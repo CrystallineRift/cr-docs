@@ -1,0 +1,146 @@
+{
+  "00-introduction": {
+    "docPath": "docs/00-introduction.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": []
+    },
+    "description": "Top-level overview — no single source file; changes whenever any major subsystem changes"
+  },
+  "backend/01-architecture": {
+    "docPath": "docs/backend/01-architecture.md",
+    "repos": {
+      "cr-api": [
+        "Convenience/CR.REST.AIO/Program.cs",
+        "Common/CR.Common.Data.Interface/**/*.cs",
+        "Common/CR.Common.Data.Postgres/**/*.cs",
+        "Common/CR.Common.Data.Sqlite/**/*.cs",
+        "Common/CR.Common.REST.Server/**/*.cs"
+      ],
+      "cr-data": []
+    },
+    "description": "Backend layer diagram, DDD module structure, dual-DB pattern, DI wiring"
+  },
+  "backend/02-npc-system": {
+    "docPath": "docs/backend/02-npc-system.md",
+    "repos": {
+      "cr-api": [
+        "Npcs/**/*.cs",
+        "Npcs/**/*.csproj"
+      ],
+      "cr-data": []
+    },
+    "description": "NPC CRUD, team management, domain service, REST endpoints"
+  },
+  "backend/03-spawner-system": {
+    "docPath": "docs/backend/03-spawner-system.md",
+    "repos": {
+      "cr-api": [
+        "Spawner/**/*.cs",
+        "Spawner/**/*.csproj"
+      ],
+      "cr-data": []
+    },
+    "description": "Weighted spawn pools, spawn history, spawner tables"
+  },
+  "backend/04-creature-generation": {
+    "docPath": "docs/backend/04-creature-generation.md",
+    "repos": {
+      "cr-api": [
+        "Creatures/**/*.cs",
+        "Game/CR.Game.CreatureGeneration/**/*.cs",
+        "Game/CR.Game.Domain.Services/**/*.cs"
+      ],
+      "cr-data": []
+    },
+    "description": "Creature generation pipeline, growth profiles, abilities assignment"
+  },
+  "backend/05-starter-creature-flow": {
+    "docPath": "docs/backend/05-starter-creature-flow.md",
+    "repos": {
+      "cr-api": [
+        "Npcs/CR.Npcs.Domain.Services/**/*.cs",
+        "Trainers/**/*.cs",
+        "Game/CR.Game.Domain.Services/**/*.cs"
+      ],
+      "cr-data": [
+        "Assets/Scripts/Npcs/**/*.cs",
+        "Assets/Scripts/Trainers/**/*.cs"
+      ]
+    },
+    "description": "Starter creature selection and onboarding flow, end-to-end"
+  },
+  "backend/06-auth-and-accounts": {
+    "docPath": "docs/backend/06-auth-and-accounts.md",
+    "repos": {
+      "cr-api": [
+        "Auth/**/*.cs",
+        "Auth/**/*.csproj"
+      ],
+      "cr-data": [
+        "Assets/Scripts/Auth/**/*.cs"
+      ]
+    },
+    "description": "Auth system: JWT, OAuth linking, account management"
+  },
+  "unity/01-project-setup": {
+    "docPath": "docs/unity/01-project-setup.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [
+        "Packages/manifest.json",
+        "ProjectSettings/**",
+        "Assets/Scripts/Installers/**/*.cs"
+      ]
+    },
+    "description": "Unity project structure, packages, folder layout"
+  },
+  "unity/02-dependency-injection": {
+    "docPath": "docs/unity/02-dependency-injection.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [
+        "Assets/Scripts/Installers/**/*.cs",
+        "Assets/Scripts/**/*Installer*.cs"
+      ]
+    },
+    "description": "Zenject DI patterns, WithId bindings, scene installers"
+  },
+  "unity/03-world-behaviours": {
+    "docPath": "docs/unity/03-world-behaviours.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [
+        "Assets/Scripts/World/**/*.cs",
+        "Assets/Scripts/**/*WorldBehaviour*.cs",
+        "Assets/Scripts/**/*WorldInitializ*.cs",
+        "Assets/Scripts/**/*GameInitializ*.cs"
+      ]
+    },
+    "description": "IWorldInitializable, WorldRegistry, GameInitializer bootstrap"
+  },
+  "unity/04-npc-interaction": {
+    "docPath": "docs/unity/04-npc-interaction.md",
+    "repos": {
+      "cr-api": [
+        "Npcs/CR.Npcs.Service.REST/**/*.cs"
+      ],
+      "cr-data": [
+        "Assets/Scripts/Npcs/**/*.cs"
+      ]
+    },
+    "description": "Client-side NPC interaction, dialogue, team display"
+  },
+  "unity/05-http-clients": {
+    "docPath": "docs/unity/05-http-clients.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [
+        "Assets/Scripts/**/*HttpClient*.cs",
+        "Assets/Scripts/**/*SqliteRepository*.cs",
+        "Assets/Scripts/Data/**/*.cs"
+      ]
+    },
+    "description": "Online/offline repository pattern, Best HTTP, SQLite cache"
+  }
+}
