@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Crystalline Rift — Docs</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css" />
+  <style>
+    /* ─── Reset & Base ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d1117;
+      --bg2:       #161b22;
+      --bg3:       #1c2128;
+      --border:    #30363d;
+      --accent:    #4dd9c0;
+      --accent2:   #79c0ff;
+      --text:      #e6edf3;
+      --text-muted:#8b949e;
+      --code-bg:   #1a1e2e;
+      --sidebar-w: 260px;
+      --header-h:  52px;
+    }
+
+    html, body {
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    a { color: var(--accent2); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ─── Layout ────────────────────────────────────────────────── */
+    #app {
+      display: grid;
+      grid-template-rows: var(--header-h) 1fr;
+      grid-template-columns: var(--sidebar-w) 1fr;
+      grid-template-areas:
+        "header header"
+        "sidebar main";
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ─── Header ────────────────────────────────────────────────── */
+    #header {
+      grid-area: header;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 24px;
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    #header .logo {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: -0.3px;
+    }
+
+    #header .logo span {
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+
+    #header .badge {
+      font-size: 11px;
+      padding: 2px 8px;
+      background: #4dd9c020;
+      border: 1px solid #4dd9c040;
+      color: var(--accent);
+      border-radius: 12px;
+      letter-spacing: 0.5px;
+    }
+
+    /* ─── Sidebar ────────────────────────────────────────────────── */
+    #sidebar {
+      grid-area: sidebar;
+      background: var(--bg2);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 16px 0 32px;
+    }
+
+    #sidebar::-webkit-scrollbar { width: 4px; }
+    #sidebar::-webkit-scrollbar-track { background: transparent; }
+    #sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .nav-section {
+      margin-bottom: 4px;
+    }
+
+    .nav-section-title {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      padding: 10px 20px 4px;
+    }
+
+    .nav-item {
+      display: block;
+      padding: 6px 20px 6px 28px;
+      color: var(--text-muted);
+      font-size: 13.5px;
+      cursor: pointer;
+      border-left: 2px solid transparent;
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .nav-item:hover {
+      color: var(--text);
+      background: var(--bg3);
+    }
+
+    .nav-item.active {
+      color: var(--accent);
+      border-left-color: var(--accent);
+      background: #4dd9c010;
+    }
+
+    /* ─── Main Content ───────────────────────────────────────────── */
+    #main {
+      grid-area: main;
+      overflow-y: auto;
+      padding: 48px 64px;
+      max-width: 900px;
+    }
+
+    #main::-webkit-scrollbar { width: 6px; }
+    #main::-webkit-scrollbar-track { background: transparent; }
+    #main::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ─── Loading / Error states ─────────────────────────────────── */
+    #loading {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--text-muted);
+      padding: 48px 0;
+    }
+
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ─── Markdown Styles ────────────────────────────────────────── */
+    #content h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--text);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 12px;
+      margin-bottom: 24px;
+    }
+
+    #content h2 {
+      font-size: 1.35rem;
+      font-weight: 600;
+      color: var(--text);
+      margin: 36px 0 12px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+    }
+
+    #content h3 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--accent2);
+      margin: 24px 0 8px;
+    }
+
+    #content h4 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin: 16px 0 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    #content p {
+      margin-bottom: 16px;
+      color: var(--text);
+    }
+
+    #content ul, #content ol {
+      margin: 0 0 16px 24px;
+    }
+
+    #content li {
+      margin-bottom: 4px;
+    }
+
+    #content strong { color: var(--text); }
+
+    #content code {
+      font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+      font-size: 0.85em;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 2px 6px;
+      color: var(--accent);
+    }
+
+    #content pre {
+      background: var(--code-bg) !important;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      overflow-x: auto;
+      margin: 16px 0 24px;
+    }
+
+    #content pre code {
+      background: none !important;
+      border: none !important;
+      padding: 0;
+      font-size: 0.88em;
+      color: inherit;
+    }
+
+    #content pre::-webkit-scrollbar { height: 4px; }
+    #content pre::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    #content blockquote {
+      border-left: 3px solid var(--accent);
+      padding: 8px 16px;
+      background: #4dd9c008;
+      margin: 16px 0;
+      border-radius: 0 6px 6px 0;
+    }
+
+    #content blockquote p { margin: 0; color: var(--text-muted); }
+
+    #content table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0 24px;
+      font-size: 13.5px;
+    }
+
+    #content th {
+      text-align: left;
+      padding: 10px 14px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    #content td {
+      padding: 8px 14px;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    #content tr:nth-child(even) td { background: var(--bg3); }
+
+    #content hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 32px 0;
+    }
+
+    /* ─── Responsive ─────────────────────────────────────────────── */
+    @media (max-width: 768px) {
+      #app {
+        grid-template-areas:
+          "header header"
+          "main main";
+        grid-template-columns: 1fr;
+      }
+      #sidebar { display: none; }
+      #main { padding: 24px 20px; }
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+  <!-- Header -->
+  <header id="header">
+    <div class="logo">Crystalline Rift <span>/ Docs</span></div>
+    <div class="badge">v0.1</div>
+  </header>
+
+  <!-- Sidebar nav is built entirely via JS using safe DOM methods (no innerHTML) -->
+  <nav id="sidebar">
+    <div id="nav-tree">
+      <div style="padding: 12px 20px; color: var(--text-muted); font-size:13px;">Loading…</div>
+    </div>
+  </nav>
+
+  <!-- Main content — DOMPurify sanitises rendered markdown before insertion -->
+  <main id="main">
+    <div id="loading">
+      <div class="spinner"></div>
+      <span>Loading documentation…</span>
+    </div>
+    <div id="content" style="display:none;"></div>
+  </main>
+</div>
+
+<!-- marked: markdown → HTML -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/11.1.1/marked.min.js"></script>
+<!-- DOMPurify: sanitise HTML before insertion into the DOM -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<!-- highlight.js: syntax highlighting -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/csharp.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/json.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/bash.min.js"></script>
+
+<script>
+(function () {
+  'use strict';
+
+  // ── Marked config ──────────────────────────────────────────────
+  marked.setOptions({
+    highlight: function (code, lang) {
+      if (lang && hljs.getLanguage(lang)) {
+        try { return hljs.highlight(code, { language: lang }).value; } catch (_) {}
+      }
+      return hljs.highlightAuto(code).value;
+    },
+    langPrefix: 'hljs language-',
+    gfm: true,
+    breaks: false,
+  });
+
+  // ── State ──────────────────────────────────────────────────────
+  var navData = [];
+  var currentPath = null;
+
+  // ── Helpers ───────────────────────────────────────────────────
+  function getPageFromUrl() {
+    return new URLSearchParams(window.location.search).get('page');
+  }
+
+  function setPageInUrl(page) {
+    var url = new URL(window.location.href);
+    url.searchParams.set('page', page);
+    history.pushState({ page: page }, '', url.toString());
+  }
+
+  // ── Safe DOM builder for nav ───────────────────────────────────
+  // Builds nav entirely with DOM methods — no innerHTML — to avoid XSS.
+  function renderNav(nav) {
+    var tree = document.getElementById('nav-tree');
+    while (tree.firstChild) tree.removeChild(tree.firstChild);
+
+    var sections = Object.create(null);
+    nav.forEach(function (item) {
+      if (!sections[item.section]) sections[item.section] = [];
+      sections[item.section].push(item);
+    });
+
+    Object.keys(sections).forEach(function (section) {
+      var sectionEl = document.createElement('div');
+      sectionEl.className = 'nav-section';
+
+      var title = document.createElement('div');
+      title.className = 'nav-section-title';
+      title.textContent = section;
+      sectionEl.appendChild(title);
+
+      sections[section].forEach(function (item) {
+        var a = document.createElement('a');
+        a.className = 'nav-item' + (item.path === currentPath ? ' active' : '');
+        a.textContent = item.title;
+        a.href = '?page=' + encodeURIComponent(item.path);
+        a.dataset.path = item.path;
+        a.addEventListener('click', function (e) {
+          e.preventDefault();
+          loadPage(item.path);
+        });
+        sectionEl.appendChild(a);
+      });
+
+      tree.appendChild(sectionEl);
+    });
+  }
+
+  function updateActiveNav() {
+    document.querySelectorAll('.nav-item').forEach(function (el) {
+      el.classList.toggle('active', el.dataset.path === currentPath);
+    });
+  }
+
+  // ── Page loading ──────────────────────────────────────────────
+  function loadPage(pagePath) {
+    if (pagePath === currentPath) return;
+    currentPath = pagePath;
+    setPageInUrl(pagePath);
+    updateActiveNav();
+
+    var loading = document.getElementById('loading');
+    var content = document.getElementById('content');
+    loading.style.display = 'flex';
+    content.style.display = 'none';
+
+    document.getElementById('main').scrollTo({ top: 0, behavior: 'smooth' });
+
+    fetch('docs/' + pagePath + '.md')
+      .then(function (res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.text();
+      })
+      .then(function (md) {
+        // Parse markdown → raw HTML, then sanitise with DOMPurify before insertion.
+        var rawHtml = marked.parse(md);
+        var safeHtml = DOMPurify.sanitize(rawHtml, {
+          // Allow highlight.js class attributes on code blocks
+          ADD_ATTR: ['class'],
+          USE_PROFILES: { html: true },
+        });
+        content.innerHTML = safeHtml;
+        hljs.highlightAll();
+      })
+      .catch(function (err) {
+        var h1 = document.createElement('h1');
+        h1.textContent = 'Page not found';
+        var p = document.createElement('p');
+        p.style.color = 'var(--text-muted)';
+        p.textContent = 'Could not load docs/' + pagePath + '.md — ' + err.message;
+        while (content.firstChild) content.removeChild(content.firstChild);
+        content.appendChild(h1);
+        content.appendChild(p);
+      })
+      .finally(function () {
+        loading.style.display = 'none';
+        content.style.display = 'block';
+      });
+  }
+
+  // ── Bootstrap ─────────────────────────────────────────────────
+  function init() {
+    fetch('nav.json')
+      .then(function (r) { return r.json(); })
+      .then(function (data) { navData = data; })
+      .catch(function () {
+        navData = [];
+        var msg = document.createElement('div');
+        msg.style.cssText = 'padding:12px 20px;color:#f85149;font-size:13px;';
+        msg.textContent = 'Failed to load nav.json — run: node generate-nav.js';
+        var tree = document.getElementById('nav-tree');
+        while (tree.firstChild) tree.removeChild(tree.firstChild);
+        tree.appendChild(msg);
+      })
+      .then(function () {
+        renderNav(navData);
+
+        var requested = getPageFromUrl();
+        var firstPage = navData[0] ? navData[0].path : null;
+        var page = (requested && navData.find(function (n) { return n.path === requested; }))
+          ? requested
+          : firstPage;
+
+        if (page) {
+          loadPage(page);
+        } else {
+          document.getElementById('loading').style.display = 'none';
+          var content = document.getElementById('content');
+          content.style.display = 'block';
+          var h1 = document.createElement('h1');
+          h1.textContent = 'No pages found';
+          var p = document.createElement('p');
+          p.style.color = 'var(--text-muted)';
+          p.textContent = 'Run: node generate-nav.js';
+          content.appendChild(h1);
+          content.appendChild(p);
+        }
+      });
+  }
+
+  window.addEventListener('popstate', function (e) {
+    var page = (e.state && e.state.page) ? e.state.page : getPageFromUrl();
+    if (page) loadPage(page);
+  });
+
+  init();
+}());
+</script>
+</body>
+</html>

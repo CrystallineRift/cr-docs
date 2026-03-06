@@ -1,0 +1,62 @@
+[
+  {
+    "section": "Introduction",
+    "title": "Crystalline Rift — Overview",
+    "path": "00-introduction"
+  },
+  {
+    "section": "Backend",
+    "title": "Backend Architecture",
+    "path": "backend/01-architecture"
+  },
+  {
+    "section": "Backend",
+    "title": "NPC System",
+    "path": "backend/02-npc-system"
+  },
+  {
+    "section": "Backend",
+    "title": "Spawner System",
+    "path": "backend/03-spawner-system"
+  },
+  {
+    "section": "Backend",
+    "title": "Creature Generation",
+    "path": "backend/04-creature-generation"
+  },
+  {
+    "section": "Backend",
+    "title": "Starter Creature Flow",
+    "path": "backend/05-starter-creature-flow"
+  },
+  {
+    "section": "Backend",
+    "title": "Auth and Accounts",
+    "path": "backend/06-auth-and-accounts"
+  },
+  {
+    "section": "Unity",
+    "title": "Unity Project Setup",
+    "path": "unity/01-project-setup"
+  },
+  {
+    "section": "Unity",
+    "title": "Dependency Injection",
+    "path": "unity/02-dependency-injection"
+  },
+  {
+    "section": "Unity",
+    "title": "World Behaviours",
+    "path": "unity/03-world-behaviours"
+  },
+  {
+    "section": "Unity",
+    "title": "NPC Interaction",
+    "path": "unity/04-npc-interaction"
+  },
+  {
+    "section": "Unity",
+    "title": "HTTP Clients",
+    "path": "unity/05-http-clients"
+  }
+]
