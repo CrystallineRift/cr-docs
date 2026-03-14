@@ -78,5 +78,30 @@
     "section": "Unity",
     "title": "Battle System",
     "path": "unity/07-battle-system"
+  },
+  {
+    "section": "Guides",
+    "title": "Scene Setup Overview",
+    "path": "guides/01-scene-setup-overview"
+  },
+  {
+    "section": "Guides",
+    "title": "Setting Up an NPC in a Scene",
+    "path": "guides/02-setup-npc-scene"
+  },
+  {
+    "section": "Guides",
+    "title": "Setting Up a Battle Scene",
+    "path": "guides/03-setup-battle-scene"
+  },
+  {
+    "section": "Guides",
+    "title": "Setting Up the World System",
+    "path": "guides/04-setup-world-system"
+  },
+  {
+    "section": "Guides",
+    "title": "Configuring Scene DI",
+    "path": "guides/05-setup-di-scene-context"
   }
 ]
