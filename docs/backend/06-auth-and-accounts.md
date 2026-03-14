@@ -18,43 +18,159 @@ The `PasswordHasher` uses `Rfc2898DeriveBytes.Pbkdf2` with SHA512 and 350,000 it
 2. SHA512 is hardware-accelerated on modern CPUs, making the iteration count effective against brute force without excessive legitimate-login latency
 3. The iteration count (350,000) matches NIST 2023 recommendations for PBKDF2-SHA512
 
-Each account has its own randomly generated salt (`RandomNumberGenerator.GetBytes(64)`). The salt and hash are both stored on the `accounts` row. The `VerifyPassword` method re-derives the hash from the input password + stored salt and compares using `SequenceEqual` (constant-time comparison to prevent timing attacks).
+Each account has its own randomly generated salt (`RandomNumberGenerator.GetBytes(64)`). The salt and hash are both stored on the `accounts` row.
 
 ### Why Discord OAuth?
 
-Discord is the primary community platform for Crystalline Rift. Players are already authenticated with Discord before playing, so reusing that identity reduces friction and eliminates the need to manage separate passwords for the majority of the playerbase. The Discord OAuth flow issues CR-native tokens (not Discord tokens) to the Unity client — the Discord token is only used server-side to identify the account.
+Discord is the primary community platform for Crystalline Rift. Players are already authenticated with Discord before playing, so reusing that identity reduces friction and eliminates the need to manage separate passwords for the majority of the playerbase.
 
 ## Account Model
 
 | Column | Notes |
 |--------|-------|
 | `id` | UUID primary key |
-| `email` | Unique, used as login identifier |
-| `password_hash` | PBKDF2-SHA512 hash (hex string) |
+| `email` | Unique, used as login identifier (nullable for Discord-only accounts) |
+| `password_hash` | PBKDF2-SHA512 hash (nullable for Discord-only accounts) |
 | `salt` | Per-account random salt (byte array, stored as blob) |
 | `created_at`, `updated_at` | Audit trail |
 | `deleted` | Soft delete |
 
-An account can have multiple trainers (`accounts` → `trainers` one-to-many). Trainers are the in-game character identities; accounts are the authentication identity. A player might have a "main" trainer and an "alt" trainer on the same account.
+An account can have multiple trainers (`accounts` → `trainers` one-to-many). Trainers are the in-game character identities; accounts are the authentication identity.
 
-## Auth Flow
+## Auth Flow — Full Login Walkthrough
 
-```
-1. Client: POST /api/v1/auth/login  { email, password }
-         → 200 { accessToken, refreshToken, expiresIn }
+### Step 1: Register
 
-2. Client stores tokens (ObscuredPrefs / secure storage)
-
-3. All subsequent requests:
-   Authorization: Bearer <accessToken>
-
-4. On 401: Client calls POST /api/v1/auth/refresh { refreshToken }
-         → 200 { accessToken, refreshToken, expiresIn }
-
-5. On refresh failure (401): redirect to login screen
+```bash
+curl -s -X POST http://localhost:5000/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"player@cr.local","password":"securepass123"}'
 ```
 
-`SimpleWebClient` in Unity attaches the token to every request via `ITokenManager.GetAccessTokenAsync()`. If the access token is expired, `TokenManager` can proactively refresh before attaching. The `NotAuthorizedException` from `SimpleWebClient` triggers a refresh attempt in most client implementations.
+Response:
+```json
+{
+  "accessToken":  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refreshToken": "def502003b8f9e...",
+  "expiresIn":    3600,
+  "accountId":    "aaaaaaaa-0000-0000-0000-000000000001"
+}
+```
+
+Registration:
+1. Validates the email is not already in use
+2. Generates a random 64-byte salt via `RandomNumberGenerator.GetBytes(64)`
+3. Derives the hash: `Rfc2898DeriveBytes.Pbkdf2(password, salt, 350_000, SHA512, 64)`
+4. Inserts the `accounts` row
+5. Returns the same access + refresh token pair as a successful login
+
+### Step 2: Login (subsequent sessions)
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:5000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"player@cr.local","password":"securepass123"}' \
+  | jq -r '.accessToken')
+```
+
+Response has the same shape as register. The `accountId` in the response is used to scope all subsequent API calls.
+
+### Step 3: Use the token
+
+```bash
+# All subsequent requests attach the bearer token
+curl -s http://localhost:5000/api/v1/trainers \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq .
+```
+
+### Step 4: Token refresh
+
+When the access token expires (default 1 hour), the client presents the refresh token:
+
+```bash
+NEW_TOKENS=$(curl -s -X POST http://localhost:5000/api/v1/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"refreshToken":"def502003b8f9e..."}')
+TOKEN=$(echo $NEW_TOKENS | jq -r '.accessToken')
+REFRESH_TOKEN=$(echo $NEW_TOKENS | jq -r '.refreshToken')
+```
+
+Each refresh call **rotates the refresh token** — the old one is invalidated and a new one is issued. Store the new refresh token immediately. If the client presents an already-rotated refresh token (possible sign of theft), the server can invalidate the entire token family.
+
+### Step 5: Logout
+
+```bash
+curl -s -X POST http://localhost:5000/api/v1/auth/logout \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"refreshToken":"def502003b8f9e..."}'
+```
+
+Server-side revocation of the refresh token. The access token remains technically valid until it expires (there is no per-access-token revocation list). For most game scenarios this is acceptable — the 1-hour window is short enough.
+
+## Token Lifetime and Sessions
+
+Access tokens are short-lived (default **1 hour**). Refresh tokens are long-lived (default **30 days**). The `expiresIn` field in the login/refresh response contains the access token lifetime in seconds.
+
+The Unity `TokenManager` proactively refreshes before expiry. `IGameSessionRepository` persists the current session (accountId, trainerId, isOnline) to SQLite so it survives app restarts. When Unity starts, `GameSessionManager` reads from this repository to restore the previous session without requiring the player to log in again. If the stored access token is still valid, the player is dropped back into the game immediately.
+
+**Token refresh flow:** Access token expires → Unity `SimpleWebClient` receives 401 → calls `TokenManager.RefreshAccessTokenAsync()` → presents refresh token to `/api/v1/auth/refresh` → stores new access + refresh tokens → retries original request. This is transparent to other Unity systems.
+
+## How to Test Auth with curl
+
+```bash
+# Register (first time)
+curl -s -X POST http://localhost:5000/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@cr.local","password":"test1234"}' | jq .
+
+# Login
+curl -s -X POST http://localhost:5000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@cr.local","password":"test1234"}' | jq .
+
+# Verify the token works (get trainer list — empty initially)
+curl -s http://localhost:5000/api/v1/trainers?accountId=<accountId> \
+  -H "Authorization: Bearer <accessToken>" | jq .
+
+# Test refresh
+curl -s -X POST http://localhost:5000/api/v1/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"refreshToken":"<refreshToken>"}' | jq .
+
+# Logout
+curl -s -X POST http://localhost:5000/api/v1/auth/logout \
+  -H "Authorization: Bearer <accessToken>" \
+  -H "Content-Type: application/json" \
+  -d '{"refreshToken":"<refreshToken>"}' | jq .
+```
+
+## Multi-Trainer Setup (One Account, Multiple Trainers)
+
+A trainer is not created automatically with the account — it is a separate `POST /api/v1/trainers` call. This allows one account to hold multiple trainers (alts).
+
+```bash
+# Create first trainer
+curl -s -X POST http://localhost:5000/api/v1/trainers \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"name\":\"MainTrainer\",\"accountId\":\"$ACCOUNT_ID\"}" | jq .
+
+# Create second trainer (same account)
+curl -s -X POST http://localhost:5000/api/v1/trainers \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"name\":\"AltTrainer\",\"accountId\":\"$ACCOUNT_ID\"}" | jq .
+
+# List all trainers for account
+curl -s "http://localhost:5000/api/v1/trainers?accountId=$ACCOUNT_ID" \
+  -H "Authorization: Bearer $TOKEN" | jq .
+```
+
+Each trainer has its own independent world state — NPCs, spawners, creatures, quest progress, and stats are all scoped to `(accountId, trainerId)`. The first trainer selection fires `OnTrainerChanged` in Unity, which triggers world initialization.
+
+In the Unity `GameSessionManager`, the player selects which trainer to play from a trainer selection screen. Once a trainer is selected, that `TrainerId` is passed in every subsequent API call. Switching trainers re-triggers world initialization for the new trainer.
 
 ## `ITokenManager`
 
@@ -108,46 +224,25 @@ Container.Bind<IAccountClient>().To<AccountClientUnityHttp>().AsSingle();
 
 All auth-related clients use `GameConfigurationKeys.AuthServerHttpAddress` as their base URL, read from `game_config.yaml`. In `CR.REST.AIO`, auth endpoints are served at the same host as all other endpoints, so `auth_server_http_address` and `npc_server_http_address` will be identical in a local development setup.
 
-## Game Auth and Session Repositories
-
-`IGameAuthRepository` and `IGameAccountRepository` are higher-level repositories used by game services that need to read auth state without dealing with raw token management. These are backed by the Unity SQLite databases for offline scenarios — the account data is cached locally so the game knows "who is logged in" even without a network connection.
-
-`IGameSessionRepository` persists the current session (accountId, trainerId, isOnline) to SQLite so it survives app restarts. When Unity starts, `GameSessionManager` reads from this repository to restore the previous session without requiring the player to log in again. If the stored access token is still valid, the player is dropped back into the game immediately.
-
 ## REST Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
+| `POST` | `/api/v1/auth/register` | Create account + return tokens |
 | `POST` | `/api/v1/auth/login` | Email/password login → access + refresh tokens |
-| `POST` | `/api/v1/auth/refresh` | Exchange refresh token for new access token |
+| `POST` | `/api/v1/auth/refresh` | Exchange refresh token for new access token (rotates refresh token) |
 | `POST` | `/api/v1/auth/logout` | Invalidate refresh token (server-side revocation) |
 | `GET`  | `/api/v1/auth/oauth/discord` | Redirect to Discord OAuth consent screen |
 | `GET`  | `/api/v1/auth/oauth/discord/callback` | Discord OAuth callback — issues CR tokens |
 
-Endpoint implementation is in `Auth/CR.Auth.Service.REST/Endpoints/`:
-- `TokenEndpoints.cs` — maps `/auth/login`, `/auth/refresh`, `/auth/logout`
-- `AuthenticationEndpoints.cs` — email/password account creation and verification
-- `OAuthLinkingEndpoints.cs` — Discord OAuth flow
-- `AccountEndpoints.cs` — account profile CRUD
-
-Auth is wired into the ASP.NET pipeline via `builder.AddCrAuth()` (extension method in `CrAuthExtensions.cs`) which configures JWT bearer validation with the CR signing key. All non-auth endpoints require a valid bearer token via the `[Authorize]` attribute or equivalent middleware.
-
-## Modules
-
-```
-cr-api/Auth/
-  CR.Auth.Data/             ← IAuthRepository (account CRUD)
-  CR.Auth.Data.Migration/   ← schema migrations
-  CR.Auth.Data.Postgres/    ← PostgreSQL impl
-  CR.Auth.Data.Sqlite/      ← SQLite impl (Unity offline)
-  CR.Auth.Model.REST/       ← ITokenManager, LoginRequest/Response, Account model
-  CR.Auth.Service.REST/     ← ASP.NET endpoints, PasswordHasher, CrAuthExtensions
-```
+Auth is wired into the ASP.NET pipeline via `builder.AddCrAuth()` (extension method in `CrAuthExtensions.cs`). All non-auth endpoints require a valid bearer token.
 
 ## Security Considerations
 
 - **Tokens are never logged.** `Program.cs` adds `Authorization` to the HTTP logging request headers list, but this is only enabled in development (`app.UseHttpLogging()` inside `if (app.Environment.IsDevelopment())`). In production, token headers are not captured in logs.
-- **Soft-deleted accounts.** When `deleted = true`, the account still exists in the database but login attempts return 401. Refresh tokens issued before deletion continue to validate until they expire or are explicitly revoked. Plan for a forced revocation pass when processing account deletion requests.
+- **Access token lifetime.** Access tokens are short-lived (default 1 hour). Refresh tokens are long-lived (default 30 days).
+- **Refresh token rotation.** Each `POST /api/v1/auth/refresh` call issues a new refresh token and invalidates the old one.
+- **Soft-deleted accounts.** When `deleted = true`, the account still exists in the database but login attempts return 401. Refresh tokens issued before deletion continue to validate until they expire.
 - **Salt storage.** The salt is stored as a binary blob alongside the hash. If the `accounts` table is compromised, the attacker has both the salt and hash — security relies entirely on the PBKDF2 iteration count making brute-force prohibitively slow.
 
 ## Common Mistakes / Tips
@@ -156,6 +251,8 @@ cr-api/Auth/
 - **Expired refresh token in `ObscuredPrefs`.** After a long hiatus (refresh token expiry period), `TokenManager.RefreshAccessTokenAsync` returns 401. The client must redirect to the login screen. Make sure the login scene is wired to `IAuthClient.LoginAsync`.
 - **Forgetting `builder.AddCrAuth()` in a new standalone host.** Requests to protected endpoints will return 401 for all clients. The method configures the JWT validation middleware.
 - **Testing with hard-coded credentials.** Use environment variables or `config.yml` overrides for test account credentials. Never commit credentials to source control.
+- **Calling trainer endpoints without a trainer.** After registration, the trainer list is empty. You must create a trainer via `POST /api/v1/trainers` before calling NPC, quest, or spawner endpoints — they all require a `trainerId`.
+- **Reusing a rotated refresh token.** After calling `/auth/refresh`, the old refresh token is invalid. If your test script stores the token in a variable and re-runs, it will attempt the old token and receive 401. Always update the stored refresh token after every refresh call.
 
 ## Related Pages
 

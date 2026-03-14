@@ -56,7 +56,7 @@ Key columns on `spawner`:
 - `row_version` — incremented on every update, reserved for future optimistic concurrency
 - `is_active` — only active spawners accept spawn requests
 - `deleted` — soft delete flag
-- `content_key` — optional designer-facing key (e.g. `"starter-wild-zone"`); unique per trainer when set (unique index on `(account_id, trainer_id, content_key) WHERE content_key IS NOT NULL`)
+- `content_key` — optional designer-facing key (e.g. `"starter-wild-zone"`); unique per trainer when set
 
 Key columns on `creature_spawner_template`:
 - `base_creature_id` — which creature species to generate
@@ -77,7 +77,7 @@ The full spawn flow in `CreatureSpawnDomainService.SpawnCreaturesAsync`:
 5. **Creature generation** — call `ICreatureGenerationService.CreateFromSpawnerAsync(template.Id, trainerId, seed)` for each creature; null results (e.g., from a missing trainer ID) are silently skipped
 6. **Spawn execution (transactional)** — open a connection, begin a transaction; write one `spawner_spawn_history` row per spawned creature; increment `spawner.current_count` and set `spawner.last_spawn_time`; commit; roll back if either step fails
 
-The transaction in step 6 ensures that if history recording fails, the spawner count is not incremented and vice versa. This prevents the spawner from thinking it has produced creatures that do not actually exist in the history log.
+The transaction in step 6 ensures that if history recording fails, the spawner count is not incremented and vice versa.
 
 ## Configuration Example
 
@@ -108,12 +108,95 @@ Task<SpawnerDomain> EnsureSpawnerForTrainerAsync(
 ```
 
 This method:
-1. Calls `GetSpawnerByContentKeyAsync(accountId, trainerId, contentKey)` — if found, returns the existing spawner mapped to `SpawnerDomain`
+1. Calls `GetSpawnerByContentKeyAsync(accountId, trainerId, contentKey)` — if found, returns the existing spawner
 2. If not found, calls `GetSpawnerTemplateByContentKeyAsync(contentKey)` to load a shared template
 3. Creates a new spawner row from the template (including all pools and creature templates) for this specific `(accountId, trainerId)` pair
 4. Returns the new spawner
 
-This mirrors the NPC system's `EnsureStarterNpcAsync` pattern — the same content_key on different trainers results in separate but identically configured spawner instances. World bootstrap calls this once per spawner definition in the scene.
+This mirrors the NPC system's `EnsureStarterNpcAsync` pattern — the same content_key on different trainers results in separate but identically configured spawner instances.
+
+## How to Reset Spawner Capacity
+
+During development it is common for `current_count` to accumulate to `max_capacity` and block all spawns. There are two approaches:
+
+**Option A: Deactivate and reactivate** — calling `/spawner/{id}/deactivate` followed by `/spawner/{id}/activate` does NOT reset `current_count`. This only toggles `is_active`.
+
+**Option B: Direct SQL update** — the intended way to reset capacity for testing:
+
+```sql
+-- Postgres / SQLite
+UPDATE spawner
+SET current_count = 0, updated_at = NOW()
+WHERE id = '<spawner-uuid>';
+```
+
+A future admin endpoint should wrap this as `POST /spawner/{id}/reset-capacity`. Until then, use direct SQL or create a test-only utility that calls the repository directly.
+
+After resetting, the spawner will accept spawn requests again on the next `POST /spawner/{id}/spawn` provided `is_active = true` and the cooldown has elapsed.
+
+**What happens after reset:** The `spawner_spawn_history` is NOT cleared — the audit log is immutable. `current_count` is the only counter that gates new spawns. History entries from before the reset remain queryable via `/spawner/{id}/history`.
+
+## Wild Battle Proxy and Capacity Reduction
+
+`SpawnerEncounterBehaviour` in Unity triggers a spawn before initiating the battle. The spawn call:
+
+```json
+POST /spawner/{spawnerId}/spawn
+{
+  "trainerId": "<trainerId>",
+  "requestedQuantity": 1,
+  "spawnSessionId": "<session-uuid>"
+}
+```
+
+This increments `current_count` by 1 and writes a `spawner_spawn_history` row. The generated creature is stored under the spawner's ID (acting as the `WildTrainerId` proxy — see the Unity Integration section below). The battle engine loads this creature via `ICreatureInventoryService.GetTeamAsync(wildTrainerId)`.
+
+If the player flees the battle, the capacity is NOT restored — the spawn already happened. This means spawner capacity represents "total encounters generated" not "currently active encounters". Size your `max_capacity` accordingly (e.g., set it to a very large number like 1,000,000 for perpetual wild zones, or a small number like 5 for a limited-event spawner).
+
+## Admin/Debug Patterns for Spawner State
+
+**Check current spawner state:**
+
+```
+GET /spawner/{id}/status
+→ 200 OK
+{
+  "spawnerId": "...",
+  "isActive": true,
+  "currentCount": 47,
+  "maxCapacity": 100,
+  "lastSpawnTime": "2026-03-13T10:00:00Z",
+  "cooldownSeconds": 0
+}
+```
+
+**View spawn history (who spawned what):**
+
+```
+GET /spawner/{id}/history?limit=20&offset=0
+→ 200 OK
+{
+  "history": [
+    {
+      "spawnedAt":          "2026-03-13T10:05:00Z",
+      "spawnedByTrainerId": "...",
+      "generatedCreatureId": "...",
+      "variantType":        "normal",
+      "levelGenerated":     7,
+      "spawnDurationMs":    142
+    }
+  ]
+}
+```
+
+**Temporarily disable a spawner without deleting it:**
+
+```
+POST /spawner/{id}/deactivate
+→ 204 No Content
+```
+
+The spawner retains all its pools, templates, and history. Reactivate with `POST /spawner/{id}/activate`.
 
 ## Quick Start
 
@@ -167,7 +250,7 @@ Spawners start inactive. Call `/spawner/{id}/activate` before any spawn attempt 
 
 ```json
 POST /spawner/{spawnerId}/spawn
-{ "requestedQuantity": 1 }
+{ "trainerId": "<trainer-uuid>", "requestedQuantity": 1 }
 ```
 
 ## API Endpoints
@@ -187,7 +270,7 @@ POST /spawner/{spawnerId}/spawn
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/spawner/{id}/spawn` | Spawn creatures |
-| `GET`  | `/spawner/{id}/status` | Spawner status |
+| `GET`  | `/spawner/{id}/status` | Spawner status (current_count, cooldown, is_active) |
 | `GET`  | `/spawner/{id}/history` | Paginated spawn history |
 
 ## `SpawnRequest` Model
@@ -201,7 +284,7 @@ public class SpawnRequest
 }
 ```
 
-`TrainerId` is optional at the API level but required for creature generation. If `TrainerId` is null, `GenerateCreatureAsync` returns null and the creature is skipped. A spawn request with `TrainerId = null` will return a successful result with zero spawned creatures — this is a gotcha when testing without a trainer context.
+`TrainerId` is optional at the API level but required for creature generation. If `TrainerId` is null, `GenerateCreatureAsync` returns null and the creature is skipped. A spawn request with `TrainerId = null` will return a successful result with zero spawned creatures.
 
 ## Error Codes
 
@@ -232,14 +315,6 @@ Every successful spawn writes a row to `spawner_spawn_history`:
 | `spawn_session_id` | Groups all creatures from one spawn call |
 | `spawn_duration_ms` | How long generation took |
 
-This history is queryable via `GetSpawnHistoryAsync` and the `/history` endpoint, providing a full audit of every creature that was ever spawned. Combine with `spawner_spawn_history.spawned_by_trainer_id` to answer "which trainer encountered which creatures in which area".
-
-## Performance Targets
-
-- Spawn operation: < 200 ms (p95)
-- Spawner status: < 50 ms (p95)
-- Max QPS: 1,000 spawns/sec per spawner
-
 ## Unity Integration — SpawnerId as Wild Trainer Proxy
 
 `SpawnerWorldBehaviour` in the Unity client exposes two properties after `InitializeAsync` completes:
@@ -260,9 +335,11 @@ See [Battle System](?page=unity/07-battle-system) for the complete wild encounte
 - **Spawner not active.** The most common reason `SpawnCreaturesAsync` returns `ValidationError`. Always call `activate` after creating a spawner.
 - **No templates in the pool.** If a pool has no active templates, `SelectTemplateAsync` returns null and the spawn returns `NoTemplatesAvailable`. Verify templates are marked `is_active = true`.
 - **Spawn probabilities don't need to sum to 1.** The service normalizes by the total. However, all templates in a pool with `spawn_probability = 0` will never be selected. Use at least 0.01 for any template you want to include.
-- **Missing `trainerId` in spawn request.** See the `SpawnRequest` note above — spawns succeed but generate zero creatures. Add `trainerId` to the request body.
-- **Capacity not reset.** After testing, `current_count` accumulates. Reset it manually or deactivate/reactivate the spawner. A future admin endpoint should support count reset.
+- **Missing `trainerId` in spawn request.** Spawns succeed but generate zero creatures. Add `trainerId` to the request body.
+- **Capacity not reset after testing.** After testing, `current_count` accumulates. Reset it via direct SQL update (`UPDATE spawner SET current_count = 0`) or delete and recreate the spawner. A future admin endpoint should support count reset without direct DB access.
 - **Using the wrong `content_key` in the world behaviour.** If `_spawnerContentKey` does not match any spawner template row, `GetSpawnerTemplateByContentKeyAsync` returns null and `EnsureSpawnerForTrainerAsync` throws `InvalidOperationException`. Verify the key matches the seed data exactly (case-sensitive).
+- **Assuming `deactivate` resets capacity.** Deactivation only sets `is_active = false`. `current_count` is preserved. If you want to "reset" a spawner, reset `current_count` via SQL and re-activate separately.
+- **Forgetting that capacity reduction is permanent.** Each spawn call increments `current_count` permanently (there is no decrement on battle flee). Size `max_capacity` appropriately for your use case. For indefinitely repeating wild zones, use a very large value like 999999 or periodically reset via admin tooling.
 
 ## Related Pages
 
