@@ -1,116 +1,107 @@
 # NPC Interaction
 
-NPC interaction in Unity is split across two MonoBehaviours that communicate through shared public properties. This separation keeps world initialization concerns (making backend calls when the world loads) distinct from player interaction concerns (responding to proximity and input).
+NPC interaction in Unity is built around a composable MonoBehaviour pattern. `NpcWorldBehaviour` resolves the NPC's backend identity, then dispatches to add-on sub-behaviours (`NpcCreatureGrantBehaviour`, `NpcTrainerBehaviour`, `NpcMerchantBehaviour`). `NpcInteractionBehaviour` sits on the same GameObject, inspects whichever sub-behaviours are present, and routes the player's E-key press to the appropriate action.
 
-## Why Two Components?
+## Why This Design?
 
-### Why `NpcWorldBehaviour` and `NpcInteractionBehaviour` Separately?
+### Why Composable Sub-Behaviours Instead of a Monolithic Component?
 
-A single component handling both initialization and interaction would mix two very different concerns:
-- **Initialization** is async, runs once at world load, requires `IWorldContext`, and talks to the backend
-- **Interaction** is event-driven, runs repeatedly in response to player proximity and input, and only needs the results of initialization
+An earlier design embedded creature grants, merchant state, and battle setup all in `NpcWorldBehaviour`. This produced a growing list of inspector fields (including `_starterCreatureBaseId`) and branching initialization logic: "if this NPC is a starter do A, if it's a merchant do B." Every NPC prefab carried dead fields for behavior it did not use.
 
-Separating them means:
-- `NpcWorldBehaviour` can be tested in isolation with a mock `INpcClient`
-- `NpcInteractionBehaviour` can be tested in isolation with a mock `NpcWorldBehaviour` (just set the public properties)
-- The interaction radius and prompt logic can be tweaked without touching the backend call logic
+The composable pattern replaces this with opt-in components:
+- `NpcWorldBehaviour` handles identity only
+- `NpcCreatureGrantBehaviour` is added only to NPCs that grant creatures
+- `NpcTrainerBehaviour` is added only to NPCs that battle the player
+- `NpcMerchantBehaviour` is added only to merchant NPCs
 
-The `[RequireComponent]` attribute enforces that both live on the same GameObject and that `SphereCollider` is present — this is a compile-time safety net for the inspector.
+`NpcInteractionBehaviour` queries `GetComponent` for whichever sub-behaviours are present and dispatches accordingly — no branching inside any single component.
 
-### Why `HasCreatureToGive` on `NpcWorldBehaviour` Instead of Re-fetching?
+### Why `NpcBattleRequest` as a Record Instead of a Dictionary?
 
-`HasCreatureToGive` is set from the `ensure-starter` response on world load and is cleared locally after a successful `give-creature` call. Re-fetching on every interaction attempt would add latency and an extra round-trip to the backend.
+Battle initiation requires several pieces of correlated data: who the NPC is, who the player is, what team the NPC brings, and what items the NPC carries into battle. A typed record makes this explicit and prevents callers from accidentally omitting fields. It also serves as the event payload for `OnBattleRequested`, giving scene-level coordinators a self-contained bundle they can pass directly to the battle system.
 
-The risk is that the backend and client disagree. This can happen if:
-- The player receives the creature on another device
-- The server-side state is rolled back due to a transaction failure
+### Why an Event (`OnBattleRequested`) Instead of a Direct Call?
 
-The `ensure-starter` call on the next world load corrects this because it re-fetches `HasCreatureToGive` from the server (the NPC team is checked fresh). For the duration of a single session, the client-side value is always consistent with the backend because the creature transfer is atomic — either it succeeds (client sets false) or it fails (client keeps true, player can retry).
+`NpcInteractionBehaviour` is a scene-level component that should not know about the battle system's entry point. Firing an event decouples the two: the battle coordinator subscribes at scene load and handles routing. This also supports testing — tests can subscribe to `OnBattleRequested` and assert it fires with correct data without needing the full battle system wired up.
 
 ## Component Overview
 
 | Component | Responsibility |
 |-----------|---------------|
-| `NpcWorldBehaviour` | Calls the backend on world init to ensure the NPC exists |
-| `NpcInteractionBehaviour` | Handles player proximity + E-press to receive a creature |
+| `NpcWorldBehaviour` | Resolves NPC backend identity; dispatches to sub-behaviours |
+| `NpcCreatureGrantBehaviour` | Seeds a designer-configured creature team; tracks grant state |
+| `NpcTrainerBehaviour` | Seeds creature team + item inventory; caches both; exposes `CanBattle` |
+| `NpcMerchantBehaviour` | Marks the NPC as a merchant; exposes `MerchantNpcId` |
+| `NpcInteractionBehaviour` | Proximity + E-press dispatcher; fires `OnBattleRequested` |
 
 Source files:
 - `../cr-data/…/NpcWorldBehaviour.cs`
+- `../cr-data/…/NpcCreatureGrantBehaviour.cs`
+- `../cr-data/…/NpcTrainerBehaviour.cs`
+- `../cr-data/…/NpcMerchantBehaviour.cs`
 - `../cr-data/…/NpcInteractionBehaviour.cs`
+- `../cr-data/…/NpcBattleRequest.cs`
 
 ## `NpcWorldBehaviour`
 
 `NpcWorldBehaviour` implements `IWorldInitializable`. It registers with `WorldRegistry` in `Awake` and is called by `GameInitializer` as part of the world bootstrap loop. See [World Behaviours](?page=unity/03-world-behaviours) for the full initialization lifecycle.
 
+`NpcWorldBehaviour` is **identity-only**. It calls `POST /api/v1/npc/ensure` to guarantee the NPC row exists on the backend, stores the resolved `NpcId`, and then calls `OnNpcReadyAsync` on all `INpcSubInitializable` components on the same GameObject.
+
 ### Inspector Fields
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `_npcContentId` | string (GUID) | Stable content identity from seed data — must match `content_id` in the database |
-| `_starterCreatureBaseId` | string (GUID) | Base creature UUID to generate on first visit |
+| `_npcContentKey` | string | Stable designer-facing key — must match `content_key` in the database (e.g. `"cindris_starter_npc"`) |
+| `_npcType` | NpcType | The NPC type to write on first creation. Defaults to `Npc`. Set to `Trainer` for trainer NPCs. First-write-wins: if the NPC already exists, this field is ignored. |
 
-Both must be valid GUIDs. If either is missing or malformed, `InitializeAsync` logs a warning and returns early — the NPC will not be initialized. The NPC GameObject will still be visible in the world but `NpcInteractionBehaviour` will find `HasCreatureToGive = false` and show no prompt.
-
-### How It Works
-
-```csharp
-public async Task InitializeAsync(IWorldContext context, CancellationToken ct = default)
-{
-    // 1. Parse Inspector GUIDs
-    if (!Guid.TryParse(_npcContentId, out var contentId))
-    {
-        _logger.Warning("[NpcWorldBehaviour] _npcContentId is not a valid GUID. NPC will not initialize.");
-        return;
-    }
-    if (!Guid.TryParse(_starterCreatureBaseId, out var starterBaseId))
-    {
-        _logger.Warning("[NpcWorldBehaviour] _starterCreatureBaseId is not a valid GUID. NPC will not initialize.");
-        return;
-    }
-
-    // 2. Store session context for later use by NpcInteractionBehaviour
-    AccountId = context.AccountId;
-    TrainerId = context.TrainerId;
-
-    // 3. Call backend
-    var response = await _npcClient.EnsureStarterNpcAsync(new EnsureStarterNpcRequest
-    {
-        AccountId = context.AccountId,
-        TrainerId = context.TrainerId,
-        ContentId = contentId,
-        StarterCreatureBaseId = starterBaseId,
-    }, ct);
-
-    // 4. Store result
-    NpcId = response.NpcId;
-    HasCreatureToGive = response.HasCreatureToGive;
-}
-```
-
-`_npcClient` is injected via Zenject's `[Inject]` method (not the constructor, since this is a MonoBehaviour). `NpcWorldBehaviour` depends on `INpcClient` which is bound to `NpcClientUnityHttp` in `LocalDevGameInstaller`. See [HTTP Clients](?page=unity/05-http-clients) for details on how the HTTP client is constructed.
+There is no `_starterCreatureBaseId` field. Creature team configuration belongs on `NpcCreatureGrantBehaviour` or `NpcTrainerBehaviour`.
 
 ### Public State
 
 | Property | Type | Notes |
 |----------|------|-------|
-| `NpcId` | Guid | Set after successful `ensure-starter`; `Guid.Empty` until initialized |
-| `HasCreatureToGive` | bool | True if NPC has a creature; set false after `give-creature` succeeds |
-| `AccountId` | Guid | From world context; used in `give-creature` request |
-| `TrainerId` | Guid | From world context; used in `give-creature` request |
-
-`NpcInteractionBehaviour` reads all four properties directly. They are public setters to support testing — in production they are only written by `NpcWorldBehaviour` itself.
+| `NpcId` | Guid | Set after `EnsureNpcAsync`; `Guid.Empty` until initialized |
+| `AccountId` | Guid | From world context |
+| `TrainerId` | Guid | From world context |
 
 ### Failure Behavior
 
-If `EnsureStarterNpcAsync` throws (network error, server error, etc.), the exception propagates to `GameInitializer`'s initialization loop. `GameInitializer` logs the error and continues to the next `IWorldInitializable`. `NpcWorldBehaviour`'s public state remains in its default values (`NpcId = Guid.Empty`, `HasCreatureToGive = false`), effectively disabling the interaction for this session.
+If `EnsureNpcAsync` throws (network error, server error, etc.), the exception propagates to `GameInitializer`'s initialization loop. `GameInitializer` logs the error and continues to the next `IWorldInitializable`. Sub-behaviours are not called and remain uninitialized. `NpcInteractionBehaviour` finds no ready state and shows no prompt.
 
-The player must reload the world (e.g., log out and back in) to retry initialization. There is currently no retry mechanism within a session.
+## `NpcBattleRequest` Record
+
+`NpcBattleRequest` is the payload carried by the `OnBattleRequested` event. It bundles everything a battle coordinator needs to start a fight:
+
+```csharp
+public record NpcBattleRequest(
+    Guid NpcId,
+    Guid AccountId,
+    Guid TrainerId,
+    IReadOnlyList<CreatureInventoryEntry> NpcTeam,
+    IReadOnlyList<NpcInventoryEntry> NpcItems
+);
+```
+
+| Field | Source |
+|-------|--------|
+| `NpcId` | `NpcWorldBehaviour.NpcId` |
+| `AccountId` | `NpcWorldBehaviour.AccountId` |
+| `TrainerId` | `NpcWorldBehaviour.TrainerId` |
+| `NpcTeam` | `NpcTrainerBehaviour.CreatureTeam` |
+| `NpcItems` | `NpcTrainerBehaviour.BattleItems` |
+
+`NpcItems` contains the items seeded via the `_items` Inspector list on `NpcTrainerBehaviour`. The battle system can use these to grant items to the trainer on victory, or for any other battle-resolution logic.
 
 ## `NpcInteractionBehaviour`
 
-### Requirements
+`NpcInteractionBehaviour` requires `NpcWorldBehaviour` and `SphereCollider` on the same GameObject (enforced with `[RequireComponent]`). It queries optional sub-behaviours in its `Awake` or `[Inject]` method:
 
-`NpcInteractionBehaviour` requires `NpcWorldBehaviour` and `SphereCollider` on the same GameObject (enforced with `[RequireComponent]`). It accesses `NpcWorldBehaviour` via `GetComponent<NpcWorldBehaviour>()` in its `[Inject]` method or `Awake`.
+```csharp
+_grantBehaviour   = GetComponent<NpcCreatureGrantBehaviour>();
+_trainerBehaviour = GetComponent<NpcTrainerBehaviour>();
+_merchantBehaviour = GetComponent<NpcMerchantBehaviour>();
+```
 
 ### Inspector Fields
 
@@ -120,15 +111,66 @@ The player must reload the world (e.g., log out and back in) to retry initializa
 
 The `SphereCollider` is set to `isTrigger = true` and `radius = _interactionRadius` on `Awake`. Do not manually configure the `SphereCollider` in the Inspector — it is overwritten at runtime.
 
-### Interaction Sequence
+### `OnBattleRequested` Event
+
+```csharp
+public event Action<NpcBattleRequest> OnBattleRequested;
+```
+
+Fired when the player presses E and `NpcTrainerBehaviour.CanBattle` is true (and no grant is pending). Scene-level coordinators subscribe to this event to launch the battle system.
+
+### Interaction Dispatch Flow
+
+When the player presses **E** inside the trigger:
+
+1. Check `_npcWorld.NpcId != Guid.Empty` — guard against pressing E before init completes
+2. **Grant check:** if `_grantBehaviour != null && _grantBehaviour.IsReady && _grantBehaviour.HasCreatureToGive`
+   - Call `POST /api/v1/npc/{npcId}/give-creature`
+   - On success: `_grantBehaviour.HasCreatureToGive = false`, hide grant prompt
+   - Grant takes priority — a trainer NPC that still has a creature to give will not trigger battle
+3. **Battle check:** else if `_trainerBehaviour != null && _trainerBehaviour.CanBattle`
+   - Build `NpcBattleRequest` from `_npcWorld` + `_trainerBehaviour.CreatureTeam` + `_trainerBehaviour.BattleItems`
+   - Fire `OnBattleRequested(request)`
+4. If neither applies, no action is taken (player may be interacting before init completes, or NPC has no relevant sub-behaviour)
+
+```csharp
+private async Task OnInteractAsync()
+{
+    if (_npcWorld.NpcId == Guid.Empty) return;
+
+    // 1. Grant takes priority
+    if (_grantBehaviour != null && _grantBehaviour.IsReady && _grantBehaviour.HasCreatureToGive)
+    {
+        await GiveCreatureAsync();
+        return;
+    }
+
+    // 2. Battle
+    if (_trainerBehaviour != null && _trainerBehaviour.CanBattle)
+    {
+        var request = new NpcBattleRequest(
+            _npcWorld.NpcId,
+            _npcWorld.AccountId,
+            _npcWorld.TrainerId,
+            _trainerBehaviour.CreatureTeam,
+            _trainerBehaviour.BattleItems
+        );
+        OnBattleRequested?.Invoke(request);
+    }
+}
+```
+
+### Proximity Detection
 
 1. Player enters `SphereCollider` trigger → `OnTriggerEnter` fires
-2. Checks `other.tag == "Player"` (the entering collider's root tag)
-3. If `_npcWorld.HasCreatureToGive` is true → calls `ShowPrompt(true)`
-4. Player presses **E** while inside the trigger → `GiveCreatureAsync` is called
-5. `POST /api/v1/npc/{npcId}/give-creature` → creature transferred to trainer storage
-6. On success: `_npcWorld.HasCreatureToGive = false`, `ShowPrompt(false)`, log message
-7. Player exits trigger → `OnTriggerExit` fires → `ShowPrompt(false)`
+2. Checks `other.tag == "Player"`
+3. Evaluates which prompt to show:
+   - Grant pending → show "Press E to receive creature"
+   - Can battle → show "Press E to battle"
+   - Neither → no prompt
+4. Player exits trigger → `OnTriggerExit` fires → hide all prompts
+
+### `GiveCreatureAsync` Detail
 
 ```csharp
 private async Task GiveCreatureAsync()
@@ -142,55 +184,113 @@ private async Task GiveCreatureAsync()
         },
         CancellationToken.None);
 
-    _npcWorld.HasCreatureToGive = false;
+    _grantBehaviour.HasCreatureToGive = false;
+    ShowPrompt(PromptType.None);
     _logger.Info($"You received {response.CreatureName}!");
 }
 ```
 
-`CancellationToken.None` is used for the give-creature call because cancelling a creature transfer mid-flight could leave the NPC's team in an inconsistent state. The server handles the transfer atomically, but if the client cancels the HTTP request before receiving the response, it does not know if the transfer succeeded. Using `CancellationToken.None` ensures the response is always received.
-
-### Edge Cases and Gotchas
-
-**Player presses E before init completes.** If the player is close to the NPC when the world loads and `InitializeAsync` is still running, `NpcId` is `Guid.Empty`. Calling `give-creature` with `Guid.Empty` will return a 400 from the backend. Guard against this by checking `_npcWorld.NpcId != Guid.Empty` before calling `GiveCreatureAsync`.
-
-**Player presses E twice rapidly.** Two concurrent `GiveCreatureAsync` calls with the same `NpcId` will result in one success and one `InvalidOperationException` ("NPC has no creatures to give"). The first to complete sets `HasCreatureToGive = false`. Debounce the E-press input or disable the input as soon as the first call starts.
-
-**NPC has no creature but `HasCreatureToGive` is true on client.** This is possible if the client and server are out of sync. `GiveCreatureAsync` will throw `NotFoundException` or `InvalidOperationException`. Handle this in the exception handler for `GiveCreatureAsync` by setting `HasCreatureToGive = false` and hiding the prompt even on failure.
+`CancellationToken.None` is used because cancelling a creature transfer mid-flight could leave the NPC's team in an inconsistent state. The server handles the transfer atomically; if the client cancels before receiving the response, it does not know if the transfer succeeded.
 
 ## Setting Up an NPC in the Scene
 
+### Starter / Grant NPC
+
 1. Create a GameObject (e.g., `NPC_Cindris`)
-2. Add `NpcWorldBehaviour` component
-3. Add `NpcInteractionBehaviour` component (`SphereCollider` is added automatically via `[RequireComponent]`)
-4. In the Inspector on `NpcWorldBehaviour`:
-   - Set `_npcContentId` to the seed-data GUID for this NPC (must match `content_id` in the database and in `game_config.yaml` / YAML asset files)
-   - Set `_starterCreatureBaseId` to the base creature UUID (must match a row in the `creature` table)
-5. Adjust `_interactionRadius` on `NpcInteractionBehaviour` as needed (default 3 world units)
-6. Ensure the player's root GameObject has the tag `"Player"` (checked in `OnTriggerEnter`)
-7. Verify Zenject has `INpcClient` bound in `LocalDevGameInstaller` (it is bound by default; only check if you added a new scene installer)
+2. Add `NpcWorldBehaviour` — set `_npcContentKey` (e.g. `"cindris_starter_npc"`), leave `_npcType` as `Npc`
+3. Add `NpcCreatureGrantBehaviour` — configure `_slots`:
+   - Slot 1: `CreatureBaseContentKey = "cindris_grass_starter"`, `SlotNumber = 1`
+4. Add `NpcInteractionBehaviour` (`SphereCollider` added automatically)
+5. Adjust `_interactionRadius` as needed
+6. Ensure the player root GameObject has tag `"Player"`
 
-## UI Prompt
+### Trainer NPC (Battle Only)
 
-`ShowPrompt(visible)` currently logs a debug message. To wire it to a world-space UI:
+1. Create a GameObject (e.g., `NPC_Trainer_Kael`)
+2. Add `NpcWorldBehaviour` — set `_npcContentKey`, set `_npcType` to `Trainer`
+3. Add `NpcTrainerBehaviour` — configure `_slots` (creature team) and optionally `_items`
+4. Add `NpcInteractionBehaviour`
+5. Subscribe to `IBattleCoordinator.OnBattleStarted` to open the battle UI when a battle begins:
+   ```csharp
+   _battleCoordinator.OnBattleStarted += session => { /* open battle UI */ };
+   ```
+   `NpcInteractionBehaviour` now calls `BattleCoordinator.StartNpcBattle(request)` directly — no additional wiring is needed to connect the interaction to the battle engine. `OnBattleRequested` still fires if you need to react to the interaction itself before the battle starts.
 
-1. Create a `Canvas` (World Space) as a child of the NPC GameObject
-2. Add a `TextMeshPro` label reading "Press E to receive creature"
-3. In `NpcInteractionBehaviour`, hold a `[SerializeField] private GameObject _promptPanel;` reference
-4. Replace the `ShowPrompt` log statement with `_promptPanel.SetActive(visible)`
+### Trainer NPC (Grant + Battle)
 
-The prompt panel should be initially inactive in the Inspector so it does not appear before the player enters the trigger radius.
+1. Create a GameObject (e.g., `NPC_Trainer_Kael`)
+2. Add `NpcWorldBehaviour` — set `_npcContentKey`, set `_npcType` to `Trainer`
+3. Add `NpcCreatureGrantBehaviour` — configure `_slots` for first-visit grant
+4. Add `NpcTrainerBehaviour` — configure `_slots` for the battle team and `_items` for battle items
+5. Add `NpcInteractionBehaviour`
+6. Subscribe to `OnBattleRequested` in a scene coordinator
+
+Note: when both are present, `NpcCreatureGrantBehaviour` must appear above `NpcTrainerBehaviour` in the component list (see [World Behaviours — Coexistence](?page=unity/03-world-behaviours)).
+
+### Merchant NPC
+
+1. Create a GameObject (e.g., `NPC_Merchant_Elara`)
+2. Add `NpcWorldBehaviour` — set `_npcContentKey`, leave `_npcType` as `Npc`
+3. Add `NpcMerchantBehaviour`
+4. Add `NpcInteractionBehaviour`
+5. In a scene coordinator, query `_merchantBehaviour.MerchantNpcId` to open the shop UI
+
+## Subscribing to Battle Events
+
+`NpcInteractionBehaviour` internally calls `IBattleCoordinator.StartNpcBattle(request)` — you do not need to wire this yourself. The recommended hook for UI and scene transitions is `IBattleCoordinator.OnBattleStarted`:
+
+```csharp
+public class BattleUIController : MonoBehaviour
+{
+    [Inject] private IBattleCoordinator _battleCoordinator;
+
+    private void OnEnable()  => _battleCoordinator.OnBattleStarted += HandleBattleStarted;
+    private void OnDisable() => _battleCoordinator.OnBattleStarted -= HandleBattleStarted;
+
+    private void HandleBattleStarted(BattleSession session)
+    {
+        // session.Kind == BattleRequestKind.NpcTrainer
+        // session.PlayerTurnKey is set and ready
+    }
+}
+```
+
+`NpcInteractionBehaviour.OnBattleRequested` still fires and can be subscribed for custom pre-battle hooks (analytics, cutscenes, etc.). Subscribe to `OnBattleStarted` if you only care about confirmed battle start; subscribe to `OnBattleRequested` if you need to act at interaction time before the battle engine initializes.
+
+Always unsubscribe in `OnDisable`/`OnDestroy` to prevent stale delegate references after scene unload.
+
+## Edge Cases and Gotchas
+
+**Player presses E before init completes.** `NpcId` is `Guid.Empty`. The guard at the top of `OnInteractAsync` returns early. No backend call is made.
+
+**Player presses E twice rapidly.** Two concurrent `GiveCreatureAsync` calls with the same `NpcId` will result in one success and one `InvalidOperationException` from the backend. Debounce with an `_isInteracting` bool guard:
+
+```csharp
+if (_isInteracting) return;
+_isInteracting = true;
+try { await OnInteractAsync(); }
+finally { _isInteracting = false; }
+```
+
+**Grant and battle both available.** Grant always takes priority (step 2 runs before step 3 in the dispatch flow). Once the grant is claimed, subsequent E-presses check battle.
+
+**`NpcTrainerBehaviour` before `NpcCreatureGrantBehaviour` in component order.** Sub-behaviours run in `GetComponents` order. If `NpcTrainerBehaviour.InitializeAsync` fetches the team before `NpcCreatureGrantBehaviour` seeds it, the cached team may be empty on first visit. Ensure `NpcCreatureGrantBehaviour` appears before `NpcTrainerBehaviour` in the Inspector's component list.
+
+**`_npcType` not set to `Trainer` on a trainer NPC.** The NPC will be created with type `Npc` in the database. This is a first-write-wins field — fix requires a direct database update. Always set `_npcType = Trainer` on trainer NPC GameObjects before the first world load.
 
 ## Common Mistakes / Tips
 
-- **`_npcContentId` and `_starterCreatureBaseId` not set in Inspector.** The NPC silently fails to initialize. Always test a new NPC placement by watching the Unity Console for initialization log messages.
-- **Player tag not set.** `OnTriggerEnter` never activates the prompt. The NPC will be "dead" even after correct initialization.
-- **Double E-press triggering two transfers.** Add an `_isTransferring` bool guard and set it true before the async call, false after (in a finally block). Reset it to false on failure to allow retry.
-- **Wrong `content_id` in Inspector.** If `_npcContentId` does not match any seed row, `GetNpcByContentIdAsync` returns null on every call and `EnsureStarterNpc` creates a new NPC with the Inspector's GUID as its `content_id`. Check the NPC count in the database if you suspect duplicate rows.
-- **Using the database `id` instead of `content_id` in the Inspector.** The Inspector field expects the `content_id` value, not the internal row `id`. If you copy the wrong UUID from the database, the NPC lookup will always miss and a duplicate will be created each session.
+- **`_npcContentKey` not set in Inspector.** `NpcWorldBehaviour.InitializeAsync` logs a warning and returns early. Sub-behaviours are never called. Always verify the Inspector field.
+- **`_starterCreatureBaseId` field no longer exists on `NpcWorldBehaviour`.** Creature team seeding is now `NpcCreatureGrantBehaviour._slots` or `NpcTrainerBehaviour._slots`. If you are migrating an old prefab, remove the old field reference and add the appropriate sub-behaviour.
+- **Player tag not set.** `OnTriggerEnter` never activates. The NPC appears in the world but is non-interactive.
+- **Not unsubscribing `OnBattleRequested`.** A destroyed coordinator with a live subscription can cause `NullReferenceException` after scene unload. Always unsubscribe in `OnDisable`.
+- **Wrong `content_key` in Inspector.** `EnsureNpcAsync` creates a new NPC row each time it sees an unknown key. Check the NPC count in the database if you suspect duplicates.
+- **`NpcTrainerBehaviour._items` using a non-GUID string.** Each `itemId` must be a valid UUID string. The behaviour logs a warning and skips invalid entries. Future work: replace `itemId` string with a `contentKey` string once items have `content_key` support.
 
 ## Related Pages
 
-- [World Behaviours](?page=unity/03-world-behaviours) — `IWorldInitializable` lifecycle that `NpcWorldBehaviour` implements
-- [Starter Creature Flow](?page=backend/05-starter-creature-flow) — end-to-end walkthrough of both components in action
-- [NPC System](?page=backend/02-npc-system) — backend domain service behind these interactions
+- [World Behaviours](?page=unity/03-world-behaviours) — `INpcSubInitializable`, `NpcWorldBehaviour` identity pattern, composable component setup
+- [NPC System](?page=backend/02-npc-system) — `EnsureNpcAsync`, `EnsureNpcCreatureTeamAsync`, `EnsureNpcItemsAsync`, REST endpoints
+- [Starter Creature Flow](?page=backend/05-starter-creature-flow) — end-to-end walkthrough of world init through player interaction
 - [HTTP Clients](?page=unity/05-http-clients) — `INpcClient` / `NpcClientUnityHttp` that carries the requests
+- [Battle System](?page=unity/07-battle-system) — `BattleCoordinator`, `BattleSession`, full NPC trainer battle flow

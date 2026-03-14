@@ -35,6 +35,16 @@
     "path": "backend/06-auth-and-accounts"
   },
   {
+    "section": "Backend",
+    "title": "Quest System",
+    "path": "backend/07-quest-system"
+  },
+  {
+    "section": "Backend",
+    "title": "Stats & Lifetime Tracking",
+    "path": "backend/08-stats-system"
+  },
+  {
     "section": "Unity",
     "title": "Unity Project Setup",
     "path": "unity/01-project-setup"
@@ -58,5 +68,15 @@
     "section": "Unity",
     "title": "HTTP Clients",
     "path": "unity/05-http-clients"
+  },
+  {
+    "section": "Unity",
+    "title": "Localization",
+    "path": "unity/06-localization"
+  },
+  {
+    "section": "Unity",
+    "title": "Battle System",
+    "path": "unity/07-battle-system"
   }
 ]

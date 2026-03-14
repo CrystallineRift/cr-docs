@@ -56,6 +56,7 @@ Key columns on `spawner`:
 - `row_version` — incremented on every update, reserved for future optimistic concurrency
 - `is_active` — only active spawners accept spawn requests
 - `deleted` — soft delete flag
+- `content_key` — optional designer-facing key (e.g. `"starter-wild-zone"`); unique per trainer when set (unique index on `(account_id, trainer_id, content_key) WHERE content_key IS NOT NULL`)
 
 Key columns on `creature_spawner_template`:
 - `base_creature_id` — which creature species to generate
@@ -95,6 +96,24 @@ Spawner: "Mystic Forest Spawner"
 ```
 
 Effective pool weights: Common = 70×1.0 = 70, Rare = 25×1.5 = 37.5, Legendary = 5×3.0 = 15. Total = 122.5. So Common spawns ~57% of the time, Rare ~31%, Legendary ~12%.
+
+## `EnsureSpawnerForTrainerAsync`
+
+`SpawnerDomainService` exposes an idempotent upsert method used during world bootstrap:
+
+```csharp
+Task<SpawnerDomain> EnsureSpawnerForTrainerAsync(
+    Guid accountId, Guid trainerId, string contentKey,
+    CancellationToken ct = default);
+```
+
+This method:
+1. Calls `GetSpawnerByContentKeyAsync(accountId, trainerId, contentKey)` — if found, returns the existing spawner mapped to `SpawnerDomain`
+2. If not found, calls `GetSpawnerTemplateByContentKeyAsync(contentKey)` to load a shared template
+3. Creates a new spawner row from the template (including all pools and creature templates) for this specific `(accountId, trainerId)` pair
+4. Returns the new spawner
+
+This mirrors the NPC system's `EnsureStarterNpcAsync` pattern — the same content_key on different trainers results in separate but identically configured spawner instances. World bootstrap calls this once per spawner definition in the scene.
 
 ## Quick Start
 
@@ -221,6 +240,21 @@ This history is queryable via `GetSpawnHistoryAsync` and the `/history` endpoint
 - Spawner status: < 50 ms (p95)
 - Max QPS: 1,000 spawns/sec per spawner
 
+## Unity Integration — SpawnerId as Wild Trainer Proxy
+
+`SpawnerWorldBehaviour` in the Unity client exposes two properties after `InitializeAsync` completes:
+
+```csharp
+public Guid SpawnerId     { get; private set; }  // the resolved spawner row ID
+public Guid WildTrainerId { get; private set; }  // Phase 1: same as SpawnerId
+```
+
+`SpawnerEncounterBehaviour` reads these and passes `WildTrainerId` as the opponent ID in `WildBattleRequest`. The battle engine (`StatefulBattleSystemV2`) loads the wild creature team via `ICreatureInventoryService.GetTeamAsync(wildTrainerId)`.
+
+In Phase 1, `WildTrainerId == SpawnerId` is an intentional proxy. There is no dedicated wild trainer entity — spawner-assigned creatures must be stored under the spawner's ID in the generated creature inventory for the battle engine to find them. A dedicated wild trainer row per spawner zone is Phase 2.
+
+See [Battle System](?page=unity/07-battle-system) for the complete wild encounter flow.
+
 ## Common Mistakes / Tips
 
 - **Spawner not active.** The most common reason `SpawnCreaturesAsync` returns `ValidationError`. Always call `activate` after creating a spawner.
@@ -228,9 +262,11 @@ This history is queryable via `GetSpawnHistoryAsync` and the `/history` endpoint
 - **Spawn probabilities don't need to sum to 1.** The service normalizes by the total. However, all templates in a pool with `spawn_probability = 0` will never be selected. Use at least 0.01 for any template you want to include.
 - **Missing `trainerId` in spawn request.** See the `SpawnRequest` note above — spawns succeed but generate zero creatures. Add `trainerId` to the request body.
 - **Capacity not reset.** After testing, `current_count` accumulates. Reset it manually or deactivate/reactivate the spawner. A future admin endpoint should support count reset.
+- **Using the wrong `content_key` in the world behaviour.** If `_spawnerContentKey` does not match any spawner template row, `GetSpawnerTemplateByContentKeyAsync` returns null and `EnsureSpawnerForTrainerAsync` throws `InvalidOperationException`. Verify the key matches the seed data exactly (case-sensitive).
 
 ## Related Pages
 
 - [Creature Generation](?page=backend/04-creature-generation) — how `ICreatureGenerationService.CreateFromSpawnerAsync` builds a creature from a template
 - [Backend Architecture](?page=backend/01-architecture) — `row_version`, transaction patterns, soft deletes
 - [Introduction](?page=00-introduction) — dual SQLite/Postgres design rationale
+- [Battle System](?page=unity/07-battle-system) — `SpawnerId` as wild trainer proxy, `SpawnerEncounterBehaviour`
