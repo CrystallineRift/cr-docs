@@ -19,7 +19,30 @@ This means the components themselves have no ordering dependency on each other �
 
 A static registry avoids the circular dependency problem: `NpcWorldBehaviour` (a MonoBehaviour) would need to inject `IWorldRegistry` to register itself, but Zenject injects MonoBehaviours in their `[Inject]` method which runs during `Awake`. By the time `[Inject]` runs, `WorldRegistry.Register` in the component's own `Awake` may have already run (execution order between Awake calls is not guaranteed). Making the registry static and globally accessible eliminates this race: `WorldRegistry.Register(this)` in `Awake` always works regardless of Zenject's injection timing.
 
-A downside of the static approach is testability — you cannot inject a mock registry in tests. This is an acceptable trade-off because `WorldRegistry` has no logic of its own; it is just a dictionary.
+A downside of the static approach is testability — you cannot inject a mock registry in tests. This is an acceptable trade-off because `WorldRegistry` has no logic of its own; it is just a list.
+
+The actual `WorldRegistry` implementation is minimal:
+
+```csharp
+public static class WorldRegistry
+{
+    static readonly List<IWorldInitializable> _all = new();
+
+    public static IReadOnlyList<IWorldInitializable> All => _all;
+
+    public static void Register(IWorldInitializable obj)
+    {
+        if (!_all.Contains(obj))
+            _all.Add(obj);
+    }
+
+    public static void Unregister(IWorldInitializable obj) => _all.Remove(obj);
+
+    public static void Clear() => _all.Clear();
+}
+```
+
+`All` returns the backing list directly (not a snapshot). `GameInitializer` calls `WorldRegistry.All.ToList()` to take a snapshot at the start of each init loop, preventing modification-during-enumeration issues.
 
 ### Why `IWorldInitializable` Instead of a Base Class?
 
@@ -30,6 +53,12 @@ An interface allows any MonoBehaviour — regardless of its base class — to pa
 Earlier versions of `NpcWorldBehaviour` embedded all NPC concerns — identity resolution, creature grants, merchant state — in a single MonoBehaviour. This led to growing inspector fields and branching initialization logic: "if this NPC is a starter, do A; if it's a merchant, do B."
 
 The composable pattern separates these concerns into independent `INpcSubInitializable` add-on components. `NpcWorldBehaviour` stays identity-only. Each sub-behaviour opts into the NPC's initialization lifecycle by implementing `INpcSubInitializable`. Designers stack only the components they need on each NPC GameObject, and there is no dead code path in any single component.
+
+### Why Sequential Initialization Instead of Parallel?
+
+`GameInitializer.RunAsync` awaits each `InitializeAsync` call in a `foreach` loop. This is intentional. Some behaviours have implicit ordering dependencies: `NpcCreatureGrantBehaviour` must seed a creature team before `NpcTrainerBehaviour` fetches it. Parallel initialization would require explicit ordering annotations on every behaviour, which is more complex and error-prone.
+
+If initialization time becomes a concern (many NPCs in a large scene), the loop can be changed to run behaviours in priority buckets — but sequential is the safe default.
 
 ## Component Overview
 
@@ -47,12 +76,7 @@ The composable pattern separates these concerns into independent `INpcSubInitial
 | `SpawnerWorldBehaviour` | World behaviour: ensures spawner zone exists; exposes `SpawnerId` |
 | `SpawnerEncounterBehaviour` | Activated by `SpawnerWorldBehaviour`; trigger-based wild encounter entry point |
 
-Source files:
-- `../cr-data/…/GameInitializer.cs`
-- `../cr-data/…/NpcWorldBehaviour.cs`
-- `../cr-data/…/NpcCreatureGrantBehaviour.cs`
-- `../cr-data/…/NpcMerchantBehaviour.cs`
-- `../cr-data/…/NpcTrainerBehaviour.cs`
+Source files live in `cr-data/My project/Assets/CR/Game/World/` and its `Behaviours/` subfolder.
 
 ## `IWorldInitializable`
 
@@ -70,17 +94,17 @@ Any `MonoBehaviour` that needs account/trainer context at scene start implements
 ```csharp
 public interface INpcSubInitializable
 {
-    Task OnNpcReadyAsync(Guid npcId, IWorldContext context, CancellationToken ct = default);
+    Task InitializeAsync(Guid npcId, Guid accountId, Guid trainerId, CancellationToken ct = default);
 }
 ```
 
-Components that implement `INpcSubInitializable` are discovered by `NpcWorldBehaviour` via `GetComponents<INpcSubInitializable>()` after the NPC's identity has been resolved. `NpcWorldBehaviour` calls `OnNpcReadyAsync` on each sub-behaviour in component order, passing the resolved `npcId` and the current world context.
+Components that implement `INpcSubInitializable` are discovered by `NpcWorldBehaviour` via `GetComponents<INpcSubInitializable>()` after the NPC's identity has been resolved. `NpcWorldBehaviour` calls `InitializeAsync` on each sub-behaviour in component order, passing the resolved `npcId` and identity GUIDs.
 
 Sub-behaviours do **not** register with `WorldRegistry` themselves — they are driven entirely by `NpcWorldBehaviour`. This means they do not need their own `Awake`/`OnDestroy` registry management.
 
 ## `WorldRegistry`
 
-A static dictionary keyed on `IWorldInitializable` instances. Thread-safe add/remove:
+A static list of `IWorldInitializable` instances. The `Register` method checks for duplicates (a behaviour added to the scene while already registered will not be double-registered). `GameInitializer` calls `WorldRegistry.All.ToList()` at the start of each `RunAsync` to get a snapshot before awaiting anything.
 
 ```csharp
 // In Awake:
@@ -90,7 +114,7 @@ WorldRegistry.Register(this);
 WorldRegistry.Unregister(this);
 ```
 
-`GameInitializer` reads `WorldRegistry.All` when it fires the init loop. The `All` property returns a snapshot of the current registrations to prevent modification-during-enumeration errors if a behaviour is destroyed while initialization is in progress.
+**How `WorldRegistry` discovers implementations.** It does not discover anything automatically. Each component that implements `IWorldInitializable` is responsible for calling `WorldRegistry.Register(this)` in its own `Awake`. There is no reflection scan or Zenject collection binding — registration is explicit. This means if you forget to call `Register`, the behaviour will not be initialized and no error will occur (it is simply not in the list).
 
 **Scene unload.** When a scene unloads, `GameInitializer` listens to `SceneManager.sceneUnloaded` and calls `WorldRegistry.Clear()`. The registry is then empty until the next scene's components each call `WorldRegistry.Register(this)` in their `Awake`.
 
@@ -109,7 +133,7 @@ public interface IWorldContext
 
 `WorldContext` is the concrete implementation, created by `GameInitializer.RunAsync` with the current session's IDs. It is immutable — the same context object is passed to all `InitializeAsync` calls within a single init loop. If the trainer changes during initialization (e.g., the user switches trainers on a slow connection), a new init loop with a new context starts. The `CancellationToken` from the previous loop is cancelled first.
 
-`IsOnline` is read from `IGameSessionRepository` at the start of `RunAsync`. It reflects whether the session was started with network access. Individual behaviours can use this to decide whether to make HTTP calls or serve from local SQLite.
+`IsOnline` is read from the `TrainerChangedEventArgs.IsOnlineTrainer` flag set by `GameSessionManager`. Individual behaviours can use this to decide whether to make HTTP calls or serve from local SQLite.
 
 ## `GameInitializer` Bootstrap Flow
 
@@ -119,36 +143,162 @@ LocalDevGameInstaller.InstallBindings
 
   → GameInitializer created immediately, [Inject] is called:
       _sessionManager.OnTrainerChanged += OnTrainerChanged
+      SceneManager.sceneUnloaded += OnSceneUnloaded
 
   → GameSessionManager.Start() runs, loads session from SQLite
-  → If a trainer is active, fires OnTrainerChanged
+  → If a trainer is active, fires OnTrainerChanged(e.TrainerId, e.IsOnlineTrainer)
 
   → GameInitializer.OnTrainerChanged fires RunAsync(accountId, trainerId, isOnline)
-      └─ Creates a new CancellationTokenSource
-      └─ Creates IWorldContext from current session
-      └─ foreach item in WorldRegistry.All:
-             await item.InitializeAsync(context, cts.Token)
+      └─ Cancels previous CancellationTokenSource (if any)
+      └─ Creates new CancellationTokenSource
+      └─ Creates IWorldContext(accountId, trainerId, isOnline)
+      └─ initializables = WorldRegistry.All.ToList()
+      └─ Logs "[GameInitializer] === World init start ==="
+      └─ foreach item in initializables:
+             await item.InitializeAsync(context, ct)
+             (OperationCanceledException → break; Exception → log, failed++, continue)
+      └─ Logs "[GameInitializer] === World init complete === N ok / M failed / Xms"
 ```
 
-`[DefaultExecutionOrder(50)]` on `GameInitializer` ensures its `Start` (if any) runs after most other components, but Zenject injection via `[Inject]` is called before any `Start`, so the subscription is always in place before `GameSessionManager` can fire.
+`[DefaultExecutionOrder(50)]` on `GameInitializer` ensures its Unity lifecycle methods run after most other components, but Zenject injection via `[Inject]` is called before any `Start`, so the subscription is always in place before `GameSessionManager` can fire.
 
-The init loop is **sequential**, not parallel. This is intentional: some behaviours may depend on the side effects of earlier behaviours (e.g., NPC initialization that creates inventory rows a later behaviour expects to find). If ordering becomes a problem, consider running behaviours in explicit priority buckets.
+Errors thrown by individual `InitializeAsync` calls are caught and logged with the component name and elapsed time. The loop continues to the next component — a single NPC failing to initialize does not block other NPCs. The final log line includes the count of successes and failures.
 
-## `GameSessionManager`
+## Failure Mode Handling
 
-`GameSessionManager` is the central state machine for login/trainer selection. It:
-- Reads the last active session from `IGameSessionRepository` on `Start`
-- Fires `OnTrainerChanged(accountId, trainerId, isOnline)` when a trainer becomes active
-- Provides `GetCurrentSession()` for one-off queries of the active identity
-- Fires `OnSessionCleared()` when the trainer logs out or the session is invalidated
+When `InitializeAsync` throws:
 
-`GameInitializer` subscribes only to `OnTrainerChanged`. When a trainer is deselected (logout), `GameInitializer` cancels the current `CancellationTokenSource` to stop any in-progress initialization loop.
+- **`OperationCanceledException`** — caught by `GameInitializer`, interpreted as clean cancellation (scene unload or trainer change mid-init). The loop stops and no further behaviours initialize for this run.
+- **Any other exception** — caught by `GameInitializer`, logged as an error with the component name and elapsed time, then the loop continues. The failed component is left in whatever partial state it was in when the exception was thrown. Downstream components that read the failed component's public state (e.g., `NpcInteractionBehaviour` checking `NpcWorldBehaviour.NpcId`) will see `Guid.Empty` and should handle it gracefully.
+
+If `GameInitializer` itself fails (e.g., `GameSessionManager` fires an event before `GameInitializer` is created — which cannot happen with `NonLazy()`), the `OnTrainerChanged` handler wraps `RunAsync` in a `ContinueWith(OnlyOnFaulted)` continuation that logs unhandled errors:
+
+```csharp
+RunAsync(...)
+    .ContinueWith(t =>
+        _logger.Error($"[GameInitializer] Unhandled error in RunAsync: {t.Exception?.GetBaseException().Message}"),
+        TaskContinuationOptions.OnlyOnFaulted);
+```
+
+If the WorldRegistry is empty when `RunAsync` fires, `GameInitializer` logs a warning: `WorldRegistry is empty — no IWorldInitializable objects registered`. This is a common symptom of forgetting `WorldRegistry.Register(this)` in `Awake`.
+
+## Adding a New IWorldInitializable System — Full Walkthrough
+
+This is the complete sequence for adding a new system that participates in world bootstrap.
+
+### Step 1 — Create the MonoBehaviour
+
+```csharp
+using System.Threading;
+using System.Threading.Tasks;
+using CR.Game.Common;
+using CR.Game.World;
+using UnityEngine;
+using Zenject;
+
+public class QuestBoardBehaviour : MonoBehaviour, IWorldInitializable
+{
+    private IQuestClient _questClient;
+    private ICRLogger _logger;
+
+    [Inject]
+    public void Init(IQuestClient questClient, ICRLogger logger)
+    {
+        _questClient = questClient;
+        _logger = logger;
+    }
+
+    private void Awake() => WorldRegistry.Register(this);
+    private void OnDestroy() => WorldRegistry.Unregister(this);
+
+    public async Task InitializeAsync(IWorldContext context, CancellationToken ct = default)
+    {
+        _logger.Debug($"[QuestBoardBehaviour] init. trainerId={context.TrainerId}");
+
+        // Store identity values you need — do NOT store the context object itself
+        _trainerId = context.TrainerId;
+
+        if (!context.IsOnline)
+        {
+            _logger.Info("[QuestBoardBehaviour] offline — skipping quest fetch.");
+            return;
+        }
+
+        var quests = await _questClient.GetActiveQuestsAsync(context.TrainerId, ct);
+        RenderQuestBoard(quests);
+    }
+
+    private Guid _trainerId;
+    private void RenderQuestBoard(/* ... */) { /* ... */ }
+}
+```
+
+Key points:
+- `Awake` registers, `OnDestroy` unregisters — always both
+- `[Inject]` wires dependencies — never use `GetComponent` or `FindObjectOfType` inside `[Inject]`
+- Always pass `ct` to inner async calls
+- Do not store the `context` reference — extract and store the values you need
+
+### Step 2 — Add the MonoBehaviour to the scene
+
+Add `QuestBoardBehaviour` to a GameObject in the scene. The component will automatically register itself with `WorldRegistry` when the scene loads.
+
+### Step 3 — Verify Zenject has the required bindings
+
+`IQuestClient` and `ICRLogger` must be bound in `LocalDevGameInstaller`. `ICRLogger` is already bound with a per-consumer factory. If `IQuestClient` is not yet bound, add it (see [Dependency Injection](?page=unity/02-dependency-injection) for the full checklist).
+
+### Step 4 — Play and check the log
+
+Look for:
+```
+[GameInitializer] Initializing 'QuestBoardBehaviour (QuestBoardBehaviour)'...
+[GameInitializer] 'QuestBoardBehaviour (QuestBoardBehaviour)' done in 43ms.
+```
+
+If the component name appears in the failure count (`M failed`), the exception message is logged directly above it.
+
+## Controlling Initialization Order
+
+The order in which `InitializeAsync` is called on registered behaviours depends on the order they were registered with `WorldRegistry` — which is the order their `Awake` methods ran. Unity does not guarantee `Awake` order across different GameObjects unless you set **Script Execution Order** in Project Settings.
+
+For the NPC sub-behaviour case, ordering within a single NPC's components is controlled by the component order in the Unity Inspector (top to bottom = first to last in `GetComponents`).
+
+If two world behaviours have a dependency (e.g., behaviour B needs data produced by behaviour A), there are two options:
+1. Set script execution order so A's `Awake` runs first (ensuring A is earlier in the `WorldRegistry.All` list)
+2. Have B read a cached value from A's public property in its `InitializeAsync` and retry if it is `Guid.Empty` (polling until A's data is ready)
+
+Option 1 is simpler and preferred for stable dependencies. Option 2 is fragile and should be avoided.
 
 ## `NpcWorldBehaviour` — Identity Only
 
-`NpcWorldBehaviour` implements `IWorldInitializable`. Its sole job is to resolve the NPC's server-side identity (`NpcId`, `AccountId`, `TrainerId`) and then hand off to sub-behaviours. It no longer embeds creature grant logic or any other NPC-type-specific behavior.
+`NpcWorldBehaviour` implements `IWorldInitializable`. Its sole job is to resolve the NPC's server-side identity (`NpcId`, `AccountId`, `TrainerId`) and then hand off to sub-behaviours.
 
-**There is no `_starterCreatureBaseId` field.** Creature team seeding is the responsibility of `NpcCreatureGrantBehaviour` (for grant NPCs) or `NpcTrainerBehaviour` (for trainer NPCs).
+From the actual source:
+
+```csharp
+public async Task InitializeAsync(IWorldContext context, CancellationToken ct = default)
+{
+    if (string.IsNullOrWhiteSpace(_npcContentKey))
+    {
+        _logger.Warn($"[NpcWorldBehaviour] '{name}' — _npcContentKey is empty. Skipping.");
+        return;
+    }
+
+    AccountId = context.AccountId;
+    TrainerId = context.TrainerId;
+
+    var result = await _npcWorldRepository.EnsureNpcAsync(
+        context.AccountId, context.TrainerId, _npcContentKey, _npcType, ct);
+
+    NpcId   = result.NpcId;
+    NpcType = result.NpcType;
+
+    // Dispatch to all sub-behaviours in component order
+    var subBehaviours = GetComponents<INpcSubInitializable>();
+    foreach (var sub in subBehaviours)
+        await sub.InitializeAsync(NpcId, AccountId, TrainerId, ct);
+}
+```
 
 ### Inspector Fields
 
@@ -156,31 +306,6 @@ The init loop is **sequential**, not parallel. This is intentional: some behavio
 |-------|------|-------------|
 | `_npcContentKey` | string | Stable designer-facing key — must match `content_key` in the database (e.g. `"cindris_starter_npc"`) |
 | `_npcType` | NpcType | The NPC type to use when first creating this NPC. Defaults to `Npc`. Set to `Trainer` for trainer NPCs. First-write-wins: if the NPC already exists, this field is ignored. |
-
-### Initialization Flow
-
-```csharp
-public async Task InitializeAsync(IWorldContext context, CancellationToken ct = default)
-{
-    // 1. Validate
-    if (string.IsNullOrWhiteSpace(_npcContentKey)) { /* log warning, return */ }
-
-    // 2. Store identity
-    AccountId = context.AccountId;
-    TrainerId = context.TrainerId;
-
-    // 3. Ensure NPC exists on the backend with the configured type
-    var result = await _npcWorldRepository.EnsureNpcAsync(
-        context.AccountId, context.TrainerId, _npcContentKey, _npcType, ct);
-
-    NpcId   = result.NpcId;
-    NpcType = result.NpcType;
-
-    // 4. Dispatch to sub-behaviours
-    foreach (var sub in GetComponents<INpcSubInitializable>())
-        await sub.InitializeAsync(NpcId, AccountId, TrainerId, ct);
-}
-```
 
 ### Public State
 
@@ -214,33 +339,6 @@ public struct NpcCreatureSlotEntry
 }
 ```
 
-### How It Works
-
-```csharp
-public async Task OnNpcReadyAsync(Guid npcId, IWorldContext context, CancellationToken ct)
-{
-    // Resolve content keys to UUIDs via game config
-    var specs = _slots.Select(s => new NpcCreatureSlotSpec(
-        ResolveCreatureBaseId(s.CreatureBaseContentKey),
-        s.SlotNumber
-    )).ToList();
-
-    var response = await _npcClient.EnsureNpcCreatureTeamAsync(
-        npcId,
-        new EnsureNpcCreatureTeamRequest
-        {
-            AccountId = context.AccountId,
-            TrainerId = context.TrainerId,
-            Slots = specs,
-        }, ct);
-
-    TeamCount = response.TeamCount;
-    IsReady = true;
-}
-```
-
-Each slot is only seeded if currently empty (backend idempotency guarantee). Random seeds are used per creature — no two trainers will have identical NPC team variants.
-
 ### Example Inspector Setup
 
 An NPC that offers two creatures in a grant flow:
@@ -262,14 +360,7 @@ GameObject: NPC_Cindris
 
 ## `NpcMerchantBehaviour` — Merchant Stub
 
-`NpcMerchantBehaviour` implements `INpcSubInitializable`. It is currently a stub that marks the NPC as a merchant and exposes a stable `MerchantNpcId` for use by shop UI systems. Full shop catalog logic is a future concern.
-
-### Public State
-
-| Property | Type | Notes |
-|----------|------|-------|
-| `IsReady` | bool | True after `OnNpcReadyAsync` completes |
-| `MerchantNpcId` | Guid | The resolved NPC ID; forwarded from `NpcWorldBehaviour` |
+`NpcMerchantBehaviour` implements `INpcSubInitializable`. It is currently a stub that marks the NPC as a merchant and exposes a stable `MerchantNpcId` for use by shop UI systems.
 
 ### Example Inspector Setup
 
@@ -280,8 +371,6 @@ GameObject: NPC_Merchant_Elara
 │    _npcType: Npc
 └─ NpcMerchantBehaviour
 ```
-
-No `NpcCreatureGrantBehaviour` needed for a pure merchant.
 
 ## `NpcTrainerBehaviour` — Battle-Ready NPC
 
@@ -295,48 +384,9 @@ No `NpcCreatureGrantBehaviour` needed for a pure merchant.
 | `_slots` | `List<NpcCreatureSlotDefinition>` | Ordered list of (creatureBaseContentKey, slotNumber) pairs for team seeding |
 | `_items` | `List<NpcItemDefinition>` | List of (itemId string, quantity) pairs for item inventory seeding |
 
-`NpcCreatureSlotDefinition`:
-```csharp
-[Serializable]
-public struct NpcCreatureSlotDefinition
-{
-    public string creatureBaseContentKey;  // e.g. "trainer_kael_creature_1_id"
-    public int slotNumber;                 // 1–6
-}
-```
-
-`NpcItemDefinition`:
-```csharp
-[Serializable]
-public struct NpcItemDefinition
-{
-    public string itemId;   // UUID string — TODO: replace with contentKey once items have content_key support
-    public int quantity;
-}
-```
-
-### Initialization Flow
-
-1. Resolve `_slots` entries → `List<NpcCreatureSlotSpec>` via `IGameConfiguration.TryGet`; warn and skip missing config keys
-2. If any specs resolved: call `EnsureNpcCreatureTeamAsync` to idempotently seed the team
-3. Fetch `CreatureTeam = await GetNpcTeamAsync(...)` and cache it
-4. Resolve `_items` entries → `List<NpcItemSeedSpec>` via `Guid.TryParse`; warn and skip invalid GUIDs
-5. If any item specs resolved: call `EnsureNpcItemsAsync` to idempotently seed the item inventory
-6. Fetch `BattleItems = await GetNpcItemsAsync(...)` and cache it
-
-All seeding calls are idempotent — safe to call on every world load. Items already present are not re-added or modified.
-
-### Public State
-
-| Property | Type | Notes |
-|----------|------|-------|
-| `CanBattle` | bool | True when `CreatureTeam.Count > 0 && _allowRematch` |
-| `CreatureTeam` | `IReadOnlyList<CreatureInventoryEntry>` | Cached team snapshot |
-| `BattleItems` | `IReadOnlyList<NpcInventoryEntry>` | Cached item inventory snapshot |
-
 ### Coexistence with `NpcCreatureGrantBehaviour`
 
-`NpcTrainerBehaviour` and `NpcCreatureGrantBehaviour` can coexist on the same GameObject. A trainer NPC that also grants a creature on first visit is a valid and common setup. The order matters:
+`NpcTrainerBehaviour` and `NpcCreatureGrantBehaviour` can coexist on the same GameObject. The order matters:
 
 ```
 Component order (top to bottom in Inspector):
@@ -348,38 +398,17 @@ Component order (top to bottom in Inspector):
 
 `NpcTrainerBehaviour` always re-fetches the team from the repository after seeding, so it will see any creatures added by `NpcCreatureGrantBehaviour` in the same init loop (since the loop is sequential). If `NpcTrainerBehaviour` is listed before `NpcCreatureGrantBehaviour`, it may fetch an incomplete team on first visit.
 
-### Example Inspector Setup
+### Public State
 
-A trainer NPC that can battle the player (also grants a creature on first visit):
-
-```
-GameObject: NPC_Trainer_Kael
-├─ NpcWorldBehaviour
-│    _npcContentKey: "kael_trainer_npc"
-│    _npcType: Trainer
-├─ NpcCreatureGrantBehaviour
-│    _slots:
-│      [0] CreatureBaseContentKey: "cindris_water_starter"
-│           SlotNumber: 1
-├─ NpcTrainerBehaviour
-│    _allowRematch: true
-│    _slots:
-│      [0] creatureBaseContentKey: "kael_battle_creature_1_id"
-│           slotNumber: 2
-│      [1] creatureBaseContentKey: "kael_battle_creature_2_id"
-│           slotNumber: 3
-│    _items:
-│      [0] itemId: "aaaa-bbbb-..."
-│           quantity: 2
-└─ NpcInteractionBehaviour
-     _interactionRadius: 4
-```
-
-`NpcInteractionBehaviour` inspects both `NpcCreatureGrantBehaviour` (grant pending?) and `NpcTrainerBehaviour` (can battle?) to decide what interaction to offer.
+| Property | Type | Notes |
+|----------|------|-------|
+| `CanBattle` | bool | True when `CreatureTeam.Count > 0 && _allowRematch` |
+| `CreatureTeam` | `IReadOnlyList<CreatureInventoryEntry>` | Cached team snapshot |
+| `BattleItems` | `IReadOnlyList<NpcInventoryEntry>` | Cached item inventory snapshot |
 
 ## `SpawnerEncounterBehaviour` — Wild Encounter Trigger
 
-`SpawnerEncounterBehaviour` is **not** an `IWorldInitializable`. It is activated by `SpawnerWorldBehaviour` after that behaviour's `InitializeAsync` completes. This separation keeps `SpawnerWorldBehaviour` focused on ensuring the spawner zone exists, and `SpawnerEncounterBehaviour` focused on detecting when the player enters it.
+`SpawnerEncounterBehaviour` is **not** an `IWorldInitializable`. It is activated by `SpawnerWorldBehaviour` after that behaviour's `InitializeAsync` completes.
 
 ```
 SpawnerWorldBehaviour.InitializeAsync
@@ -391,52 +420,19 @@ Once activated, `SpawnerEncounterBehaviour`:
 2. On `OnTriggerEnter` with tag `"Player"`: builds a `WildBattleRequest` and calls `IBattleCoordinator.StartWildBattle`
 3. Subscribes to `IBattleCoordinator.OnBattleEnded` to reset the encounter lock when the battle ends
 
-`[RequireComponent(typeof(SpawnerWorldBehaviour))]` enforces co-presence at the Unity component level. However, `SpawnerEncounterBehaviour` won't activate unless `SpawnerWorldBehaviour` is also present and its `InitializeAsync` completes successfully.
-
-Do not add or configure a `SphereCollider` manually — `Activate()` creates and configures it at runtime.
+`[RequireComponent(typeof(SpawnerWorldBehaviour))]` enforces co-presence at the Unity component level. Do not add or configure a `SphereCollider` manually — `Activate()` creates and configures it at runtime.
 
 See [Battle System](?page=unity/07-battle-system) for the full wild encounter flow.
-
-## Implementing a New World Behaviour
-
-```csharp
-public class MyWorldBehaviour : MonoBehaviour, IWorldInitializable
-{
-    private IMyService _myService;
-    private ICRLogger _logger;
-
-    [Inject]
-    public void Init(IMyService myService, ICRLogger logger)
-    {
-        _myService = myService;
-        _logger = logger;
-    }
-
-    private void Awake() => WorldRegistry.Register(this);
-    private void OnDestroy() => WorldRegistry.Unregister(this);
-
-    public async Task InitializeAsync(IWorldContext context, CancellationToken ct = default)
-    {
-        _logger.Debug($"[MyWorldBehaviour] init. trainer={context.TrainerId}");
-        await _myService.DoSomethingAsync(context.AccountId, context.TrainerId, ct);
-    }
-}
-```
-
-Always pass `ct` to all async calls inside `InitializeAsync`. If the scene is unloaded or the trainer changes mid-initialization, the token is cancelled and your async operations should terminate gracefully (they will throw `OperationCanceledException` which is caught by `GameInitializer`'s loop).
-
-Do not store the `IWorldContext` reference beyond the scope of `InitializeAsync` — it may become stale if the trainer changes. Store only the values you need (e.g., `_accountId = context.AccountId`).
 
 ## Scene Unload and Re-initialization
 
 When a scene unloads:
 1. `GameInitializer` receives `SceneManager.sceneUnloaded` event
-2. Cancels the active `CancellationTokenSource`
-3. Calls `WorldRegistry.Clear()`
+2. Calls `WorldRegistry.Clear()`
 
 When the new scene loads:
 1. Each new `IWorldInitializable` in the scene calls `WorldRegistry.Register(this)` in its `Awake`
-2. If a trainer is already active, `GameSessionManager` fires `OnTrainerChanged` again (or `GameInitializer` manually re-fires on scene load with the cached session)
+2. When a trainer is already active, `GameSessionManager` fires `OnTrainerChanged` again (or `GameInitializer` re-fires on scene load via the cached session)
 3. `InitializeAsync` runs for all newly registered behaviours
 
 This means behaviours in a new scene are always initialized fresh with the current session — there is no stale state from the previous scene.
@@ -448,11 +444,11 @@ This means behaviours in a new scene are always initialized fresh with the curre
 - **Using `context.AccountId` after `InitializeAsync` returns.** Store the ID values you need as fields. The context object is not guaranteed to remain valid beyond the method.
 - **Dynamically instantiated behaviours not getting initialized.** Use a separate post-initialization hook or check `GameSessionManager.GetCurrentSession()` in the behaviour's `Awake` to self-initialize if a session is already active.
 - **Not using `NonLazy()` for `GameInitializer`.** Without `NonLazy()`, `GameInitializer` is never created unless something resolves it, meaning `OnTrainerChanged` is never subscribed and world initialization never happens. See [Dependency Injection](?page=unity/02-dependency-injection).
-- **`SpawnerEncounterBehaviour` zone never triggers.** If `SpawnerWorldBehaviour.InitializeAsync` did not complete (init error, missing `_spawnerContentKey`, or world bootstrap not running), `Activate` is never called and the `SphereCollider` stays disabled. Check the `GameInitializer` log for errors during spawner init.
-- **Adding `INpcSubInitializable` components without `NpcWorldBehaviour`.** Sub-behaviours are driven by `NpcWorldBehaviour.InitializeAsync`. If `NpcWorldBehaviour` is missing from the GameObject, sub-behaviours' `OnNpcReadyAsync` is never called — they will silently remain uninitialized.
-- **Placing creature slot config on `NpcWorldBehaviour` instead of `NpcCreatureGrantBehaviour` or `NpcTrainerBehaviour`.** `NpcWorldBehaviour` is identity-only. There is no `_starterCreatureBaseId` or similar field on it. All creature team configuration belongs on the relevant sub-behaviour.
-- **Wrong `_npcType` on `NpcWorldBehaviour`.** If a trainer NPC has `_npcType = Npc`, it is created as a generic NPC in the database. This is a first-write-wins setting — to fix an already-created NPC, update the `npc_type` column directly in the database.
-- **`NpcTrainerBehaviour` listed before `NpcCreatureGrantBehaviour`.** If a trainer NPC also has a grant behaviour, place `NpcCreatureGrantBehaviour` above `NpcTrainerBehaviour` in the component list. The init loop is sequential, so grant seeding must complete before the trainer behaviour fetches the team.
+- **`WorldRegistry is empty` warning on Play.** Every `IWorldInitializable` component in the scene must call `WorldRegistry.Register(this)` in its `Awake`. If you see this warning, at least one component is missing the call.
+- **`SpawnerEncounterBehaviour` zone never triggers.** If `SpawnerWorldBehaviour.InitializeAsync` did not complete (init error, missing `_spawnerContentKey`, or world bootstrap not running), `Activate` is never called and the `SphereCollider` stays disabled. Check the GameInitializer log for errors during spawner init.
+- **Adding `INpcSubInitializable` components without `NpcWorldBehaviour`.** Sub-behaviours are driven by `NpcWorldBehaviour.InitializeAsync`. If `NpcWorldBehaviour` is missing from the GameObject, sub-behaviours' `InitializeAsync` is never called — they will silently remain uninitialized.
+- **`NpcTrainerBehaviour` listed before `NpcCreatureGrantBehaviour`.** The init loop is sequential and follows component order. If the trainer behaviour runs before the grant behaviour, it may cache an empty team on first visit.
+- **Wrong `_npcType` on `NpcWorldBehaviour`.** If a trainer NPC has `_npcType = Npc`, it is created as a generic NPC in the database. This is first-write-wins — fix requires a direct database update.
 
 ## Related Pages
 
@@ -460,5 +456,5 @@ This means behaviours in a new scene are always initialized fresh with the curre
 - [NPC Interaction](?page=unity/04-npc-interaction) — `NpcInteractionBehaviour` dispatches grant vs battle using sub-behaviour state
 - [Battle System](?page=unity/07-battle-system) — `BattleCoordinator`, `SpawnerEncounterBehaviour`, all three battle types
 - [Starter Creature Flow](?page=backend/05-starter-creature-flow) — end-to-end flow showing `WorldRegistry` → `NpcWorldBehaviour.InitializeAsync`
-- [NPC System](?page=backend/02-npc-system) — `EnsureNpcAsync`, `EnsureNpcCreatureTeamAsync`, `EnsureNpcItemsAsync`, `NpcCreatureSlotSpec`, `NpcItemSeedSpec`
+- [NPC System](?page=backend/02-npc-system) — `EnsureNpcAsync`, `EnsureNpcCreatureTeamAsync`, `EnsureNpcItemsAsync`
 - [HTTP Clients](?page=unity/05-http-clients) — `IsOnline` context flag and how HTTP clients handle offline mode
