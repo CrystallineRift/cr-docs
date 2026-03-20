@@ -56,10 +56,10 @@ Each NPC also has an associated **team inventory** (`npc_creature_team`) with up
 `NpcCreatureSlotSpec` is a value type that pairs a creature base reference with its target team slot:
 
 ```csharp
-public record NpcCreatureSlotSpec(Guid CreatureBaseId, int SlotNumber);
+public record NpcCreatureSlotSpec(string CreatureBaseContentKey, int SlotNumber);
 ```
 
-It is the input element type for `EnsureNpcCreatureTeamAsync`. Each spec drives one slot — the `CreatureBaseId` identifies what kind of creature to generate and `SlotNumber` (1–6) identifies where it goes in the NPC's team. Passing duplicate slot numbers within a single call is a caller error; the service processes slots in order and the second attempt on an already-filled slot is silently skipped (idempotent per slot).
+It is the input element type for `EnsureNpcCreatureTeamAsync`. Each spec drives one slot — the `CreatureBaseContentKey` identifies what kind of creature to generate (looked up via `ICreatureRepository.GetByContentKeyAsync`) and `SlotNumber` (1–6) identifies where it goes in the NPC's team. Passing duplicate slot numbers within a single call is a caller error; the service processes slots in order and the second attempt on an already-filled slot is silently skipped (idempotent per slot).
 
 ### `NpcItemSeedSpec` Value Type
 
@@ -127,7 +127,7 @@ POST /api/v1/npc/ensure-starter
   "accountId":             "aaaaaaaa-0000-0000-0000-000000000001",
   "trainerId":             "bbbbbbbb-0000-0000-0000-000000000002",
   "contentKey":            "cindris_starter_npc",
-  "starterCreatureBaseId": "cccccccc-0000-0000-0000-000000000003"
+  "starterCreatureContentKey": "cindris"
 }
 
 → 200 OK
@@ -234,11 +234,11 @@ curl -s -X POST http://localhost:5000/api/v1/npc/ensure-starter \
     \"accountId\": \"<accountId>\",
     \"trainerId\": \"$TRAINER_ID\",
     \"contentKey\": \"cindris_starter_npc\",
-    \"starterCreatureBaseId\": \"<creatureBaseId>\"
+    \"starterCreatureContentKey\": \"cindris\"
   }"
 ```
 
-The `accountId` comes from the register response. Use `jq` to extract it alongside the token. The `creatureBaseId` must match a row in the `creature` table — check the seed migrations or Swagger UI for valid IDs.
+The `accountId` comes from the register response. Use `jq` to extract it alongside the token. The `starterCreatureContentKey` must match the `content_key` column in the `creature` table — seeded values include `"cindris"`, `"starter_1"`, `"starter_2"`, `"starter_3"`.
 
 ## Key Domain Operations
 
@@ -282,12 +282,12 @@ Returns the final team count (total creatures currently in team, including pre-e
 Internally, for each slot:
 1. Checks whether the NPC's team already has a creature in that slot
 2. If occupied — skips (idempotent)
-3. If empty — calls `ICreatureGenerationService.GetAvailableGrowthProfilesAsync` for the `CreatureBaseId`
+3. If empty — resolves the `BaseCreature` via `ICreatureRepository.GetByContentKeyAsync(slot.CreatureBaseContentKey)`, then calls `ICreatureGenerationService.GetAvailableGrowthProfilesAsync` for the resolved creature
 4. Calls `ICreatureGenerationService.GetAvailableAbilityProgressionSetsAsync` — uses the first set if any exist
 5. Calls `ICreatureGenerationService.CreateAsync` with level=1, `Nature.Hardy`, `Gender.Unknown`, and a random seed
 6. Calls `AddCreatureToNpcTeamAsync` at the target slot number
 
-**Failure mode:** If `CreatureBaseId` references a creature with no growth profiles, step 3 throws `InvalidOperationException`. The slot is not filled. Always ensure base creatures have at least one growth profile. See [Creature Generation](?page=backend/04-creature-generation).
+**Failure mode:** If `CreatureBaseContentKey` does not match any row in the `creature` table, `GetByContentKeyAsync` returns `null` and step 3 throws `InvalidOperationException`. If the resolved creature has no growth profiles, step 3 also throws `InvalidOperationException`. The slot is not filled. Always ensure base creatures have at least one growth profile. See [Creature Generation](?page=backend/04-creature-generation).
 
 ### `EnsureNpcItemsAsync`
 
@@ -331,13 +331,13 @@ Task<NpcBase> EnsureStarterNpcAsync(
     Guid accountId,
     Guid trainerId,
     string contentKey,
-    Guid starterCreatureBaseId,
+    string starterCreatureContentKey,
     CancellationToken ct = default);
 ```
 
 Internally:
 1. Calls `EnsureNpcAsync(accountId, trainerId, contentKey)` — ensures the NPC row exists (defaults to `NpcType.Npc`)
-2. Calls `EnsureNpcCreatureTeamAsync(npc.Id, accountId, trainerId, [new NpcCreatureSlotSpec(starterCreatureBaseId, 1)])` — fills slot 1 if empty
+2. Calls `EnsureNpcCreatureTeamAsync(npc.Id, accountId, trainerId, [new NpcCreatureSlotSpec(starterCreatureContentKey, 1)])` — fills slot 1 if empty
 
 ### `GiveNpcCreatureToTrainerStorageAsync`
 
@@ -464,8 +464,8 @@ POST /api/v1/npc/ffee9012-.../ensure-creature-team
   "accountId": "00000000-...",
   "trainerId": "00000000-...",
   "slots": [
-    { "creatureBaseId": "aabb1234-...", "slotNumber": 1 },
-    { "creatureBaseId": "ccdd5678-...", "slotNumber": 2 }
+    { "creatureBaseContentKey": "cindris", "slotNumber": 1 },
+    { "creatureBaseContentKey": "starter_1", "slotNumber": 2 }
   ]
 }
 
@@ -485,7 +485,7 @@ POST /api/v1/npc/ensure-starter
   "accountId":             "00000000-...",
   "trainerId":             "00000000-...",
   "contentKey":            "cindris_starter_npc",
-  "starterCreatureBaseId": "ccdd5678-..."
+  "starterCreatureContentKey": "cindris"
 }
 
 → 200 OK

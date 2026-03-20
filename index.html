@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Crystalline Rift — Docs</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css" />
+  <!-- Swagger UI -->
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
   <style>
     /* ─── Reset & Base ─────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -83,6 +85,39 @@
       letter-spacing: 0.5px;
     }
 
+    /* ─── Top Tabs ───────────────────────────────────────────────── */
+    .top-tabs {
+      display: flex;
+      gap: 2px;
+      margin-left: auto;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 3px;
+    }
+
+    .top-tab {
+      padding: 5px 18px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-muted);
+      background: transparent;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: color 0.15s, background 0.15s;
+      font-family: inherit;
+      letter-spacing: 0.2px;
+    }
+
+    .top-tab:hover { color: var(--text); }
+
+    .top-tab.active {
+      color: var(--accent);
+      background: var(--bg2);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+
     /* ─── Sidebar ────────────────────────────────────────────────── */
     #sidebar {
       grid-area: sidebar;
@@ -138,12 +173,82 @@
       grid-area: main;
       overflow-y: auto;
       padding: 48px 64px;
-      max-width: 900px;
     }
 
     #main::-webkit-scrollbar { width: 6px; }
     #main::-webkit-scrollbar-track { background: transparent; }
     #main::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ─── API Panel ──────────────────────────────────────────────── */
+    #api-panel {
+      grid-column: 1 / -1;
+      grid-row: 2;
+      overflow-y: auto;
+      display: none;
+      background: var(--bg);
+    }
+
+    #api-panel::-webkit-scrollbar { width: 6px; }
+    #api-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ─── Swagger UI dark theme overrides ───────────────────────── */
+    .swagger-ui { color: var(--text); font-family: inherit !important; }
+    .swagger-ui .topbar { display: none; }
+
+    .swagger-ui .info { margin: 32px 0; }
+    .swagger-ui .info .title { color: var(--text) !important; font-size: 2rem !important; }
+    .swagger-ui .info p, .swagger-ui .info li,
+    .swagger-ui .info table { color: var(--text-muted) !important; }
+
+    .swagger-ui .scheme-container,
+    .swagger-ui section.models,
+    .swagger-ui .opblock-tag,
+    .swagger-ui .opblock,
+    .swagger-ui .model-container { background: var(--bg2) !important; border-color: var(--border) !important; }
+
+    .swagger-ui .opblock-tag { border-bottom: 1px solid var(--border) !important; }
+    .swagger-ui .opblock-tag summary { color: var(--text) !important; }
+    .swagger-ui .opblock-tag:hover { background: var(--bg3) !important; }
+
+    .swagger-ui .opblock .opblock-summary { border-color: var(--border) !important; }
+    .swagger-ui .opblock .opblock-summary-method { border-radius: 4px; }
+    .swagger-ui .opblock .opblock-summary-description { color: var(--text-muted) !important; }
+    .swagger-ui .opblock .opblock-summary-path { color: var(--text) !important; }
+
+    .swagger-ui .opblock.opblock-get    { background: #1a2a3a !important; border-color: #2a4a6a !important; }
+    .swagger-ui .opblock.opblock-post   { background: #1a2a1a !important; border-color: #2a5a2a !important; }
+    .swagger-ui .opblock.opblock-put    { background: #2a2a1a !important; border-color: #5a5a2a !important; }
+    .swagger-ui .opblock.opblock-delete { background: #2a1a1a !important; border-color: #5a2a2a !important; }
+
+    .swagger-ui .opblock-body pre,
+    .swagger-ui .highlight-code { background: var(--code-bg) !important; color: var(--accent) !important; }
+
+    .swagger-ui input, .swagger-ui textarea, .swagger-ui select {
+      background: var(--bg3) !important; color: var(--text) !important;
+      border-color: var(--border) !important;
+    }
+    .swagger-ui .btn { color: var(--text) !important; border-color: var(--border) !important; background: var(--bg3) !important; }
+    .swagger-ui .btn.execute { background: var(--accent) !important; border-color: var(--accent) !important; color: #0d1117 !important; }
+    .swagger-ui .btn.authorize { color: var(--accent) !important; border-color: var(--accent) !important; }
+
+    .swagger-ui .response-col_status { color: var(--accent) !important; }
+    .swagger-ui .response-col_description { color: var(--text-muted) !important; }
+
+    .swagger-ui label, .swagger-ui .parameter__name,
+    .swagger-ui .parameter__type, .swagger-ui table thead tr th,
+    .swagger-ui .prop-type { color: var(--text-muted) !important; }
+
+    .swagger-ui table tbody tr td { color: var(--text) !important; border-color: var(--border) !important; }
+    .swagger-ui table thead tr { border-color: var(--border) !important; background: var(--bg3) !important; }
+
+    .swagger-ui .model-title, .swagger-ui .model { color: var(--text) !important; }
+    .swagger-ui .model-toggle:after { filter: invert(1); }
+
+    .swagger-ui .dialog-ux .modal-ux { background: var(--bg2) !important; border-color: var(--border) !important; }
+    .swagger-ui .dialog-ux .modal-ux-header { background: var(--bg3) !important; border-color: var(--border) !important; }
+    .swagger-ui .dialog-ux .modal-ux-header h3 { color: var(--text) !important; }
+
+    .swagger-ui .markdown p, .swagger-ui .markdown li { color: var(--text) !important; }
 
     /* ─── Loading / Error states ─────────────────────────────────── */
     #loading {
@@ -285,6 +390,169 @@
       margin: 32px 0;
     }
 
+    /* ─── Mermaid Diagrams ───────────────────────────────────────── */
+    #content .mermaid {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px;
+      margin: 16px 0 24px;
+      overflow-x: auto;
+      text-align: center;
+    }
+    #content .mermaid svg { max-width: 100%; }
+
+    /* ─── Search Button ──────────────────────────────────────────── */
+    #search-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 12px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-muted);
+      font-size: 13px;
+      font-family: inherit;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+    #search-btn:hover { border-color: var(--accent); color: var(--text); }
+    #search-btn svg { flex-shrink: 0; }
+    #search-btn kbd {
+      font-size: 10px;
+      padding: 1px 5px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text-muted);
+      font-family: inherit;
+    }
+
+    /* ─── Search Overlay ─────────────────────────────────────────── */
+    #search-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding-top: 80px;
+    }
+    #search-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(2px);
+    }
+    #search-panel {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 660px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      max-height: calc(100vh - 120px);
+    }
+    #search-input-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    #search-input-wrap svg { color: var(--text-muted); flex-shrink: 0; }
+    #search-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      font-size: 16px;
+      color: var(--text);
+      font-family: inherit;
+    }
+    #search-input::placeholder { color: var(--text-muted); }
+    #search-input-wrap .esc-hint {
+      font-size: 11px;
+      padding: 2px 6px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+    #search-results { overflow-y: auto; flex: 1; }
+    #search-results::-webkit-scrollbar { width: 4px; }
+    #search-results::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .search-status {
+      padding: 24px 16px;
+      color: var(--text-muted);
+      font-size: 13.5px;
+      text-align: center;
+    }
+    .search-result-group { padding: 8px 0 4px; }
+    .search-result-group + .search-result-group { border-top: 1px solid var(--border); }
+    .search-result-page-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      padding: 4px 16px 6px;
+    }
+    .search-result-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 8px 16px;
+      cursor: pointer;
+      border-left: 2px solid transparent;
+      transition: background 0.1s, border-color 0.1s;
+    }
+    .search-result-item:hover, .search-result-item.focused {
+      background: var(--bg3);
+      border-left-color: var(--accent);
+    }
+    .search-result-heading { font-size: 13.5px; font-weight: 500; color: var(--text); }
+    .search-result-heading mark {
+      background: #4dd9c030;
+      color: var(--accent);
+      border-radius: 2px;
+      padding: 0 1px;
+      font-style: normal;
+    }
+    .search-result-excerpt { font-size: 12px; color: var(--text-muted); line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .search-result-excerpt mark {
+      background: #4dd9c018;
+      color: var(--text);
+      border-radius: 2px;
+      padding: 0 1px;
+      font-style: normal;
+    }
+    #search-footer {
+      display: flex;
+      gap: 16px;
+      padding: 8px 16px;
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .search-key-hint { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-muted); }
+    .search-key-hint kbd {
+      font-size: 10px;
+      padding: 1px 5px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-family: inherit;
+    }
+
     /* ─── Responsive ─────────────────────────────────────────────── */
     @media (max-width: 768px) {
       #app {
@@ -295,6 +563,7 @@
       }
       #sidebar { display: none; }
       #main { padding: 24px 20px; }
+      #search-btn .search-btn-label, #search-btn kbd { display: none; }
     }
   </style>
 </head>
@@ -304,7 +573,40 @@
   <header id="header">
     <div class="logo">Crystalline Rift <span>/ Docs</span></div>
     <div class="badge">v0.1</div>
+
+    <button id="search-btn" title="Search documentation (Ctrl+K)">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <span class="search-btn-label">Search</span>
+      <kbd>Ctrl+K</kbd>
+    </button>
+
+    <nav class="top-tabs">
+      <button class="top-tab active" data-tab="docs">Docs</button>
+      <button class="top-tab" data-tab="api">API</button>
+    </nav>
   </header>
+
+  <!-- Search overlay -->
+  <div id="search-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="Search documentation">
+    <div id="search-backdrop"></div>
+    <div id="search-panel">
+      <div id="search-input-wrap">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input id="search-input" type="text" placeholder="Search documentation…" autocomplete="off" spellcheck="false" />
+        <span class="esc-hint">Esc</span>
+      </div>
+      <div id="search-results" role="listbox"></div>
+      <div id="search-footer">
+        <span class="search-key-hint"><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
+        <span class="search-key-hint"><kbd>↵</kbd> open</span>
+        <span class="search-key-hint"><kbd>Esc</kbd> close</span>
+      </div>
+    </div>
+  </div>
 
   <!-- Sidebar nav is built entirely via JS using safe DOM methods (no innerHTML) -->
   <nav id="sidebar">
@@ -321,8 +623,15 @@
     </div>
     <div id="content" style="display:none;"></div>
   </main>
+
+  <!-- API explorer panel (Swagger UI) -->
+  <div id="api-panel">
+    <div id="swagger-ui"></div>
+  </div>
 </div>
 
+<!-- mermaid: diagram rendering -->
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <!-- marked: markdown → HTML -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/11.1.1/marked.min.js"></script>
 <!-- DOMPurify: sanitise HTML before insertion into the DOM -->
@@ -332,14 +641,34 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/csharp.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/json.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/bash.min.js"></script>
+<!-- Swagger UI bundle -->
+<script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
 
 <script>
 (function () {
   'use strict';
 
+  // ── Mermaid config ─────────────────────────────────────────────
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: 'dark',
+    themeVariables: {
+      background:    '#0d1117',
+      mainBkg:       '#161b22',
+      nodeBorder:    '#30363d',
+      lineColor:     '#4dd9c0',
+      primaryColor:  '#1c2128',
+      primaryBorderColor: '#30363d',
+      primaryTextColor:   '#e6edf3',
+      edgeLabelBackground: '#161b22',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
+    },
+  });
+
   // ── Marked config ──────────────────────────────────────────────
   marked.setOptions({
     highlight: function (code, lang) {
+      if (lang === 'mermaid') return code;  // let mermaid handle its own blocks
       if (lang && hljs.getLanguage(lang)) {
         try { return hljs.highlight(code, { language: lang }).value; } catch (_) {}
       }
@@ -353,6 +682,58 @@
   // ── State ──────────────────────────────────────────────────────
   var navData = [];
   var currentPath = null;
+  var activeTab = 'docs';
+  var swaggerInitialised = false;
+
+  // ── Search state ───────────────────────────────────────────────
+  // Each entry: { path, pageTitle, heading, headingLevel, slug, body }
+  var searchIndex = [];
+  var searchIndexBuilt = false;
+  var searchIndexBuilding = false;
+  var searchFocusedIndex = -1;
+  var searchDebounceTimer = null;
+
+  // ── Tab switching ──────────────────────────────────────────────
+  function switchTab(tab) {
+    if (tab === activeTab) return;
+    activeTab = tab;
+
+    var sidebar = document.getElementById('sidebar');
+    var main    = document.getElementById('main');
+    var apiPanel = document.getElementById('api-panel');
+
+    document.querySelectorAll('.top-tab').forEach(function (btn) {
+      btn.classList.toggle('active', btn.dataset.tab === tab);
+    });
+
+    if (tab === 'api') {
+      sidebar.style.display = 'none';
+      main.style.display = 'none';
+      apiPanel.style.display = 'block';
+      if (!swaggerInitialised) {
+        swaggerInitialised = true;
+        SwaggerUIBundle({
+          url: 'openapi.yaml',
+          dom_id: '#swagger-ui',
+          deepLinking: true,
+          presets: [SwaggerUIBundle.presets.apis],
+          layout: 'BaseLayout',
+          tryItOutEnabled: true,
+          requestSnippetsEnabled: true,
+          defaultModelsExpandDepth: 1,
+          defaultModelExpandDepth: 2,
+        });
+      }
+    } else {
+      sidebar.style.display = '';
+      main.style.display = '';
+      apiPanel.style.display = 'none';
+    }
+  }
+
+  document.querySelectorAll('.top-tab').forEach(function (btn) {
+    btn.addEventListener('click', function () { switchTab(btn.dataset.tab); });
+  });
 
   // ── Helpers ───────────────────────────────────────────────────
   function getPageFromUrl() {
@@ -366,7 +747,6 @@
   }
 
   // ── Safe DOM builder for nav ───────────────────────────────────
-  // Builds nav entirely with DOM methods — no innerHTML — to avoid XSS.
   function renderNav(nav) {
     var tree = document.getElementById('nav-tree');
     while (tree.firstChild) tree.removeChild(tree.firstChild);
@@ -394,7 +774,8 @@
         a.dataset.path = item.path;
         a.addEventListener('click', function (e) {
           e.preventDefault();
-          loadPage(item.path);
+          switchTab('docs');
+          loadPage(item.path, null);
         });
         sectionEl.appendChild(a);
       });
@@ -410,8 +791,13 @@
   }
 
   // ── Page loading ──────────────────────────────────────────────
-  function loadPage(pagePath) {
-    if (pagePath === currentPath) return;
+  // anchor: optional heading slug to scroll to after load.
+  function loadPage(pagePath, anchor) {
+    // Same page: just scroll to anchor without reloading.
+    if (pagePath === currentPath) {
+      if (anchor) scrollToAnchor(anchor);
+      return;
+    }
     currentPath = pagePath;
     setPageInUrl(pagePath);
     updateActiveNav();
@@ -421,7 +807,9 @@
     loading.style.display = 'flex';
     content.style.display = 'none';
 
-    document.getElementById('main').scrollTo({ top: 0, behavior: 'smooth' });
+    if (!anchor) {
+      document.getElementById('main').scrollTo({ top: 0, behavior: 'smooth' });
+    }
 
     fetch('docs/' + pagePath + '.md')
       .then(function (res) {
@@ -429,15 +817,32 @@
         return res.text();
       })
       .then(function (md) {
-        // Parse markdown → raw HTML, then sanitise with DOMPurify before insertion.
         var rawHtml = marked.parse(md);
         var safeHtml = DOMPurify.sanitize(rawHtml, {
-          // Allow highlight.js class attributes on code blocks
           ADD_ATTR: ['class'],
           USE_PROFILES: { html: true },
         });
         content.innerHTML = safeHtml;
         hljs.highlightAll();
+
+        // Convert mermaid code blocks to renderable divs (safe: uses textContent, not innerHTML)
+        var mermaidNodes = [];
+        content.querySelectorAll('pre > code.language-mermaid').forEach(function (code) {
+          var pre = code.parentElement;
+          var div = document.createElement('div');
+          div.className = 'mermaid';
+          div.textContent = code.textContent;
+          pre.replaceWith(div);
+          mermaidNodes.push(div);
+        });
+        if (mermaidNodes.length > 0) {
+          mermaid.run({ nodes: mermaidNodes });
+        }
+
+        // Scroll to heading anchor if requested (brief delay for layout to settle)
+        if (anchor) {
+          setTimeout(function () { scrollToAnchor(anchor); }, 50);
+        }
       })
       .catch(function (err) {
         var h1 = document.createElement('h1');
@@ -454,6 +859,297 @@
         content.style.display = 'block';
       });
   }
+
+  function scrollToAnchor(slug) {
+    var el = document.getElementById(slug);
+    if (!el) return;
+    var main = document.getElementById('main');
+    main.scrollTo({ top: el.offsetTop - 24, behavior: 'smooth' });
+    // Brief teal flash on the heading so the user knows where they landed
+    el.style.transition = 'background 0.3s ease';
+    el.style.background = '#4dd9c018';
+    setTimeout(function () { el.style.background = ''; }, 1200);
+  }
+
+  // Convert heading text to the slug marked.js uses for heading ids
+  function slugify(text) {
+    return text.toLowerCase().trim()
+      .replace(/[^\w\s-]/g, '')
+      .replace(/[\s_]+/g, '-');
+  }
+
+  // ── Search index building ─────────────────────────────────────
+  function parseMarkdownIntoSections(md, path, pageTitle) {
+    var lines = md.split('\n');
+    var sections = [];
+    var currentHeading = pageTitle;
+    var currentLevel = 1;
+    var currentSlug = '';
+    var bodyLines = [];
+
+    function flushSection() {
+      var body = bodyLines.join(' ')
+        .replace(/```[\s\S]*?```/g, '')
+        .replace(/`[^`]+`/g, '')
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+        .replace(/[*_#>|]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (currentHeading || body) {
+        sections.push({ path: path, pageTitle: pageTitle, heading: currentHeading,
+          headingLevel: currentLevel, slug: currentSlug, body: body });
+      }
+      bodyLines = [];
+    }
+
+    lines.forEach(function (line) {
+      var m = line.match(/^(#{1,4})\s+(.+)/);
+      if (m) {
+        flushSection();
+        currentLevel = m[1].length;
+        currentHeading = m[2].trim();
+        currentSlug = slugify(currentHeading);
+      } else {
+        bodyLines.push(line);
+      }
+    });
+    flushSection();
+    return sections;
+  }
+
+  function buildSearchIndex() {
+    if (searchIndexBuilt || searchIndexBuilding || navData.length === 0) return;
+    searchIndexBuilding = true;
+
+    var resultsEl = document.getElementById('search-results');
+    var status = document.createElement('div');
+    status.className = 'search-status';
+    status.textContent = 'Building search index…';
+    while (resultsEl.firstChild) resultsEl.removeChild(resultsEl.firstChild);
+    resultsEl.appendChild(status);
+
+    var fetches = navData.map(function (item) {
+      return fetch('docs/' + item.path + '.md')
+        .then(function (res) { return res.ok ? res.text() : ''; })
+        .then(function (md) { return parseMarkdownIntoSections(md, item.path, item.title); })
+        .catch(function () { return []; });
+    });
+
+    Promise.all(fetches).then(function (allSections) {
+      allSections.forEach(function (sections) {
+        sections.forEach(function (s) { searchIndex.push(s); });
+      });
+      searchIndexBuilt = true;
+      searchIndexBuilding = false;
+      var query = document.getElementById('search-input').value;
+      if (query.trim()) runSearch(query);
+      else showSearchPlaceholder();
+    });
+  }
+
+  // ── Search logic ──────────────────────────────────────────────
+  function runSearch(query) {
+    var q = query.trim().toLowerCase();
+    if (!q) { showSearchPlaceholder(); return; }
+    if (!searchIndexBuilt) { buildSearchIndex(); return; }
+
+    var scored = [];
+    searchIndex.forEach(function (entry) {
+      var headingLower = (entry.heading || '').toLowerCase();
+      var bodyLower    = (entry.body || '').toLowerCase();
+      var pageLower    = (entry.pageTitle || '').toLowerCase();
+      var score = 0;
+      if (pageLower.indexOf(q) !== -1)    score += 30;
+      if (headingLower.indexOf(q) !== -1) score += 20;
+      if (bodyLower.indexOf(q) !== -1)    score += 10;
+      if (score === 0) return;
+      // Bonus for whole-word match
+      var re = new RegExp('\\b' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      if (re.test(entry.heading)) score += 5;
+      if (re.test(entry.body))    score += 2;
+      scored.push({ entry: entry, score: score });
+    });
+
+    scored.sort(function (a, b) { return b.score - a.score; });
+    renderSearchResults(scored.slice(0, 20), query);
+  }
+
+  function showSearchPlaceholder() {
+    var resultsEl = document.getElementById('search-results');
+    while (resultsEl.firstChild) resultsEl.removeChild(resultsEl.firstChild);
+    var status = document.createElement('div');
+    status.className = 'search-status';
+    status.textContent = 'Type to search across all documentation…';
+    resultsEl.appendChild(status);
+    searchFocusedIndex = -1;
+  }
+
+  // Wrap matched substring in <mark> using safe DOM construction (no innerHTML)
+  function highlightMatch(text, query) {
+    if (!text || !query) return document.createTextNode(text || '');
+    var fragment = document.createDocumentFragment();
+    var lowerText = text.toLowerCase();
+    var lowerQuery = query.toLowerCase();
+    var lastIndex = 0;
+    var idx;
+    while ((idx = lowerText.indexOf(lowerQuery, lastIndex)) !== -1) {
+      if (idx > lastIndex) fragment.appendChild(document.createTextNode(text.slice(lastIndex, idx)));
+      var mark = document.createElement('mark');
+      mark.textContent = text.slice(idx, idx + query.length);
+      fragment.appendChild(mark);
+      lastIndex = idx + query.length;
+    }
+    if (lastIndex < text.length) fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+    return fragment;
+  }
+
+  function getExcerpt(body, query) {
+    if (!body) return '';
+    var idx = body.toLowerCase().indexOf(query.toLowerCase());
+    if (idx === -1) return body.slice(0, 120);
+    var start = Math.max(0, idx - 40);
+    var end   = Math.min(body.length, idx + query.length + 80);
+    return (start > 0 ? '…' : '') + body.slice(start, end) + (end < body.length ? '…' : '');
+  }
+
+  function renderSearchResults(scored, query) {
+    var resultsEl = document.getElementById('search-results');
+    while (resultsEl.firstChild) resultsEl.removeChild(resultsEl.firstChild);
+    searchFocusedIndex = -1;
+
+    if (scored.length === 0) {
+      var noResult = document.createElement('div');
+      noResult.className = 'search-status';
+      noResult.textContent = 'No results for "' + query + '"';
+      resultsEl.appendChild(noResult);
+      return;
+    }
+
+    // Group results by page path
+    var groups = Object.create(null);
+    var groupOrder = [];
+    scored.forEach(function (item) {
+      var p = item.entry.path;
+      if (!groups[p]) { groups[p] = []; groupOrder.push(p); }
+      groups[p].push(item);
+    });
+
+    var allItems = [];
+
+    groupOrder.forEach(function (path) {
+      var items = groups[path];
+      var groupEl = document.createElement('div');
+      groupEl.className = 'search-result-group';
+
+      var label = document.createElement('div');
+      label.className = 'search-result-page-label';
+      label.textContent = items[0].entry.pageTitle;
+      groupEl.appendChild(label);
+
+      items.forEach(function (item) {
+        var entry = item.entry;
+        var resultEl = document.createElement('div');
+        resultEl.className = 'search-result-item';
+        resultEl.setAttribute('role', 'option');
+
+        var headingEl = document.createElement('div');
+        headingEl.className = 'search-result-heading';
+        if (entry.headingLevel > 1) {
+          headingEl.style.paddingLeft = ((entry.headingLevel - 1) * 8) + 'px';
+          headingEl.style.color = 'var(--text-muted)';
+          headingEl.style.fontSize = '12.5px';
+        }
+        headingEl.appendChild(highlightMatch(entry.heading, query));
+        resultEl.appendChild(headingEl);
+
+        // Show excerpt only when the body (not just heading) matched
+        if ((entry.body || '').toLowerCase().indexOf(query.toLowerCase()) !== -1) {
+          var excerptEl = document.createElement('div');
+          excerptEl.className = 'search-result-excerpt';
+          excerptEl.appendChild(highlightMatch(getExcerpt(entry.body, query), query));
+          resultEl.appendChild(excerptEl);
+        }
+
+        resultEl.addEventListener('click', function () {
+          hideSearchOverlay();
+          switchTab('docs');
+          loadPage(entry.path, entry.headingLevel > 1 ? entry.slug : null);
+        });
+        resultEl.addEventListener('mouseenter', function () {
+          setFocusedItem(allItems.indexOf(resultEl));
+        });
+
+        groupEl.appendChild(resultEl);
+        allItems.push(resultEl);
+      });
+
+      resultsEl.appendChild(groupEl);
+    });
+
+    resultsEl._allItems = allItems;
+  }
+
+  function setFocusedItem(idx) {
+    var resultsEl = document.getElementById('search-results');
+    var items = resultsEl._allItems || [];
+    if (searchFocusedIndex >= 0 && searchFocusedIndex < items.length)
+      items[searchFocusedIndex].classList.remove('focused');
+    searchFocusedIndex = idx;
+    if (idx >= 0 && idx < items.length) {
+      items[idx].classList.add('focused');
+      items[idx].scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  // ── Search overlay open / close ───────────────────────────────
+  function showSearchOverlay() {
+    var overlay = document.getElementById('search-overlay');
+    overlay.style.display = 'flex';
+    var input = document.getElementById('search-input');
+    input.value = '';
+    input.focus();
+    showSearchPlaceholder();
+    // Start building index in the background so first keystroke is fast
+    if (!searchIndexBuilt && !searchIndexBuilding && navData.length > 0) buildSearchIndex();
+  }
+
+  function hideSearchOverlay() {
+    document.getElementById('search-overlay').style.display = 'none';
+    searchFocusedIndex = -1;
+  }
+
+  document.getElementById('search-btn').addEventListener('click', showSearchOverlay);
+  document.getElementById('search-backdrop').addEventListener('click', hideSearchOverlay);
+
+  document.getElementById('search-input').addEventListener('input', function () {
+    var query = this.value;
+    clearTimeout(searchDebounceTimer);
+    if (!query.trim()) { showSearchPlaceholder(); return; }
+    searchDebounceTimer = setTimeout(function () { runSearch(query); }, 120);
+  });
+
+  document.getElementById('search-input').addEventListener('keydown', function (e) {
+    var resultsEl = document.getElementById('search-results');
+    var items = resultsEl._allItems || [];
+    if (e.key === 'Escape') { hideSearchOverlay(); e.preventDefault(); }
+    else if (e.key === 'ArrowDown') { setFocusedItem(Math.min(searchFocusedIndex + 1, items.length - 1)); e.preventDefault(); }
+    else if (e.key === 'ArrowUp')   { setFocusedItem(Math.max(searchFocusedIndex - 1, 0)); e.preventDefault(); }
+    else if (e.key === 'Enter' && searchFocusedIndex >= 0 && searchFocusedIndex < items.length) {
+      items[searchFocusedIndex].click(); e.preventDefault();
+    }
+  });
+
+  // Ctrl+K / Cmd+K to open, Escape to close from anywhere on the page
+  document.addEventListener('keydown', function (e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      var overlay = document.getElementById('search-overlay');
+      if (overlay.style.display === 'none') showSearchOverlay();
+      else hideSearchOverlay();
+    } else if (e.key === 'Escape') {
+      hideSearchOverlay();
+    }
+  });
 
   // ── Bootstrap ─────────────────────────────────────────────────
   function init() {
@@ -479,7 +1175,7 @@
           : firstPage;
 
         if (page) {
-          loadPage(page);
+          loadPage(page, null);
         } else {
           document.getElementById('loading').style.display = 'none';
           var content = document.getElementById('content');
@@ -497,7 +1193,7 @@
 
   window.addEventListener('popstate', function (e) {
     var page = (e.state && e.state.page) ? e.state.page : getPageFromUrl();
-    if (page) loadPage(page);
+    if (page) loadPage(page, null);
   });
 
   init();

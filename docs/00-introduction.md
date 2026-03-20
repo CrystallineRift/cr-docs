@@ -64,19 +64,24 @@ git clone https://github.com/CrystallineRift/cr-docs.git
 | Trainers | `Trainers/` | `CR.Trainers.*` |
 | Auth | `Auth/` | `CR.Auth.*` |
 | Battle | `Game/CR.Game.BattleSystem` | `CR.Game.BattleSystem` |
+| Quests | `Quests/` | `CR.Quests.*` |
+| Stats | `Stats/` | `CR.Stats.*` |
+| Localization | `Game/CR.Game.Localization/` | `CR.Core.Configuration` |
 
 Each system follows the same layering pattern: interfaces in a shared `*.Data` project, Postgres implementation in `*.Data.Postgres`, SQLite implementation in `*.Data.Sqlite`, business logic in `*.Domain.Services`, and REST endpoints in `*.Service.REST`. See [Backend Architecture](?page=backend/01-architecture) for details.
 
 ## Key Design Concepts
 
-### content_id vs UUID
+### content_key vs UUID
 
 Every game entity that has a counterpart in Unity's `game_config.yaml` asset system carries two identifiers:
 
 - `id` (UUID) — the internal database primary key, generated at row creation, never exposed to designers
-- `content_id` (UUID) / `content_key` (string) — a stable identifier that Unity's Inspector fields reference, matching keys in `game_config.yaml`
+- `content_key` (string) — a stable, human-readable key that Unity Inspector fields reference, matching entries in `game_config.yaml` (e.g. `"cindris_starter_npc"`, `"quest_talk_to_elder"`)
 
-This separation means a game designer can rename a creature, move it to a different YAML section, or change its display properties without touching the database schema or invalidating existing rows. The backend looks up entities by `content_id` when bridging from Unity's world to the database, and uses `id` for all internal foreign key relationships.
+This separation means a game designer can rename a creature, move it to a different YAML section, or change its display properties without touching the database schema or invalidating existing rows. The backend looks up entities by `content_key` when bridging from Unity's world to the database, and uses `id` for all internal foreign key relationships.
+
+`content_key` uniqueness is enforced at the database level. For per-trainer entities (NPCs, spawners), the unique index is scoped to `(account_id, trainer_id, content_key)`. For shared content (quest templates), `content_key` is globally unique.
 
 ### Soft Deletes
 
@@ -112,3 +117,6 @@ Or open `index.html` directly with VS Code Live Server.
 - [World Behaviours](?page=unity/03-world-behaviours) — IWorldInitializable, WorldRegistry, GameInitializer
 - [NPC Interaction](?page=unity/04-npc-interaction) — NpcWorldBehaviour, NpcInteractionBehaviour
 - [HTTP Clients](?page=unity/05-http-clients) — SimpleWebClient, typed client pattern, error handling
+- [Quest System](?page=backend/07-quest-system) — quest templates, lifecycle, progress events, stat side-effects
+- [Stats and Lifetime Tracking](?page=backend/08-stats-system) — string-keyed flat stat store, audit log, write operators
+- [Localization](?page=unity/06-localization) — YAML-based localization loaded at runtime, shared Unity/backend library

@@ -28,9 +28,14 @@
         "Npcs/**/*.cs",
         "Npcs/**/*.csproj"
       ],
-      "cr-data": []
+      "cr-data": [
+        "Assets/Scripts/Npcs/**/*NpcCreatureGrantBehaviour*.cs",
+        "Assets/Scripts/Npcs/**/*NpcTrainerBehaviour*.cs",
+        "Assets/Scripts/Npcs/**/*NpcMerchantBehaviour*.cs",
+        "Assets/Scripts/Npcs/**/*INpcSubInitializable*.cs"
+      ]
     },
-    "description": "NPC CRUD, team management, domain service, REST endpoints"
+    "description": "NPC CRUD, team management, domain service, REST endpoints, NpcCreatureSlotSpec"
   },
   "backend/03-spawner-system": {
     "docPath": "docs/backend/03-spawner-system.md",
@@ -83,6 +88,32 @@
     },
     "description": "Auth system: JWT, OAuth linking, account management"
   },
+  "backend/07-quest-system": {
+    "docPath": "docs/backend/07-quest-system.md",
+    "repos": {
+      "cr-api": [
+        "Quests/**/*.cs",
+        "Quests/**/*.csproj"
+      ],
+      "cr-data": [
+        "My project/Assets/CR/Quests/**/*.cs"
+      ]
+    },
+    "description": "Quest system: templates, objectives, rewards, instances, progress events, requirements, condition evaluation"
+  },
+  "backend/08-stats-system": {
+    "docPath": "docs/backend/08-stats-system.md",
+    "repos": {
+      "cr-api": [
+        "Stats/**/*.cs",
+        "Stats/**/*.csproj"
+      ],
+      "cr-data": [
+        "My project/Assets/CR/Stats/**/*.cs"
+      ]
+    },
+    "description": "CR.Stats lifetime stat tracking domain: trainer_stat, stat_event, operators, StatKey constants"
+  },
   "unity/01-project-setup": {
     "docPath": "docs/unity/01-project-setup.md",
     "repos": {
@@ -114,10 +145,14 @@
         "Assets/Scripts/World/**/*.cs",
         "Assets/Scripts/**/*WorldBehaviour*.cs",
         "Assets/Scripts/**/*WorldInitializ*.cs",
-        "Assets/Scripts/**/*GameInitializ*.cs"
+        "Assets/Scripts/**/*GameInitializ*.cs",
+        "Assets/Scripts/**/*NpcCreatureGrantBehaviour*.cs",
+        "Assets/Scripts/**/*NpcMerchantBehaviour*.cs",
+        "Assets/Scripts/**/*NpcTrainerBehaviour*.cs",
+        "Assets/Scripts/**/*INpcSubInitializable*.cs"
       ]
     },
-    "description": "IWorldInitializable, WorldRegistry, GameInitializer bootstrap"
+    "description": "IWorldInitializable, WorldRegistry, GameInitializer bootstrap, INpcSubInitializable composable NPC sub-behaviours"
   },
   "unity/04-npc-interaction": {
     "docPath": "docs/unity/04-npc-interaction.md",
@@ -126,10 +161,15 @@
         "Npcs/CR.Npcs.Service.REST/**/*.cs"
       ],
       "cr-data": [
-        "Assets/Scripts/Npcs/**/*.cs"
+        "Assets/Scripts/Npcs/**/*.cs",
+        "Assets/Scripts/**/*NpcInteractionBehaviour*.cs",
+        "Assets/Scripts/**/*NpcBattleRequest*.cs",
+        "Assets/Scripts/**/*NpcCreatureGrantBehaviour*.cs",
+        "Assets/Scripts/**/*NpcTrainerBehaviour*.cs",
+        "Assets/Scripts/**/*NpcMerchantBehaviour*.cs"
       ]
     },
-    "description": "Client-side NPC interaction, dialogue, team display"
+    "description": "Composable NPC interaction: NpcInteractionBehaviour dispatch, NpcBattleRequest, OnBattleRequested event, grant vs battle flow"
   },
   "unity/05-http-clients": {
     "docPath": "docs/unity/05-http-clients.md",
@@ -142,5 +182,83 @@
       ]
     },
     "description": "Online/offline repository pattern, Best HTTP, SQLite cache"
+  },
+  "unity/06-localization": {
+    "docPath": "docs/unity/06-localization.md",
+    "repos": {
+      "cr-api": [
+        "Game/CR.Game.Localization/LocalizationRepository.cs",
+        "Game/CR.Game.Localization/LocalizedText.cs"
+      ],
+      "cr-data": [
+        "My project/Assets/CR/Core/Data/Repository/Implementation/GameCore/LocalizationRepository.cs",
+        "My project/Assets/CR/Resources/configuration/localization/*.yaml"
+      ]
+    },
+    "description": "Per-domain per-language YAML localization files, LocalizationRepository loading, key naming convention"
+  },
+  "unity/07-battle-system": {
+    "docPath": "docs/unity/07-battle-system.md",
+    "repos": {
+      "cr-api": [
+        "Game/CR.Game.Service.BFF/Endpoints/BattleEndpoints.cs"
+      ],
+      "cr-data": [
+        "My project/Assets/CR/Game/Battle/BattleCoordinator.cs",
+        "My project/Assets/CR/Game/Battle/IBattleClient.cs",
+        "My project/Assets/CR/Game/Battle/BattleClientUnityHttp.cs",
+        "My project/Assets/CR/Game/Battle/BattleSession.cs",
+        "My project/Assets/CR/Game/Battle/IBattleCoordinator.cs",
+        "My project/Assets/CR/Game/World/Behaviours/NpcInteractionBehaviour.cs",
+        "My project/Assets/CR/Game/World/Behaviours/SpawnerEncounterBehaviour.cs"
+      ]
+    },
+    "description": "BattleCoordinator, IBattleClient HTTP flow, StartNpcBattle/StartWildBattle, BattleSession, SpawnerEncounterBehaviour"
+  },
+  "unity/08-content-registry": {
+    "docPath": "docs/unity/08-content-registry.md",
+    "repos": {
+      "cr-api": [
+        "Creatures/CR.Creatures.Data.Migration/M1015EnforceContentKeyNotNullAndUnique.cs",
+        "Npcs/CR.Npcs.Data.Migration/M2006EnforceContentKeyNotNullOnNpcs.cs",
+        "Spawner/CR.Spawner.Data.Migration/M5012EnforceContentKeyNotNullOnSpawner.cs",
+        "Game/CR.Game.Model/Creatures/BaseCreature.cs"
+      ],
+      "cr-data": [
+        "My project/Assets/CR/Core/Data/Registry/IGameContentRegistry.cs",
+        "My project/Assets/CR/Core/Data/Registry/GameContentRegistry.cs",
+        "My project/Assets/CR/Core/Data/Registry/ContentKeys.cs",
+        "My project/Assets/CR/Core/Data/Registry/CreatureContentDef.cs",
+        "My project/Assets/CR/Core/Data/Registry/NpcContentDef.cs",
+        "My project/Assets/CR/Core/Data/Registry/SpawnerContentDef.cs",
+        "My project/Assets/CR/Resources/configuration/content_registry.yaml",
+        "My project/Assets/CR/Core/Data/Repository/GameConfigurationKeys.cs",
+        "My project/Assets/CR/Core/Assets/IGameAssetLoader.cs",
+        "My project/Assets/CR/Core/Assets/GameAssetLoader.cs"
+      ]
+    },
+    "description": "IGameContentRegistry, GameContentRegistry, ContentKeys constants, content_registry.yaml, CreatureContentDef/NpcContentDef/SpawnerContentDef POCOs, IGameAssetLoader.LoadAssetByKeyAsync"
+  },
+  "backend/09-battle-persistence": {
+    "docPath": "docs/backend/09-battle-persistence.md",
+    "repos": {
+      "cr-api": [
+        "Game/CR.Game.Data.Migration/M8004CreateBattleTables.cs",
+        "Game/CR.Game.Data/Interface/IBattleRepository.cs",
+        "Game/CR.Game.Data/Implementation/BaseBattleRepository.cs",
+        "Game/CR.Game.Data.Postgres/BattleRepository.cs",
+        "Game/CR.Game.Data.Sqlite/BattleRepository.cs",
+        "Game/CR.Game.Model/Battle/**/*.cs",
+        "Game/CR.Game.Domain.Services/Interfaces/Battle/IBattleDomainService.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Battle/BattleDomainService.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/BattleEndpoints.cs",
+        "Convenience/CR.REST.AIO/Program.cs"
+      ],
+      "cr-data": [
+        "My project/Assets/CR/Game/Battle/IBattleClient.cs",
+        "My project/Assets/CR/Game/Battle/BattleClientUnityHttp.cs"
+      ]
+    },
+    "description": "Battle DB tables (battle, battle_round, battle_round_input, battle_creature_state, battle_action_log), IBattleRepository, BattleDomainService, REST endpoints, DI wiring"
   }
 }

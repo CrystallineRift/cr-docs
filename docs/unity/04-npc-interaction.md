@@ -209,9 +209,9 @@ Any scene-level UI (e.g., battle screen controller) subscribes to `OnBattleStart
 
 1. Create a GameObject (e.g., `NPC_Trainer_Kael`)
 2. Add `NpcWorldBehaviour` — set `_npcContentKey`, set `_npcType` to `Trainer`
-3. Add `NpcTrainerBehaviour` — configure `_slots` (creature content keys from `game_config.yaml`) and optionally `_items` (UUID strings)
+3. Add `NpcTrainerBehaviour` — configure `_slots` (set `creatureBaseContentKey` directly in the Inspector, e.g. `"cindris"` or `"starter_1"`) and optionally `_items` (UUID strings)
 4. Add `NpcInteractionBehaviour`
-5. Verify each `creatureBaseContentKey` in `_slots` has a matching entry in `game_config.yaml` that resolves to a valid UUID
+5. Verify each `creatureBaseContentKey` in `_slots` matches the `content_key` column in the `creature` table (seeded values: `"cindris"`, `"starter_1"`, `"starter_2"`, `"starter_3"`)
 
 ### Trainer NPC (Grant + Battle)
 

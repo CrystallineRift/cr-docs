@@ -1,0 +1,3219 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "CR.REST.AIO",
+    "version": "1.0"
+  },
+  "paths": {
+    "/auth/token/refresh": {
+      "post": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/auth/game": {
+      "post": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthenticateWithGameRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/auth/basic": {
+      "post": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthenticateWithEmailPasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/auth/oauth": {
+      "post": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthenticateWithOAuth2TokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/auth/oauth/link": {
+      "post": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkOAuthRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/account": {
+      "post": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/account/{provider}/{id}": {
+      "get": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "parameters": [
+          {
+            "name": "providerParam",
+            "in": "query",
+            "required": true,
+            "style": "form",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/creature/base/{id}": {
+      "get": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "operationId": "GetCreature",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/creature/base": {
+      "post": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "operationId": "CreateCreature",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBaseCreatureRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BaseCreature"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "operationId": "GetCreaturesPaginated",
+        "parameters": [
+          {
+            "name": "offset",
+            "in": "query",
+            "required": true,
+            "style": "form",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": true,
+            "style": "form",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BaseCreature"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/creature/generated/{id}": {
+      "get": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "operationId": "Get Generated Creature",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeneratedCreature"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/creature/generated": {
+      "post": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "operationId": "Create Generated Creature",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateCreatureRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GeneratedCreature"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/creature/generated/multiple": {
+      "post": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "operationId": "Create Multiple Generated Creatures",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateMultipleCreatureRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GeneratedCreature"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/creature/growthProfile/{id}": {
+      "get": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "operationId": "Get Growth Proflie",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GrowthProfile"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/creature/growthProfile": {
+      "post": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "operationId": "Create Growth Profile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateGrowthProfileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GrowthProfile"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "operationId": "GetGrowthProfilesPaginated",
+        "parameters": [
+          {
+            "name": "offset",
+            "in": "query",
+            "required": true,
+            "style": "form",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": true,
+            "style": "form",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GrowthProfile"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/trainer/{id}": {
+      "get": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "operationId": "GetTrainer",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrainerBase"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/trainer": {
+      "post": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "operationId": "CreateTrainer",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTrainerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Trainer"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "operationId": "GetTrainersPaginated",
+        "parameters": [
+          {
+            "name": "offset",
+            "in": "query",
+            "required": true,
+            "style": "form",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": true,
+            "style": "form",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Trainer"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/trainer/{trainerId}": {
+      "put": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "operationId": "Update Trainers",
+        "parameters": [
+          {
+            "name": "trainerId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrainerBase"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Trainer"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "operationId": "Delete Trainers",
+        "parameters": [
+          {
+            "name": "trainerId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/trainer/{trainerId}/inventory": {
+      "get": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "operationId": "Get Trainers Inventories",
+        "parameters": [
+          {
+            "name": "trainerId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Inventory"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "operationId": "Create Trainers Inventories",
+        "parameters": [
+          {
+            "name": "trainerId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Inventory"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Inventory"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/trainer/{trainerId}/inventory/{inventoryId}": {
+      "put": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "operationId": "Update Trainers Inventories",
+        "parameters": [
+          {
+            "name": "trainerId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "inventoryId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Inventory"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Inventory"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "operationId": "Delete Trainers Inventory",
+        "parameters": [
+          {
+            "name": "trainerId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "inventoryId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/trainer/{trainerId}/inventory/item/{inventoryId}": {
+      "get": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "operationId": "Get Items In Inventories",
+        "parameters": [
+          {
+            "name": "trainerId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "inventoryId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ItemInventoryEntry"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "operationId": "Add Item To Trainers Inventories",
+        "parameters": [
+          {
+            "name": "trainerId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "inventoryId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddItemToInventoryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatureInventoryEntry"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/trainer/{trainerId}/inventory/item": {
+      "get": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "operationId": "Get Trainers Item Inventories",
+        "parameters": [
+          {
+            "name": "trainerId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "inventoryId",
+            "in": "query",
+            "required": true,
+            "style": "form",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Inventory"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/trainer/{trainerId}/inventory/creature/{inventoryId}": {
+      "get": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "operationId": "Get Creatures In Inventory",
+        "parameters": [
+          {
+            "name": "trainerId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "inventoryId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CreatureInventoryEntry"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "operationId": "Add Creature To Inventory",
+        "parameters": [
+          {
+            "name": "trainerId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "inventoryId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddCreatureToInventoryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatureInventoryEntry"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/trainer/{trainerId}/inventory/creature/{inventoryId}/{creatureId}": {
+      "delete": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "operationId": "Remove Creature From Inventory",
+        "parameters": [
+          {
+            "name": "trainerId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "inventoryId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "creatureId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/trainer/{trainerId}/inventory/creature/{inventoryId}/swap": {
+      "put": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "operationId": "Swap Creature Slots",
+        "parameters": [
+          {
+            "name": "trainerId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "inventoryId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SwapCreatureSlotsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ability/stat_change": {
+      "post": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "operationId": "Create stat change",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StatChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int64"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ability/stat_change/{id}": {
+      "get": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "operationId": "Get stat change",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatChange"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "operationId": "Update stat change",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StatChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "operationId": "Delete stat change",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/ability/status_condition": {
+      "post": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "operationId": "Create status condition",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BaseStatusCondition"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int64"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ability/status_condition/{id}": {
+      "get": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "operationId": "Get status condition",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BaseStatusCondition"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ability": {
+      "post": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "operationId": "Create ability",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAbilityRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int64"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ability/base": {
+      "post": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "operationId": "Create base ability",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BaseAbility"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int64"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ability/{id}": {
+      "get": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "operationId": "Get an ability",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ability"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/stats": {
+      "get": {
+        "tags": [
+          "CR.REST.AIO"
+        ],
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "query",
+            "required": true,
+            "style": "form",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "trainerId",
+            "in": "query",
+            "required": true,
+            "style": "form",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/v1/npc/ensure-starter": {
+      "post": {
+        "tags": [
+          "NPCs"
+        ],
+        "summary": "Ensure starter NPC exists for a trainer",
+        "description": "Creates the starter NPC and populates its team with a starter creature if it does not yet exist. Idempotent.",
+        "operationId": "EnsureStarterNpc",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnsureStarterNpcRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/npc/{npcId}/give-creature": {
+      "post": {
+        "tags": [
+          "NPCs"
+        ],
+        "summary": "Transfer first creature from NPC team to trainer storage",
+        "description": "Removes the first creature from the NPC's team and places it in the trainer's storage inventory.",
+        "operationId": "GiveNpcCreature",
+        "parameters": [
+          {
+            "name": "npcId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GiveCreatureRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/quests/available": {
+      "get": {
+        "tags": [
+          "Quests"
+        ],
+        "summary": "Get quests available for a trainer",
+        "operationId": "GetAvailableQuests",
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "query",
+            "required": true,
+            "style": "form",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "trainerId",
+            "in": "query",
+            "required": true,
+            "style": "form",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "npcContentId",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/quests/active": {
+      "get": {
+        "tags": [
+          "Quests"
+        ],
+        "summary": "Get active quests for a trainer",
+        "operationId": "GetActiveQuests",
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "query",
+            "required": true,
+            "style": "form",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "trainerId",
+            "in": "query",
+            "required": true,
+            "style": "form",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/quests/{instanceId}": {
+      "get": {
+        "tags": [
+          "Quests"
+        ],
+        "summary": "Get a specific quest instance",
+        "operationId": "GetQuestInstance",
+        "parameters": [
+          {
+            "name": "instanceId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "accountId",
+            "in": "query",
+            "required": true,
+            "style": "form",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "trainerId",
+            "in": "query",
+            "required": true,
+            "style": "form",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/quests/{templateId}/accept": {
+      "post": {
+        "tags": [
+          "Quests"
+        ],
+        "summary": "Accept a quest",
+        "operationId": "AcceptQuest",
+        "parameters": [
+          {
+            "name": "templateId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptQuestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/quests/{instanceId}/abandon": {
+      "post": {
+        "tags": [
+          "Quests"
+        ],
+        "summary": "Abandon an active quest",
+        "operationId": "AbandonQuest",
+        "parameters": [
+          {
+            "name": "instanceId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AbandonQuestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/quests/progress": {
+      "post": {
+        "tags": [
+          "Quests"
+        ],
+        "summary": "Record a progress event for active quests",
+        "operationId": "RecordQuestProgress",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordProgressRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/quests/{instanceId}/claim-rewards": {
+      "post": {
+        "tags": [
+          "Quests"
+        ],
+        "summary": "Claim rewards for a completed quest",
+        "operationId": "ClaimQuestRewards",
+        "parameters": [
+          {
+            "name": "instanceId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimRewardsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AbandonQuestRequest": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "trainerId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Ability": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "power": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "accuracy": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "cost": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "priority": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "targetType": {
+            "type": "string",
+            "nullable": true
+          },
+          "category": {
+            "type": "string",
+            "nullable": true
+          },
+          "assetId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "elementType": {
+            "$ref": "#/components/schemas/ElementType"
+          },
+          "conditionsInflictedIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "deleted": {
+            "type": "boolean"
+          },
+          "conditionsInflicted": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StatusCondition"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AcceptQuestRequest": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "trainerId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AccountType": {
+        "enum": [
+          0,
+          1,
+          2
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "AddCreatureToInventoryRequest": {
+        "type": "object",
+        "properties": {
+          "creatureId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "slotNumber": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AddItemToInventoryRequest": {
+        "type": "object",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "slotNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "count": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AuthProvider": {
+        "enum": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "AuthToken": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/AuthProvider"
+          },
+          "providerId": {
+            "type": "string",
+            "nullable": true
+          },
+          "tokenType": {
+            "type": "string",
+            "nullable": true
+          },
+          "accessToken": {
+            "type": "string",
+            "nullable": true
+          },
+          "refreshToken": {
+            "type": "string",
+            "nullable": true
+          },
+          "expiresIn": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "utcCreatedAt": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "utcExpiresAt": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AuthenticateWithEmailPasswordRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "password": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AuthenticateWithGameRequest": {
+        "type": "object",
+        "properties": {
+          "gameInstallationId": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AuthenticateWithOAuth2TokenRequest": {
+        "type": "object",
+        "properties": {
+          "oAuthProvider": {
+            "$ref": "#/components/schemas/AuthProvider"
+          },
+          "accessToken": {
+            "type": "string",
+            "nullable": true
+          },
+          "refreshToken": {
+            "type": "string",
+            "nullable": true
+          },
+          "expiresAtUtc": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "BaseAbility": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "power": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "accuracy": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "cost": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "priority": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "targetType": {
+            "type": "string",
+            "nullable": true
+          },
+          "category": {
+            "type": "string",
+            "nullable": true
+          },
+          "assetId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "elementType": {
+            "$ref": "#/components/schemas/ElementType"
+          },
+          "conditionsInflictedIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "deleted": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "BaseCreature": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "assetId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "elementType": {
+            "$ref": "#/components/schemas/ElementType"
+          },
+          "baseHitPoints": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "baseAttack": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "baseSpecialAttack": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "baseDefense": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "baseSpecialDefense": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "baseSpeed": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "BaseStatusCondition": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "applyToUser": {
+            "type": "boolean"
+          },
+          "probability": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "statChangeIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "nullable": true
+          },
+          "onHitEffectAssetId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "onTriggerEffectAssetId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "onRemovedEffectAssetId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Calculation": {
+        "enum": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "ClaimRewardsRequest": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "trainerId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateAbilityRequest": {
+        "type": "object",
+        "properties": {
+          "ability": {
+            "$ref": "#/components/schemas/Ability"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateAccountRequest": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "$ref": "#/components/schemas/AccountType"
+          },
+          "gameInstallationId": {
+            "type": "string",
+            "nullable": true
+          },
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "password": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateBaseCreatureRequest": {
+        "type": "object",
+        "properties": {
+          "baseCreature": {
+            "$ref": "#/components/schemas/BaseCreature"
+          },
+          "includeCreature": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateGrowthProfileRequest": {
+        "type": "object",
+        "properties": {
+          "growthProfile": {
+            "$ref": "#/components/schemas/GrowthProfile"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateTrainerRequest": {
+        "type": "object",
+        "properties": {
+          "trainer": {
+            "$ref": "#/components/schemas/TrainerBase"
+          },
+          "includeTrainer": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreatureInventoryEntry": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "accountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "trainerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "inventoryId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "slotNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "creatureId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "quantity": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ElementType": {
+        "enum": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "EnsureStarterNpcRequest": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "trainerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "contentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "starterCreatureBaseId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Gender": {
+        "enum": [
+          0,
+          1,
+          2
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "GenerateCreatureRequest": {
+        "type": "object",
+        "properties": {
+          "creature": {
+            "$ref": "#/components/schemas/GeneratedCreature"
+          },
+          "includeCreature": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "GenerateMultipleCreatureRequest": {
+        "type": "object",
+        "properties": {
+          "creatures": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GeneratedCreature"
+            },
+            "nullable": true
+          },
+          "includeCreature": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "GeneratedCreature": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "growthProfileId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "firstCaughtByTrainerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "baseCreatureId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "currentTrainerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "firstAbilityId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "secondAbilityId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "thirdAbilityId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "fourthAbilityId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "firstHeldItemId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "secondHeldItemId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "captureDate": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "lastTradeDate": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "experiencePoints": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "signingKeyId": {
+            "type": "string",
+            "nullable": true
+          },
+          "givenName": {
+            "type": "string",
+            "nullable": true
+          },
+          "gender": {
+            "$ref": "#/components/schemas/Gender"
+          },
+          "firstNature": {
+            "$ref": "#/components/schemas/Nature"
+          },
+          "secondNature": {
+            "$ref": "#/components/schemas/Nature"
+          },
+          "thirdNature": {
+            "$ref": "#/components/schemas/Nature"
+          },
+          "hitPoints": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "attack": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "specialAttack": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "defense": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "specialDefense": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "speed": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "abilityProgressionSetId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "GiveCreatureRequest": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "trainerId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "GrowthProfile": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "experienceGrowth": {
+            "type": "number",
+            "format": "float"
+          },
+          "hitPointsGrowth": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "attackGrowth": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "specialAttackGrowth": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "defenseGrowth": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "specialDefenseGrowth": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "speedGrowth": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Inventory": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "type": {
+            "$ref": "#/components/schemas/InventoryType"
+          },
+          "accountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "trainerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "maxSlots": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "InventoryType": {
+        "enum": [
+          0,
+          1,
+          2
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "ItemInventoryEntry": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "accountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "trainerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "inventoryId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "slotNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "quantity": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "itemId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "LinkOAuthRequest": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "link": {
+            "$ref": "#/components/schemas/AuthToken"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Nature": {
+        "enum": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "QuestObjectiveType": {
+        "enum": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          10,
+          11,
+          20,
+          30
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "RecordProgressRequest": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "trainerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "objectiveType": {
+            "$ref": "#/components/schemas/QuestObjectiveType"
+          },
+          "referenceId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "amount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "metadata": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "RefreshTokenRequest": {
+        "type": "object",
+        "properties": {
+          "oAuthProvider": {
+            "$ref": "#/components/schemas/AuthProvider"
+          },
+          "accountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "refreshToken": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Stat": {
+        "enum": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "StatChange": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "impactedStat": {
+            "$ref": "#/components/schemas/Stat"
+          },
+          "calculation": {
+            "$ref": "#/components/schemas/Calculation"
+          },
+          "amountMin": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "amountMax": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "durationKind": {
+            "$ref": "#/components/schemas/StatChangeDuration"
+          },
+          "duration": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "StatChangeDuration": {
+        "enum": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "StatusCondition": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "applyToUser": {
+            "type": "boolean"
+          },
+          "probability": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "statChangeIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "nullable": true
+          },
+          "onHitEffectAssetId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "onTriggerEffectAssetId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "onRemovedEffectAssetId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "statChanges": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StatChange"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "SwapCreatureSlotsRequest": {
+        "type": "object",
+        "properties": {
+          "slot1": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "slot2": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Trainer": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "pronouns": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "skinTone": {
+            "type": "string",
+            "nullable": true
+          },
+          "headAssetId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "headExtraId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "faceAssetId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "faceExtraId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "hairAssetId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "hairExtraId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "eyeShapeId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "eyeColorId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "eyeExtraId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "bodyAssetId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "bodyExtraId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "backAssetId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "backExtraId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "legsAssetId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "legsExtraId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "feetAssetId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "feetExtraId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "deleted": {
+            "type": "boolean"
+          },
+          "accountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "creatureTeamInventoryId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "creatureStorageInventoryId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "itemBackpackInventoryId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "itemStorageInventoryId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "creatureStorage": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GeneratedCreature"
+            },
+            "nullable": true
+          },
+          "currentTeam": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GeneratedCreature"
+            },
+            "nullable": true
+          },
+          "itemsInBackpack": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ItemInventoryEntry"
+            },
+            "nullable": true
+          },
+          "itemsInStorage": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ItemInventoryEntry"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "TrainerBase": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "pronouns": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "skinTone": {
+            "type": "string",
+            "nullable": true
+          },
+          "headAssetId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "headExtraId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "faceAssetId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "faceExtraId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "hairAssetId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "hairExtraId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "eyeShapeId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "eyeColorId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "eyeExtraId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "bodyAssetId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "bodyExtraId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "backAssetId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "backExtraId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "legsAssetId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "legsExtraId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "feetAssetId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "feetExtraId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "deleted": {
+            "type": "boolean"
+          },
+          "accountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "creatureTeamInventoryId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "creatureStorageInventoryId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "itemBackpackInventoryId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "itemStorageInventoryId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

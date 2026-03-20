@@ -41,8 +41,38 @@
   },
   {
     "section": "Backend",
-    "title": "Stats & Lifetime Tracking",
+    "title": "Stats and Lifetime Tracking",
     "path": "backend/08-stats-system"
+  },
+  {
+    "section": "Backend",
+    "title": "Battle Persistence",
+    "path": "backend/09-battle-persistence"
+  },
+  {
+    "section": "Guides",
+    "title": "Scene Setup Overview",
+    "path": "guides/01-scene-setup-overview"
+  },
+  {
+    "section": "Guides",
+    "title": "Setting Up an NPC in a Scene",
+    "path": "guides/02-setup-npc-scene"
+  },
+  {
+    "section": "Guides",
+    "title": "Setting Up a Battle Scene",
+    "path": "guides/03-setup-battle-scene"
+  },
+  {
+    "section": "Guides",
+    "title": "Setting Up the World System",
+    "path": "guides/04-setup-world-system"
+  },
+  {
+    "section": "Guides",
+    "title": "Configuring Scene DI (Zenject SceneContext)",
+    "path": "guides/05-setup-di-scene-context"
   },
   {
     "section": "Unity",
@@ -80,28 +110,8 @@
     "path": "unity/07-battle-system"
   },
   {
-    "section": "Guides",
-    "title": "Scene Setup Overview",
-    "path": "guides/01-scene-setup-overview"
-  },
-  {
-    "section": "Guides",
-    "title": "Setting Up an NPC in a Scene",
-    "path": "guides/02-setup-npc-scene"
-  },
-  {
-    "section": "Guides",
-    "title": "Setting Up a Battle Scene",
-    "path": "guides/03-setup-battle-scene"
-  },
-  {
-    "section": "Guides",
-    "title": "Setting Up the World System",
-    "path": "guides/04-setup-world-system"
-  },
-  {
-    "section": "Guides",
-    "title": "Configuring Scene DI",
-    "path": "guides/05-setup-di-scene-context"
+    "section": "Unity",
+    "title": "Content Registry",
+    "path": "unity/08-content-registry"
   }
 ]
