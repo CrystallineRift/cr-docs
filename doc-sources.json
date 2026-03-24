@@ -201,19 +201,33 @@
     "docPath": "docs/unity/07-battle-system.md",
     "repos": {
       "cr-api": [
-        "Game/CR.Game.Service.BFF/Endpoints/BattleEndpoints.cs"
+        "Game/CR.Game.Service.BFF/Endpoints/BattleEndpoints.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/WildBattleEndpoints.cs"
       ],
       "cr-data": [
         "My project/Assets/CR/Game/Battle/BattleCoordinator.cs",
         "My project/Assets/CR/Game/Battle/IBattleClient.cs",
+        "My project/Assets/CR/Game/Battle/IBattleCoordinator.cs",
         "My project/Assets/CR/Game/Battle/BattleClientUnityHttp.cs",
         "My project/Assets/CR/Game/Battle/BattleSession.cs",
-        "My project/Assets/CR/Game/Battle/IBattleCoordinator.cs",
+        "My project/Assets/CR/Game/Battle/WildBattleRequest.cs",
+        "My project/Assets/CR/Game/Battle/BattleAnimationConfig.cs",
+        "My project/Assets/CR/Game/Battle/Arena/BattleArena.cs",
+        "My project/Assets/CR/Game/Battle/Arena/BattleArenaRegistry.cs",
+        "My project/Assets/CR/Game/Battle/Arena/BattleCameraController.cs",
+        "My project/Assets/CR/Game/Battle/Events/BattleEvents.cs",
+        "My project/Assets/CR/Game/Battle/AI/IWildBattleAIService.cs",
+        "My project/Assets/CR/Game/Battle/AI/LocalWildBattleAIService.cs",
+        "My project/Assets/CR/Game/Battle/DTOs/ActionOutcomeResponse.cs",
+        "My project/Assets/CR/Game/Battle/DTOs/SubmitActionRequest.cs",
+        "My project/Assets/CR/Game/Battle/DTOs/WildBattleStateDtos.cs",
+        "My project/Assets/CR/UI/Battle/BattleHUD.cs",
         "My project/Assets/CR/Game/World/Behaviours/NpcInteractionBehaviour.cs",
-        "My project/Assets/CR/Game/World/Behaviours/SpawnerEncounterBehaviour.cs"
+        "My project/Assets/CR/Game/World/Behaviours/SpawnerEncounterBehaviour.cs",
+        "My project/Assets/CR/Game/World/Behaviours/SpawnerWorldBehaviour.cs"
       ]
     },
-    "description": "BattleCoordinator, IBattleClient HTTP flow, StartNpcBattle/StartWildBattle, BattleSession, SpawnerEncounterBehaviour"
+    "description": "BattleCoordinator sequential turn loop, IBattleClient HTTP flow, BattleEvents static events, Arena system, BattleHUD, wild AI, StartNpcBattle/StartWildBattle, SpawnerEncounterBehaviour with encounter delay"
   },
   "unity/08-content-registry": {
     "docPath": "docs/unity/08-content-registry.md",
@@ -327,14 +341,19 @@
     "repos": {
       "cr-api": [
         "Game/CR.Game.Data.Migration/M8004CreateBattleTables.cs",
+        "Game/CR.Game.Data.Migration/M8006AddActiveTurnToBattleRound.cs",
         "Game/CR.Game.Data/Interface/IBattleRepository.cs",
         "Game/CR.Game.Data/Implementation/BaseBattleRepository.cs",
         "Game/CR.Game.Data.Postgres/BattleRepository.cs",
         "Game/CR.Game.Data.Sqlite/BattleRepository.cs",
         "Game/CR.Game.Model/Battle/**/*.cs",
         "Game/CR.Game.Domain.Services/Interfaces/Battle/IBattleDomainService.cs",
+        "Game/CR.Game.Domain.Services/Interfaces/Battle/IWildBattleAIDomainService.cs",
         "Game/CR.Game.Domain.Services/Implementation/Battle/BattleDomainService.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Battle/WildBattleAIDomainService.cs",
         "Game/CR.Game.Service.BFF/Endpoints/BattleEndpoints.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/WildBattleEndpoints.cs",
+        "Convenience/CR.Game.Compat/Battle/**/*.cs",
         "Convenience/CR.REST.AIO/Program.cs"
       ],
       "cr-data": [

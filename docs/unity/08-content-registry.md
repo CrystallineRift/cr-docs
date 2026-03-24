@@ -226,6 +226,15 @@ Add entries to `ContentKeys` whenever a new creature, NPC, or spawner is created
 |----------|-------------|
 | `DisplayNameKey` | Localization key for the zone label |
 
+### `SpawnerDefinition` Inspector Fields
+
+`SpawnerDefinition` ScriptableObjects expose an additional field added in Phase 3:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `contentKey` | string | Must match `content_key` in the backend spawner table |
+| `battleArenaKey` | string | Optional. Must match `BattleArena.ArenaKey` of a scene arena object. Used by `SpawnerWorldBehaviour` to tell `BattleCoordinator` which arena to activate when a wild battle starts from this zone. Leave empty to skip arena teleportation. |
+
 ## Hot-Content System
 
 The registry now supports **hot-content** — the ability to upgrade the local ScriptableObject registry with server-fetched definitions at runtime, without blocking startup.
@@ -410,6 +419,8 @@ A **summary bar** counts errors/warnings/info at the top. Each row has a `[↑]`
 `ContentPublishTool` (`CR/Core/Data/Editor/ContentPublishTool.cs`) sends a `POST /api/v1/content/publish` request to the backend with the full asset manifest and a content version hash.
 
 **Pre-publish validation:** Before sending, the tool scans all `CreatureDefinition` and `ItemDefinition` assets for empty `assetKey`. If any are found, a dialog reports the count ("X definitions have no assetKey and will be skipped") and gives the option to **Publish Anyway** or **Cancel**.
+
+**Seed to Local SQLite upsert behaviour:** The existence check queries `game_assets` by `key` without filtering on `deleted`, so rows that were previously soft-deleted are found and updated (with `deleted` reset to `0`) rather than triggering a unique constraint error on re-insert.
 
 Fields:
 - **Server Address** — e.g. `http://localhost:8080`
