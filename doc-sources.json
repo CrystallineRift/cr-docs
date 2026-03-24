@@ -226,18 +226,101 @@
       ],
       "cr-data": [
         "My project/Assets/CR/Core/Data/Registry/IGameContentRegistry.cs",
-        "My project/Assets/CR/Core/Data/Registry/GameContentRegistry.cs",
+        "My project/Assets/CR/Core/Data/Registry/ScriptableObjectContentRegistry.cs",
+        "My project/Assets/CR/Core/Data/Registry/ServerContentRegistry.cs",
+        "My project/Assets/CR/Core/Data/Registry/MutableContentRegistry.cs",
+        "My project/Assets/CR/Core/Data/Registry/ContentRegistryInitializer.cs",
+        "My project/Assets/CR/Core/Data/Registry/OnlineOfflineContentRegistry.cs",
+        "My project/Assets/CR/Core/Data/Registry/ContentRegistryBootstrapper.cs",
+        "My project/Assets/CR/Core/Data/Registry/AddressablesCatalogUpdater.cs",
+        "My project/Assets/CR/Core/Data/Registry/ContentDefinitionProvider.cs",
         "My project/Assets/CR/Core/Data/Registry/ContentKeys.cs",
         "My project/Assets/CR/Core/Data/Registry/CreatureContentDef.cs",
+        "My project/Assets/CR/Core/Data/Registry/ItemContentDef.cs",
         "My project/Assets/CR/Core/Data/Registry/NpcContentDef.cs",
         "My project/Assets/CR/Core/Data/Registry/SpawnerContentDef.cs",
-        "My project/Assets/CR/Resources/configuration/content_registry.yaml",
+        "My project/Assets/CR/Core/Data/Registry/Definitions/CreatureDefinition.cs",
+        "My project/Assets/CR/Core/Data/Registry/Definitions/ItemDefinition.cs",
+        "My project/Assets/CR/Core/Data/Registry/Definitions/NpcDefinition.cs",
+        "My project/Assets/CR/Core/Data/Registry/Definitions/SpawnerDefinition.cs",
         "My project/Assets/CR/Core/Data/Repository/GameConfigurationKeys.cs",
+        "My project/Assets/CR/Core/Data/Repository/Implementation/Config/IContentManifestRepository.cs",
+        "My project/Assets/CR/Core/Data/Repository/Implementation/Config/ContentManifestClientUnityHttp.cs",
+        "My project/Assets/CR/Core/Data/Repository/Implementation/Config/ContentManifestResponse.cs",
         "My project/Assets/CR/Core/Assets/IGameAssetLoader.cs",
-        "My project/Assets/CR/Core/Assets/GameAssetLoader.cs"
+        "My project/Assets/CR/Core/Assets/GameAssetLoader.cs",
+        "My project/Assets/CR/Core/Data/Editor/ContentCreatorTool.cs",
+        "My project/Assets/CR/Core/Data/Editor/DefinitionEditorExtensions.cs",
+        "My project/Assets/CR/Core/Data/Editor/CreatureDefinitionEditor.cs",
+        "My project/Assets/CR/Core/Data/Editor/ItemDefinitionEditor.cs",
+        "My project/Assets/CR/Core/Data/Editor/NpcDefinitionEditor.cs",
+        "My project/Assets/CR/Core/Data/Editor/SpawnerDefinitionEditor.cs",
+        "My project/Assets/CR/Core/Data/Editor/ContentDefinitionProviderEditor.cs",
+        "My project/Assets/CR/Core/Data/Editor/LocalizationEditorCache.cs",
+        "My project/Assets/CR/Core/Data/Editor/LocalizationKeyField.cs",
+        "My project/Assets/CR/Core/Data/Editor/LocalizationEditorWindow.cs",
+        "My project/Assets/CR/Core/Data/Editor/ContentAuditTool.cs",
+        "My project/Assets/CR/Core/Data/Editor/ContentPublishTool.cs"
       ]
     },
-    "description": "IGameContentRegistry, GameContentRegistry, ContentKeys constants, content_registry.yaml, CreatureContentDef/NpcContentDef/SpawnerContentDef POCOs, IGameAssetLoader.LoadAssetByKeyAsync"
+    "description": "IGameContentRegistry, ScriptableObjectContentRegistry, ServerContentRegistry, MutableContentRegistry, ContentRegistryInitializer, ContentManifestClientUnityHttp, ContentDefinitionProvider, ContentKeys constants, CreatureDefinition/ItemDefinition/NpcDefinition/SpawnerDefinition ScriptableObjects, CreatureContentDef/ItemContentDef/NpcContentDef/SpawnerContentDef POCOs, IGameAssetLoader.LoadAssetByKeyAsync, ContentCreatorTool EditorWindow, custom Inspectors for all definition types, AddressablesCatalogUpdater, LocalizationEditorWindow, ContentAuditTool, ContentPublishTool"
+  },
+  "backend/10-asset-management": {
+    "docPath": "docs/backend/10-asset-management.md",
+    "repos": {
+      "cr-api": [
+        "Game/CR.Game.Data.Migration/M8005CreateAppConfigTable.cs",
+        "Game/CR.Game.Model/Config/AppConfig.cs",
+        "Game/CR.Game.Data/Interface/IAppConfigRepository.cs",
+        "Game/CR.Game.Data/Implementation/BaseAppConfigRepository.cs",
+        "Game/CR.Game.Data.Sqlite/AppConfigRepository.cs",
+        "Game/CR.Game.Data.Postgres/AppConfigRepository.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/VersionCheckEndpoints.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/GameAssetEndpoints.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/ContentPublishEndpoints.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Asset/AssetDomainService.cs",
+        "Game/CR.Game.Data/Interface/IGameAssetRepository.cs",
+        "Game/CR.Game.Data/Implementation/BaseGameAssetRepository.cs",
+        "Game/CR.Game.Model/Content/ContentManifestResponse.cs",
+        "Game/CR.Game.Data/Interface/IContentManifestRepository.cs",
+        "Game/CR.Game.Data/Implementation/BaseContentManifestRepository.cs",
+        "Game/CR.Game.Data.Postgres/ContentManifestRepository.cs",
+        "Game/CR.Game.Data.Sqlite/ContentManifestRepository.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/ContentManifestEndpoints.cs",
+        "Game/CR.Game.Model/Items/BaseItem.cs",
+        "Items/CR.Items.Data.Migration/M6004AddContentKeyToItem.cs"
+      ],
+      "cr-data": [
+        "My project/Assets/CR/Core/Data/Repository/Implementation/Config/IVersionCheckRepository.cs",
+        "My project/Assets/CR/Core/Data/Repository/Implementation/Config/VersionCheckClientUnityHttp.cs",
+        "My project/Assets/CR/Core/Data/Repository/Implementation/Config/VersionCheckResponse.cs",
+        "My project/Assets/CR/Core/Data/Repository/Implementation/Config/IContentManifestRepository.cs",
+        "My project/Assets/CR/Core/Data/Repository/Implementation/Config/ContentManifestClientUnityHttp.cs",
+        "My project/Assets/CR/Core/Data/Repository/Implementation/Config/ContentManifestResponse.cs",
+        "My project/Assets/CR/Core/Data/Editor/ContentPublishTool.cs",
+        "My project/Assets/CR/Core/Data/Editor/ContentDeployTool.cs",
+        "scripts/setup-s3-bucket.sh",
+        "scripts/setup-minio-bucket.sh",
+        "scripts/deploy-content.sh"
+      ]
+    },
+    "description": "game_assets table, app_config singleton row, version-check endpoint, content-publish endpoint, content-manifest endpoint, X-Pipeline-Key auth, three-system asset architecture (Addressables CDN, cr-api backend, local SQLite), S3/MinIO CDN setup, deploy scripts"
+  },
+  "unity/09-addressables-setup": {
+    "docPath": "docs/unity/09-addressables-setup.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [
+        "My project/Assets/CR/Core/Assets/GameAssetLoader.cs",
+        "My project/Assets/CR/Core/Assets/IGameAssetLoader.cs",
+        "My project/Assets/CR/Core/Player/CreatureSpawner.cs",
+        "My project/Assets/CR/Core/Data/Editor/ContentPublishTool.cs",
+        "My project/Assets/CR/Core/Data/Editor/ContentDeployTool.cs",
+        "scripts/deploy-content.sh",
+        "scripts/setup-minio-bucket.sh"
+      ]
+    },
+    "description": "Unity Addressables end-to-end setup: Groups/Profiles windows, Play Mode Script, making assets Addressable, ContentPublishTool Seed to SQLite, Deploy Content tool, MinIO/S3 gotchas, CreatureSpawner MonoBehaviour"
   },
   "backend/09-battle-persistence": {
     "docPath": "docs/backend/09-battle-persistence.md",

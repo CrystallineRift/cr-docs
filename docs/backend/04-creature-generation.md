@@ -138,6 +138,24 @@ This method bridges the Spawner system to the creature generation pipeline:
 5. `SelectGrowthProfileFromTemplate` — returns `template.GrowthProfileId`; throws if empty
 6. Builds `CreateCreatureRequest` with `Gender = Unknown`, `FirstNature = default(Nature)`, and delegates to `CreateAsync`
 
+## `BaseCreature` Model
+
+`BaseCreature` is the template record for a creature species stored in the `creature` table. Key fields relevant to the generation pipeline:
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `Id` | `Guid` | Internal UUID primary key |
+| `ContentKey` | `string` | Designer-facing identifier (e.g. `"cindris"`) — NOT NULL, UNIQUE (enforced by M1015) |
+| `AssetKey` | `string?` | Addressables address or Resources path for the primary art asset (e.g. `"creatures/cindris"`). Replaced `AssetId: Guid?` in migration M1016. |
+| `BaseHitPoints` | `int` | Base stat used by the generation formula |
+| `BaseAttack` | `int` | — |
+| `BaseDefense` | `int` | — |
+| `BaseSpeed` | `int` | — |
+| `BaseSpecialAttack` | `int` | — |
+| `BaseSpecialDefense` | `int` | — |
+
+> **Migration note:** `M1016ReplaceAssetIdWithAssetKeyOnCreature` dropped the `asset_id UUID` column and added `asset_key TEXT` in its place. If you have existing data with `asset_id` values, those UUIDs must be translated to string keys via the `game_assets` table before running M1016.
+
 ## `GeneratedCreature` Model
 
 A `GeneratedCreature` is a live instance of a base `creature`. Key fields:

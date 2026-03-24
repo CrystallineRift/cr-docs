@@ -137,13 +137,15 @@ Plain POCOs in `Game/CR.Game.Model/Battle/` — one file per table:
 ```csharp
 public interface IBattleDomainService
 {
-    Task<Guid>            StartBattleAsync(Guid trainer1Id, Guid trainer2Id, string battleType, CancellationToken ct);
-    Task<BattleStartResult> GetBattleStartResultAsync(Guid battleId, Guid trainerId, CancellationToken ct);
-    Task                  SubmitInputAsync(Guid battleId, Guid trainerId, string roundKey, BattleAction[] actions, CancellationToken ct);
-    Task<BattleStateDto>  GetBattleStateAsync(Guid battleId, CancellationToken ct);
-    Task<bool>            IsBattleCompleteAsync(Guid battleId, CancellationToken ct);
+    Task<Guid>             StartBattleAsync(Guid trainer1Id, Guid trainer2Id, string battleType, CancellationToken ct);
+    Task<BattleStartResult?> GetBattleStartResultAsync(Guid battleId, Guid trainerId, CancellationToken ct);
+    Task                   SubmitInputAsync(Guid battleId, Guid trainerId, string roundKey, BattleAction[] actions, CancellationToken ct);
+    Task<BattleStateDto?>  GetBattleStateAsync(Guid battleId, CancellationToken ct);
+    Task<bool>             IsBattleCompleteAsync(Guid battleId, CancellationToken ct);
 }
 ```
+
+`GetBattleStartResultAsync` and `GetBattleStateAsync` return `null` when the battle ID is not found — following the project convention that domain services return `T?` for not-found lookups rather than throwing `InvalidOperationException`. `InvalidOperationException` is reserved for true invariant violations (submitting input to an already-ended battle, double submission, etc.).
 
 ### `StartBattleAsync`
 
@@ -158,7 +160,10 @@ public interface IBattleDomainService
 1. Load the current `battle_round` — validate that `roundKey` matches the trainer's stored key
 2. Throw `ArgumentException` on key mismatch (prevents replay attacks)
 3. Insert `battle_round_input` for this trainer (unique constraint prevents double-submission)
-4. If both inputs are now present: resolve the round using the battle logic, update `battle_creature_state`, append `battle_action_log`, generate next round keys and insert a new `battle_round` (or mark the battle `"Ended"` if a team is fully fainted)
+4. If both inputs are now present: resolve the round using the battle logic, update `battle_creature_state`, append `battle_action_log`, then apply three-way outcome logic:
+   - **One side fully fainted** → mark battle `"Ended"`, set `winner_id` to the surviving trainer
+   - **Both sides fully fainted simultaneously** → mark battle `"Ended"`, `winner_id = NULL` (draw)
+   - **Neither side fully fainted** → generate next round keys and insert a new `battle_round`
 
 ### `GetBattleStateAsync`
 
@@ -246,6 +251,8 @@ See [Battle System](?page=unity/07-battle-system) for the full Unity-side flow.
 | `SubmitInput_BothTrainers_ResolvesRoundAndAdvances` | Round resolves, new round row inserted |
 | `SubmitInput_WrongRoundKey_Throws` | `ArgumentException` on bad key |
 | `SubmitInput_AllCreaturesFainted_EndsBattle` | Battle status set to `"Ended"`, winner recorded |
+| `ResolveRound_SimultaneousKO_BattleEndsWithDraw` | Both sides faint simultaneously → `"Ended"` with `winner_id = NULL` |
+| `GetBattleState_InvalidBattleId_ReturnsNull` | `GetBattleStateAsync` returns `null` for unknown battle ID |
 
 `IBattleRepository` is mocked with Moq — no real DB required for the unit tests.
 

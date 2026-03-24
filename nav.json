@@ -50,6 +50,11 @@
     "path": "backend/09-battle-persistence"
   },
   {
+    "section": "Backend",
+    "title": "Asset Management",
+    "path": "backend/10-asset-management"
+  },
+  {
     "section": "Guides",
     "title": "Scene Setup Overview",
     "path": "guides/01-scene-setup-overview"
@@ -113,5 +118,10 @@
     "section": "Unity",
     "title": "Content Registry",
     "path": "unity/08-content-registry"
+  },
+  {
+    "section": "Unity",
+    "title": "Addressables Setup",
+    "path": "unity/09-addressables-setup"
   }
 ]

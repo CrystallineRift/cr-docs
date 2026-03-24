@@ -169,6 +169,48 @@ public static class GuildEndpoints
 }
 ```
 
+## REST Endpoint Groups
+
+All endpoint groups registered in `Program.cs` via `app.Map*Endpoints()`:
+
+| Endpoint class | Route prefix | Description |
+|----------------|-------------|-------------|
+| `NpcEndpoints` | `/api/v1/npcs` | NPC CRUD and team management |
+| `SpawnerEndpoints` | `/api/v1/spawners` | Spawner configuration and spawn trigger |
+| `CreatureEndpoints` | `/api/v1/creatures` | Base creature and generated creature management |
+| `TrainerEndpoints` | `/api/v1/trainers` | Trainer profiles and inventory |
+| `AuthEndpoints` | `/api/v1/auth` | Account creation, login, token refresh |
+| `QuestEndpoints` | `/api/v1/quests` | Quest templates, instances, progress |
+| `StatEndpoints` | `/api/v1/stats` | Lifetime stat reads and increments |
+| `BattleEndpoints` | `/api/v1/battles` | Battle lifecycle (start, submit input, resolve) |
+| `GameAssetEndpoints` | `/api/v1/game-assets` | Asset manifest reads — `GET /api/v1/game-assets`, `GET /api/v1/game-assets/{key}` |
+| `VersionCheckEndpoints` | `/api/v1/version-check` | Client/content version compatibility check |
+| `ContentPublishEndpoints` | `/api/v1/content/publish` | Pipeline-only content publish (`X-Pipeline-Key` auth) |
+
+## Key Repositories
+
+| Interface | Implementation(s) | Domain |
+|-----------|------------------|--------|
+| `ICreatureRepository` | `CreatureRepository` (PG + SQLite) | Creatures |
+| `IGeneratedCreatureRepository` | `GeneratedCreatureRepository` (PG + SQLite) | Creatures |
+| `INpcRepository` | `NpcRepository` (PG + SQLite) | Npcs |
+| `ISpawnerRepository` | `SpawnerRepository` (PG + SQLite) | Spawner |
+| `ITrainerRepository` | `TrainerRepository` (PG + SQLite) | Trainers |
+| `IBattleRepository` | `BattleRepository` (PG + SQLite) | Game/Battle |
+| `IGameAssetRepository` | `GameAssetRepository` (PG + SQLite) | Game/Assets |
+| `IAppConfigRepository` | `AppConfigRepository` (PG + SQLite) | Game/Config |
+
+## Key Domain Services
+
+| Interface | Lifecycle | Notes |
+|-----------|-----------|-------|
+| `ICreatureGenerationService` | Singleton | Shared across NPC and Spawner domains |
+| `INpcDomainService` | Scoped | Depends on `IDbConnectionFactory` |
+| `IQuestDomainService` | Scoped | Depends on `IStatService` (Scoped) |
+| `IStatService` | Scoped | Append-only stat store |
+| `IBattleDomainService` | Singleton | Battle lifecycle orchestration |
+| `IAssetDomainService` | Singleton | `GetOrCreateAsync` for asset records; used by content publish pipeline |
+
 ### 6. Wire in Program.cs
 
 ```csharp
@@ -431,3 +473,4 @@ Domain services throw these typed exceptions rather than returning nullable resu
 - [Dependency Injection](?page=unity/02-dependency-injection) — Unity-side DI wiring mirrors the server pattern
 - [Quest System](?page=backend/07-quest-system) — concrete example of the scoped service pattern; stats side-effects
 - [Stats and Lifetime Tracking](?page=backend/08-stats-system) — append-only audit log, Increment/Max/Set operators
+- [Asset Management](?page=backend/10-asset-management) — game_assets table, app_config singleton, version-check and content-publish endpoints

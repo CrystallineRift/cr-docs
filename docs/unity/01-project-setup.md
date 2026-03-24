@@ -83,8 +83,11 @@ The `CR/` folder is the game's source root. Every domain has its own subfolder f
 | Best HTTP | 3.x | Asset Store |
 | Newtonsoft.Json for Unity | 13.x | UPM (`com.unity.nuget.newtonsoft-json`) |
 | Anti-Cheat Toolkit | latest | Asset Store (for `ObscuredPrefs`) |
+| Unity Addressables | 1.21.21 | UPM (`com.unity.addressables`) |
 
-All four are required for the game to compile. If any is missing, the build will fail with `CS0246: The type or namespace name '...' could not be found`.
+The first four are required for the game to compile. If any is missing, the build will fail with `CS0246: The type or namespace name '...' could not be found`.
+
+**Addressables** (`com.unity.addressables` 1.21.21) is in `manifest.json` but the `AddressablesCatalogUpdater` class is compile-gated behind the `CR_ADDRESSABLES` scripting define symbol. The package is present so that Addressables asset references compile; to activate the catalog update check at startup, add `CR_ADDRESSABLES` to **Project Settings → Player → Scripting Define Symbols**.
 
 **Zenject** (also known as Extenject for Unity) provides the `MonoInstaller` base class, `[Inject]` attribute, `Container.Bind`, and `GameContext` scene component. It is the entire foundation of the dependency injection system. See [Dependency Injection](?page=unity/02-dependency-injection) for details.
 

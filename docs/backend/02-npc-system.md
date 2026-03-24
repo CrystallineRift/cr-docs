@@ -505,7 +505,7 @@ cr-api/Npcs/
   CR.Npcs.Data.Migration/       ← FluentMigrator migrations
   CR.Npcs.Data.Postgres/        ← PostgreSQL implementations
   CR.Npcs.Data.Sqlite/          ← SQLite implementations
-  CR.Npcs.Domain.Services/      ← INpcDomainService, INpcMerchantService
+  CR.Npcs.Domain.Services/      ← INpcDomainService
   CR.Npcs.Model.REST/           ← request/response models
   CR.Npcs.Service.REST/         ← ASP.NET endpoints
 ```
@@ -529,3 +529,135 @@ cr-api/Npcs/
 - [NPC Interaction](?page=unity/04-npc-interaction) — Unity-side composable MonoBehaviours that drive NPC initialization and player interaction
 - [World Behaviours](?page=unity/03-world-behaviours) — `IWorldInitializable` lifecycle and the composable sub-behaviour pattern
 - [Backend Architecture](?page=backend/01-architecture) — transaction patterns, soft deletes, module structure, keyed vs non-keyed DI
+
+## Merchant NPC Service (`INpcMerchantService`)
+
+`INpcMerchantService` / `NpcMerchantService` handles all business logic for NPCs of type `Merchant` — inventory management, buy/sell price calculations, and fully transactional purchase and sell operations. It is a separate domain service from `INpcDomainService` and is registered as `AddScoped` because it depends on `IDbConnectionFactory`.
+
+### Why a Separate Service?
+
+`INpcDomainService` covers the full lifecycle of any NPC (creation, team management, starter flow). Merchant-specific operations — price calculations tied to per-NPC multipliers, transactional item transfers between merchant and trainer inventories — are cohesive enough to warrant their own service boundary. This keeps `NpcDomainService` focused and avoids coupling item pricing logic into the general NPC domain.
+
+### Pricing Model
+
+Each `NpcBase` row carries two multipliers:
+
+| Column | Default | Meaning |
+|--------|---------|---------|
+| `buy_multiplier` | 1.0 | Trainer pays `base_value * buy_multiplier` to purchase from merchant |
+| `sell_multiplier` | 0.5 | Trainer receives `base_value * sell_multiplier` when selling to merchant |
+
+These are stored on the `npc` table and are updated via `UpdateMerchantBuyMultiplierAsync` / `UpdateMerchantSellMultiplierAsync`.
+
+### Transaction Pattern
+
+Both `PurchaseItemFromMerchantAsync` and `SellItemToMerchantAsync` open a single `DbConnection`, begin a transaction, and coordinate writes across `INpcInventoryRepository` and `ITrainerItemInventoryRepository` using `*InTransactionAsync` variants. On any failure the transaction is rolled back and a failed `PurchaseResult` / `SellResult` (with `Success = false` and an `ErrorMessage`) is returned rather than throwing — callers can inspect the result without needing to catch.
+
+```
+Purchase flow:
+  1. Validate NPC is a Merchant (NpcType.Merchant)
+  2. Validate merchant has >= requested quantity (returns failed result if not)
+  3. Validate trainer inventory can accept items (IItemInventoryService.CanAddAsync)
+  4. Calculate total price (base_value * buy_multiplier * quantity)
+  5. BEGIN TRANSACTION
+     a. RemoveItemInTransactionAsync from merchant inventory
+     b. AddItemToInventoryInTransactionAsync (or UpdateItemQuantityInTransactionAsync) in trainer inventory
+  6. COMMIT (or ROLLBACK on error → returns failed result)
+```
+
+### DI Registration
+
+```csharp
+// Program.cs — both keyed and non-keyed required
+builder.Services.AddKeyedScoped<INpcMerchantService, NpcMerchantService>("npc-merchant");
+builder.Services.AddScoped<INpcMerchantService, NpcMerchantService>();
+```
+
+The keyed registration `"npc-merchant"` is used by `NpcMerchantEndpoints` via `[FromKeyedServices("npc-merchant")]`. The non-keyed registration allows other services to inject `INpcMerchantService` directly if needed.
+
+All dependencies (`INpcRepository`, `INpcInventoryRepository`, `IItemRepository`, `ITrainerRepository`, `ITrainerItemInventoryRepository`, `IItemInventoryService`, `IDbConnectionFactory`) are already registered as non-keyed singletons or scoped services before the merchant service is registered.
+
+## Merchant REST Endpoints
+
+All merchant endpoints are prefixed `/api/v1/merchants`.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/merchants/{npcId}/inventory` | List all items in merchant's inventory |
+| `GET` | `/api/v1/merchants/{npcId}/inventory/{itemId}` | Get a single item entry (404 if absent) |
+| `POST` | `/api/v1/merchants/{npcId}/inventory` | Add item to merchant inventory |
+| `PUT` | `/api/v1/merchants/{npcId}/inventory/{itemId}` | Set item quantity |
+| `DELETE` | `/api/v1/merchants/{npcId}/inventory/{itemId}` | Remove quantity of item (query: `quantity`) |
+| `DELETE` | `/api/v1/merchants/{npcId}/inventory` | Clear entire merchant inventory |
+| `GET` | `/api/v1/merchants/{npcId}/price/buy/{itemId}` | Calculate buy price for one unit |
+| `GET` | `/api/v1/merchants/{npcId}/price/sell/{itemId}` | Calculate sell price for one unit |
+| `POST` | `/api/v1/merchants/{npcId}/purchase` | Purchase items from merchant to trainer inventory |
+| `POST` | `/api/v1/merchants/{npcId}/sell` | Sell items from trainer inventory to merchant |
+
+All endpoints accept `accountId` and `trainerId` either as query params (GET/DELETE) or inside the JSON body (POST/PUT).
+
+### `POST /api/v1/merchants/{npcId}/purchase`
+
+```json
+POST /api/v1/merchants/ffee9012-.../purchase
+{
+  "accountId":         "aaaaaaaa-...",
+  "trainerId":         "bbbbbbbb-...",
+  "itemId":            "cccccccc-...",
+  "quantity":          3,
+  "targetInventoryId": "dddddddd-..."
+}
+
+→ 200 OK (success)
+{
+  "success": true,
+  "npcId": "ffee9012-...",
+  "trainerId": "bbbbbbbb-...",
+  "itemId": "cccccccc-...",
+  "quantity": 3,
+  "targetInventoryId": "dddddddd-...",
+  "totalPrice": 375.00
+}
+
+→ 409 Conflict (failure — e.g. insufficient stock or full inventory)
+{
+  "success": false,
+  "errorMessage": "Merchant does not have sufficient quantity. Available: 1, Requested: 3"
+}
+```
+
+### `POST /api/v1/merchants/{npcId}/sell`
+
+```json
+POST /api/v1/merchants/ffee9012-.../sell
+{
+  "accountId":         "aaaaaaaa-...",
+  "trainerId":         "bbbbbbbb-...",
+  "itemId":            "cccccccc-...",
+  "quantity":          2,
+  "sourceInventoryId": "eeeeeeee-..."
+}
+
+→ 200 OK (success)
+{
+  "success": true,
+  "npcId": "ffee9012-...",
+  "trainerId": "bbbbbbbb-...",
+  "itemId": "cccccccc-...",
+  "quantity": 2,
+  "sourceInventoryId": "eeeeeeee-...",
+  "totalPrice": 150.00
+}
+```
+
+### `GET /api/v1/merchants/{npcId}/price/buy/{itemId}`
+
+```
+GET /api/v1/merchants/ffee9012-.../price/buy/cccccccc-...
+  ?accountId=aaaaaaaa-...&trainerId=bbbbbbbb-...
+
+→ 200 OK
+{ "price": 125.00 }
+```
+
+Returns 404 if the NPC or item does not exist.
