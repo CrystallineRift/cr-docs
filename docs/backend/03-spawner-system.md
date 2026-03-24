@@ -58,6 +58,13 @@ Key columns on `spawner`:
 - `deleted` — soft delete flag
 - `content_key` — optional designer-facing key (e.g. `"starter-wild-zone"`); unique per trainer when set
 
+The Unity-side `SpawnerDefinition` ScriptableObject mirrors the backend `content_key` and adds a second field used by the battle system:
+
+| Field | Description |
+|-------|-------------|
+| `contentKey` | Must match `content_key` in the backend DB |
+| `battleArenaKey` | Arena key used to look up the `BattleArena` MonoBehaviour in the scene. Must match `BattleArena.arenaKey` on the corresponding arena prefab. Leave empty to skip arena teleportation during wild encounters. |
+
 Key columns on `creature_spawner_template`:
 - `base_creature_id` — which creature species to generate
 - `growth_profile_id` — which stat scaling curve to use
@@ -149,7 +156,7 @@ POST /spawner/{spawnerId}/spawn
 }
 ```
 
-This increments `current_count` by 1 and writes a `spawner_spawn_history` row. The generated creature is stored under the spawner's ID (acting as the `WildTrainerId` proxy — see the Unity Integration section below). The battle engine loads this creature via `ICreatureInventoryService.GetTeamAsync(wildTrainerId)`.
+This increments `current_count` by 1 and writes a `spawner_spawn_history` row. The generated creature is stored under the Wild Trainer account (GUID `00000000-0000-0000-0000-000000000001` — see the Unity Integration section below). The battle engine loads this creature via `ICreatureInventoryService.GetTeamAsync(wildTrainerId)`.
 
 If the player flees the battle, the capacity is NOT restored — the spawn already happened. This means spawner capacity represents "total encounters generated" not "currently active encounters". Size your `max_capacity` accordingly (e.g., set it to a very large number like 1,000,000 for perpetual wild zones, or a small number like 5 for a limited-event spawner).
 
@@ -315,18 +322,18 @@ Every successful spawn writes a row to `spawner_spawn_history`:
 | `spawn_session_id` | Groups all creatures from one spawn call |
 | `spawn_duration_ms` | How long generation took |
 
-## Unity Integration — SpawnerId as Wild Trainer Proxy
+## Unity Integration — Wild Trainer GUID
 
 `SpawnerWorldBehaviour` in the Unity client exposes two properties after `InitializeAsync` completes:
 
 ```csharp
 public Guid SpawnerId     { get; private set; }  // the resolved spawner row ID
-public Guid WildTrainerId { get; private set; }  // Phase 1: same as SpawnerId
+public Guid WildTrainerId { get; private set; }  // always 00000000-0000-0000-0000-000000000001
 ```
 
-`SpawnerEncounterBehaviour` reads these and passes `WildTrainerId` as the opponent ID in `WildBattleRequest`. The battle engine (`StatefulBattleSystemV2`) loads the wild creature team via `ICreatureInventoryService.GetTeamAsync(wildTrainerId)`.
+`WildTrainerId` is hardcoded to the well-known Wild Trainer GUID (`00000000-0000-0000-0000-000000000001`), seeded by `M9990SeedGameData` on the backend. Spawned wild creatures are stored under this trainer's account, and `BattleDomainService` looks them up via `ICreatureInventoryService.GetTeamAsync(wildTrainerId)`.
 
-In Phase 1, `WildTrainerId == SpawnerId` is an intentional proxy. There is no dedicated wild trainer entity — spawner-assigned creatures must be stored under the spawner's ID in the generated creature inventory for the battle engine to find them. A dedicated wild trainer row per spawner zone is Phase 2.
+`SpawnerEncounterBehaviour` reads these values and passes `WildTrainerId` as the opponent ID in `WildBattleRequest`. After the battle ends, the backend soft-deletes all creatures owned by the Wild Trainer — ensuring wild creature rows do not accumulate indefinitely.
 
 See [Battle System](?page=unity/07-battle-system) for the complete wild encounter flow.
 

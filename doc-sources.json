@@ -44,9 +44,13 @@
         "Spawner/**/*.cs",
         "Spawner/**/*.csproj"
       ],
-      "cr-data": []
+      "cr-data": [
+        "My project/Assets/CR/Core/Data/Registry/Definitions/SpawnerDefinition.cs",
+        "My project/Assets/CR/Game/World/Behaviours/SpawnerWorldBehaviour.cs",
+        "My project/Assets/CR/Game/World/Behaviours/SpawnerEncounterBehaviour.cs"
+      ]
     },
-    "description": "Weighted spawn pools, spawn history, spawner tables"
+    "description": "Weighted spawn pools, spawn history, spawner tables, SpawnerDefinition.battleArenaKey, Wild Trainer GUID integration"
   },
   "backend/04-creature-generation": {
     "docPath": "docs/backend/04-creature-generation.md",

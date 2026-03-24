@@ -102,7 +102,7 @@ The wild trainer GUID is `00000000-0000-0000-0000-000000000001` (defined in `Wil
 | `BattleType` | string | `"ONEvONE"` etc. |
 | `PlayerTrainerId` | Guid | The local player's trainer ID |
 | `OpponentTrainerId` | Guid | The NPC or wild trainer ID |
-| `PlayerTurnKey` | string | Round key; pass this to the server when submitting a move via the legacy `SubmitInputAsync` |
+| `PlayerTurnKey` | string | Round key for round 1 — stored on the session but superseded by `ActionOutcome.NextRoundKey` from each `SubmitActionAsync` response as the loop advances |
 | `Kind` | `BattleRequestKind` | `NpcTrainer`, `Wild`, or `PvP` |
 
 ## `BattleResult`
@@ -121,20 +121,20 @@ The wild trainer GUID is `00000000-0000-0000-0000-000000000001` (defined in `Wil
 ```csharp
 public interface IBattleClient
 {
-    // Original API
+    // Active methods used by the wild-battle turn loop
     Task<StartBattleResponse>       StartBattleAsync(StartBattleRequest request, CancellationToken ct);
-    Task<BattleRoundKeyResponse>    GetRoundKeyAsync(Guid battleId, Guid trainerId, CancellationToken ct);
-    Task<SubmitBattleInputResponse> SubmitInputAsync(Guid battleId, SubmitBattleInputRequest request, CancellationToken ct);
     Task<BattleStateResponse>       GetBattleStateAsync(Guid battleId, CancellationToken ct);
-
-    // Phase 3: turn-loop additions
     Task<ActionOutcomeResponse>     SubmitActionAsync(Guid battleId, SubmitActionRequest request, CancellationToken ct);
     Task<ActionOutcomeResponse>     SubmitWildTurnAsync(Guid battleId, CancellationToken ct);
     Task<RunAttemptResponse>        TryRunAsync(Guid battleId, Guid trainerId, CancellationToken ct);
+
+    // Legacy methods — kept for NPC battle compatibility; not used in wild-battle flow
+    Task<BattleRoundKeyResponse>    GetRoundKeyAsync(Guid battleId, Guid trainerId, CancellationToken ct);
+    Task<SubmitBattleInputResponse> SubmitInputAsync(Guid battleId, SubmitBattleInputRequest request, CancellationToken ct);
 }
 ```
 
-`StartBattleResponse` now includes `ActiveTrainerId` and `RoundKey` fields to avoid a separate `GetRoundKeyAsync` call in the wild turn loop.
+`StartBattleResponse` includes `ActiveTrainerId` and `RoundKey` fields so the turn loop can begin immediately without a separate `GetRoundKeyAsync` call.
 
 The base URL is read from `game_config.yaml` via `GameConfigurationKeys.BattleServerHttpAddress`.
 
@@ -170,12 +170,14 @@ On `OnTriggerEnter` (Player tag), a coroutine `EncounterDelayRoutine` is started
 
 ## Wild Battle AI
 
-`LocalWildBattleAIService` (`IWildBattleAIService`) provides a simple heuristic for client-side wild battle decisions. The server's `SubmitWildTurnAsync` endpoint calls the backend AI; this service is available for offline/testing scenarios.
+`LocalWildBattleAIService` (`IWildBattleAIService`) provides client-side wild battle AI decisions. The server's `SubmitWildTurnAsync` endpoint uses `WildBattleAIDomainService` in online mode; this service runs locally for offline scenarios.
 
 Decision priority:
-1. If HP < 30% and a healing item is available → use item
-2. 20% random chance → use a Status-category ability if one exists
-3. Default → use the highest-power non-Status ability
+1. If `currentHp / maxHp < 30%` AND a healing item is available in `wildTrainerItems` → use item (type 2)
+2. 20% random chance → use a Status-category ability if one exists in `wildAbilities`
+3. Default → use the highest-power non-Status ability from `wildAbilities`
+
+The backend `WildBattleAIDomainService` omits the HP/healing check (it queries abilities globally, not per-creature). The two AIs produce equivalent behaviour when no healing items are available.
 
 ## `BattleAnimationConfig`
 
@@ -189,7 +191,7 @@ A `ScriptableObject` created via `Assets > Create > CR > Battle > Animation Conf
 - `ActionMenu/` with `BattleButton` and `RunButton` (Buttons; hidden on non-player turns)
 - `BattleLog/LogText` (Text; shows last 4 battle events)
 
-`BattleButton` calls `IBattleCoordinator.SubmitPlayerAction("[{\"type\":0}]")` (default attack). `RunButton` submits type 3 (Escape). A full implementation should open an ability picker sub-menu.
+`BattleButton` calls `IBattleCoordinator.SubmitPlayerAction("[{\"type\":0}]")` (default attack). `RunButton` submits type 4 (Run). The `BattleActionType` enum values are: Ability=0, Item=2, Switch=3, Run=4. A full implementation should open an ability picker sub-menu.
 
 ## `WildBattleRequest`
 
@@ -227,6 +229,10 @@ public record WildBattleRequest(
 **Battle already in progress.** `BattleCoordinator` guards against concurrent starts with a `_battleInProgress` flag. A second `StartWildBattle` while a battle is active is ignored with a warning.
 
 **`SubmitPlayerAction` without a pending turn.** If called when no `TaskCompletionSource` is waiting, a warning is logged and the call is a no-op.
+
+**`EndBattle` idempotency.** `EndBattle` is guarded by a `_battleEnded` bool flag and returns immediately on repeated calls. This prevents double-invocation when `OperationCanceledException` unwinds the turn loop (e.g. player disconnect) while the `finally` block also calls `EndBattle`. The flag is reset at the start of each new battle in `StartWildBattleAsync`.
+
+**`OperationCanceledException` in the turn loop.** When `EndBattle` cancels the `_playerActionSource` TCS during a forced exit, the awaited `_playerActionSource.Task` throws `OperationCanceledException`. A dedicated `catch (OperationCanceledException)` block before the generic `catch (Exception ex)` swallows this silently — it is not an error, and `EndBattle` in `finally` handles cleanup.
 
 **`IBattleClient` server address.** `BattleClientUnityHttp` reads `game_config.yaml` key `battle_server_http_address`. In local dev this is `http://localhost:8080`. Ensure the AIO host is running.
 

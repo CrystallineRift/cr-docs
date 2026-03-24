@@ -116,6 +116,8 @@ Fill in the Server Address and Pipeline API Key, then click **Publish to Server*
 
 Click **Seed Assets to Local SQLite**, browse to your local `.bytes` database file (the same one the Database Manager uses), then click seed. This upserts rows directly into the SQLite `game_assets` table without needing the API server running.
 
+The upsert logic checks for the row by `key` (ignoring the `deleted` flag) so that previously soft-deleted rows are updated and un-deleted rather than causing a unique constraint error on re-insert.
+
 > **Gotcha:** Forgetting to seed local SQLite is the most common reason `IGameAssetLoader.LoadAssetByKeyAsync` returns `null` in Play Mode. The log will show `"Getting game asset by key"` followed immediately by `"Asset key not found in registry"` — that is a DB miss, not an Addressables miss.
 
 After seeding, the log should show `"Getting game asset by key"` → `"Getting game asset by id"` (two DB lookups) before reaching Addressables. If you see both lookups, the DB side is working.
@@ -169,6 +171,8 @@ For rapid iteration during development, stay on **Use Asset Database** and skip 
 **Usage:** Add `CreatureSpawner` to a GameObject, set Asset Key, hit Play. Call `SpawnAsync()` or `DespawnCurrent()` from other scripts at runtime.
 
 **Assembly note:** `CreatureSpawner` lives in `CR.Core.Player.asmdef` which does not reference Assembly-CSharp. It therefore cannot take a `CreatureDefinition` reference directly — it uses a plain `string assetKey` field instead. Copy the value from the `assetKey` field on the definition.
+
+**Asset release:** `OnDestroy` cancels any in-flight load and destroys the spawned creature, but does **not** call `IGameAssetLoader.ReleaseAllAssets()`. Because `IGameAssetLoader` is a shared singleton, releasing all assets from one `CreatureSpawner` would unload assets still in use by other systems. If you need to release the specific handle, track the loaded asset reference manually and call `ReleaseAsset(Guid)` with the corresponding asset UUID.
 
 ---
 

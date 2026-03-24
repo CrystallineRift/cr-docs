@@ -2,9 +2,13 @@
 
 The battle system uses fully DB-backed state. All battle data — sessions, round keys, submitted inputs, creature HP, and action logs — is stored in five relational tables and survives server restarts. There is no in-memory state.
 
-## Why DB-Backed?
+## Turn Model
 
-The previous implementation (`StatefulBattleSystemV2`) stored all state in `ConcurrentDictionary` / `Dictionary` fields on a singleton. A server restart mid-battle lost everything. The DB-backed replacement gives:
+Battles use a **sequential turn model**: exactly one trainer acts per round, resolved immediately on submit. The current round carries an `active_trainer_id` field so the client always knows whose turn it is. The faster creature (by Speed stat) goes first; ties go to the player (trainer1).
+
+This replaced the old simultaneous-submit model where both trainers had to submit before a round could resolve.
+
+## Why DB-Backed?
 
 - **Crash recovery** — `GET /api/v1/battle/{id}/state` returns the correct state after a restart.
 - **Horizontal scaling** — any API node can handle any request for a battle.
@@ -21,7 +25,7 @@ Tracks the overall battle session.
 | `id` | UUID PK | Battle session identifier |
 | `trainer1_id` | UUID NOT NULL | |
 | `trainer2_id` | UUID NOT NULL | |
-| `battle_type` | VARCHAR(50) | `"ONEvONE"` etc. |
+| `battle_type` | VARCHAR(50) | `"ONEvONE"`, `"Wild"`, etc. |
 | `status` | VARCHAR(50) | `"Active"` or `"Ended"` |
 | `winner_id` | UUID NULL | Set when status → `"Ended"` |
 | `started_at` | DATETIME | |
@@ -30,13 +34,14 @@ Tracks the overall battle session.
 
 ### `battle_round`
 
-One row per round per battle. Stores the per-trainer round keys used to authenticate move submissions.
+One row per round per battle. `active_trainer_id` identifies whose turn it is (added by M8006).
 
 | Column | Type | Notes |
 |--------|------|-------|
 | `id` | UUID PK | |
 | `battle_id` | UUID FK → `battle.id` | |
 | `round_number` | INT | 1-based |
+| `active_trainer_id` | UUID NULL | Whose turn this round |
 | `trainer1_key` | VARCHAR(255) | Opaque submission token |
 | `trainer2_key` | VARCHAR(255) | |
 | `created_at` | DATETIME | |
@@ -60,7 +65,7 @@ Unique constraint: `(battle_id, round_number, trainer_id)` — one submission pe
 
 ### `battle_creature_state`
 
-Mutable per-creature state during a battle (HP, status conditions). Updated each time a round resolves.
+Mutable per-creature state during a battle (HP, status conditions). Updated each time an action resolves.
 
 | Column | Type | Notes |
 |--------|------|-------|
@@ -71,7 +76,7 @@ Mutable per-creature state during a battle (HP, status conditions). Updated each
 | `slot_number` | INT | Team position (1-N) |
 | `current_hp` | INT | |
 | `is_active` | BOOLEAN | Currently on field |
-| `status_conditions_json` | TEXT NULL | JSON array |
+| `status_conditions_json` | TEXT NULL | JSON array of `ActiveBattleCondition` |
 
 Unique constraint: `(battle_id, creature_id)`.
 
@@ -112,157 +117,214 @@ Task<IReadOnlyList<BattleActionLogRecord>> GetActionLogAsync(Guid battleId);
 
 ### Implementation
 
-Follows the same pattern as `BaseNpcRepository` and `BaseCreatureRepository`:
-
 | Class | Location |
 |-------|----------|
 | `BaseBattleRepository` | `Game/CR.Game.Data/Implementation/BaseBattleRepository.cs` |
 | `BattleRepository` (Postgres) | `Game/CR.Game.Data.Postgres/BattleRepository.cs` |
 | `BattleRepository` (SQLite) | `Game/CR.Game.Data.Sqlite/BattleRepository.cs` |
 
-`BaseBattleRepository` uses `IsSqlite` branching for boolean literals and datetime format differences. The Postgres and SQLite subclasses only provide the `IDbConnection` factory.
-
 ### Record Types
 
 Plain POCOs in `Game/CR.Game.Model/Battle/` — one file per table:
 
 - `BattleRecord` — maps to `battle`
-- `BattleRoundRecord` — maps to `battle_round`
+- `BattleRoundRecord` — maps to `battle_round` (includes `ActiveTrainerId`)
 - `BattleRoundInputRecord` — maps to `battle_round_input`
 - `BattleCreatureStateRecord` — maps to `battle_creature_state`
 - `BattleActionLogRecord` — maps to `battle_action_log`
+- `BattleAction` — represents a single submitted action (type, abilityId, itemId, etc.)
+- `ActionOutcome` — full resolution result returned from `SubmitActionAsync`
+- `ActiveBattleCondition` / `ActiveStatChange` — live conditions stored as JSON in creature state
 
 ## `IBattleDomainService`
 
 ```csharp
 public interface IBattleDomainService
 {
-    Task<Guid>             StartBattleAsync(Guid trainer1Id, Guid trainer2Id, string battleType, CancellationToken ct);
-    Task<BattleStartResult?> GetBattleStartResultAsync(Guid battleId, Guid trainerId, CancellationToken ct);
-    Task                   SubmitInputAsync(Guid battleId, Guid trainerId, string roundKey, BattleAction[] actions, CancellationToken ct);
-    Task<BattleStateDto?>  GetBattleStateAsync(Guid battleId, CancellationToken ct);
-    Task<bool>             IsBattleCompleteAsync(Guid battleId, CancellationToken ct);
+    Task<BattleStartResult>  StartBattleAsync(Guid trainer1Id, Guid trainer2Id, string battleType, CancellationToken ct);
+    Task<BattleStateDto?>    GetBattleStateAsync(Guid battleId, CancellationToken ct);
+    Task<ActionOutcome>      SubmitActionAsync(Guid battleId, Guid trainerId, string roundKey, string actionsJson, CancellationToken ct);
+    Task<bool>               IsBattleCompleteAsync(Guid battleId, CancellationToken ct);
 }
 ```
 
-`GetBattleStartResultAsync` and `GetBattleStateAsync` return `null` when the battle ID is not found — following the project convention that domain services return `T?` for not-found lookups rather than throwing `InvalidOperationException`. `InvalidOperationException` is reserved for true invariant violations (submitting input to an already-ended battle, double submission, etc.).
+`GetBattleStateAsync` returns `null` when the battle ID is not found. `InvalidOperationException` is reserved for invariant violations (submitting to an ended battle, wrong trainer for active turn, double submission).
 
 ### `StartBattleAsync`
 
 1. Load both trainers' teams via `ICreatureInventoryService`
-2. Insert `battle` row (`status = "Active"`)
+2. Insert `battle` row (`status = "Active"`, `battle_type`)
 3. Insert one `battle_creature_state` row per creature from both teams
-4. Generate round 1 keys (one UUID per trainer), insert `battle_round` row
-5. Return the new `battle.id`
+4. Determine first-turn trainer by comparing active creature Speed stats (ties → trainer1)
+5. Generate round 1 keys, insert `battle_round` row with `active_trainer_id`
+6. Return `BattleStartResult` (includes `BattleId`, `ActiveTrainerId`, round keys)
 
-### `SubmitInputAsync`
+### `SubmitActionAsync`
 
-1. Load the current `battle_round` — validate that `roundKey` matches the trainer's stored key
-2. Throw `ArgumentException` on key mismatch (prevents replay attacks)
-3. Insert `battle_round_input` for this trainer (unique constraint prevents double-submission)
-4. If both inputs are now present: resolve the round using the battle logic, update `battle_creature_state`, append `battle_action_log`, then apply three-way outcome logic:
-   - **One side fully fainted** → mark battle `"Ended"`, set `winner_id` to the surviving trainer
-   - **Both sides fully fainted simultaneously** → mark battle `"Ended"`, `winner_id = NULL` (draw)
-   - **Neither side fully fainted** → generate next round keys and insert a new `battle_round`
+1. Validate battle exists + is Active
+2. Load current round; verify `round.ActiveTrainerId == trainerId`
+3. Validate round key
+4. Guard against double-submission (unique constraint on `battle_round_input`)
+5. Insert `battle_round_input`
+6. Resolve the action immediately via `BattleResolver.Resolve()` (from `CR.Game.Compat`)
+7. Persist updated HP and conditions for both creatures
+8. Write action log entry
+9. Check battle-end condition (all of one trainer's creatures at HP ≤ 0)
+10. If battle not over: create new round with `active_trainer_id = opposingTrainerId`
+11. Return `ActionOutcome` including `NextActiveTrainerId` + `NextRoundKey`
 
-### `GetBattleStateAsync`
+### HP Write-Back and Wild Cleanup
 
-Assembles `BattleStateDto` from the DB without any in-memory state:
+When the battle ends:
+- Each creature's final `battle_creature_state.current_hp` is written back to `generated_creature.hit_points`
+- All creatures belonging to the Wild Trainer (GUID `00000000-0000-0000-0000-000000000001`) are soft-deleted
 
-```csharp
-public record BattleStateDto(
-    Guid   BattleId,
-    string Status,
-    Guid?  WinnerId,
-    IReadOnlyList<BattleCreatureStateRecord> CreatureStates,
-    IReadOnlyList<BattleActionLogRecord>     ActionLog
-);
+## Shared Battle Engine (`CR.Game.Compat`)
+
+The pure calculation logic lives in `Convenience/CR.Game.Compat/Battle/` (targets `netstandard2.1`, usable by both backend and Unity):
+
+| Class | Purpose |
+|-------|---------|
+| `BattleResolver` | Static `Resolve(action, attacker, defender, abilityDef, seed) → SingleActionResult` |
+| `BattleActionParser` | `Parse(json) → List<BattleAction>`, `Serialise(actions) → string` |
+| `CreatureSnapshot` | Input to resolver: creature stats + active conditions |
+| `SingleActionResult` | Output: damage dealt, final HP, conditions applied/removed/triggered |
+
+### Damage Formula
+
 ```
+Physical:  damage = floor(Power × Attack / Defense)
+Special:   damage = floor(Power × SpecialAttack / SpecialDefense)
+Status:    damage = 0
+```
+
+Minimum damage is 1 for damaging abilities. Active `StatChange` modifiers are applied to snapshot stats before calling `Resolve`.
+
+### Accuracy Check
+
+```
+hits = random(0, 100) < ability.Accuracy   (seed-deterministic RNG)
+```
+
+Miss → no damage, no conditions, `ActionOutcome.Missed = true`.
+
+### Condition Application
+
+`BattleResolver` contains a reserved hook for applying conditions to the defender on ability hit. In the current implementation, condition lookup (resolving condition definitions from ability data) happens in `BattleDomainService` rather than inside the resolver — the resolver only calculates damage and processes the attacker's existing conditions. Future work will pass pre-resolved condition definitions into the resolver.
+
+### `SingleActionResult.AttackerRemainingConditions`
+
+After resolving an action, `SingleActionResult` exposes `AttackerRemainingConditions` — the updated condition list for the attacker after start-of-turn DOT processing and turn-decrement. This list has:
+
+- Permanent conditions (TurnsRemaining == -1) carried through unchanged.
+- Conditions with TurnsRemaining > 1 decremented by 1.
+- Conditions with TurnsRemaining == 1 moved to `ConditionsRemoved` and dropped from the list.
+
+`BattleDomainService` writes this list back to `battle_creature_state.status_conditions_json` on every resolved action, replacing the original (unmodified) condition snapshot.
+
+## Run / Escape Mechanics
+
+When a trainer submits a `BattleActionType.Run` action, `BattleDomainService` resolves the attempt immediately using a deterministic escape formula rather than passing through to `BattleResolver`:
+
+```
+escapeChance = clamp(50 + (playerSpeed - wildSpeed) × 2, 10, 95)
+roll = new Random(battleId.GetHashCode() ^ roundNumber).Next(0, 100)
+escaped = roll < escapeChance
+```
+
+- **Escape succeeds:** battle status → `"Ended"`, `ActionOutcome.BattleOutcome = Escaped`, `ActionOutcome.BattleEnded = true`. HP is written back and wild creatures are soft-deleted.
+- **Escape fails:** the opponent acts next — a new round is opened with `active_trainer_id = opponentId`, and `ActionOutcome.BattleEnded = false`. No round key is returned for the fleeing trainer.
+
+The RNG is seeded deterministically from `battleId.GetHashCode() ^ roundNumber`, so the outcome for a given battle state is reproducible.
+
+## Wild Trainer
+
+A system "Wild" trainer with well-known GUID `00000000-0000-0000-0000-000000000001` is seeded by `M9990SeedGameData`. All spawned wild creatures are assigned to this trainer. After battle they are soft-deleted via `WriteBackHpAsync`.
+
+## Wild Turn Endpoint
+
+`POST /api/v1/battle/{battleId}/wild-turn` is called by the Unity client when `ActionOutcome.NextActiveTrainerId == WildTrainerId` in online mode. It calls `IWildBattleAIDomainService.DecideActionAsync()` and submits the result via `SubmitActionAsync`, returning the `ActionOutcome`.
+
+`WildBattleAIDomainService` heuristics (in priority order):
+1. 20% random chance → use a Status-category ability if one is available
+2. Default → pick the highest-power non-Status ability
+
+Note: the backend AI does not check HP percentage or items. The Unity-side `LocalWildBattleAIService` adds a HP < 30% healing-item check as an additional first-priority step before the 20% debuff roll.
 
 ## REST Endpoints
 
-Defined in `Game/CR.Game.Service.BFF/Endpoints/BattleEndpoints.cs`:
+Defined in `Game/CR.Game.Service.BFF/Endpoints/BattleEndpoints.cs` and `WildBattleEndpoints.cs`:
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| `POST` | `/api/v1/battle/start` | Creates a battle between two trainers; returns `BattleId` + trainer's round key |
-| `GET` | `/api/v1/battle/{id}/state` | Returns full `BattleStateDto` for the given battle |
-| `POST` | `/api/v1/battle/{id}/submit` | Submits a trainer's moves for the current round |
-| `GET` | `/api/v1/battle/{id}/round-key` | Returns the calling trainer's current round key |
+| `POST` | `/api/v1/battle/start` | Creates a battle; returns `BattleId` + first `ActiveTrainerId` + round key |
+| `GET` | `/api/v1/battle/{id}/state` | Returns full `BattleStateDto` |
+| `GET` | `/api/v1/battle/{id}/round-key?trainerId=` | Returns current round key for a given trainer |
+| `POST` | `/api/v1/battle/{id}/submit` | Submits a trainer's action for the active turn; returns `ActionOutcome` |
+| `POST` | `/api/v1/battle/{id}/run` | Attempts to flee; triggers escape-chance formula |
+| `GET` | `/api/v1/battle/{id}/summary` | Returns post-battle summary (outcome, creature HP grid) |
+| `POST` | `/api/v1/battle/{id}/wild-turn` | Triggers Wild AI turn (online mode only); body is empty `{}` |
 
-All endpoints require bearer authentication. The `trainerId` is extracted from the auth context.
+All endpoints require bearer authentication.
 
 ## DI Wiring
 
 ```csharp
 // Convenience/CR.REST.AIO/Program.cs
 
-// Repository (singleton — connection factory only, stateless)
-builder.Services.AddSingleton<IBattleRepository>(
-    new BattleRepository(logger, configuration));
-
-// Domain service (scoped — uses IDbConnectionFactory for transactions)
+builder.Services.AddSingleton<IBattleRepository>(new BattleRepository(logger, configuration));
 builder.Services.AddScoped<IBattleDomainService, BattleDomainService>();
+builder.Services.AddSingleton<IWildBattleAIDomainService, WildBattleAIDomainService>();
 
-// Migration (auto-discovers M8004 in CR.Game.Data.Migration)
 new GameDatabaseMigrator().Migrate(configuration);
 
-// Endpoints
 app.MapBattleEndpoints();
+app.MapWildBattleEndpoints();
 ```
 
-## Migration
-
-`M8004CreateBattleTables` in `Game/CR.Game.Data.Migration/` creates all five tables. It follows the same ANSI SQL pattern as other CR migrations — no engine-specific syntax.
+## Migrations
 
 ```
-M8001CreateBattleSystemConfigTable
 M8004CreateBattleTables              ← creates the 5 battle tables
+M8006AddActiveTurnToBattleRound      ← adds active_trainer_id to battle_round
+M9990SeedGameData                    ← seeds Wild Trainer (guarded: skips if account table absent)
 ```
-
-`GameDatabaseMigrator` auto-discovers all migrations in the assembly by scanning for `[Migration(...)]` attributes and runs them in numeric order.
-
-## Unity Client Integration
-
-The Unity client interacts with the battle REST API via `IBattleClient`:
-
-```csharp
-public interface IBattleClient
-{
-    Task<StartBattleResponse>    StartBattleAsync(StartBattleRequest request, CancellationToken ct);
-    Task<BattleRoundKeyResponse> GetRoundKeyAsync(Guid battleId, Guid trainerId, CancellationToken ct);
-    Task<SubmitInputResponse>    SubmitInputAsync(Guid battleId, SubmitBattleInputRequest request, CancellationToken ct);
-    Task<BattleStateResponse>    GetBattleStateAsync(Guid battleId, CancellationToken ct);
-}
-```
-
-`BattleClientUnityHttp` is the concrete implementation using Best HTTP (`SimpleWebClient`). It is bound as a singleton in `LocalDevGameInstaller` and injected into `BattleCoordinator`.
-
-See [Battle System](?page=unity/07-battle-system) for the full Unity-side flow.
 
 ## Tests
 
-`Game/CR.Game.Domain.Services.Test/BattleDomainServiceTests.cs` covers:
+### Domain Service Tests (`Game/CR.Game.Domain.Services.Test/`)
 
 | Test | Verifies |
 |------|---------|
-| `StartBattle_CreatesSessionAndRoundKeys` | Battle row created, round 1 keys generated |
-| `SubmitInput_OneTrainer_DoesNotResolveRound` | Round not resolved until both trainers submit |
-| `SubmitInput_BothTrainers_ResolvesRoundAndAdvances` | Round resolves, new round row inserted |
-| `SubmitInput_WrongRoundKey_Throws` | `ArgumentException` on bad key |
-| `SubmitInput_AllCreaturesFainted_EndsBattle` | Battle status set to `"Ended"`, winner recorded |
-| `ResolveRound_SimultaneousKO_BattleEndsWithDraw` | Both sides faint simultaneously → `"Ended"` with `winner_id = NULL` |
-| `GetBattleState_InvalidBattleId_ReturnsNull` | `GetBattleStateAsync` returns `null` for unknown battle ID |
+| `StartBattle_FasterWildCreature_WildGoesFirst` | Speed-based first turn |
+| `StartBattle_SpeedTie_PlayerGoesFirst` | Tie-breaking rule |
+| `SubmitAction_PlayerTurn_ResolvesImmediatelyAndCreatesNextRound` | Sequential flow |
+| `SubmitAction_WrongTrainerForActiveTurn_ThrowsInvalidOperation` | Turn order enforcement |
+| `SubmitAction_PhysicalAbility_UsesAttackOverDefense` | Physical damage formula |
+| `SubmitAction_SpecialAbility_UsesSpecialAttackOverSpecialDefense` | Special damage formula |
+| `SubmitAction_StatusAbility_NoDamage` | Status ability handling |
+| `SubmitAction_MissedAccuracy_NoDamageNoConditions` | Miss handling |
+| `SubmitAction_TargetFaints_BattleEndsWithCorrectWinner` | Battle-end detection |
+| `SubmitAction_BothCreaturesFaint_SameTurn_EndsInDraw` | Draw condition |
+| `SubmitAction_AfterBattleEnded_ThrowsInvalidOperation` | Post-battle guard |
+| `SubmitAction_RunAction_Escapes_WhenSpeedAdvantage` | Escape formula: 95% chance → succeeds |
+| `SubmitAction_RunAction_Fails_WhenSlowerThanWild` | Escape formula: 10% chance → fails |
+| `SubmitAction_ConditionDot_DamagesAttackerAtStartOfTurn` | DOT fires at start of turn |
+| `SubmitAction_ConditionExpires_RemovedAfterTurnsElapse` | Expired conditions are removed |
 
-`IBattleRepository` is mocked with Moq — no real DB required for the unit tests.
+### Resolver Tests (`Convenience/CR.Game.Compat.Test/`)
+
+Pure logic tests with no mocks — `BattleResolver.Resolve()` is called directly with constructed snapshots. Covers both damage formula branches, miss, DOT trigger, condition expiry, deterministic RNG.
 
 ## Gotchas
 
-**`BattleDomainService` must be `AddScoped`, not `AddSingleton`.** It depends on `IDbConnectionFactory` which opens scoped DB connections. Registering it as a singleton causes connection reuse across requests and will lead to threading issues under load.
+**`BattleDomainService` must be `AddScoped`, not `AddSingleton`.** It depends on `IDbConnectionFactory` which opens scoped DB connections.
 
-**Round keys are single-use.** Each `StartBattleAsync` and each round resolution generates fresh UUIDs. Caching a round key and reusing it after the round resolves will cause `SubmitInputAsync` to throw `ArgumentException`.
+**`active_trainer_id` determines whose turn it is.** Do not compare round keys to decide who can submit — always check `round.ActiveTrainerId == trainerId`.
 
-**DB transaction scope.** The round resolution path (updating creature states, inserting action log, creating next round) must complete atomically. `BattleDomainService` wraps this in a transaction. If the server crashes between these writes, the round will not be resolved and both trainers can resubmit.
+**`ActionOutcome.NextRoundKey` is single-use.** Returned from `SubmitActionAsync` for the next round; valid only until that round resolves.
+
+**`ActiveBattleCondition` / `ActiveStatChange` are plain classes (not records) in `CR.Game.Model`.** Using `record` + `init` in a multi-TFM assembly causes `MissingMethodException` at runtime when the net8.0 build is loaded by a netstandard2.1 consumer. Condition objects are constructed with object-initializer syntax.
 
 ## Related Pages
 
