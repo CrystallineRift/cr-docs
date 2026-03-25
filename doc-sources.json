@@ -216,9 +216,20 @@
         "My project/Assets/CR/Game/Battle/BattleSession.cs",
         "My project/Assets/CR/Game/Battle/WildBattleRequest.cs",
         "My project/Assets/CR/Game/Battle/BattleAnimationConfig.cs",
+        "My project/Assets/CR/Game/Battle/CreatureAnimationProfile.cs",
+        "My project/Assets/CR/Game/Battle/OnlineOfflineBattleClient.cs",
+        "My project/Assets/CR/Game/Battle/Offline/IBattleRepository.cs",
+        "My project/Assets/CR/Game/Battle/Offline/SqliteOfflineBattleRepository.cs",
+        "My project/Assets/CR/Game/Battle/Offline/OfflineBattleService.cs",
+        "My project/Assets/CR/Game/Battle/Offline/OfflineBattleClient.cs",
+        "My project/Assets/CR/Game/Battle/Offline/Models/BattleRecord.cs",
+        "My project/Assets/CR/Game/Battle/Offline/Models/BattleRoundRecord.cs",
+        "My project/Assets/CR/Game/Battle/Offline/Models/BattleCreatureStateRecord.cs",
+        "My project/Assets/CR/Game/Battle/Offline/Models/BattleActionLogRecord.cs",
         "My project/Assets/CR/Game/Battle/Arena/BattleArena.cs",
         "My project/Assets/CR/Game/Battle/Arena/BattleArenaRegistry.cs",
         "My project/Assets/CR/Game/Battle/Arena/BattleCameraController.cs",
+        "My project/Assets/CR/Game/Battle/Arena/Editor/BattleArenaCreator.cs",
         "My project/Assets/CR/Game/Battle/Events/BattleEvents.cs",
         "My project/Assets/CR/Game/Battle/AI/IWildBattleAIService.cs",
         "My project/Assets/CR/Game/Battle/AI/LocalWildBattleAIService.cs",
@@ -346,6 +357,8 @@
       "cr-api": [
         "Game/CR.Game.Data.Migration/M8004CreateBattleTables.cs",
         "Game/CR.Game.Data.Migration/M8006AddActiveTurnToBattleRound.cs",
+        "Creatures/CR.Creatures.Data.Migration/M1017AddAbilityProgressionSetIdToBaseCreature.cs",
+        "Creatures/CR.Creatures.Data.Migration/M9003AddAnimationKeyToAbilities.cs",
         "Game/CR.Game.Data/Interface/IBattleRepository.cs",
         "Game/CR.Game.Data/Implementation/BaseBattleRepository.cs",
         "Game/CR.Game.Data.Postgres/BattleRepository.cs",
@@ -365,6 +378,6 @@
         "My project/Assets/CR/Game/Battle/BattleClientUnityHttp.cs"
       ]
     },
-    "description": "Battle DB tables (battle, battle_round, battle_round_input, battle_creature_state, battle_action_log), IBattleRepository, BattleDomainService, REST endpoints, DI wiring"
+    "description": "Battle DB tables (battle, battle_round, battle_round_input, battle_creature_state, battle_action_log), IBattleRepository, BattleDomainService, REST endpoints, DI wiring, wild AI ability progression set, animation_key on abilities"
   }
 }

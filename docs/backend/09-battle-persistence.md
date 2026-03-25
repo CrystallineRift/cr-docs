@@ -133,7 +133,7 @@ Plain POCOs in `Game/CR.Game.Model/Battle/` — one file per table:
 - `BattleCreatureStateRecord` — maps to `battle_creature_state`
 - `BattleActionLogRecord` — maps to `battle_action_log`
 - `BattleAction` — represents a single submitted action (type, abilityId, itemId, etc.)
-- `ActionOutcome` — full resolution result returned from `SubmitActionAsync`
+- `ActionOutcome` — full resolution result returned from `SubmitActionAsync` (includes `AbilityKey` set from `BaseAbility.AnimationKey`)
 - `ActiveBattleCondition` / `ActiveStatChange` — live conditions stored as JSON in creature state
 
 ## `IBattleDomainService`
@@ -249,6 +249,8 @@ A system "Wild" trainer with well-known GUID `00000000-0000-0000-0000-0000000000
 1. 20% random chance → use a Status-category ability if one is available
 2. Default → pick the highest-power non-Status ability
 
+The AI loads abilities from the wild creature's own progression set when available. It looks up the `GeneratedCreature` by `CreatureId`, reads `AbilityProgressionSetId`, and calls `IAbilityRepository.GetAbilitiesForProgressionSetAtLevelAsync(setId, level)` to get only abilities the creature has actually learned at its current level. If the generated creature has no progression set, or if the progression-set lookup fails, it falls back to `GetAbilitiesPaginated(0, 50)`.
+
 Note: the backend AI does not check HP percentage or items. The Unity-side `LocalWildBattleAIService` adds a HP < 30% healing-item check as an additional first-priority step before the 20% debuff roll.
 
 ## REST Endpoints
@@ -287,8 +289,14 @@ app.MapWildBattleEndpoints();
 ```
 M8004CreateBattleTables              ← creates the 5 battle tables
 M8006AddActiveTurnToBattleRound      ← adds active_trainer_id to battle_round
+M1017AddAbilityProgressionSetIdToBaseCreature  ← adds ability_progression_set_id (UUID NULL) to creature table
+M9003AddAnimationKeyToAbilities      ← adds animation_key (VARCHAR NULL) to abilities table
 M9990SeedGameData                    ← seeds Wild Trainer (guarded: skips if account table absent)
 ```
+
+`ability_progression_set_id` links a `creature` row to an `AbilityProgressionSet`, enabling wild AI to restrict ability selection to the abilities the creature has actually learned at its current level. `null` means no set assigned — the AI falls back to a global ability query.
+
+`animation_key` on the `abilities` table drives client-side animation clip selection. `null` means the creature's `defaultAttackClip` (from `CreatureAnimationProfile`) is used instead.
 
 ## Tests
 

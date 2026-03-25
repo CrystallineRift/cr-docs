@@ -17,9 +17,16 @@ The battle system connects scene-level events (NPC interaction, wild encounter t
 ### Installer Binding
 
 ```csharp
-// LocalDevGameInstaller.cs
+// LocalDevGameInstaller.cs — offline battle stack
+var offlineBattleRepo = new SqliteOfflineBattleRepository(logger, connectionString);
+Container.Bind<SqliteOfflineBattleRepository>().FromInstance(offlineBattleRepo).AsSingle();
+Container.Bind<IBattleRepository>().FromInstance(offlineBattleRepo).AsSingle();
+Container.Bind<OfflineBattleService>().AsSingle();
+Container.Bind<OfflineBattleClient>().AsSingle();
+Container.Bind<BattleClientUnityHttp>().AsSingle();
+// IBattleClient routes to online or offline via OnlineOfflineBattleClient
 Container.Bind<IBattleClient>()
-    .To<BattleClientUnityHttp>()
+    .To<OnlineOfflineBattleClient>()
     .AsSingle();
 
 Container.Bind<IBattleCoordinator>()
@@ -145,10 +152,19 @@ The base URL is read from `game_config.yaml` via `GameConfigurationKeys.BattleSe
 | Inspector Field | Type | Description |
 |-----------------|------|-------------|
 | `arenaKey` | string | Must match `SpawnerWorldBehaviour._battleArenaKey` / `SpawnerDefinition.battleArenaKey` |
-| `playerSpawnPoint` | Transform | Where the player's creature spawns |
-| `opponentSpawnPoint` | Transform | Where the wild creature spawns |
+| `playerTrainerPosition` | Transform | Where the player trainer stands |
+| `opponentTrainerPosition` | Transform | Where the opponent trainer stands |
+| `playerCreaturePosition` | Transform | Where the player's active creature spawns |
+| `opponentCreaturePosition` | Transform | Where the opponent's active creature spawns |
 | `cameraLookTarget` | Transform | `BattleCameraController` lerps to look at this |
-| `environmentRoot` | GameObject | Activated/deactivated by `Activate()`/`Deactivate()` |
+| `defaultBiome` | `BiomeType` | The biome active when the arena awakens |
+| `biomes` | `BiomeEnvironment[]` | Maps each `BiomeType` to a root `GameObject` to activate/deactivate |
+
+`BiomeType` enum values: `Grassland`, `Forest`, `Cave`, `Desert`, `Mountain`, `Beach`, `Swamp`, `Tundra`, `Volcanic`.
+
+`BattleArena.Activate(BiomeType? biome)` activates the arena at the given (or default) biome. `SetBiome(biome)` can be called at any time to swap active environment roots. `Deactivate()` hides all environment roots.
+
+Use **CR > Battle > Create Placeholder Arena** (editor menu) to scaffold a new arena GameObject with all child transforms pre-wired and `arenaKey` set to `"arena_placeholder"`.
 
 `BattleArenaRegistry` implements `IWorldInitializable` and indexes all `BattleArena` components in the scene by `arenaKey` at world init. It is bound as `IBattleArenaRegistry`.
 
@@ -182,6 +198,41 @@ The backend `WildBattleAIDomainService` omits the HP/healing check (it queries a
 ## `BattleAnimationConfig`
 
 A `ScriptableObject` created via `Assets > Create > CR > Battle > Animation Config`. Maps ability keys to clip names and VFX prefabs. `GetEntry(abilityKey)` falls back to a `"default"` entry if no exact match is found.
+
+Each `BattleAnimationEntry` now includes `attackClipOverride` (string, default empty). When non-empty, this overrides the creature's `defaultAttackClip` from its `CreatureAnimationProfile`.
+
+## `CreatureAnimationProfile`
+
+A `ScriptableObject` created via `Assets > Create > CR > Battle > Creature Animation Profile`. Holds per-creature animator state names.
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `defaultAttackClip` | `"Attack"` | Animator state for the default attack (used when ability has no override) |
+| `hitClip` | `"Hit"` | Animator state when the creature takes damage |
+| `faintClip` | `"Faint"` | Animator state when the creature faints |
+| `idleClip` | `"Idle"` | Animator state during idle |
+
+Assign a `CreatureAnimationProfile` to `BattleCoordinator._defaultAnimProfile`. `BattleCoordinator.FireOutcomeEvents` resolves clip names as: `BattleAnimationConfig.attackClipOverride` → `CreatureAnimationProfile.defaultAttackClip` → hard-coded fallback `"Attack"`.
+
+## Offline Battle Stack
+
+The offline battle stack allows all battle mechanics to run locally without a server. It mirrors the online flow and stores battle state in the local SQLite database for crash recovery.
+
+| Class | Namespace | Role |
+|-------|-----------|------|
+| `IBattleRepository` | `CR.Game.Battle.Offline` | Interface for SQLite battle persistence |
+| `SqliteOfflineBattleRepository` | `CR.Game.Battle.Offline` | CREATE TABLE IF NOT EXISTS on construction; stores battles, rounds, creature states, action log |
+| `OfflineBattleService` | `CR.Game.Battle.Offline` | Domain logic: speed-based first-mover, `BattleResolver` damage, escape RNG, wild creature soft-delete |
+| `OfflineBattleClient` | `CR.Game.Battle.Offline` | `IBattleClient` for offline mode; delegates to `OfflineBattleService` and `IWildBattleAIService` |
+| `OnlineOfflineBattleClient` | `CR.Game.Battle` | Routes to `BattleClientUnityHttp` (online) or `OfflineBattleClient` (offline) based on `IGameDataRepository.IsPlayingOnline` |
+
+Tables created by `SqliteOfflineBattleRepository`: `battle`, `battle_round`, `battle_creature_state`, `battle_action_log`. These live in the same SQLite file as the trainer database.
+
+`OfflineBattleService.StartBattleAsync` seeds initial `BattleCreatureStateRecord` rows for each team (slot 1 is `is_active=true`), determines first-mover by creature Speed (tie → trainer1), creates round 1.
+
+`OfflineBattleService.SubmitActionAsync` handles action types:
+- Type 0 (Ability) — uses `BattleResolver.Resolve` for damage/miss; persists updated states; calls `DeleteCreature` on wild creatures when defeated
+- Type 4 (Run) — computes escape chance `clamp(50 + (atkSpeed - defSpeed) * 2, 10, 95)`, rolls RNG seeded from `battleId.GetHashCode() ^ roundNumber`
 
 ## `BattleHUD`
 

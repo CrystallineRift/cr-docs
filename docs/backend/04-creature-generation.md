@@ -147,6 +147,7 @@ This method bridges the Spawner system to the creature generation pipeline:
 | `Id` | `Guid` | Internal UUID primary key |
 | `ContentKey` | `string` | Designer-facing identifier (e.g. `"cindris"`) — NOT NULL, UNIQUE (enforced by M1015) |
 | `AssetKey` | `string?` | Addressables address or Resources path for the primary art asset (e.g. `"creatures/cindris"`). Replaced `AssetId: Guid?` in migration M1016. |
+| `AbilityProgressionSetId` | `Guid?` | FK to `ability_progression_set_entry.ability_progression_set_id`; the default progression set for this species. Added by M1017. Null means no default set assigned. |
 | `BaseHitPoints` | `int` | Base stat used by the generation formula |
 | `BaseAttack` | `int` | — |
 | `BaseDefense` | `int` | — |
