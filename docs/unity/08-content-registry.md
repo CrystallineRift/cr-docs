@@ -429,6 +429,15 @@ foreach (var key in _registry.CreatureKeys)
 | `SyncSpawner(def)` | `PUT /api/v1/spawners/by-content-key/{contentKey}` | Pushes display fields + `battleArenaKey` |
 | `SyncNpc(def)` | — | Returns `(false, "NPC content keys are world-specific; only pull is available.")` — NPC push is not supported |
 
+**Delete methods** — call the soft-delete backend endpoints; return `(ok, message)` where `ok = false` means the server rejected the delete (surfaces the error text to the user):
+
+| Method | HTTP call | Notes |
+|--------|-----------|-------|
+| `DeleteCreature(contentKey)` | `DELETE /api/v1/creatures/by-content-key/{contentKey}` | Returns `(false, message)` if the server returns 409 (trainer creatures exist referencing this species) |
+| `DeleteSpawner(contentKey)` | `DELETE /api/v1/spawners/by-content-key/{contentKey}` | Always safe — spawner templates have no per-trainer rows |
+
+NPC delete is not supported — NPC rows are per-trainer instances (no global template table).
+
 **Apply methods** — called when the user accepts a sync decision:
 
 | Method | Side effects |
@@ -450,10 +459,10 @@ Content Studio exposes a **↕ Sync** button on the Creatures, NPCs, and Spawner
 1. **Fetching phase** — calls `FetchAll*()` for the active tab, shows a status label
 2. **Reviewing phase** — draws a sync review panel grouping definitions into four categories:
    - **Only Local** — SO exists locally but not on server. For Creatures/Spawners: auto-queued for push. For NPCs: info badge (push not supported).
-   - **Only Server** — server has a record but no local SO. Auto-queued for pull (creates a new SO via `CreateAssetSilent<T>()`).
+   - **Only Server** — server has a record but no local SO. **For Creatures and Spawners:** requires an explicit choice per row — each row shows **[Pull]** and **[Delete]** toggle buttons. Apply is blocked until every row has a resolution. **For NPCs, Abilities, Progression Sets, and Growth Profiles:** auto-queued for pull (no delete option available).
    - **In Sync** — local and server match; shown collapsed.
    - **Conflict** — both exist but differ. Shows a diff table of changed field names with per-field values. User must choose **Use Local** or **Use Server** per conflict before Apply is enabled.
-3. **Apply** — disabled until all conflicts are resolved. Calls `ApplyContentSyncDecisions()` which iterates each category and applies the appropriate `Apply*` or `Sync*` call. New SOs created on pull are registered into `ContentDefinitionProvider`.
+3. **Apply** — disabled until all conflicts and OnlyServer rows (for Creatures/Spawners) are resolved. The Apply button label shows counts: `↑ push`, `↓ pull`, `✕ delete`, `✓ resolved`. Calls `ApplyContentSyncDecisions()` which iterates each category and applies the appropriate `Apply*`, `Sync*`, or `Delete*` call. New SOs created on pull are registered into `ContentDefinitionProvider`. If a creature delete is blocked (409 — trainer-owned creatures exist), an error dialog is shown and the server record is left intact.
 
 `CreateAssetSilent<T>()` is an internal helper that creates a definition SO asset at a default path without opening a save dialog, handling name collisions by appending `_1`, `_2`, etc.
 
@@ -482,7 +491,7 @@ Window → CR → Content Studio
 - **Dual-panel layout** — list area (45% height) + inline detail inspector (55%); clicking any row embeds the full custom editor below the list via `Editor.CreateEditor(asset).OnInspectorGUI()`
 - **Orphan strip** (tabs 0–3) — detects unregistered definition assets on disk; `[Register All]` appends them to the provider; orphan rows are selectable so you can inspect before registering
 - **`+ New` button** (tabs 0–3) — toggles an inline create panel with content-key field and type-specific extras (element for Creatures, npcType for NPCs); `Create & Register` creates the SO and selects it in the detail panel
-- **`Unregister` button** — shown in the detail panel toolbar for tabs 0–3; removes from the provider array while keeping the `.asset` file
+- **`Unregister` button** — shown in the detail panel toolbar for tabs 0–3; removes from the provider array while keeping the `.asset` file. For Creatures and Spawners, a dialog appears after unregistering asking "Also delete from server?" — choosing **Delete from server** calls `ContentCreatorSyncHelper.DeleteCreature/DeleteSpawner`; any server-side block (e.g. 409 creature guard) is surfaced in a follow-up dialog.
 - **`↕ Sync` button** — available on all tabs except Items; triggers the bidirectional sync review workflow
 - **File-dialog `New` button** (tabs 4–6) — opens a save dialog to create a new `AbilityConfig`, `AbilityProgressionSetConfig`, or `GrowthProfileConfig` SO
 
@@ -590,6 +599,41 @@ Every definition Inspector shows:
 - Colored element pill next to the element dropdown
 - Preview row: `content key → display name key → asset key` (rendered in a cached monospace `GUIStyle` using `Font.CreateDynamicFontFromOSFont("Courier New", 11)`; the font and style are created once and stored in a `private static` field)
 - `[Add to ContentKeys.Creatures]` button — appears inline below the HelpBox when the content key is missing from `ContentKeys.Creatures`; calls `ContentStudioTool.AddConstantToContentKeys` directly without opening any window
+
+## Removing Content from the Backend
+
+All deletes are **soft-deletes** (`deleted = true`). The row is never physically removed; it disappears from all read queries and sync fetch calls.
+
+### Via Unregister (removing a specific definition)
+
+1. Open the definition in Content Studio (click its row to open the detail panel).
+2. Click **Unregister** in the detail panel toolbar — this removes the SO from the `ContentDefinitionProvider` array and clears the selection. The `.asset` file is kept on disk.
+3. A dialog appears: **"Also delete from server?"**
+   - **Delete from server** → calls `ContentCreatorSyncHelper.DeleteCreature/DeleteSpawner`, which sends `DELETE /api/v1/creatures/by-content-key/{contentKey}` or `DELETE /api/v1/spawners/by-content-key/{contentKey}`. If the server rejects the delete (e.g. 409 for a creature that trainers own), an error dialog shows the server's message and the record is left intact.
+   - **Keep on server** → record stays in the backend; it will show up again as **Only Server** on the next sync.
+
+> NPC definitions cannot be deleted from the backend this way — NPC rows are per-trainer instances (no global template table to delete from). Delete individual NPC instances via admin tooling or direct SQL.
+
+### Via Sync — "Only Server" rows
+
+When a content key exists on the server but has no local SO (e.g. the `.asset` file was deleted), the Sync review panel shows it in the **Only Server** section. For Creatures and Spawners each row now shows two buttons:
+
+- **[Pull]** — creates a new local SO and registers it (same as before).
+- **[Delete]** — soft-deletes the backend record. For creatures, blocked with a dialog if any trainer-owned `generated_creature` rows reference the species.
+
+Apply is blocked until every Only Server row has an explicit choice.
+
+### Player-data guard for Creatures
+
+`DELETE /api/v1/creatures/by-content-key/{contentKey}` checks `SELECT COUNT(*) FROM generated_creature WHERE NOT deleted AND base_creature_id = @id`. If any trainer-owned creatures reference the species:
+
+- Backend returns **409 Conflict** with body `{ "message": "X trainer creature(s) are based on this species. Remove them before deleting the template." }`
+- The editor surfaces this message in a dialog.
+- The `creature` row is **not** deleted.
+
+To delete a creature species that trainers own, first release or delete all their `generated_creature` instances, then retry the delete.
+
+---
 
 ## Adding a New Entity
 

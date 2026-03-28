@@ -299,6 +299,22 @@ If `abilitySetId` is set but no `ability_progress` rows exist for that set at th
 
 **Edge case:** If `GetAvailableAbilityProgressionSetsAsync` is called for a base creature, it returns set IDs extracted from `ability_progress.set_name` where the set_name parses as a GUID. If designers use non-GUID set names (e.g. `"starter_set"`), they will not appear in this list. Use UUID-formatted set names stored in the progression entries.
 
+## Creature List and Upsert Endpoints
+
+Three endpoints support the Unity Content Creator bidirectional sync:
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/creatures` | Returns all `BaseCreature` rows, paginated. Query params: `offset` (default 0), `limit` (default 500). Response includes all base stat fields, `contentKey`, `assetKey`, `elementType` (int), `abilityProgressionSetId` (nullable UUID), and `updatedAt`. Uses `[FromKeyedServices("CreatureDB")]` `ICreatureRepository`. |
+| `PUT` | `/api/v1/creatures/by-content-key/{contentKey}` | Upserts a `BaseCreature` row by `content_key`. If the row exists it is updated in-place; if not it is inserted. Uses ANSI `INSERT … ON CONFLICT (content_key) DO UPDATE SET …` — works on both SQLite and Postgres. Body is a full `BaseCreature` JSON object (all stats + `elementType`, `assetKey`, `abilityProgressionSetId`). Returns `{ contentKey }` on success. |
+| `DELETE` | `/api/v1/creatures/by-content-key/{contentKey}` | Soft-deletes the `BaseCreature` row. **Player-data guard:** first counts rows in `generated_creature WHERE NOT deleted AND base_creature_id = @id`. If any trainer-owned creatures reference this species, returns **409 Conflict** with `{ "message": "X trainer creature(s) are based on this species. Remove them before deleting the template." }`. Otherwise sets `deleted = true` and returns 204. Implemented via `IGeneratedCreatureRepository.CountByBaseCreatureIdAsync`. |
+
+These endpoints are registered in `Creatures/CR.Creatures.Service.REST/Endpoints/CreatureEndpoints.cs` alongside the existing creature endpoints.
+
+## Growth Profile List Endpoint
+
+`GET /api/v1/growth-profiles` returns a paginated list of all growth profiles. Query parameters: `offset` (default 0) and `limit` (default 500). Uses the `[FromKeyedServices("CreatureDB")]` `IGrowthProfileRepository`. This endpoint is consumed by the Unity `AbilityLibraryTool` bidirectional sync to compare server-side growth profiles against local `GrowthProfileConfig` ScriptableObjects.
+
 ## `GetAvailableGrowthProfilesAsync` Gotcha
 
 Currently this method returns **all** growth profiles in the database rather than filtering to profiles that are compatible with a specific base creature:
