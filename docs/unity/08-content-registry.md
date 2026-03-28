@@ -589,52 +589,92 @@ Every definition Inspector shows:
 `CreatureDefinitionEditor` additionally shows:
 - Colored element pill next to the element dropdown
 - Preview row: `content key → display name key → asset key` (rendered in a cached monospace `GUIStyle` using `Font.CreateDynamicFontFromOSFont("Courier New", 11)`; the font and style are created once and stored in a `private static` field)
+- `[Add to ContentKeys.Creatures]` button — appears inline below the HelpBox when the content key is missing from `ContentKeys.Creatures`; calls `ContentStudioTool.AddConstantToContentKeys` directly without opening any window
 
 ## Adding a New Entity
 
-### Using the Content Studio (recommended)
+### Adding a new Creature (full pipeline)
 
-1. Open `Window → CR → Content Studio`
-2. Select the appropriate tab (Creatures / Items / NPCs / Spawners)
-3. Click `+ New` to expand the create panel; fill in content key and type-specific fields
-4. Click `Create & Register` — the tool creates the `.asset` file, registers it in the provider, selects it in the detail panel, and updates `ContentKeys.cs`
-5. Add the localization entry for `DisplayNameKey` (see [Localization](?page=unity/06-localization))
+This is the most common case and involves the most moving parts. Work through the checklist in order.
 
-### Manual workflow
+#### Step 1 — Create the prefab and mark it Addressable
 
-1. **Create the definition ScriptableObject:**
-   - Right-click in the Project window → `Create > CR > Content > Creature Definition`
-   - Set `content_key` to the designer key (e.g. `"emberox"`)
-   - Set `DisplayNameKey` to a localization key (e.g. `"creature.emberox.name"`)
-   - Set `Element`, `AssetKey`, and other fields as needed
+1. Build or import your creature prefab.
+2. In the **Inspector**, tick **Addressable** (this creates an entry in the Addressables Groups window).
+3. Set the Addressable **address** to a stable key like `creatures/crabby`. This exact string is what you'll set as `assetKey` on the definition SO in the next step.
 
-2. **Add the asset to `ContentDefinitionProvider`:**
-   - Open the `ContentDefinitionProvider` asset
-   - Add the new definition to the appropriate array (e.g. `Creature Definitions`)
+> The address is the runtime lookup key — it must exactly match `assetKey` on the `CreatureDefinition`.
 
-3. **Add the constant to `ContentKeys`:**
+#### Step 2 — Create the definition SO and fill it in
 
-   ```csharp
-   public static class Creatures
-   {
-       public const string Emberox = "emberox";
-       // ...
-   }
-   ```
+Open `Window → CR → Content Studio` → **Creatures** tab → `[+ New]`.
 
-4. **Add the localization entry** for `DisplayNameKey` in the relevant localization YAML file (see [Localization](?page=unity/06-localization)).
+Fill in:
 
-5. **Seed the backend** — add the `content_key` value to the creature migration seed data and ensure `M1015EnforceContentKeyNotNullAndUnique` has run.
+| Field | Example | Notes |
+|-------|---------|-------|
+| `contentKey` | `creature_crabby` | Snake-case, unique. Must match `content_key` in the backend DB. |
+| `assetKey` | `creatures/crabby` | Must exactly match the Addressable address from Step 1. |
+| `displayNameKey` | `creature_crabby_name` | Localization key (auto-suggested). |
+| `element` | `Water` | Dropdown in the Inspector. |
 
-6. **Publish the asset manifest** — run `Window > CR > Publish Content` to push the `asset_key` to the backend `game_assets` table so `IGameAssetLoader.LoadAssetByKeyAsync` can resolve it.
+Click `Create & Register` — the SO is created, added to `ContentDefinitionProvider`, and the `ContentKeys.Creatures` constant is added automatically.
+
+If you created the SO manually (e.g. via right-click → `Create > CR > Content > Creature Definition`), open it in the Inspector: a yellow HelpBox will appear if the constant is missing. Click **`[Add to ContentKeys.Creatures]`** to add it in one click.
+
+#### Step 3 — Add the localization entry
+
+Open `Window → CR → Localization Editor` → **Creatures** tab → **Missing** section. The new creature will appear there. Fill in the English display name and click `[+YAML]`. See [Localization](?page=unity/06-localization).
+
+#### Step 4 — Seed the backend `creatures` row
+
+The backend must have a row in the `creatures` table with a matching `content_key`. Options:
+
+- **Sync from Unity** — use the `[↕ Sync]` button in the Creatures tab of Content Studio. This calls `PUT /api/v1/creatures/by-content-key/{contentKey}` to push your local SO values to the server (creates the row if missing).
+- **Manual migration seed** — add the key to the creature seed migration and re-run migrations.
+
+#### Step 5 — Testing in-editor / local dev (no publish required)
+
+`GameAssetLoader.LoadAssetByKeyAsync` first checks the `game_assets` registry (populated by ContentPublishTool). If the asset isn't there yet, **it falls back to loading directly from Addressables by key**. This means:
+
+- As long as the prefab is marked Addressable with the correct address, `CreatureSpawner` and other systems will find it immediately in editor play mode — no ContentPublishTool run required.
+- The fallback only triggers on a registry miss, so published production builds are unaffected.
+
+#### Step 6 — Publish before shipping (production only)
+
+When you're ready to ship or test against a real server, run `Window → CR → Publish Content`. This calls `POST /api/v1/content/publish`, which seeds the `game_assets` table row for the creature's `assetKey`. After that, `LoadAssetByKeyAsync` resolves via the registry (the normal path) rather than the fallback.
+
+---
+
+### Adding a new Item / NPC / Spawner
+
+The flow is the same as creatures with these differences:
+
+| Type | No assetKey needed? | Backend sync | Localization tab |
+|------|---------------------|--------------|-----------------|
+| Item | No — set `assetKey` to the Addressable address | No direct sync (no backend service) | Items |
+| NPC | Not typically | Pull-only (server is authoritative for `npcType`) | NPCs |
+| Spawner | No — see backend spawner system | Push via `[↕ Sync]` → `PUT /api/v1/spawners/by-content-key/{contentKey}` | Spawners |
+
+For all types: `[+ New]` in Content Studio creates, registers, and adds the `ContentKeys` constant in one step.
+
+---
 
 ## `IGameAssetLoader.LoadAssetByKeyAsync<T>`
 
-`IGameAssetLoader.LoadAssetByKeyAsync<T>(assetKey)` is unchanged. It takes the `AssetKey` from a content def (which matches `game_assets.key` in the backend database) and returns the loaded Unity asset via Addressables or Resources, depending on `game_assets.loader_source`.
+`LoadAssetByKeyAsync<T>(assetKey)` takes an Addressables address string (the `assetKey` from a `CreatureDefinition` or equivalent) and returns the loaded Unity asset.
 
 ```csharp
-var sprite = await _assetLoader.LoadAssetByKeyAsync<Sprite>(def.AssetKey);
+var prefab = await _assetLoader.LoadAssetByKeyAsync<GameObject>(def.assetKey);
 ```
+
+**Resolution order:**
+
+1. **Registry lookup** — queries `game_assets` (via `IAssetDomainService.GetByKeyAsync`) for a row matching `assetKey`. If found, uses the stored `loader_source` (Addressable or Resource) to load.
+2. **Direct Addressables fallback** — if the registry returns null (asset not yet published), attempts `Addressables.LoadAssetAsync<T>(assetKey)` directly. This lets unpublished local assets load during development without requiring a ContentPublish run.
+3. **Null** — if both fail, returns null and logs a warning.
+
+> Assets loaded via the fallback path are not tracked in `_loadedHandles` so `ReleaseAsset` will not release them. This is intentional for dev builds — the fallback path disappears once the asset is published and the registry path takes over.
 
 ## Relationship to `game_config.yaml` and `GameConfigurationKeys`
 
