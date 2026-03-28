@@ -5,7 +5,15 @@
       "cr-api": [],
       "cr-data": []
     },
-    "description": "Top-level overview — no single source file; changes whenever any major subsystem changes"
+    "description": "Top-level overview \u2014 no single source file; changes whenever any major subsystem changes"
+  },
+  "changelog": {
+    "docPath": "docs/changelog.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": []
+    },
+    "description": "Reverse-chronological log of significant additions; updated manually with each feature sprint"
   },
   "backend/01-architecture": {
     "docPath": "docs/backend/01-architecture.md",
@@ -278,7 +286,7 @@
         "My project/Assets/CR/Core/Data/Repository/Implementation/Config/ContentManifestResponse.cs",
         "My project/Assets/CR/Core/Assets/IGameAssetLoader.cs",
         "My project/Assets/CR/Core/Assets/GameAssetLoader.cs",
-        "My project/Assets/CR/Core/Data/Editor/ContentCreatorTool.cs",
+        "My project/Assets/CR/Core/Data/Editor/ContentStudioTool.cs",
         "My project/Assets/CR/Core/Data/Editor/DefinitionEditorExtensions.cs",
         "My project/Assets/CR/Core/Data/Editor/CreatureDefinitionEditor.cs",
         "My project/Assets/CR/Core/Data/Editor/ItemDefinitionEditor.cs",
@@ -289,10 +297,25 @@
         "My project/Assets/CR/Core/Data/Editor/LocalizationKeyField.cs",
         "My project/Assets/CR/Core/Data/Editor/LocalizationEditorWindow.cs",
         "My project/Assets/CR/Core/Data/Editor/ContentAuditTool.cs",
-        "My project/Assets/CR/Core/Data/Editor/ContentPublishTool.cs"
+        "My project/Assets/CR/Core/Data/Editor/ContentPublishTool.cs",
+        "My project/Assets/CR/Core/Data/Registry/Definitions/SpawnerZoneConfig.cs",
+        "My project/Assets/CR/Core/Data/Registry/Definitions/AbilityConfig.cs",
+        "My project/Assets/CR/Core/Data/Registry/Definitions/AbilityProgressionSetConfig.cs",
+        "My project/Assets/CR/Core/Data/Registry/Definitions/GrowthProfileConfig.cs",
+        "My project/Assets/CR/Core/Data/Editor/AbilityConfigEditor.cs",
+        "My project/Assets/CR/Core/Data/Editor/AbilityProgressionSetConfigEditor.cs",
+        "My project/Assets/CR/Core/Data/Editor/GrowthProfileConfigEditor.cs",
+        "My project/Assets/CR/Core/Data/Editor/SpawnerZoneConfigEditor.cs",
+        "My project/Assets/CR/Game/World/IAbilityLibrarySyncClient.cs",
+        "My project/Assets/CR/Game/World/AbilityLibrarySyncHttpClient.cs",
+        "My project/Assets/CR/Game/World/LocalAbilityLibrarySyncClient.cs",
+        "My project/Assets/CR/Game/World/OnlineOfflineAbilityLibrarySyncClient.cs",
+        "My project/Assets/CR/Game/World/Editor/AbilityEditorSyncHelper.cs",
+        "My project/Assets/CR/Game/World/Editor/ContentCreatorSyncHelper.cs",
+        "My project/Assets/CR/Core/DI/LocalDevGameInstaller.cs"
       ]
     },
-    "description": "IGameContentRegistry, ScriptableObjectContentRegistry, ServerContentRegistry, MutableContentRegistry, ContentRegistryInitializer, ContentManifestClientUnityHttp, ContentDefinitionProvider, ContentKeys constants, CreatureDefinition/ItemDefinition/NpcDefinition/SpawnerDefinition ScriptableObjects, CreatureContentDef/ItemContentDef/NpcContentDef/SpawnerContentDef POCOs, IGameAssetLoader.LoadAssetByKeyAsync, ContentCreatorTool EditorWindow, custom Inspectors for all definition types, AddressablesCatalogUpdater, LocalizationEditorWindow, ContentAuditTool, ContentPublishTool"
+    "description": "IGameContentRegistry, ScriptableObjectContentRegistry, ServerContentRegistry, MutableContentRegistry, ContentRegistryInitializer, ContentManifestClientUnityHttp, ContentDefinitionProvider, ContentKeys constants, CreatureDefinition/ItemDefinition/NpcDefinition/SpawnerDefinition ScriptableObjects, CreatureContentDef/ItemContentDef/NpcContentDef/SpawnerContentDef POCOs, IGameAssetLoader.LoadAssetByKeyAsync, ContentStudioTool unified EditorWindow (7 tabs replacing ContentCreatorTool and AbilityLibraryTool), custom Inspectors for all definition types, AddressablesCatalogUpdater, LocalizationEditorWindow, ContentAuditTool, ContentPublishTool, AbilityConfig/AbilityProgressionSetConfig/GrowthProfileConfig SOs, AbilityEditorSyncHelper, ability sync clients (HTTP/local/online-offline)"
   },
   "backend/10-asset-management": {
     "docPath": "docs/backend/10-asset-management.md",

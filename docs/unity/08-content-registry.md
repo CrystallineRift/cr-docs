@@ -30,10 +30,14 @@ The registry bridges two concerns:
 | `ItemDefinition` | `CR/Core/Data/Registry/Definitions/ItemDefinition.cs` |
 | `NpcDefinition` | `CR/Core/Data/Registry/Definitions/NpcDefinition.cs` |
 | `SpawnerDefinition` | `CR/Core/Data/Registry/Definitions/SpawnerDefinition.cs` |
+| `SpawnerZoneConfig` | `CR/Core/Data/Registry/Definitions/SpawnerZoneConfig.cs` |
+| `AbilityConfig` | `CR/Core/Data/Registry/Definitions/AbilityConfig.cs` |
+| `AbilityProgressionSetConfig` | `CR/Core/Data/Registry/Definitions/AbilityProgressionSetConfig.cs` |
+| `GrowthProfileConfig` | `CR/Core/Data/Registry/Definitions/GrowthProfileConfig.cs` |
 | `IContentManifestRepository` | `CR/Core/Data/Repository/Implementation/Config/IContentManifestRepository.cs` |
 | `ContentManifestClientUnityHttp` | `CR/Core/Data/Repository/Implementation/Config/ContentManifestClientUnityHttp.cs` |
 | `ContentManifestResponse` | `CR/Core/Data/Repository/Implementation/Config/ContentManifestResponse.cs` |
-| `ContentCreatorTool` *(Editor only)* | `CR/Core/Data/Editor/ContentCreatorTool.cs` |
+| `ContentStudioTool` *(Editor only)* | `CR/Core/Data/Editor/ContentStudioTool.cs` |
 | `DefinitionEditorExtensions` *(Editor only)* | `CR/Core/Data/Editor/DefinitionEditorExtensions.cs` |
 | `CreatureDefinitionEditor` *(Editor only)* | `CR/Core/Data/Editor/CreatureDefinitionEditor.cs` |
 | `ItemDefinitionEditor` *(Editor only)* | `CR/Core/Data/Editor/ItemDefinitionEditor.cs` |
@@ -45,6 +49,11 @@ The registry bridges two concerns:
 | `LocalizationEditorWindow` *(Editor only)* | `CR/Core/Data/Editor/LocalizationEditorWindow.cs` |
 | `ContentAuditTool` *(Editor only)* | `CR/Core/Data/Editor/ContentAuditTool.cs` |
 | `ContentPublishTool` *(Editor only)* | `CR/Core/Data/Editor/ContentPublishTool.cs` |
+| `AbilityConfigEditor` *(Editor only)* | `CR/Core/Data/Editor/AbilityConfigEditor.cs` |
+| `AbilityProgressionSetConfigEditor` *(Editor only)* | `CR/Core/Data/Editor/AbilityProgressionSetConfigEditor.cs` |
+| `GrowthProfileConfigEditor` *(Editor only)* | `CR/Core/Data/Editor/GrowthProfileConfigEditor.cs` |
+| `AbilityEditorSyncHelper` *(Editor only)* | `CR/Game/World/Editor/AbilityEditorSyncHelper.cs` |
+| `ContentCreatorSyncHelper` *(Editor only)* | `CR/Game/World/Editor/ContentCreatorSyncHelper.cs` |
 
 ## `IGameContentRegistry`
 
@@ -80,6 +89,7 @@ Loads all `*.yaml` files from the localization directory at domain-reload time (
 | `SuggestKey(contentType, contentKey)` | Derives the conventional key: `creature_cindris_name` from `("creature", "cindris")` |
 | `AddEntry(contentType, key, value)` | Appends `key: value` to `{contentType}s.yaml`; calls `AssetDatabase.Refresh()`. Returns `false` and logs an error if the file cannot be written. |
 | `UpdateEntry(key, value)` | Overwrites the value for an existing key using an atomic write (write to `.tmp` then `File.Move`). If the backing YAML file has been deleted externally, calls `Reload()` and retries once; returns `false` if the file is still missing. Returns `false` and logs on any I/O error. |
+| `AddOrUpdateEntry(contentType, key, value)` | Convenience method: calls `UpdateEntry` if the key already exists, otherwise calls `AddEntry`. Used by `ContentCreatorSyncHelper` when pulling creature/NPC definitions from the server, to auto-create or refresh the display-name localization entry. |
 | `RemoveEntry(key)` | Removes a key from its YAML file using an atomic write. Same staleness and error handling as `UpdateEntry`. |
 | `Reload()` | Re-reads all files from disk |
 
@@ -99,7 +109,7 @@ Key convention matches the existing YAML files:
 
 ### `LocalizationKeyField`
 
-A static drawing utility used by all definition Inspectors and the Content Creator. Replace bare `TextField` calls for localization keys with `LocalizationKeyField.Draw(...)`.
+A static drawing utility used by all definition Inspectors and the Content Studio. Replace bare `TextField` calls for localization keys with `LocalizationKeyField.Draw(...)`.
 
 All `GUIStyle` objects are cached as `private static` fields (badge valid/invalid, resolved value preview, missing preview) with lazy init — no style allocations occur during `Draw()` after the first call.
 
@@ -129,9 +139,9 @@ Display Name Key  [creature_emberox_name     ] ✗  [Suggest] [+YAML]
   └────────────────────────────────────────┘
 ```
 
-### Auto-suggest in Content Creator
+### Auto-suggest in Content Studio
 
-When you type a content key in the Content Creator form and the Display Name Key field is empty, it auto-fills the suggested key. Example: typing `"cindris"` in the Creatures tab immediately fills `"creature_cindris_name"`.
+When you type a content key in the `+ New` panel (tabs 0–3) and the Display Name Key field is empty, it auto-fills the suggested key. Example: typing `"cindris"` in the Creatures tab immediately fills `"creature_cindris_name"`.
 
 If that key doesn't exist in the YAML yet, the `[+YAML]` button appears. Clicking it shows an inline panel where you type the English display value and click **Add Entry** — the key is appended to the appropriate YAML file and `AssetDatabase.Refresh()` is called automatically.
 
@@ -149,6 +159,10 @@ Each entity type has a dedicated ScriptableObject that designers create via the 
 | `Assets > Create > CR > Content > Item Definition` | `ItemDefinition` | One SO per item type |
 | `Assets > Create > CR > Content > NPC Definition` | `NpcDefinition` | One SO per NPC |
 | `Assets > Create > CR > Content > Spawner Definition` | `SpawnerDefinition` | One SO per spawner zone |
+| `Assets > Create > CR > Content > Spawner Zone Config` | `SpawnerZoneConfig` | Full zone config for spawner sync |
+| `Assets > Create > CR > Content > Ability Config` | `AbilityConfig` | One SO per ability (auto-generates stable GUID) |
+| `Assets > Create > CR > Content > Ability Progression Set Config` | `AbilityProgressionSetConfig` | Ordered list of (level, ability, slot) entries |
+| `Assets > Create > CR > Content > Growth Profile Config` | `GrowthProfileConfig` | Stat and XP growth multipliers per creature species |
 
 Each definition asset holds the `content_key`, `DisplayNameKey` (localization key), element type, asset key, and other metadata for that entity.
 
@@ -226,14 +240,38 @@ Add entries to `ContentKeys` whenever a new creature, NPC, or spawner is created
 |----------|-------------|
 | `DisplayNameKey` | Localization key for the zone label |
 
+### `CreatureDefinition` Inspector Fields
+
+`CreatureDefinition` ScriptableObjects hold the full set of species data synced from the backend:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `contentKey` | string | Must match `content_key` in the backend `creature` table |
+| `displayNameKey` | string | Localization key (e.g. `"creature_cindris_display"`) — resolved at runtime via `ILocalizationRepository` |
+| `element` | string | Elemental type string matching the backend `ElementType` enum (e.g. `"Fire"`, `"Radiant"`) |
+| `assetKey` | string | Addressables address or Resources path for the creature's primary asset |
+| `name` | string | Display name string (synced from server; mirrors backend `name` column) |
+| `description` | string | Lore description (synced from server) |
+| `baseHitPoints` | int | Base HP stat |
+| `baseAttack` | int | Base Attack stat |
+| `baseSpecialAttack` | int | Base Special Attack stat |
+| `baseDefense` | int | Base Defense stat |
+| `baseSpecialDefense` | int | Base Special Defense stat |
+| `baseSpeed` | int | Base Speed stat |
+| `abilityProgressionSetId` | string | Optional GUID referencing the `AbilityProgressionSet` that drives this creature's level-up moves. Empty = none. |
+
 ### `SpawnerDefinition` Inspector Fields
 
-`SpawnerDefinition` ScriptableObjects expose an additional field added in Phase 3:
+`SpawnerDefinition` ScriptableObjects store the full zone configuration synced from the backend:
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `contentKey` | string | Must match `content_key` in the backend spawner table |
 | `battleArenaKey` | string | Optional. Must match `BattleArena.ArenaKey` of a scene arena object. Used by `SpawnerWorldBehaviour` to tell `BattleCoordinator` which arena to activate when a wild battle starts from this zone. Leave empty to skip arena teleportation. |
+| `displayName` | string | Human-readable label (synced from server) |
+| `description` | string | Description text (synced from server) |
+| `maxCapacity` | int | Max creatures alive at once (default 5; synced from server) |
+| `spawnCooldownSeconds` | int | Seconds between spawn cycles (default 300; synced from server) |
 
 ## Hot-Content System
 
@@ -363,24 +401,92 @@ foreach (var key in _registry.CreatureKeys)
 
 ## Editor Tools
 
-### Content Creator Tool — `Window → CR → Content Creator`
+### Content Creator Bidirectional Sync — `ContentCreatorSyncHelper`
 
-The **Content Creator** is an EditorWindow (`CR/Core/Data/Editor/ContentCreatorTool.cs`) that handles the full create/edit/register lifecycle in one place.
+`CR/Game/World/Editor/ContentCreatorSyncHelper.cs` — Editor-only static helper that mirrors `AbilityEditorSyncHelper` for Creature, NPC, and Spawner content. Uses blocking `System.Net.Http.HttpClient` calls (acceptable in editor context). Item sync is not supported (no backend REST service).
+
+**Server response DTOs** (same file, `namespace CR.Game.World.Editor`):
+
+| Type | Fields |
+|------|--------|
+| `ServerCreatureDto` | `contentKey`, `name`, `description`, `assetKey`, `elementType` (string), `abilityProgressionSetId`, `updatedAt`, and all base stat ints |
+| `ServerNpcDto` | `contentKey`, `npcType` (string) |
+| `ServerSpawnerDto` | `contentKey`, `name`, `description`, `battleArenaKey`, `maxCapacity`, `spawnCooldownSeconds`, `updatedAt` |
+
+**Fetch methods** — called by the sync review panel in Content Studio (tabs 0, 2, 3):
+
+| Method | HTTP call |
+|--------|-----------|
+| `FetchAllCreatures()` | `GET /api/v1/creatures` |
+| `FetchAllNpcs()` | `GET /api/v1/npc/content-registry` |
+| `FetchAllSpawners()` | `GET /api/v1/spawners/templates` |
+
+**Push methods:**
+
+| Method | HTTP call | Notes |
+|--------|-----------|-------|
+| `SyncCreature(def)` | `PUT /api/v1/creatures/by-content-key/{contentKey}` | Pushes all base stat fields |
+| `SyncSpawner(def)` | `PUT /api/v1/spawners/by-content-key/{contentKey}` | Pushes display fields + `battleArenaKey` |
+| `SyncNpc(def)` | — | Returns `(false, "NPC content keys are world-specific; only pull is available.")` — NPC push is not supported |
+
+**Apply methods** — called when the user accepts a sync decision:
+
+| Method | Side effects |
+|--------|-------------|
+| `ApplyToCreature(def, dto)` | Sets all stat/name fields on the SO. Auto-generates `displayNameKey` (`creature_{contentKey}_display`) and calls `LocalizationEditorCache.AddOrUpdateEntry` to create or update the YAML entry. |
+| `ApplyToNpc(def, dto)` | Sets `npcType`. Auto-generates `displayNameKey` (`npc_{contentKey}_display`) with the `contentKey` as a placeholder value. |
+| `ApplyToSpawner(def, dto)` | Sets `displayName`, `description`, `maxCapacity`, `spawnCooldownSeconds`, `battleArenaKey`. |
+
+**Diff methods** — return `string[]` of changed field names:
+
+- `CreatureDiffersFromServer(local, server, out differentFields)`
+- `NpcDiffersFromServer(local, server, out differentFields)`
+- `SpawnerDiffersFromServer(local, server, out differentFields)`
+
+#### Content Studio Sync UI (tabs 0, 2, 3)
+
+Content Studio exposes a **↕ Sync** button on the Creatures, NPCs, and Spawners tabs (hidden on Items) that triggers the sync review workflow:
+
+1. **Fetching phase** — calls `FetchAll*()` for the active tab, shows a status label
+2. **Reviewing phase** — draws a sync review panel grouping definitions into four categories:
+   - **Only Local** — SO exists locally but not on server. For Creatures/Spawners: auto-queued for push. For NPCs: info badge (push not supported).
+   - **Only Server** — server has a record but no local SO. Auto-queued for pull (creates a new SO via `CreateAssetSilent<T>()`).
+   - **In Sync** — local and server match; shown collapsed.
+   - **Conflict** — both exist but differ. Shows a diff table of changed field names with per-field values. User must choose **Use Local** or **Use Server** per conflict before Apply is enabled.
+3. **Apply** — disabled until all conflicts are resolved. Calls `ApplyContentSyncDecisions()` which iterates each category and applies the appropriate `Apply*` or `Sync*` call. New SOs created on pull are registered into `ContentDefinitionProvider`.
+
+`CreateAssetSilent<T>()` is an internal helper that creates a definition SO asset at a default path without opening a save dialog, handling name collisions by appending `_1`, `_2`, etc.
+
+### Content Studio Tool — `Window → CR → Content Studio`
+
+The **Content Studio** is a unified EditorWindow (`CR/Core/Data/Editor/ContentStudioTool.cs`) that replaces the former Content Creator and Ability Library windows. It handles all 7 content domains in a single window with a consistent dual-panel UX: clicking a row in the list opens its full custom inspector inline below.
 
 ```
-Window → CR → Content Creator
+Window → CR → Content Studio
 ```
+
+**Tab layout (7 tabs):**
+
+| Index | Tab | Data Source | Sync |
+|-------|-----|-------------|------|
+| 0 | Creatures | `ContentDefinitionProvider.creatures` + orphan scan | `ContentCreatorSyncHelper` |
+| 1 | Items | `ContentDefinitionProvider.items` + orphan scan | — |
+| 2 | NPCs | `ContentDefinitionProvider.npcs` + orphan scan | `ContentCreatorSyncHelper` |
+| 3 | Spawners | `ContentDefinitionProvider.spawners` + orphan scan | `ContentCreatorSyncHelper` |
+| 4 | Abilities | `AssetDatabase.FindAssets("t:AbilityConfig")` | `AbilityEditorSyncHelper` |
+| 5 | Progression Sets | `AssetDatabase.FindAssets("t:AbilityProgressionSetConfig")` | `AbilityEditorSyncHelper` |
+| 6 | Growth Profiles | `AssetDatabase.FindAssets("t:GrowthProfileConfig")` | `AbilityEditorSyncHelper` |
 
 **Features:**
-- **Provider header** — auto-finds the `ContentDefinitionProvider` asset on open; `[Find]` re-runs the search; `[Create Provider]` creates one if missing
-- **Tab bar** — Creatures / Items / NPCs / Spawners (each label shows the current count)
-- **Registered list** — scrollable per-tab list with `[↑]` ping, `[Edit]` inline edit, `[✕]` unregister; on remove, a dialog offers to also delete the `.asset` file from disk
-- **Orphan strip** — detects definition assets that exist in the project but aren't registered; `[Register All Orphans]` appends them
-- **Create / Edit form** — tab-specific fields (contentKey, displayNameKey, element, assetKey, npcType); validates for empty key and duplicates before saving; `displayNameKey` uses `LocalizationKeyField` with live YAML validation
-- **`Add to ContentKeys.cs` checkbox** (default on) — automatically inserts a PascalCase constant into the correct inner class of `ContentKeys.cs` and calls `AssetDatabase.Refresh()`
-- **Status bar** — always-visible HelpBox showing the last action result
+- **Provider header** — auto-finds the `ContentDefinitionProvider` asset on open; `[Find]` re-runs the search; count badge shows all 4 registry totals (e.g. `5C · 3I · 2N · 1S`)
+- **Dual-panel layout** — list area (45% height) + inline detail inspector (55%); clicking any row embeds the full custom editor below the list via `Editor.CreateEditor(asset).OnInspectorGUI()`
+- **Orphan strip** (tabs 0–3) — detects unregistered definition assets on disk; `[Register All]` appends them to the provider; orphan rows are selectable so you can inspect before registering
+- **`+ New` button** (tabs 0–3) — toggles an inline create panel with content-key field and type-specific extras (element for Creatures, npcType for NPCs); `Create & Register` creates the SO and selects it in the detail panel
+- **`Unregister` button** — shown in the detail panel toolbar for tabs 0–3; removes from the provider array while keeping the `.asset` file
+- **`↕ Sync` button** — available on all tabs except Items; triggers the bidirectional sync review workflow
+- **File-dialog `New` button** (tabs 4–6) — opens a save dialog to create a new `AbilityConfig`, `AbilityProgressionSetConfig`, or `GrowthProfileConfig` SO
 
-`ContentCreatorTool.AddConstantToContentKeys(contentKey, contentType)` is also exposed as a `public static` method so tooling such as `ContentAuditTool` can trigger ContentKeys.cs updates without opening the window.
+`ContentStudioTool.AddConstantToContentKeys(contentKey, contentType)` is a `public static` method so tooling such as `ContentAuditTool` can trigger ContentKeys.cs updates without opening the window.
 
 ### Localization Editor Window — `Window → CR → Localization Editor`
 
@@ -408,7 +514,7 @@ When switching tabs with unsaved changes, a dialog ("Unsaved Changes — Switch 
 |----------|----------|-------------|------------|
 | Error | Missing Asset Key | Creature or item has no `assetKey` — cannot load art | `[Fix]` → opens asset in Inspector |
 | Warning | Localization | `displayNameKey` is not in any YAML file | `[Fix]` → opens Localization Editor |
-| Warning | ContentKeys | No matching constant in `ContentKeys.cs` | `[Fix]` → calls `ContentCreatorTool.AddConstantToContentKeys` |
+| Warning | ContentKeys | No matching constant in `ContentKeys.cs` | `[Fix]` → calls `ContentStudioTool.AddConstantToContentKeys` |
 | Info | Orphaned Asset | Definition asset is not registered in the provider | `[Fix]` → registers it |
 | Info | Orphaned YAML | YAML key has no matching definition | `[Fix]` → removes the key from YAML |
 
@@ -463,13 +569,17 @@ Each definition type has a `[CustomEditor]` that replaces the default Inspector:
 | `ItemDefinitionEditor` | `ItemDefinition` | Steel blue banner |
 | `NpcDefinitionEditor` | `NpcDefinition` | Teal banner |
 | `SpawnerDefinitionEditor` | `SpawnerDefinition` | Dark green banner |
+| `SpawnerZoneConfigEditor` | `SpawnerZoneConfig` | Blue banner, pool/template foldouts, SO reference for `abilityProgressionSet` |
+| `AbilityConfigEditor` | `AbilityConfig` | Purple banner, element/category popups, status-move power warning |
+| `AbilityProgressionSetConfigEditor` | `AbilityProgressionSetConfig` | Brown banner, entry list with duplicate (level, slot) detection |
+| `GrowthProfileConfigEditor` | `GrowthProfileConfig` | Green banner, two-column stat grid, live base-50 stat preview |
 | `ContentDefinitionProviderEditor` | `ContentDefinitionProvider` | Navy banner |
 
 Every definition Inspector shows:
 - Colored type banner (via `DefinitionEditorExtensions.DrawBanner`)
 - Validated field rows (green `✓` / red `✗` badge, via `prop.DrawValidated`)
 - HelpBox indicating whether the content key is present in `ContentKeys.cs` (via `key.DrawContentKeyInfo`)
-- `[Open in Content Creator]` button
+- `[Open in Content Studio]` button
 
 `ContentDefinitionProviderEditor` additionally shows:
 - Count summary (`4 Creatures · 0 Items · 0 NPCs · 1 Spawner`)
@@ -482,12 +592,12 @@ Every definition Inspector shows:
 
 ## Adding a New Entity
 
-### Using the Content Creator (recommended)
+### Using the Content Studio (recommended)
 
-1. Open `Window → CR → Content Creator`
+1. Open `Window → CR → Content Studio`
 2. Select the appropriate tab (Creatures / Items / NPCs / Spawners)
-3. Fill in the form fields; check `Add to ContentKeys.cs` (default on)
-4. Click `Create & Register` — the tool creates the `.asset` file, registers it in the provider, and updates `ContentKeys.cs`
+3. Click `+ New` to expand the create panel; fill in content key and type-specific fields
+4. Click `Create & Register` — the tool creates the `.asset` file, registers it in the provider, selects it in the detail panel, and updates `ContentKeys.cs`
 5. Add the localization entry for `DisplayNameKey` (see [Localization](?page=unity/06-localization))
 
 ### Manual workflow
@@ -553,6 +663,164 @@ Every entity that appears in the registry must have a matching `content_key` val
 - `M5012EnforceContentKeyNotNullOnSpawner` — spawner table
 
 If a content key in the registry has no matching row in the DB, `EnsureNpcAsync` / `EnsureSpawnerForTrainerByKeyAsync` will fail at world bootstrap. If a DB row exists with no matching registry entry, runtime systems will fall back gracefully (empty `TryGet`) but will not crash.
+
+
+## Ability Library Authoring
+
+Three ScriptableObjects form the ability authoring pipeline. Each has a "Sync to Server" button in its custom Inspector that calls `AbilityEditorSyncHelper` (editor-only, blocking HTTP).
+
+### `AbilityConfig`
+
+Created via `Assets > Create > CR > Content > Ability Config`. Fields:
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `id` | auto-generated GUID | Stable UUID — set once by `OnValidate`, never change after first sync |
+| `abilityName` | — | Display name of the ability |
+| `description` | — | Tooltip / battle-log description |
+| `elementType` | `"Normal"` | One of: Normal, Fire, Water, Flora, Ice, Ground, Wind, Lightning, Poison, Radiant |
+| `power` | 0 | Base damage value |
+| `accuracy` | 100 | Hit chance (0–100) |
+| `cost` | 20 | PP cost per use |
+| `priority` | 0 | Turn order modifier |
+| `targetType` | `"Single"` | Target selection type |
+| `category` | `"Physical"` | Physical, Special, or Status |
+| `animationKey` | — | Links to a battle animation asset |
+
+The Inspector warns if `power > 0` and `category == "Status"`.
+
+"Sync to Server" → `PUT {game_server_http_address}/api/v1/abilities/{id}`
+
+### `AbilityProgressionSetConfig`
+
+Created via `Assets > Create > CR > Content > Ability Progression Set Config`. Fields:
+
+| Field | Description |
+|-------|-------------|
+| `id` | Auto-generated stable GUID |
+| `setName` | Human-readable label |
+| `description` | Optional notes |
+| `isActive` | Whether this set is active in the backend |
+| `entries[]` | Array of `AbilityProgressionEntry`: `(level, AbilityConfig, abilitySlot 1–4)` |
+
+The Inspector shows a per-entry foldout sorted by level and warns on duplicate `(level, slot)` pairs. Entries with a null or ID-less `AbilityConfig` are skipped on sync.
+
+"Sync to Server" → `POST {game_server_http_address}/api/v1/ability-progression/sets/sync`
+
+### `GrowthProfileConfig`
+
+Created via `Assets > Create > CR > Content > Growth Profile Config`. Fields:
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `id` | auto-generated GUID | Stable UUID |
+| `profileName` | — | Name matching the backend `growth_profile.name` |
+| `description` | — | Optional notes |
+| `experienceGrowth` | 100 | XP gain multiplier (100 = normal) |
+| `hitPointsGrowth` | 100 | HP stat scale at level 1 (100 = base × 1.0) |
+| `attackGrowth` | 100 | Attack scale |
+| `defenseGrowth` | 100 | Defense scale |
+| `specialAttackGrowth` | 100 | Sp. Atk scale |
+| `specialDefenseGrowth` | 100 | Sp. Def scale |
+| `speedGrowth` | 100 | Speed scale |
+
+The Inspector renders a two-column grid for the six stat fields and shows a live preview: `Base 50 @ Lv1 → HP:{50*hp/100} ATK:{50*atk/100} ...`. A warning appears if any value is below 10.
+
+"Sync to Server" → `PUT {creature_server_http_address}/api/v1/growth-profiles/{id}`
+
+### `AbilityEditorSyncHelper`
+
+`CR/Game/World/Editor/AbilityEditorSyncHelper.cs` — Editor-only static helper. Reads `game_server_http_address` from `game_config.yaml` via `Resources.Load<TextAsset>("configuration/game_config")` and uses blocking `System.Net.Http.HttpClient` calls (acceptable in editor context). Returns `(bool ok, string message)` tuples that the custom Inspectors display in a `HelpBox`.
+
+#### Bidirectional sync support
+
+`AbilityEditorSyncHelper` also provides fetch and conflict-detection methods used by the Content Studio sync review workflow (tabs 4–6):
+
+**Server response DTOs** (defined in the same file, `namespace CR.Game.World.Editor`):
+
+| Type | Fields |
+|------|--------|
+| `ServerAbilityDto` | `id`, `name`, `description`, `elementType` (int), `power`, `accuracy`, `cost`, `priority`, `targetType`, `category`, `animationKey`, `updatedAt` |
+| `ServerGrowthProfileDto` | `id`, `name`, `description`, `experienceGrowth` (float), `hitPointsGrowth`, `attackGrowth`, `defenseGrowth`, `specialAttackGrowth`, `specialDefenseGrowth`, `speedGrowth`, `updatedAt` |
+| `ServerProgressionSetDto` | `id`, `name`, `description`, `isActive`, `updatedAt`, `entries` (list of `ServerProgressionEntryDto`) |
+| `ServerProgressionEntryDto` | `level`, `abilityId`, `abilitySlot` |
+
+**Fetch methods** — blocking GET calls using `System.Text.Json.JsonDocument` (not `JsonUtility`; required for top-level JSON arrays):
+
+| Method | Endpoint |
+|--------|----------|
+| `FetchAllAbilities()` | `GET /api/v1/abilities` |
+| `FetchAllGrowthProfiles()` | `GET /api/v1/growth-profiles` |
+| `FetchAllProgressionSets()` | `GET /api/v1/ability-progression/sets` |
+
+Each returns `(bool ok, string error, List<T> data)`.
+
+**Apply-from-server methods** — update a local SO in-place from a server DTO:
+
+| Method | Notes |
+|--------|-------|
+| `ApplyToAbility(config, dto)` | Copies all fields; converts `elementType` int back to string via reverse lookup |
+| `ApplyToGrowthProfile(config, dto)` | Copies all growth fields |
+
+**Conflict detection** — pure functions, no side effects:
+
+| Method | Returns |
+|--------|---------|
+| `AbilityDiffersFromServer(local, server, out string[] differentFields)` | `true` if any field differs; populates `differentFields` |
+| `GrowthProfileDiffersFromServer(local, server, out string[] differentFields)` | same |
+| `ProgressionSetDiffersFromServer(local, server, out string[] differentFields)` | compares name, description, isActive, entry count |
+
+**Element type reverse lookup** — `IntToElementType` dictionary maps server int values (0–11) back to the `elementType` string used by `AbilityConfig`.
+
+### Spawner Template `abilityProgressionSet` Field
+
+`SpawnerTemplateConfig.abilityProgressionSet` is now a `AbilityProgressionSetConfig?` SO reference (previously a raw UUID string). The `SpawnerZoneConfigEditor` renders it as an object drag field with a warning if empty. Both `SpawnerSyncHttpClient` and `LocalSpawnerSyncClient` read `t.abilityProgressionSet?.id` to extract the UUID.
+
+### Ability Sync Workflow (Tabs 4–6 in Content Studio)
+
+The Abilities, Progression Sets, and Growth Profiles tabs in **Content Studio** each have a **"↕ Sync with Server"** button that triggers a full bidirectional sync review. (These tabs formerly lived in the standalone `AbilityLibraryTool` window.)
+
+#### Bidirectional sync workflow
+
+1. Click **"↕ Sync with Server"** on any tab (Abilities, Growth Profiles, or Progression Sets).
+2. The tool fetches all records from the server for that type.
+3. A **Sync Review** panel replaces the normal list, grouped by status:
+
+| Status | Color badge | Description |
+|--------|------------|-------------|
+| **Only Local** | Green | Asset exists locally but not on the server — will push on Apply |
+| **Only Server** | Blue | Record on server but no matching local SO — will create local SO on Apply |
+| **In Sync** | Gray | ID matches, all fields equal — no action |
+| **Conflict** | Orange | ID matches but one or more fields differ — requires manual resolution |
+
+4. For each **Conflict**, a diff table shows the differing field names with Local and Server values side by side.
+5. Resolution buttons per conflict: **Use Local** (push local to server), **Use Server** (pull server data into local SO), **Skip** (take no action).
+6. The **Apply** button is disabled until all conflicts have a resolution chosen. Its label shows the pending action count: `Apply (N push, M pull, K resolved)`.
+7. On Apply, all decisions are executed in order, `AssetDatabase.SaveAssets()` is called, and the panel closes.
+
+#### Progression Set conflict notes
+
+For Progression Set conflicts resolved as **Use Server**, only the top-level fields (`name`, `description`, `isActive`) are updated. Entries are not overwritten — they reference `AbilityConfig` SOs by object reference and cannot be reconstructed from server UUIDs without a full lookup pass. A HelpBox warning `"Entries require manual update"` appears in the conflict row when UseServer is selected.
+
+#### Silent asset creation
+
+When pulling a server-only record (creating a new local SO), `CreateAssetSilent<T>` is used instead of the file-dialog `CreateAsset<T>`. It writes directly to the target folder (`Assets/CR/Content/Abilities`, `GrowthProfiles`, or `ProgressionSets`) with the server name as the filename, appending a short UUID suffix if a file with that name already exists.
+
+### Ability Sync DI Wiring
+
+```csharp
+// LocalDevGameInstaller.cs
+Container.Bind<IAbilityLibrarySyncClient>()
+    .WithId("online").To<AbilityLibrarySyncHttpClient>().AsSingle();
+Container.Bind<IAbilityLibrarySyncClient>()
+    .WithId("offline").To<LocalAbilityLibrarySyncClient>()
+    .FromMethod(ctx => new LocalAbilityLibrarySyncClient(
+        connectionStringFactory.GetConnectionStringForRepository(LocalDataSources.BaseCreatureOfflineRepository),
+        new CRUnityLoggerAdapter(typeof(LocalAbilityLibrarySyncClient))))
+    .AsSingle();
+Container.Bind<IAbilityLibrarySyncClient>()
+    .To<OnlineOfflineAbilityLibrarySyncClient>().AsSingle();
+```
 
 ## Gotchas
 
