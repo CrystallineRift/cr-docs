@@ -259,6 +259,7 @@ Add entries to `ContentKeys` whenever a new creature, NPC, or spawner is created
 | `baseSpecialDefense` | int | Base Special Defense stat |
 | `baseSpeed` | int | Base Speed stat |
 | `abilityProgressionSetId` | string | Optional GUID referencing the `AbilityProgressionSet` that drives this creature's level-up moves. Empty = none. |
+| `growthProfileId` | string | Optional GUID referencing the `GrowthProfile` that governs how this creature's stats scale per level. Empty = none. Synced bidirectionally with the backend `creature.growth_profile_id` column (added by M1018). |
 
 ### `SpawnerDefinition` Inspector Fields
 
@@ -409,7 +410,7 @@ foreach (var key in _registry.CreatureKeys)
 
 | Type | Fields |
 |------|--------|
-| `ServerCreatureDto` | `contentKey`, `name`, `description`, `assetKey`, `elementType` (string), `abilityProgressionSetId`, `updatedAt`, and all base stat ints |
+| `ServerCreatureDto` | `contentKey`, `name`, `description`, `assetKey`, `elementType` (string), `abilityProgressionSetId`, `growthProfileId`, `updatedAt`, and all base stat ints |
 | `ServerNpcDto` | `contentKey`, `npcType` (string) |
 | `ServerSpawnerDto` | `contentKey`, `name`, `description`, `battleArenaKey`, `maxCapacity`, `spawnCooldownSeconds`, `updatedAt` |
 
@@ -575,7 +576,7 @@ Each definition type has a `[CustomEditor]` that replaces the default Inspector:
 | Editor class | Target type | Color |
 |---|---|---|
 | `CreatureDefinitionEditor` | `CreatureDefinition` | Deep red banner + element color pill |
-| `ItemDefinitionEditor` | `ItemDefinition` | Steel blue banner |
+| `ItemDefinitionEditor` | `ItemDefinition` | Steel blue banner; structured effect/trigger param fields (typed dropdowns — no raw JSON TextArea); condition picker via `GET /ability/status_conditions` |
 | `NpcDefinitionEditor` | `NpcDefinition` | Teal banner |
 | `SpawnerDefinitionEditor` | `SpawnerDefinition` | Dark green banner |
 | `SpawnerZoneConfigEditor` | `SpawnerZoneConfig` | Blue banner, pool/template foldouts, SO reference for `abilityProgressionSet` |
