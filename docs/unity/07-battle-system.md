@@ -203,9 +203,11 @@ The offline battle stack uses the DLL's `BattleDomainService` (same class the ba
 | Component | Role |
 |-----------|------|
 | `CR.Game.Data.Sqlite.BattleRepository` | DLL SQLite implementation of `IBattleRepository`; stores battles, rounds, creature states, action log in `game.bytes` |
-| `CR.Game.Domain.Services.BattleDomainService` | DLL domain service; full offline battle logic — speed-based first-mover, `BattleResolver` damage, escape RNG, wild creature soft-delete |
-| `BattleHttpDomainAdapter` | Online path: calls the REST API |
-| `OnlineOfflineBattleDomainService` | Routes to `battle_online` or `battle_offline` binding based on `IsPlayingOnline` |
+| `CR.Game.Domain.Services.Implementation.Battle.BattleDomainService` | DLL domain service; full offline battle logic — speed-based first-mover, `BattleResolver` damage, escape RNG, wild creature soft-delete |
+| `BattleHttpDomainAdapter` | Online path: implements `IBattleDomainService` against the REST API |
+| `OnlineOfflineBattleDomainService` | Routes calls to `battle_online` or `battle_offline` binding based on `IsPlayingOnline` |
+
+> **Note:** The legacy Unity-side stack (`IBattleClient` / `BattleClientUnityHttp` / `OfflineBattleClient` / `OfflineBattleService` / `IBattleRepository` under `CR.Game.Battle.Offline` / `SqliteOfflineBattleRepository`) was removed in favour of the DLL's `IBattleDomainService`. New code must not reintroduce those types.
 
 The `game.bytes` file is keyed as `LocalDataSources.GameOfflineRepository` and resolved to `database_path_game` in `game_config.yaml` (defaults to `{persistentDataPath}/databases/gameOffline.bytes`).
 

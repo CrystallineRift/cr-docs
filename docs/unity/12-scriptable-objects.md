@@ -216,6 +216,20 @@ Defines a single battle ability. `id` is a stable GUID auto-generated on first c
 | `animationKey` | string | Key used to look up `BattleAnimationConfig` entry |
 | `conditions` | `AbilityConditionEntry[]` | Status conditions this ability can inflict |
 
+**Audio / VFX content keys** (Addressables addresses — each optional):
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `useSfxKey` | string | SFX played when the ability is cast / used |
+| `hitSfxKey` | string | SFX played at impact (on a landed hit) |
+| `missSfxKey` | string | SFX played when the ability misses |
+| `useVfxKey` | string | VFX prefab played on the caster (charge-up / cast effect) |
+| `travelVfxKey` | string | Projectile VFX travelling from caster to target |
+| `hitVfxKey` | string | VFX prefab played at the target on impact |
+| `cameraCueKey` | string | Camera cue / shake / zoom identifier |
+
+> **Migration note:** The previous UUID `assetId` field was dropped in cr-api migration `M1021ReplaceAssetIdsWithKeys` and replaced with the key columns above. Existing data is preserved as NULL keys — populate via Content Studio.
+
 **AbilityConditionEntry** (nested):
 
 | Field | Type | Purpose |
@@ -225,6 +239,33 @@ Defines a single battle ability. `id` is a stable GUID auto-generated on first c
 | `probability` | int (0–100) | Chance the condition is applied |
 | `durationTurns` | int | -1 = permanent; 0+ = number of turns |
 | `statChanges` | `AbilityStatChangeEntry[]` | Stat modifications the condition applies |
+
+---
+
+### StatusConditionConfig
+
+**Menu:** `CR/Content/Status Condition Config`  
+**Instances:** `Assets/CR/Content/Defs/StatusConditions/`  
+**Backend sync:** Via Content Studio → `/api/v1/status-conditions`
+
+Standalone ScriptableObject form of a status condition. Used when a condition is shared across multiple abilities instead of inlined per-ability via `AbilityConditionEntry`.
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `id` | string (GUID) | Stable identifier |
+| `name` | string | Display name |
+| `applyToUser` | bool | True = self-applied; false = target-applied |
+| `probability` | int (0–100) | Chance the condition is applied |
+| `durationTurns` | int? | Null = permanent |
+| `statChanges` | `ConditionStatChangeEntry[]` | Stat modifications applied while active |
+| `onHitVfxKey` | string | VFX on impact when the condition is inflicted |
+| `onTriggerVfxKey` | string | VFX when the condition ticks each turn |
+| `onRemovedVfxKey` | string | VFX when the condition is removed |
+| `onApplySfxKey` | string | SFX when first applied |
+| `onTickSfxKey` | string | SFX each tick |
+| `onRemoveSfxKey` | string | SFX when removed |
+
+> **Migration note:** `on_hit_effect_asset_id`, `on_trigger_effect_asset_id`, and `on_removed_effect_asset_id` UUID columns were dropped in cr-api `M1021ReplaceAssetIdsWithKeys` and replaced with the VFX/SFX key columns above.
 
 ---
 

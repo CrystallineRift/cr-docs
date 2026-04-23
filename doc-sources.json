@@ -218,31 +218,20 @@
       ],
       "cr-data": [
         "cr-api-unity/Assets/CR/Game/Battle/BattleCoordinator.cs",
-        "cr-api-unity/Assets/CR/Game/Battle/IBattleClient.cs",
         "cr-api-unity/Assets/CR/Game/Battle/IBattleCoordinator.cs",
-        "cr-api-unity/Assets/CR/Game/Battle/BattleClientUnityHttp.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/BattleHttpDomainAdapter.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/OnlineOfflineBattleDomainService.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/ItemHttpDomainAdapter.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/OnlineOfflineItemDomainService.cs",
         "cr-api-unity/Assets/CR/Game/Battle/BattleSession.cs",
         "cr-api-unity/Assets/CR/Game/Battle/WildBattleRequest.cs",
         "cr-api-unity/Assets/CR/Game/Battle/BattleAnimationConfig.cs",
         "cr-api-unity/Assets/CR/Game/Battle/CreatureAnimationProfile.cs",
-        "cr-api-unity/Assets/CR/Game/Battle/OnlineOfflineBattleClient.cs",
-        "cr-api-unity/Assets/CR/Game/Battle/Offline/IBattleRepository.cs",
-        "cr-api-unity/Assets/CR/Game/Battle/Offline/SqliteOfflineBattleRepository.cs",
-        "cr-api-unity/Assets/CR/Game/Battle/Offline/OfflineBattleService.cs",
-        "cr-api-unity/Assets/CR/Game/Battle/Offline/OfflineBattleClient.cs",
-        "cr-api-unity/Assets/CR/Game/Battle/Offline/Models/BattleRecord.cs",
-        "cr-api-unity/Assets/CR/Game/Battle/Offline/Models/BattleRoundRecord.cs",
-        "cr-api-unity/Assets/CR/Game/Battle/Offline/Models/BattleCreatureStateRecord.cs",
-        "cr-api-unity/Assets/CR/Game/Battle/Offline/Models/BattleActionLogRecord.cs",
         "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleArena.cs",
         "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleArenaRegistry.cs",
         "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleCameraController.cs",
         "cr-api-unity/Assets/CR/Game/Battle/Arena/Editor/BattleArenaCreator.cs",
         "cr-api-unity/Assets/CR/Game/Battle/Events/BattleEvents.cs",
-        "cr-api-unity/Assets/CR/Game/Battle/AI/IWildBattleAIService.cs",
-        "cr-api-unity/Assets/CR/Game/Battle/AI/LocalWildBattleAIService.cs",
-        "cr-api-unity/Assets/CR/Game/Battle/DTOs/ActionOutcomeResponse.cs",
-        "cr-api-unity/Assets/CR/Game/Battle/DTOs/SubmitActionRequest.cs",
         "cr-api-unity/Assets/CR/Game/Battle/DTOs/WildBattleStateDtos.cs",
         "cr-api-unity/Assets/CR/UI/Battle/BattleHUD.cs",
         "cr-api-unity/Assets/CR/Game/World/Behaviours/NpcInteractionBehaviour.cs",
@@ -250,7 +239,7 @@
         "cr-api-unity/Assets/CR/Game/World/Behaviours/SpawnerWorldBehaviour.cs"
       ]
     },
-    "description": "BattleCoordinator sequential turn loop, IBattleClient HTTP flow, BattleEvents static events, Arena system, BattleHUD, wild AI, StartNpcBattle/StartWildBattle, SpawnerEncounterBehaviour with encounter delay"
+    "description": "BattleCoordinator sequential turn loop, BattleHttpDomainAdapter + OnlineOfflineBattleDomainService stack, BattleEvents static events, Arena system, BattleHUD, StartNpcBattle/StartWildBattle, SpawnerEncounterBehaviour with encounter delay"
   },
   "unity/08-content-registry": {
     "docPath": "docs/unity/08-content-registry.md",
@@ -410,11 +399,11 @@
         "Convenience/CR.REST.AIO/Program.cs"
       ],
       "cr-data": [
-        "cr-api-unity/Assets/CR/Game/Battle/IBattleClient.cs",
-        "cr-api-unity/Assets/CR/Game/Battle/BattleClientUnityHttp.cs"
+        "cr-api-unity/Assets/CR/Game/Battle/BattleHttpDomainAdapter.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/OnlineOfflineBattleDomainService.cs"
       ]
     },
-    "description": "Battle DB tables (battle, battle_round, battle_round_input, battle_creature_state, battle_action_log), IBattleRepository, BattleDomainService, REST endpoints, DI wiring, wild AI ability progression set, animation_key on abilities"
+    "description": "Battle DB tables (battle, battle_round, battle_round_input, battle_creature_state, battle_action_log), IBattleRepository, BattleDomainService, BattleHttpDomainAdapter, REST endpoints, DI wiring, ability progression, animation_key + VFX/SFX keys on abilities"
   },
   "unity/11-dialogue-integration": {
     "docPath": "docs/unity/11-dialogue-integration.md",

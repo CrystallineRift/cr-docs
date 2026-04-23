@@ -486,8 +486,21 @@ POST /api/v1/quests/progress
 POST /api/v1/quests/claim
 { "accountId": "...", "trainerId": "...", "instanceId": "cccccccc-..." }
 
-→ 200 OK  (QuestInstance with rewards_claimed: true)
+→ 200 OK
+{
+  "instance": { /* QuestInstance with rewards_claimed: true */ },
+  "spawnedCreatureIds": ["<guid>", "..."]
+}
 ```
+
+`ClaimRewardsAsync` returns a typed `QuestClaimResult`:
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `Instance` | `QuestInstance` | Updated instance row with `rewards_claimed = true` |
+| `SpawnedCreatureIds` | `Guid[]` | Creature IDs spawned by `RewardType.Creature` rewards — consumers must place these into the trainer's team or storage |
+
+On the Unity client, `QuestManager.ClaimRewardsAsync` deserializes this result and forwards it to `QuestRewardDispatcher`, which places spawned creatures, fires `OnRewardsDispatched`, and routes through the event-wiring system (see `docs/unity/15-event-wiring.md`). Stat writes (`TrainerExperiencePoints`, `QuestsCompleted`) are performed by the backend during `ClaimRewardsAsync` — the Unity side must not double-write them.
 
 ### Content Studio sync: `PUT /api/v1/quests/templates/bulk`
 
