@@ -235,7 +235,7 @@ Note: `GameInitializer`'s `[Inject]` method subscribes in the injection call, no
 - Use `AsSingle()` for stateful services (domain services, managers) — one instance shared by all consumers
 - Use `AsCached()` for repository instances created with `FromInstance` — Zenject will not try to re-create them
 - Use `AsTransient()` for stateless helpers where each consumer should get its own instance (e.g., `ILogger<T>`)
-- `NonLazy()` forces instantiation at bind time — used for `GameInitializer` and `BattleCoordinator` so they subscribe to events immediately
+- `NonLazy()` forces instantiation at bind time — used for `GameInitializer`, `BattleCoordinator`, `QuestDialogueBridge`, and `QuestRewardDispatcher` so they subscribe to events immediately
 - **Never use `FindObjectOfType<T>()` inside an `[Inject]` method.** Zenject resolves injections during `Awake` before the scene is fully initialized. `FindObjectOfType` may return null for objects not yet awake.
 - **Circular dependencies.** Zenject detects circular constructor injection at startup and throws. If you need a circular relationship (rare), use lazy injection with `Lazy<IService>`.
 

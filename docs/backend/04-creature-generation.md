@@ -65,8 +65,8 @@ public class CreateCreatureRequest
 
 The implementation in `CreatureGenerationService` follows these steps:
 
-1. **Validate** — calls `ValidateRequestAsync`; throws `ArgumentException` on failure
-2. **Fetch base creature** — `ICreatureRepository.GetCreature(BaseCreatureId)`; throws if not found
+1. **Validate** — calls `ValidateRequestAsync`; throws `ArgumentException("Invalid creature creation request")` on failure. Logs a specific `LogWarning` message per check so the reason is visible in the console.
+2. **Fetch base creature** — `ICreatureRepository.GetCreature(BaseCreatureId)`; throws `ArgumentException` if null
 3. **Fetch growth profile** — `IGrowthProfileRepository.Get(GrowthProfileId)`; throws if not found
 4. **Build `GeneratedCreature`** — assigns all fields, calls `CalculateExperienceForLevel(level)`, calls `GenerateSigningKeyId(trainerId, baseCreatureId)`
 5. **Calculate stats** — `CalculateBaseStats(creature, baseCreature, growthProfile, level)`
@@ -133,10 +133,24 @@ This method bridges the Spawner system to the creature generation pipeline:
 
 1. Validate `spawnerTemplateId` and `trainerId` are non-empty
 2. Fetch `CreatureSpawnerTemplate` — throws `InvalidOperationException` if not found or not active
-3. `SelectBaseCreatureFromTemplate` — returns `template.BaseCreatureId`; throws if empty
-4. `DetermineLevelFromTemplate` — picks a random level in `[template.MinLevel, template.MaxLevel]` using `seed` if provided
-5. `SelectGrowthProfileFromTemplate` — returns `template.GrowthProfileId`; throws if empty
+3. `ResolveBaseCreatureIdAsync` — resolves the creature UUID with stale-reference fallback (see below)
+4. `DetermineLevelFromTemplate` — picks a random level in `[template.MinLevel, template.MaxLevel]` using `seed` if provided; defaults to level 1 if no range set
+5. `ResolveGrowthProfileIdAsync` — resolves the growth profile UUID with stale-reference fallback (see below)
 6. Builds `CreateCreatureRequest` with `Gender = Unknown`, `FirstNature = default(Nature)`, and delegates to `CreateAsync`
+
+### Stale-UUID Fallback {#staleuuid-fallback}
+
+When the cr-api backend Postgres database is rebuilt (e.g., during development or a migration rollback), the UUIDs assigned to `BaseCreature` and `GrowthProfile` rows change. The SQLite offline cache (Unity) stores these UUIDs in `creature_spawner_template.base_creature_id` and `growth_profile_id`. If the server then re-syncs content with new UUIDs, the stored foreign keys become stale.
+
+`ResolveBaseCreatureIdAsync` and `ResolveGrowthProfileIdAsync` handle this transparently:
+
+1. **Fast path** — look up by UUID; return immediately if found.
+2. **Fallback** — if not found AND the template stores `creature_content_key` / `growth_profile_name`, look up by that key/name instead.
+3. **Self-heal** — update `template.BaseCreatureId` / `template.GrowthProfileId` with the newly resolved UUID and persist via `UpdateCreatureSpawnerTemplateAsync`. Subsequent calls hit the fast path.
+
+The fallback keys (`creature_content_key`, `growth_profile_name`) are written to `creature_spawner_template` by `LocalSpawnerSyncClient` when syncing zone configs and `SpawnerDefinition` SOs (migration M5014).
+
+> **Prevention:** `ServerContentSyncService.SyncCreaturesAsync` and `SyncGrowthProfilesAsync` now use `ON CONFLICT(content_key/name) DO UPDATE SET … (without id)` instead of `INSERT OR REPLACE`. This preserves existing UUIDs across re-syncs, eliminating the problem for healthy databases going forward.
 
 ## `BaseCreature` Model
 
@@ -160,6 +174,8 @@ This method bridges the Spawner system to the creature generation pipeline:
 > - `M1016ReplaceAssetIdWithAssetKeyOnCreature` dropped the `asset_id UUID` column and added `asset_key TEXT`.
 > - `M1017AddAbilityProgressionSetIdToBaseCreature` added `ability_progression_set_id UUID NULL`.
 > - `M1018AddGrowthProfileIdToBaseCreature` added `growth_profile_id UUID NULL`, linking a species template to its default growth curve.
+> - `M1019NormalizeCreatureIdsToLowercase` normalises existing `id` values in the `creature` table to lowercase hyphenated format. Required because Dapper's `GuidTypeHandler` always writes lowercase UUIDs; migration seed data used uppercase literals, causing `WHERE id = @id` mismatches on SQLite's case-sensitive TEXT comparison.
+> - `M1020NormalizeGrowthProfileIdsToLowercase` applies the same lowercase normalisation to `growth_profile.id`.
 
 ## `GeneratedCreature` Model
 

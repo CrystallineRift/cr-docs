@@ -108,11 +108,15 @@ Each `SpawnerTemplateConfig`:
 
 Key columns on `creature_spawner_template`:
 - `base_creature_id` — which creature species to generate
+- `creature_content_key` — the designer-facing `content_key` of the base creature (added M5014); used as a fallback when `base_creature_id` is stale after a server rebuild
 - `growth_profile_id` — which stat scaling curve to use
+- `growth_profile_name` — the human-readable name of the growth profile (added M5014); fallback lookup if `growth_profile_id` is stale
 - `ability_progression_set_id` — nullable; which ability set to use (null = no abilities)
 - `min_level` / `max_level` — level range for generated creatures
 - `spawn_probability` — relative probability within the pool (does not need to sum to 1.0; the service normalizes)
 - `variant_type` — `"normal"`, `"shiny"`, `"legendary"`
+
+> **UUID stability:** `creature_content_key` and `growth_profile_name` are stored alongside the UUID foreign keys so the generation service can self-heal stale references without user intervention. See [Creature Generation — stale UUID fallback](?page=backend/04-creature-generation#staleuuid-fallback).
 
 ## Spawn Algorithm
 

@@ -45,7 +45,7 @@ The `BattleBagPanelHandler` MonoBehaviour manages the panel:
 [Zenject.Inject]
 public void Init(
     IBattleCoordinator battleCoordinator,
-    IItemUseRepository itemUseRepository,
+    IItemUseDomainService itemUseDomainService,
     IItemInventoryService itemInventoryService,
     IItemDomainService itemDomainService,
     ICreatureInventoryService creatureInventoryService,
@@ -178,14 +178,11 @@ The `bag-confirm-button` is enabled only when:
 Clicking the button calls:
 
 ```csharp
-var request = new ItemUseRequest(
-    targetCreatureId,
-    targetIsOpponent,
-    currentBattleId,
-    currentRoundNumber);
-
-var result = await _itemUseRepository.UseItemAsync(
-    trainerId, itemId, request);
+var result = await _itemUseDomainService.UseItemAsync(
+    trainerId, trainerId, itemId,
+    targetCreatureId, targetIsOpponent,
+    currentBattleId, currentRoundNumber,
+    CancellationToken.None);
 ```
 
 ### Capture Success

@@ -133,8 +133,9 @@ Plain POCOs in `Game/CR.Game.Model/Battle/` — one file per table:
 - `BattleCreatureStateRecord` — maps to `battle_creature_state`
 - `BattleActionLogRecord` — maps to `battle_action_log`
 - `BattleAction` — represents a single submitted action (type, abilityId, itemId, etc.)
-- `ActionOutcome` — full resolution result returned from `SubmitActionAsync` (includes `AbilityKey` set from `BaseAbility.AnimationKey`)
+- `ActionOutcome` — full resolution result returned from `SubmitActionAsync` (includes `AbilityKey`, `ConditionsApplied`, `AttackerConditionsApplied`)
 - `ActiveBattleCondition` / `ActiveStatChange` — live conditions stored as JSON in creature state
+- `ResolvedConditionDefinition` — pre-loaded condition + stat changes passed into the resolver (lives in `CR.Game.Model/Battle/`)
 
 ## `IBattleDomainService`
 
@@ -185,10 +186,11 @@ The pure calculation logic lives in `Convenience/CR.Game.Compat/Battle/` (target
 
 | Class | Purpose |
 |-------|---------|
-| `BattleResolver` | Static `Resolve(action, attacker, defender, abilityDef, seed) → SingleActionResult` |
+| `BattleResolver` | Static `Resolve(action, attacker, defender, abilityDef, resolvedConditions?, seed) → SingleActionResult` |
 | `BattleActionParser` | `Parse(json) → List<BattleAction>`, `Serialise(actions) → string` |
 | `CreatureSnapshot` | Input to resolver: creature stats + active conditions |
-| `SingleActionResult` | Output: damage dealt, final HP, conditions applied/removed/triggered |
+| `SingleActionResult` | Output: damage dealt, final HP, conditions applied/removed/triggered + `AttackerConditionsApplied` |
+| `ResolvedConditionDefinition` | Pre-loaded condition + stat changes passed to resolver; avoids N+1 DB queries |
 
 ### Damage Formula
 
@@ -210,7 +212,11 @@ Miss → no damage, no conditions, `ActionOutcome.Missed = true`.
 
 ### Condition Application
 
-`BattleResolver` contains a reserved hook for applying conditions to the defender on ability hit. In the current implementation, condition lookup (resolving condition definitions from ability data) happens in `BattleDomainService` rather than inside the resolver — the resolver only calculates damage and processes the attacker's existing conditions. Future work will pass pre-resolved condition definitions into the resolver.
+On an ability hit, `BattleResolver` iterates the `resolvedConditions` list passed by the caller. For each condition a probability roll is made; if it succeeds an `ActiveBattleCondition` is constructed with pre-rolled `StatChange` amounts and the condition's `DurationTurns` (or -1 for permanent). Conditions with `ApplyToUser = true` land in `SingleActionResult.AttackerConditionsApplied`; all others in `ConditionsApplied` (defender).
+
+`BattleDomainService` bulk-fetches conditions via `IAbilityRepository.GetStatusConditionsWithStatChanges` (two queries: one for conditions, one JOIN for their stat changes) before calling the resolver. Self-applied (attacker) conditions are merged into `AttackerRemainingConditions` before writing back to `battle_creature_state.status_conditions_json`. Both `ConditionsApplied` and `AttackerConditionsApplied` are included in the `ActionOutcome` returned to the client.
+
+Miss → no conditions applied regardless of probability.
 
 ### `SingleActionResult.AttackerRemainingConditions`
 
@@ -251,7 +257,7 @@ A system "Wild" trainer with well-known GUID `00000000-0000-0000-0000-0000000000
 
 The AI loads abilities from the wild creature's own progression set when available. It looks up the `GeneratedCreature` by `CreatureId`, reads `AbilityProgressionSetId`, and calls `IAbilityRepository.GetAbilitiesForProgressionSetAtLevelAsync(setId, level)` to get only abilities the creature has actually learned at its current level. If the generated creature has no progression set, or if the progression-set lookup fails, it falls back to `GetAbilitiesPaginated(0, 50)`.
 
-Note: the backend AI does not check HP percentage or items. The Unity-side `LocalWildBattleAIService` adds a HP < 30% healing-item check as an additional first-priority step before the 20% debuff roll.
+The Unity client uses the same DLL `WildBattleAIDomainService` for offline battles, bound via `IWildBattleAIDomainService`.
 
 ## REST Endpoints
 
@@ -320,9 +326,9 @@ M9990SeedGameData                    ← seeds Wild Trainer (guarded: skips if a
 | `SubmitAction_ConditionDot_DamagesAttackerAtStartOfTurn` | DOT fires at start of turn |
 | `SubmitAction_ConditionExpires_RemovedAfterTurnsElapse` | Expired conditions are removed |
 
-### Resolver Tests (`Convenience/CR.Game.Compat.Test/`)
+### Resolver Condition Tests (`Game/CR.Game.Domain.Services.Test/Battle/BattleResolverConditionTests.cs`)
 
-Pure logic tests with no mocks — `BattleResolver.Resolve()` is called directly with constructed snapshots. Covers both damage formula branches, miss, DOT trigger, condition expiry, deterministic RNG.
+Pure logic tests — `BattleResolver.Resolve()` called directly with `ResolvedConditionDefinition` lists. Covers probability proc/miss, `applyToUser` routing to `AttackerConditionsApplied`, zero/null probability, amount range rolling, miss suppression, `DurationTurns` mapping to `TurnsRemaining`, and `null` resolved-conditions guard.
 
 ## Gotchas
 

@@ -12,7 +12,7 @@ This mirrors the Class/Object relationship: `quest_template` is the class, `ques
 
 ### Why `content_key` on Templates?
 
-Quest templates carry a `content_key` (e.g. `"quest_talk_to_elder"`) for the same reason NPCs and spawners do — it bridges the backend database to Unity's `game_config.yaml` asset definitions and the localization system. The Unity client references quests by `content_key` to resolve display names, quest art, and dialogue strings from YAML without a live database read. `content_key` is globally unique across all quest templates.
+Quest templates carry a `content_key` (e.g. `"quest_talk_to_elder"`) for the same reason NPCs and spawners do — it bridges the backend database to Unity's `QuestDefinition` ScriptableObjects. The Unity client references quests by `content_key` to resolve display names, descriptions, and objective data from SOs without a live database read. `content_key` is globally unique across all quest templates.
 
 The `giver_npc_content_key` column links a template to the NPC that offers it, using the same string key that appears on the NPC's `content_key` column. When a player opens an NPC's quest list, the client calls `GetAvailableQuestsForTrainerAsync(accountId, trainerId, npcContentKey, ct)` — the backend filters `quest_template.giver_npc_content_key = npcContentKey` to return only that NPC's quests.
 
@@ -41,7 +41,7 @@ erDiagram
         uuid quest_template_id FK
         int objective_type
         int target_count
-        uuid target_reference_id
+        string target_reference_id
         boolean is_optional
     }
     quest_reward_template {
@@ -49,7 +49,7 @@ erDiagram
         uuid quest_template_id FK
         int reward_type
         int quantity
-        uuid reference_id
+        varchar(500) reference_id
     }
     quest_requirement {
         uuid id PK
@@ -170,21 +170,22 @@ Key points:
 - Use `0`/`false` for booleans (engine-aware as shown)
 - Always provide a `Down()` that cleans up seed data
 
-### Step 2: Reference the quest in `game_config.yaml`
+### Step 2: Create a `QuestDefinition` ScriptableObject in Unity
 
-```yaml
-quests:
-  - content_key: "quest_battle_trial"
-    display_name: "Battle Trial"
-    description: "Win 3 battles to prove your worth."
-    icon: "quest_sword_icon"
-    objectives:
-      - description: "Win 3 battles"
-        objective_type: WinBattles
-        target_count: 3
-```
+In the Unity editor, right-click in the Project window and select **Create → CR → Quest Definition**. Fill in the inspector fields:
 
-Unity uses this to resolve display strings and icons without a database read. The `content_key` must match the database row exactly.
+| Field | Value |
+|-------|-------|
+| `contentKey` | `"quest_battle_trial"` — must match the migration exactly |
+| `questName` | `"Battle Trial"` |
+| `description` | `"Win 3 battles to prove your worth."` |
+| `giverNpcContentKey` | `"kael_trainer_npc"` |
+| `isRepeatable` | false |
+| `objectives[0].objectiveType` | `WinBattles` |
+| `objectives[0].description` | `"Win 3 battles"` |
+| `objectives[0].targetCount` | 3 |
+
+The SO is the Unity-side source of truth for display data. The `content_key` must match the database row exactly. Use the **Sync to Backend** button in the inspector to push the template to the server via `PUT /api/v1/quests/templates/bulk` rather than writing a separate migration for the template row — the migration is only needed for seed data in environments without the editor.
 
 ### Step 3: Add a requirement (optional)
 
@@ -373,7 +374,7 @@ public class QuestProgressEvent
 {
     public QuestObjectiveType ObjectiveType { get; set; }
     public int Amount { get; set; }
-    public Guid? ReferenceId { get; set; }  // creature id, item id, location id, etc.
+    public string? ReferenceId { get; set; }  // content key: creature, item, location, etc.
 }
 ```
 
@@ -389,7 +390,7 @@ Every progress event also increments a lifetime stat regardless of whether any q
 | `DealDamage`, `DealDamageOfType` | `damage_dealt_total` | Increment |
 | `HealAmount` | `damage_healed_total` | Increment |
 | `CollectItem` | `items_collected_total` | Increment |
-| `ReachCreatureLevel` | `creature_level_{referenceId}` AND `highest_creature_level` | Max |
+| `ReachCreatureLevel` | `creature_level_{referenceId}` (content key) AND `highest_creature_level` | Max |
 
 Quest-scoped progress resets with each instance. Lifetime stats never reset.
 
@@ -398,18 +399,21 @@ Quest-scoped progress resets with each instance. Lifetime stats never reset.
 `IConditionEvaluator` is used internally by `GetAvailableQuestsForTrainerAsync` to gate quest availability:
 
 ```csharp
-// All must pass — returns false on first failure
+// Short-circuits on first failure. Used as the accept gate — cheap and authoritative.
 Task<bool> EvaluateAllAsync(
     IReadOnlyList<QuestRequirement> requirements,
     Guid accountId, Guid trainerId, CancellationToken ct);
 
-// Returns per-requirement pass/fail results for UI display
+// Evaluates every requirement individually. Never short-circuits.
+// Returns a RequirementCheckResult per row — use for locked-quest preview UI.
 Task<IReadOnlyList<RequirementCheckResult>> EvaluateEachAsync(
     IReadOnlyList<QuestRequirement> requirements,
     Guid accountId, Guid trainerId, CancellationToken ct);
 ```
 
-`EvaluateEachAsync` is intended for client-side "locked quest" previews — a trainer can see a quest they cannot yet accept, with each unmet requirement highlighted.
+`EvaluateEachAsync` is for client-side "locked quest" previews — the trainer sees a quest they cannot yet accept, with each unmet requirement highlighted (e.g. "Complete quest X", "Reach trainer level 5"). Do **not** use it as the accept gate; use `EvaluateAllAsync` there.
+
+`RequirementCheckResult` pairs the original `QuestRequirement` with a `bool Met` flag, giving the caller full context to render requirement state without a second lookup.
 
 ## REST Endpoints
 
@@ -424,6 +428,7 @@ All quest endpoints are prefixed `/api/v1/quests`.
 | `POST` | `/api/v1/quests/abandon` | Abandon an active quest instance |
 | `POST` | `/api/v1/quests/progress` | Record a progress event against active quests |
 | `POST` | `/api/v1/quests/claim` | Claim rewards for a completed quest |
+| `PUT` | `/api/v1/quests/templates/bulk` | Bulk create-or-update quest templates by `content_key` (Content Studio sync) |
 
 ### Query parameters (GET endpoints)
 
@@ -484,9 +489,121 @@ POST /api/v1/quests/claim
 → 200 OK  (QuestInstance with rewards_claimed: true)
 ```
 
+### Content Studio sync: `PUT /api/v1/quests/templates/bulk`
+
+Used by the Unity editor Content Studio to push `QuestDefinition` ScriptableObjects to the server. Each entry is matched by `content_key` and the template row plus all its objectives, rewards, and requirements are replaced atomically.
+
+```json
+PUT /api/v1/quests/templates/bulk
+[
+  {
+    "contentKey": "quest_battle_trial",
+    "name": "Battle Trial",
+    "description": "Win 3 battles to prove your worth.",
+    "giverNpcContentKey": "kael_trainer_npc",
+    "isRepeatable": false,
+    "maxRepeatCount": 0,
+    "sortOrder": 10,
+    "objectives": [
+      {
+        "objectiveType": 3,
+        "description": "Win 3 battles",
+        "targetCount": 3,
+        "targetReferenceId": null,
+        "targetMetadata": null,
+        "isOptional": false,
+        "sortOrder": 0
+      }
+    ],
+    "rewards": [
+      {
+        "rewardType": 1,
+        "quantity": 500,
+        "referenceId": null,
+        "metadata": null
+      }
+    ],
+    "requirements": [
+      {
+        "requirementType": 0,
+        "operatorType": 0,
+        "targetValue": 1,
+        "referenceId": "quest_intro_talk_to_oak",
+        "statKey": null
+      }
+    ]
+  }
+]
+
+→ 200 OK
+{
+  "count": 1,
+  "templates": [
+    { "id": "11111111-...", "contentKey": "quest_battle_trial", "name": "Battle Trial", ... }
+  ]
+}
+```
+
+`requirements` is optional. Omitting it (or passing `null`) leaves existing `quest_requirement` rows untouched. Passing an empty array clears all requirements. Passing entries replaces them.
+
+The handler uses `IQuestTemplateRepository.UpsertTemplateWithChildrenAsync`, which:
+1. Looks up the existing template by `content_key`.
+2. If found: UPDATEs the template row and preserves its original `id` and `created_at`.
+3. If not found: INSERTs a new template row with a generated `id`.
+4. Soft-deletes all existing objective rows for this template (`deleted = 1`).
+5. INSERTs fresh objective rows (new `id` per row).
+6. Soft-deletes all existing reward rows for this template.
+7. INSERTs fresh reward rows.
+8. If `requirements` was supplied: soft-deletes existing requirement rows, then INSERTs fresh ones.
+
+A `400 Bad Request` is returned if the request body is empty or any entry has a blank `contentKey`.
+
+## Reward Claiming
+
+`ClaimRewardsAsync` distributes all rewards defined in `quest_reward_template` for the completed quest instance before marking it claimed. Each reward row is processed by `GrantRewardAsync`, which dispatches on `RewardType`.
+
+### M7011 Migration
+
+`M7011_QuestRewardRefToText` changes `quest_reward_template.reference_id` from `UUID` to `VARCHAR(500)` on Postgres. SQLite stores all values as TEXT so no DDL change is needed there. The column now holds designer content keys (e.g. `"item_potion"`, `"spawner_starter_cindris"`) rather than opaque UUIDs.
+
+### Implemented reward types
+
+| `RewardType` | `referenceId` semantics | Behaviour |
+|---|---|---|
+| `Experience` (0) | Not used | Increments the `trainer_xp` stat by `quantity` via `IStatService.IncrementAsync` |
+| `Currency` (1) | `content_key` of the currency item in the `item` table | Looks up the item by `IItemDomainService.GetItemByContentKeyAsync`, then calls `ITrainerInventoryDomainService.AddItemAsync(trainerId, item.Id, quantity)` |
+| `Item` (2) | `content_key` of the item in the `item` table | Same as Currency — both reward types resolve to inventory items |
+| `Creature` (3) | `content_key` of a global spawner template | Looks up the spawner via `ISpawnerRepository.GetSpawnerTemplateByContentKeyAsync`, then calls `ICreatureSpawnDomainService.SpawnCreaturesAsync(spawner.Id, new SpawnRequest { TrainerId = trainerId, RequestedQuantity = quantity })` |
+
+### Deferred reward types
+
+| `RewardType` | Status |
+|---|---|
+| `Ability` (4) | Logs an informational message; no action taken |
+| `Badge` (5) | Logs an informational message; no action taken |
+| `Title` (6) | Logs an informational message; no action taken |
+
+### Graceful skip policy
+
+`GrantRewardAsync` never throws. If a required lookup fails (item content key not found, spawner not found, empty `referenceId`), it logs a warning and moves on to the next reward. The `quests_completed` stat and `rewards_claimed = true` are still written — partial reward delivery is preferred over blocking the claim entirely.
+
+### Content Studio usage
+
+When pushing quest templates via `PUT /api/v1/quests/templates/bulk`, set `referenceId` to the content key string directly:
+
+```json
+"rewards": [
+  { "rewardType": 0, "quantity": 500, "referenceId": null },
+  { "rewardType": 2, "quantity": 3,   "referenceId": "item_potion" },
+  { "rewardType": 3, "quantity": 1,   "referenceId": "spawner_starter_cindris" }
+]
+```
+
+The endpoint no longer attempts a GUID parse — any non-blank string is stored as-is.
+
 ## DI Registration
 
-`QuestDomainService` must be registered as **Scoped**, not Singleton. It depends on `IConditionEvaluator`, which depends on `IStatService` — and `IStatService` is Scoped:
+`QuestDomainService` must be registered as **Scoped**, not Singleton. It depends on `IConditionEvaluator` (which depends on `IStatService`), `IItemDomainService`, `ITrainerInventoryDomainService`, and `ICreatureSpawnDomainService` — all of which are Scoped:
 
 ```csharp
 // Program.cs
@@ -499,6 +616,9 @@ if (!isSwaggerGen) new QuestDatabaseMigratorPostgres().Migrate(configuration);
 
 builder.Services.AddScoped<IStatService, StatService>();
 builder.Services.AddScoped<IConditionEvaluator, ConditionEvaluator>();
+builder.Services.AddScoped<IItemDomainService, ItemDomainService>();
+builder.Services.AddScoped<ITrainerInventoryDomainService, TrainerInventoryDomainService>();
+// ICreatureSpawnDomainService and ISpawnerRepository already registered above
 builder.Services.AddScoped<IQuestDomainService, QuestDomainService>();
 ```
 
