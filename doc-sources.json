@@ -53,9 +53,9 @@
         "Spawner/**/*.csproj"
       ],
       "cr-data": [
-        "My project/Assets/CR/Core/Data/Registry/Definitions/SpawnerDefinition.cs",
-        "My project/Assets/CR/Game/World/Behaviours/SpawnerWorldBehaviour.cs",
-        "My project/Assets/CR/Game/World/Behaviours/SpawnerEncounterBehaviour.cs"
+        "cr-api-unity/Assets/CR/Core/Data/Registry/Definitions/SpawnerDefinition.cs",
+        "cr-api-unity/Assets/CR/Game/World/Behaviours/SpawnerWorldBehaviour.cs",
+        "cr-api-unity/Assets/CR/Game/World/Behaviours/SpawnerEncounterBehaviour.cs"
       ]
     },
     "description": "Weighted spawn pools, spawn history, spawner tables, SpawnerDefinition.battleArenaKey, Wild Trainer GUID integration"
@@ -108,7 +108,7 @@
         "Quests/**/*.csproj"
       ],
       "cr-data": [
-        "My project/Assets/CR/Quests/**/*.cs"
+        "cr-api-unity/Assets/CR/Quests/**/*.cs"
       ]
     },
     "description": "Quest system: templates, objectives, rewards, instances, progress events, requirements, condition evaluation"
@@ -121,7 +121,7 @@
         "Stats/**/*.csproj"
       ],
       "cr-data": [
-        "My project/Assets/CR/Stats/**/*.cs"
+        "cr-api-unity/Assets/CR/Stats/**/*.cs"
       ]
     },
     "description": "CR.Stats lifetime stat tracking domain: trainer_stat, stat_event, operators, StatKey constants"
@@ -203,8 +203,8 @@
         "Game/CR.Game.Localization/LocalizedText.cs"
       ],
       "cr-data": [
-        "My project/Assets/CR/Core/Data/Repository/Implementation/GameCore/LocalizationRepository.cs",
-        "My project/Assets/CR/Resources/configuration/localization/*.yaml"
+        "cr-api-unity/Assets/CR/Core/Data/Repository/Implementation/GameCore/LocalizationRepository.cs",
+        "cr-api-unity/Assets/CR/Resources/configuration/localization/*.yaml"
       ]
     },
     "description": "Per-domain per-language YAML localization files, LocalizationRepository loading, key naming convention"
@@ -217,40 +217,29 @@
         "Game/CR.Game.Service.BFF/Endpoints/WildBattleEndpoints.cs"
       ],
       "cr-data": [
-        "My project/Assets/CR/Game/Battle/BattleCoordinator.cs",
-        "My project/Assets/CR/Game/Battle/IBattleClient.cs",
-        "My project/Assets/CR/Game/Battle/IBattleCoordinator.cs",
-        "My project/Assets/CR/Game/Battle/BattleClientUnityHttp.cs",
-        "My project/Assets/CR/Game/Battle/BattleSession.cs",
-        "My project/Assets/CR/Game/Battle/WildBattleRequest.cs",
-        "My project/Assets/CR/Game/Battle/BattleAnimationConfig.cs",
-        "My project/Assets/CR/Game/Battle/CreatureAnimationProfile.cs",
-        "My project/Assets/CR/Game/Battle/OnlineOfflineBattleClient.cs",
-        "My project/Assets/CR/Game/Battle/Offline/IBattleRepository.cs",
-        "My project/Assets/CR/Game/Battle/Offline/SqliteOfflineBattleRepository.cs",
-        "My project/Assets/CR/Game/Battle/Offline/OfflineBattleService.cs",
-        "My project/Assets/CR/Game/Battle/Offline/OfflineBattleClient.cs",
-        "My project/Assets/CR/Game/Battle/Offline/Models/BattleRecord.cs",
-        "My project/Assets/CR/Game/Battle/Offline/Models/BattleRoundRecord.cs",
-        "My project/Assets/CR/Game/Battle/Offline/Models/BattleCreatureStateRecord.cs",
-        "My project/Assets/CR/Game/Battle/Offline/Models/BattleActionLogRecord.cs",
-        "My project/Assets/CR/Game/Battle/Arena/BattleArena.cs",
-        "My project/Assets/CR/Game/Battle/Arena/BattleArenaRegistry.cs",
-        "My project/Assets/CR/Game/Battle/Arena/BattleCameraController.cs",
-        "My project/Assets/CR/Game/Battle/Arena/Editor/BattleArenaCreator.cs",
-        "My project/Assets/CR/Game/Battle/Events/BattleEvents.cs",
-        "My project/Assets/CR/Game/Battle/AI/IWildBattleAIService.cs",
-        "My project/Assets/CR/Game/Battle/AI/LocalWildBattleAIService.cs",
-        "My project/Assets/CR/Game/Battle/DTOs/ActionOutcomeResponse.cs",
-        "My project/Assets/CR/Game/Battle/DTOs/SubmitActionRequest.cs",
-        "My project/Assets/CR/Game/Battle/DTOs/WildBattleStateDtos.cs",
-        "My project/Assets/CR/UI/Battle/BattleHUD.cs",
-        "My project/Assets/CR/Game/World/Behaviours/NpcInteractionBehaviour.cs",
-        "My project/Assets/CR/Game/World/Behaviours/SpawnerEncounterBehaviour.cs",
-        "My project/Assets/CR/Game/World/Behaviours/SpawnerWorldBehaviour.cs"
+        "cr-api-unity/Assets/CR/Game/Battle/BattleCoordinator.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/IBattleCoordinator.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/BattleHttpDomainAdapter.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/OnlineOfflineBattleDomainService.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/ItemHttpDomainAdapter.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/OnlineOfflineItemDomainService.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/BattleSession.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/WildBattleRequest.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/BattleAnimationConfig.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/CreatureAnimationProfile.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleArena.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleArenaRegistry.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleCameraController.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Arena/Editor/BattleArenaCreator.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Events/BattleEvents.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/DTOs/WildBattleStateDtos.cs",
+        "cr-api-unity/Assets/CR/UI/Battle/BattleHUD.cs",
+        "cr-api-unity/Assets/CR/Game/World/Behaviours/NpcInteractionBehaviour.cs",
+        "cr-api-unity/Assets/CR/Game/World/Behaviours/SpawnerEncounterBehaviour.cs",
+        "cr-api-unity/Assets/CR/Game/World/Behaviours/SpawnerWorldBehaviour.cs"
       ]
     },
-    "description": "BattleCoordinator sequential turn loop, IBattleClient HTTP flow, BattleEvents static events, Arena system, BattleHUD, wild AI, StartNpcBattle/StartWildBattle, SpawnerEncounterBehaviour with encounter delay"
+    "description": "BattleCoordinator sequential turn loop, BattleHttpDomainAdapter + OnlineOfflineBattleDomainService stack, BattleEvents static events, Arena system, BattleHUD, StartNpcBattle/StartWildBattle, SpawnerEncounterBehaviour with encounter delay"
   },
   "unity/08-content-registry": {
     "docPath": "docs/unity/08-content-registry.md",
@@ -262,57 +251,57 @@
         "Game/CR.Game.Model/Creatures/BaseCreature.cs"
       ],
       "cr-data": [
-        "My project/Assets/CR/Core/Data/Registry/IGameContentRegistry.cs",
-        "My project/Assets/CR/Core/Data/Registry/ScriptableObjectContentRegistry.cs",
-        "My project/Assets/CR/Core/Data/Registry/ServerContentRegistry.cs",
-        "My project/Assets/CR/Core/Data/Registry/MutableContentRegistry.cs",
-        "My project/Assets/CR/Core/Data/Registry/ContentRegistryInitializer.cs",
-        "My project/Assets/CR/Core/Data/Registry/OnlineOfflineContentRegistry.cs",
-        "My project/Assets/CR/Core/Data/Registry/ContentRegistryBootstrapper.cs",
-        "My project/Assets/CR/Core/Data/Registry/AddressablesCatalogUpdater.cs",
-        "My project/Assets/CR/Core/Data/Registry/ContentDefinitionProvider.cs",
-        "My project/Assets/CR/Core/Data/Registry/ContentKeys.cs",
-        "My project/Assets/CR/Core/Data/Registry/CreatureContentDef.cs",
-        "My project/Assets/CR/Core/Data/Registry/ItemContentDef.cs",
-        "My project/Assets/CR/Core/Data/Registry/NpcContentDef.cs",
-        "My project/Assets/CR/Core/Data/Registry/SpawnerContentDef.cs",
-        "My project/Assets/CR/Core/Data/Registry/Definitions/CreatureDefinition.cs",
-        "My project/Assets/CR/Core/Data/Registry/Definitions/ItemDefinition.cs",
-        "My project/Assets/CR/Core/Data/Registry/Definitions/NpcDefinition.cs",
-        "My project/Assets/CR/Core/Data/Registry/Definitions/SpawnerDefinition.cs",
-        "My project/Assets/CR/Core/Data/Repository/GameConfigurationKeys.cs",
-        "My project/Assets/CR/Core/Data/Repository/Implementation/Config/IContentManifestRepository.cs",
-        "My project/Assets/CR/Core/Data/Repository/Implementation/Config/ContentManifestClientUnityHttp.cs",
-        "My project/Assets/CR/Core/Data/Repository/Implementation/Config/ContentManifestResponse.cs",
-        "My project/Assets/CR/Core/Assets/IGameAssetLoader.cs",
-        "My project/Assets/CR/Core/Assets/GameAssetLoader.cs",
-        "My project/Assets/CR/Core/Data/Editor/ContentStudioTool.cs",
-        "My project/Assets/CR/Core/Data/Editor/DefinitionEditorExtensions.cs",
-        "My project/Assets/CR/Core/Data/Editor/CreatureDefinitionEditor.cs",
-        "My project/Assets/CR/Core/Data/Editor/ItemDefinitionEditor.cs",
-        "My project/Assets/CR/Core/Data/Editor/NpcDefinitionEditor.cs",
-        "My project/Assets/CR/Core/Data/Editor/SpawnerDefinitionEditor.cs",
-        "My project/Assets/CR/Core/Data/Editor/ContentDefinitionProviderEditor.cs",
-        "My project/Assets/CR/Core/Data/Editor/LocalizationEditorCache.cs",
-        "My project/Assets/CR/Core/Data/Editor/LocalizationKeyField.cs",
-        "My project/Assets/CR/Core/Data/Editor/LocalizationEditorWindow.cs",
-        "My project/Assets/CR/Core/Data/Editor/ContentAuditTool.cs",
-        "My project/Assets/CR/Core/Data/Editor/ContentPublishTool.cs",
-        "My project/Assets/CR/Core/Data/Registry/Definitions/SpawnerZoneConfig.cs",
-        "My project/Assets/CR/Core/Data/Registry/Definitions/AbilityConfig.cs",
-        "My project/Assets/CR/Core/Data/Registry/Definitions/AbilityProgressionSetConfig.cs",
-        "My project/Assets/CR/Core/Data/Registry/Definitions/GrowthProfileConfig.cs",
-        "My project/Assets/CR/Core/Data/Editor/AbilityConfigEditor.cs",
-        "My project/Assets/CR/Core/Data/Editor/AbilityProgressionSetConfigEditor.cs",
-        "My project/Assets/CR/Core/Data/Editor/GrowthProfileConfigEditor.cs",
-        "My project/Assets/CR/Core/Data/Editor/SpawnerZoneConfigEditor.cs",
-        "My project/Assets/CR/Game/World/IAbilityLibrarySyncClient.cs",
-        "My project/Assets/CR/Game/World/AbilityLibrarySyncHttpClient.cs",
-        "My project/Assets/CR/Game/World/LocalAbilityLibrarySyncClient.cs",
-        "My project/Assets/CR/Game/World/OnlineOfflineAbilityLibrarySyncClient.cs",
-        "My project/Assets/CR/Game/World/Editor/AbilityEditorSyncHelper.cs",
-        "My project/Assets/CR/Game/World/Editor/ContentCreatorSyncHelper.cs",
-        "My project/Assets/CR/Core/DI/LocalDevGameInstaller.cs"
+        "cr-api-unity/Assets/CR/Core/Data/Registry/IGameContentRegistry.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/ScriptableObjectContentRegistry.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/ServerContentRegistry.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/MutableContentRegistry.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/ContentRegistryInitializer.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/OnlineOfflineContentRegistry.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/ContentRegistryBootstrapper.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/AddressablesCatalogUpdater.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/ContentDefinitionProvider.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/ContentKeys.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/CreatureContentDef.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/ItemContentDef.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/NpcContentDef.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/SpawnerContentDef.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/Definitions/CreatureDefinition.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/Definitions/ItemDefinition.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/Definitions/NpcDefinition.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/Definitions/SpawnerDefinition.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Repository/GameConfigurationKeys.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Repository/Implementation/Config/IContentManifestRepository.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Repository/Implementation/Config/ContentManifestClientUnityHttp.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Repository/Implementation/Config/ContentManifestResponse.cs",
+        "cr-api-unity/Assets/CR/Core/Assets/IGameAssetLoader.cs",
+        "cr-api-unity/Assets/CR/Core/Assets/GameAssetLoader.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Editor/ContentStudioTool.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Editor/DefinitionEditorExtensions.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Editor/CreatureDefinitionEditor.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Editor/ItemDefinitionEditor.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Editor/NpcDefinitionEditor.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Editor/SpawnerDefinitionEditor.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Editor/ContentDefinitionProviderEditor.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Editor/LocalizationEditorCache.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Editor/LocalizationKeyField.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Editor/LocalizationEditorWindow.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Editor/ContentAuditTool.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Editor/ContentPublishTool.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/Definitions/SpawnerZoneConfig.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/Definitions/AbilityConfig.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/Definitions/AbilityProgressionSetConfig.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/Definitions/GrowthProfileConfig.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Editor/AbilityConfigEditor.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Editor/AbilityProgressionSetConfigEditor.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Editor/GrowthProfileConfigEditor.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Editor/SpawnerZoneConfigEditor.cs",
+        "cr-api-unity/Assets/CR/Game/World/IAbilityLibrarySyncClient.cs",
+        "cr-api-unity/Assets/CR/Game/World/AbilityLibrarySyncHttpClient.cs",
+        "cr-api-unity/Assets/CR/Game/World/LocalAbilityLibrarySyncClient.cs",
+        "cr-api-unity/Assets/CR/Game/World/OnlineOfflineAbilityLibrarySyncClient.cs",
+        "cr-api-unity/Assets/CR/Game/World/Editor/AbilityEditorSyncHelper.cs",
+        "cr-api-unity/Assets/CR/Game/World/Editor/ContentCreatorSyncHelper.cs",
+        "cr-api-unity/Assets/CR/Core/DI/LocalDevGameInstaller.cs"
       ]
     },
     "description": "IGameContentRegistry, ScriptableObjectContentRegistry, ServerContentRegistry, MutableContentRegistry, ContentRegistryInitializer, ContentManifestClientUnityHttp, ContentDefinitionProvider, ContentKeys constants, CreatureDefinition/ItemDefinition/NpcDefinition/SpawnerDefinition ScriptableObjects, CreatureContentDef/ItemContentDef/NpcContentDef/SpawnerContentDef POCOs, IGameAssetLoader.LoadAssetByKeyAsync, ContentStudioTool unified EditorWindow (7 tabs replacing ContentCreatorTool and AbilityLibraryTool), custom Inspectors for all definition types, AddressablesCatalogUpdater, LocalizationEditorWindow, ContentAuditTool, ContentPublishTool, AbilityConfig/AbilityProgressionSetConfig/GrowthProfileConfig SOs, AbilityEditorSyncHelper, ability sync clients (HTTP/local/online-offline)"
@@ -343,14 +332,14 @@
         "Items/CR.Items.Data.Migration/M6004AddContentKeyToItem.cs"
       ],
       "cr-data": [
-        "My project/Assets/CR/Core/Data/Repository/Implementation/Config/IVersionCheckRepository.cs",
-        "My project/Assets/CR/Core/Data/Repository/Implementation/Config/VersionCheckClientUnityHttp.cs",
-        "My project/Assets/CR/Core/Data/Repository/Implementation/Config/VersionCheckResponse.cs",
-        "My project/Assets/CR/Core/Data/Repository/Implementation/Config/IContentManifestRepository.cs",
-        "My project/Assets/CR/Core/Data/Repository/Implementation/Config/ContentManifestClientUnityHttp.cs",
-        "My project/Assets/CR/Core/Data/Repository/Implementation/Config/ContentManifestResponse.cs",
-        "My project/Assets/CR/Core/Data/Editor/ContentPublishTool.cs",
-        "My project/Assets/CR/Core/Data/Editor/ContentDeployTool.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Repository/Implementation/Config/IVersionCheckRepository.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Repository/Implementation/Config/VersionCheckClientUnityHttp.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Repository/Implementation/Config/VersionCheckResponse.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Repository/Implementation/Config/IContentManifestRepository.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Repository/Implementation/Config/ContentManifestClientUnityHttp.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Repository/Implementation/Config/ContentManifestResponse.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Editor/ContentPublishTool.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Editor/ContentDeployTool.cs",
         "scripts/setup-s3-bucket.sh",
         "scripts/setup-minio-bucket.sh",
         "scripts/deploy-content.sh"
@@ -363,16 +352,29 @@
     "repos": {
       "cr-api": [],
       "cr-data": [
-        "My project/Assets/CR/Core/Assets/GameAssetLoader.cs",
-        "My project/Assets/CR/Core/Assets/IGameAssetLoader.cs",
-        "My project/Assets/CR/Core/Player/CreatureSpawner.cs",
-        "My project/Assets/CR/Core/Data/Editor/ContentPublishTool.cs",
-        "My project/Assets/CR/Core/Data/Editor/ContentDeployTool.cs",
+        "cr-api-unity/Assets/CR/Core/Assets/GameAssetLoader.cs",
+        "cr-api-unity/Assets/CR/Core/Assets/IGameAssetLoader.cs",
+        "cr-api-unity/Assets/CR/Core/Player/CreatureSpawner.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Editor/ContentPublishTool.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Editor/ContentDeployTool.cs",
         "scripts/deploy-content.sh",
         "scripts/setup-minio-bucket.sh"
       ]
     },
     "description": "Unity Addressables end-to-end setup: Groups/Profiles windows, Play Mode Script, making assets Addressable, ContentPublishTool Seed to SQLite, Deploy Content tool, MinIO/S3 gotchas, CreatureSpawner MonoBehaviour"
+  },
+  "unity/10-player-menu-ui": {
+    "docPath": "docs/unity/10-player-menu-ui.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [
+        "cr-api-unity/Assets/CR/UI/PlayerMenuWindow.cs",
+        "cr-api-unity/Assets/CR/UI/PlayerTeamView.cs",
+        "cr-api-unity/Assets/CR/UI/Resources/PlayerMenuWindow.uxml",
+        "cr-api-unity/Assets/CR/UI/Resources/PlayerMenuWindow.uss"
+      ]
+    },
+    "description": "Player menu UI: 4-tab overlay (Team/Bag/Journal/Options), PlayerTeamView CCG-style creature cards, input wiring via UICoordinator"
   },
   "backend/09-battle-persistence": {
     "docPath": "docs/backend/09-battle-persistence.md",
@@ -397,10 +399,102 @@
         "Convenience/CR.REST.AIO/Program.cs"
       ],
       "cr-data": [
-        "My project/Assets/CR/Game/Battle/IBattleClient.cs",
-        "My project/Assets/CR/Game/Battle/BattleClientUnityHttp.cs"
+        "cr-api-unity/Assets/CR/Game/Battle/BattleHttpDomainAdapter.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/OnlineOfflineBattleDomainService.cs"
       ]
     },
-    "description": "Battle DB tables (battle, battle_round, battle_round_input, battle_creature_state, battle_action_log), IBattleRepository, BattleDomainService, REST endpoints, DI wiring, wild AI ability progression set, animation_key on abilities"
+    "description": "Battle DB tables (battle, battle_round, battle_round_input, battle_creature_state, battle_action_log), IBattleRepository, BattleDomainService, BattleHttpDomainAdapter, REST endpoints, DI wiring, ability progression, animation_key + VFX/SFX keys on abilities"
+  },
+  "unity/11-dialogue-integration": {
+    "docPath": "docs/unity/11-dialogue-integration.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [
+        "cr-api-unity/Assets/CR/Dialogue/Interface/IDialogueHandler.cs",
+        "cr-api-unity/Assets/CR/Dialogue/Implementation/PixelCrushersDialogueHandler.cs",
+        "cr-api-unity/Assets/CR/Quests/Dialogue/QuestDialogueBridge.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/Definitions/QuestDefinition.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Editor/QuestDefinitionEditor.cs",
+        "cr-api-unity/Assets/CR/Core/DI/LocalDevGameInstaller.cs"
+      ]
+    },
+    "description": "Dialogue System abstraction: IDialogueHandler interface, PixelCrushersDialogueHandler MonoBehaviour, QuestDialogueBridge, conversation dropdown in QuestObjectiveDefinition editor, abort-detection flag pattern"
+  },
+  "unity/12-scriptable-objects": {
+    "docPath": "docs/unity/12-scriptable-objects.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [
+        "cr-api-unity/Assets/CR/Core/Data/Registry/Definitions/CreatureDefinition.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/Definitions/NpcDefinition.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/Definitions/ItemDefinition.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/Definitions/SpawnerDefinition.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/Definitions/SpawnerZoneConfig.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/Definitions/QuestDefinition.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/Definitions/AbilityConfig.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/Definitions/AbilityProgressionSetConfig.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/Definitions/GrowthProfileConfig.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/ContentDefinitionProvider.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/BattleAnimationConfig.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/CreatureAnimationProfile.cs"
+      ]
+    },
+    "description": "All ScriptableObject types: what each does, every field, which sync to the backend and via which endpoint, ContentDefinitionProvider registry wiring, Dialogue Database note"
+  },
+  "unity/13-battle-bag-ui": {
+    "docPath": "docs/unity/13-battle-bag-ui.md",
+    "repos": {
+      "cr-api": [
+        "Game/CR.Game.Model/Items/ItemUsageFlags.cs",
+        "Game/CR.Game.Model/Items/ItemEffectType.cs",
+        "Items/CR.Items.Domain.Services/Interfaces/IItemEffectHandler.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/ItemEndpoints.cs"
+      ],
+      "cr-data": [
+        "cr-api-unity/Assets/CR/UI/Battle/BattleBagPanelHandler.cs",
+        "cr-api-unity/Assets/CR/UI/Resources/BattleBagPanel.uxml",
+        "cr-api-unity/Assets/CR/UI/Resources/BattleBagPanel.uss",
+        "cr-api-unity/Assets/CR/UI/Battle/BattleHUD.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/Definitions/ItemDefinition.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/Definitions/ItemEnums.cs"
+      ]
+    },
+    "description": "BattleBagPanelHandler item display logic, item row rendering, capture crystal visual indicators, BattleHUD integration, ItemUsageFlags/CaptureCrystal flag, USS styles for capture items"
+  },
+  "unity/14-capture-mechanic": {
+    "docPath": "docs/unity/14-capture-mechanic.md",
+    "repos": {
+      "cr-api": [
+        "Game/CR.Game.Domain.Services/Implementation/Item/Handlers/CaptureCreatureHandler.cs",
+        "Items/CR.Items.Data.Migration/M6006AddCaptureModifierToItem.cs",
+        "Items/CR.Items.Data.Migration/M6007SeedCaptureCrystals.cs",
+        "Game/CR.Game.Model/Items/BaseItem.cs"
+      ],
+      "cr-data": [
+        "cr-api-unity/Assets/CR/Game/Battle/Events/BattleEvents.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/Definitions/ItemDefinition.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/Definitions/ItemEnums.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Repository/Implementation/GameConfigurationKeys.cs"
+      ]
+    },
+    "description": "Capture crystal tiers (Shard/Standard/Fine/Radiant), capture formula, capture_modifier property, Backend IItemEffectHandler wiring, BattleEvents.RaiseCreatureCaptured, USS visual indicators"
+  },
+  "unity/15-event-wiring": {
+    "docPath": "docs/unity/15-event-wiring.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [
+        "cr-api-unity/Assets/CR/Core/Wiring/**/*.cs",
+        "cr-api-unity/Assets/CR/Core/State/Events/CustomTypes/**/*.cs",
+        "cr-api-unity/Assets/CR/Core/State/Bridge/**/*.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Events/BattleEvents.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/BattleCoordinator.cs",
+        "cr-api-unity/Assets/CR/Core/Session/GameSessionManager.cs",
+        "cr-api-unity/Assets/CR/Core/Session/IGameSessionService.cs",
+        "cr-api-unity/Assets/CR/Quests/QuestRewardDispatcher.cs",
+        "cr-api-unity/Assets/CR/UI/Battle/BattleBagPanelHandler.cs"
+      ]
+    },
+    "description": "Designer-facing event + variable wiring: EventWiringManifest, VariableWiringManifest, IEventSourceRegistry, BattleEventsAdapter, TrainerSessionAdapter, QuestRewardAdapter, capture/exp/level events, editor window, codegen for IL2CPP, how to add new events and data payloads"
   }
 }

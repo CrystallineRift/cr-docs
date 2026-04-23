@@ -400,6 +400,7 @@ All NPC endpoints are prefixed `/api/v1/npc`.
 | `POST` | `/api/v1/npc` | Create NPC |
 | `PUT` | `/api/v1/npc/{id}` | Update NPC |
 | `DELETE` | `/api/v1/npc/{id}` | Soft-delete NPC |
+| `GET` | `/api/v1/npc/content-registry` | Returns all distinct `(contentKey, npcType)` pairs across all NPC rows for editor sync tooling |
 
 ### `POST /api/v1/npc/ensure` — EnsureNpc
 

@@ -186,6 +186,13 @@ All endpoint groups registered in `Program.cs` via `app.Map*Endpoints()`:
 | `GameAssetEndpoints` | `/api/v1/game-assets` | Asset manifest reads — `GET /api/v1/game-assets`, `GET /api/v1/game-assets/{key}` |
 | `VersionCheckEndpoints` | `/api/v1/version-check` | Client/content version compatibility check |
 | `ContentPublishEndpoints` | `/api/v1/content/publish` | Pipeline-only content publish (`X-Pipeline-Key` auth) |
+| `AbilityEndpoints` | `/api/v1/abilities` | `GET` paginated ability list with inline conditions (non-keyed repo + direct DB join); `PUT /{id}` upsert |
+| Inline in `Program.cs` | `/api/v1/abilities/{id}/sync-conditions` | `POST` atomically replaces all status conditions for an ability |
+| Inline in `Program.cs` | `/api/v1/abilities/{id}` | `DELETE` soft-deletes ability with full cascade through conditions and stat changes |
+| Inline in `Program.cs` | `/api/v1/status-conditions` | `GET` paginated list of non-deleted status conditions with embedded stat changes (`limit`, `offset`) |
+| Inline in `Program.cs` | `/api/v1/stat-changes` | `GET` paginated list of non-deleted stat changes (`limit`, `offset`) |
+| `GrowthProfileEndpoints` | `/api/v1/growth-profiles` | `GET /` paginated list; `PUT /{id}` upsert |
+| Inline in `Program.cs` | `/api/v1/ability-progression/sets` | `GET` paginated list of progression sets with entries (for Unity bidirectional sync) |
 
 ## Key Repositories
 

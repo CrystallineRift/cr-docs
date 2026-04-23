@@ -12,30 +12,28 @@ The battle system connects scene-level events (NPC interaction, wild encounter t
 
 ## `BattleCoordinator`
 
-`BattleCoordinator` is a MonoBehaviour singleton bound as `IBattleCoordinator`. It is the only component that may call `IBattleClient` to start a battle or drive the turn loop. Scene components inject `IBattleCoordinator` — never the concrete class.
+`BattleCoordinator` is a MonoBehaviour singleton bound as `IBattleCoordinator`. It is the only component that may call `IBattleDomainService` to start a battle or drive the turn loop. Scene components inject `IBattleCoordinator` — never the concrete class.
 
 ### Installer Binding
 
 ```csharp
-// LocalDevGameInstaller.cs — offline battle stack
-var offlineBattleRepo = new SqliteOfflineBattleRepository(logger, connectionString);
-Container.Bind<SqliteOfflineBattleRepository>().FromInstance(offlineBattleRepo).AsSingle();
-Container.Bind<IBattleRepository>().FromInstance(offlineBattleRepo).AsSingle();
-Container.Bind<OfflineBattleService>().AsSingle();
-Container.Bind<OfflineBattleClient>().AsSingle();
-Container.Bind<BattleClientUnityHttp>().AsSingle();
-// IBattleClient routes to online or offline via OnlineOfflineBattleClient
-Container.Bind<IBattleClient>()
-    .To<OnlineOfflineBattleClient>()
-    .AsSingle();
+// LocalDevGameInstaller.cs — battle stack
+var gameDatabaseCs = connectionStringFactory.GetConnectionStringForRepository(LocalDataSources.GameOfflineRepository);
+var battleRepo     = new CR.Game.Data.Sqlite.BattleRepository(logger, gameDatabaseCs);
+Container.Bind<CR.Game.Data.Interface.IBattleRepository>().FromInstance(battleRepo).AsSingle();
+
+// IBattleDomainService routes to HTTP (online) or DLL BattleDomainService (offline)
+Container.Bind<IBattleDomainService>().WithId("battle_online") .To<BattleHttpDomainAdapter>().AsSingle();
+Container.Bind<IBattleDomainService>().WithId("battle_offline").To<BattleDomainService>().AsSingle();
+Container.Bind<IBattleDomainService>().To<OnlineOfflineBattleDomainService>().AsSingle();
+
+Container.Bind<IWildBattleAIDomainService>().To<WildBattleAIDomainService>().AsSingle();
 
 Container.Bind<IBattleCoordinator>()
     .To<BattleCoordinator>()
     .FromNewComponentOnNewGameObject()
     .AsSingle();
 
-// Phase 3 additions
-Container.Bind<IWildBattleAIService>().To<LocalWildBattleAIService>().AsSingle();
 Container.Bind<IBattleArenaRegistry>().To<BattleArenaRegistry>()
     .FromNewComponentOnNewGameObject().AsSingle();
 Container.Bind<IBattleCameraController>().To<BattleCameraController>()
@@ -62,7 +60,7 @@ public interface IBattleCoordinator
 
 | Event | Payload | When it fires |
 |-------|---------|---------------|
-| `OnBattleStarted` | `BattleSession` | After `IBattleClient.StartBattleAsync` returns and the arena is activated |
+| `OnBattleStarted` | `BattleSession` | After `IBattleDomainService.StartBattleAsync` returns and the arena is activated |
 | `OnBattleEnded` | `BattleResult` | After the turn loop ends (win/loss/draw/escape) |
 
 ### Static `BattleEvents`
@@ -72,7 +70,7 @@ public interface IBattleCoordinator
 | Event | Signature | Description |
 |-------|-----------|-------------|
 | `BattleStarted` | `(string battleId, string activeTrainerId)` | Battle started, first active trainer set |
-| `PlayerTurnStarted` | `(string activeCreatureId, string[] abilityIds)` | HUD should show action menu |
+| `PlayerTurnStarted` | `(string activeCreatureId, List<WildAbilityDto> abilities)` | HUD should show action menu with ability list |
 | `CreatureAttacking` | `(string creatureId, string attackClip)` | Play attack animation |
 | `CreatureHit` | `(string creatureId, int damage)` | Display damage number |
 | `HpChanged` | `(string creatureId, int finalHp, int maxHp)` | Update HP bar |
@@ -88,12 +86,13 @@ Wild battles drive a sequential turn loop entirely client-side. The server resol
 StartBattleAsync
     └─ if activeTrainer == player
            RaisePlayerTurnStarted → await SubmitPlayerAction()
-           SubmitActionAsync → ActionOutcomeResponse
+           IBattleDomainService.SubmitActionAsync → ActionOutcome
        else
-           SubmitWildTurnAsync → ActionOutcomeResponse
+           IWildBattleAIDomainService.DecideActionAsync → submit via IBattleDomainService
+           IBattleDomainService.SubmitActionAsync → ActionOutcome
     └─ FireOutcomeEvents (HP bars, faint animations)
-    └─ if outcome.battleEnded → RaiseBattleEnded → break
-       else advance activeTrainerId + roundKey
+    └─ if outcome.BattleEnded → RaiseBattleEnded → break
+       else advance activeTrainerId (Guid) + NextRoundKey
 ```
 
 `SubmitPlayerAction(string actionJson)` is called by the HUD (or any input handler) to unblock the `TaskCompletionSource` awaited in the loop. The action JSON matches the backend's action format, e.g. `[{"type":0,"abilityId":"...","targetCreatureId":"..."}]`.
@@ -121,29 +120,13 @@ The wild trainer GUID is `00000000-0000-0000-0000-000000000001` (defined in `Wil
 | `WinnerTrainerId` | Guid? | Null on draw or forfeit |
 | `Reason` | string | `"AllCreaturesFainted"`, `"Forfeit"`, `"loop_complete"`, etc. |
 
-## `IBattleClient`
+## `IBattleDomainService` (Unity-side)
 
-`IBattleClient` is the HTTP interface to the battle REST API. `BattleClientUnityHttp` is the concrete implementation.
+`BattleCoordinator` injects `IBattleDomainService` — the same DLL interface the backend implements. Online calls are routed through `BattleHttpDomainAdapter` (HTTP to the REST API); offline calls go directly to the DLL's `BattleDomainService` backed by the local `game.bytes` SQLite file.
 
-```csharp
-public interface IBattleClient
-{
-    // Active methods used by the wild-battle turn loop
-    Task<StartBattleResponse>       StartBattleAsync(StartBattleRequest request, CancellationToken ct);
-    Task<BattleStateResponse>       GetBattleStateAsync(Guid battleId, CancellationToken ct);
-    Task<ActionOutcomeResponse>     SubmitActionAsync(Guid battleId, SubmitActionRequest request, CancellationToken ct);
-    Task<ActionOutcomeResponse>     SubmitWildTurnAsync(Guid battleId, CancellationToken ct);
-    Task<RunAttemptResponse>        TryRunAsync(Guid battleId, Guid trainerId, CancellationToken ct);
+`OnlineOfflineBattleDomainService` selects the active implementation from `IGameDataRepository.IsPlayingOnline` at call time — no restart needed to switch modes.
 
-    // Legacy methods — kept for NPC battle compatibility; not used in wild-battle flow
-    Task<BattleRoundKeyResponse>    GetRoundKeyAsync(Guid battleId, Guid trainerId, CancellationToken ct);
-    Task<SubmitBattleInputResponse> SubmitInputAsync(Guid battleId, SubmitBattleInputRequest request, CancellationToken ct);
-}
-```
-
-`StartBattleResponse` includes `ActiveTrainerId` and `RoundKey` fields so the turn loop can begin immediately without a separate `GetRoundKeyAsync` call.
-
-The base URL is read from `game_config.yaml` via `GameConfigurationKeys.BattleServerHttpAddress`.
+The HTTP base URL is read from `game_config.yaml` via `GameConfigurationKeys.BattleServerHttpAddress`.
 
 ## Arena System
 
@@ -172,7 +155,7 @@ Use **CR > Battle > Create Placeholder Arena** (editor menu) to scaffold a new a
 
 ## `SpawnerEncounterBehaviour`
 
-Enhanced in Phase 3 to include an encounter delay and zone-exit cancellation.
+Adds a random 2–5 s delay before triggering a battle. If the player exits the trigger zone during the delay the encounter is cancelled.
 
 | Inspector Field | Type | Default | Description |
 |-----------------|------|---------|-------------|
@@ -186,14 +169,13 @@ On `OnTriggerEnter` (Player tag), a coroutine `EncounterDelayRoutine` is started
 
 ## Wild Battle AI
 
-`LocalWildBattleAIService` (`IWildBattleAIService`) provides client-side wild battle AI decisions. The server's `SubmitWildTurnAsync` endpoint uses `WildBattleAIDomainService` in online mode; this service runs locally for offline scenarios.
+`BattleCoordinator` injects `IWildBattleAIDomainService` (the DLL interface). The same `WildBattleAIDomainService` runs both client-side (offline) and server-side (via the `/wild-turn` endpoint in online mode).
 
 Decision priority:
-1. If `currentHp / maxHp < 30%` AND a healing item is available in `wildTrainerItems` → use item (type 2)
-2. 20% random chance → use a Status-category ability if one exists in `wildAbilities`
-3. Default → use the highest-power non-Status ability from `wildAbilities`
+1. 20% random chance → use a Status-category ability if one exists
+2. Default → use the highest-power non-Status ability
 
-The backend `WildBattleAIDomainService` omits the HP/healing check (it queries abilities globally, not per-creature). The two AIs produce equivalent behaviour when no healing items are available.
+Abilities are loaded from the wild creature's progression set at its current level. Falls back to a global paginated query when no set is assigned.
 
 ## `BattleAnimationConfig`
 
@@ -216,33 +198,51 @@ Assign a `CreatureAnimationProfile` to `BattleCoordinator._defaultAnimProfile`. 
 
 ## Offline Battle Stack
 
-The offline battle stack allows all battle mechanics to run locally without a server. It mirrors the online flow and stores battle state in the local SQLite database for crash recovery.
+The offline battle stack uses the DLL's `BattleDomainService` (same class the backend uses) backed by a local SQLite file (`game.bytes`). Battle tables are created by `DatabaseMigrationRunner.MigrateDomain` on startup.
 
-| Class | Namespace | Role |
-|-------|-----------|------|
-| `IBattleRepository` | `CR.Game.Battle.Offline` | Interface for SQLite battle persistence |
-| `SqliteOfflineBattleRepository` | `CR.Game.Battle.Offline` | CREATE TABLE IF NOT EXISTS on construction; stores battles, rounds, creature states, action log |
-| `OfflineBattleService` | `CR.Game.Battle.Offline` | Domain logic: speed-based first-mover, `BattleResolver` damage, escape RNG, wild creature soft-delete |
-| `OfflineBattleClient` | `CR.Game.Battle.Offline` | `IBattleClient` for offline mode; delegates to `OfflineBattleService` and `IWildBattleAIService` |
-| `OnlineOfflineBattleClient` | `CR.Game.Battle` | Routes to `BattleClientUnityHttp` (online) or `OfflineBattleClient` (offline) based on `IGameDataRepository.IsPlayingOnline` |
+| Component | Role |
+|-----------|------|
+| `CR.Game.Data.Sqlite.BattleRepository` | DLL SQLite implementation of `IBattleRepository`; stores battles, rounds, creature states, action log in `game.bytes` |
+| `CR.Game.Domain.Services.Implementation.Battle.BattleDomainService` | DLL domain service; full offline battle logic — speed-based first-mover, `BattleResolver` damage, escape RNG, wild creature soft-delete |
+| `BattleHttpDomainAdapter` | Online path: implements `IBattleDomainService` against the REST API |
+| `OnlineOfflineBattleDomainService` | Routes calls to `battle_online` or `battle_offline` binding based on `IsPlayingOnline` |
 
-Tables created by `SqliteOfflineBattleRepository`: `battle`, `battle_round`, `battle_creature_state`, `battle_action_log`. These live in the same SQLite file as the trainer database.
+> **Note:** The legacy Unity-side stack (`IBattleClient` / `BattleClientUnityHttp` / `OfflineBattleClient` / `OfflineBattleService` / `IBattleRepository` under `CR.Game.Battle.Offline` / `SqliteOfflineBattleRepository`) was removed in favour of the DLL's `IBattleDomainService`. New code must not reintroduce those types.
 
-`OfflineBattleService.StartBattleAsync` seeds initial `BattleCreatureStateRecord` rows for each team (slot 1 is `is_active=true`), determines first-mover by creature Speed (tie → trainer1), creates round 1.
-
-`OfflineBattleService.SubmitActionAsync` handles action types:
-- Type 0 (Ability) — uses `BattleResolver.Resolve` for damage/miss; persists updated states; calls `DeleteCreature` on wild creatures when defeated
-- Type 4 (Run) — computes escape chance `clamp(50 + (atkSpeed - defSpeed) * 2, 10, 95)`, rolls RNG seeded from `battleId.GetHashCode() ^ roundNumber`
+The `game.bytes` file is keyed as `LocalDataSources.GameOfflineRepository` and resolved to `database_path_game` in `game_config.yaml` (defaults to `{persistentDataPath}/databases/gameOffline.bytes`).
 
 ## `BattleHUD`
 
-`BattleHUD` (`Assets/CR/UI/Battle/BattleHUD.cs`) is a MonoBehaviour that subscribes to `BattleEvents` and updates uGUI elements. Requires a Canvas with:
-- `PlayerPanel/CreatureName` (Text) and `PlayerPanel/HpBar` (Slider)
-- `OpponentPanel/CreatureName` (Text) and `OpponentPanel/HpBar` (Slider)
-- `ActionMenu/` with `BattleButton` and `RunButton` (Buttons; hidden on non-player turns)
-- `BattleLog/LogText` (Text; shows last 4 battle events)
+`BattleHUD` (`Assets/CR/UI/Battle/BattleHUD.cs`) is a MonoBehaviour overlay built with **UI Toolkit** (UIDocument). It subscribes to `BattleEvents` and never calls the API directly.
 
-`BattleButton` calls `IBattleCoordinator.SubmitPlayerAction("[{\"type\":0}]")` (default attack). `RunButton` submits type 4 (Run). The `BattleActionType` enum values are: Ability=0, Item=2, Switch=3, Run=4. A full implementation should open an ability picker sub-menu.
+**Files:**
+- `BattleHUD.cs` — MonoBehaviour; queries elements and wires button callbacks
+- `BattleBagPanelHandler.cs` — MonoBehaviour; manages the in-battle Items/Bag panel
+- `Resources/BattleHUD.uxml` — layout: opponent panel (top-right), player panel (bottom-left), battle log, action menu (Battle / Items / Run), ability panel
+- `Resources/BattleHUD.uss` — styles; root has `picking-mode="Ignore"` so clicks pass through to the 3D world
+- `UI/Battle/BattleBagPanel.uxml` — bag panel layout (item list, party slots, confirm/cancel)
+
+**Setup:**
+1. Add a `UIDocument` + `BattleHUD` MonoBehaviour to a GameObject in the scene. `BattleHUD.Awake` auto-loads `Resources/BattleHUD.uxml` if none is assigned.
+2. Add `BattleBagPanelHandler` as a second component on the **same GameObject** (or a sibling with its own UIDocument). Assign its `UIDocument` field.
+3. On the `BattleHUD` component, assign the `BattleBagPanelHandler` component to the **Bag Panel Handler** SerializeField.
+
+The root is hidden (`DisplayStyle.None`) on start and shown when `BattleEvents.BattleStarted` fires.
+
+**Action menu buttons:** Battle (opens ability grid) → Items (opens bag panel via `BattleBagPanelHandler.Open`) → Run (submits `[{"type":4}]`)
+
+**HP bars** are custom `VisualElement` fills; width is set via `style.width = Length.Percent(ratio * 100f)` with a USS `transition-duration: 0.3s` for smooth animation.
+
+**Turn flow:**
+1. `PlayerTurnStarted` fires → `ActionMenu` shown; ability list cached in `_currentAbilities`; ability buttons pre-populated
+2. Player presses **Battle** → `ActionMenu` hidden, `AbilityPanel` shown (2×2 grid of up to 4 abilities)
+3. Player presses an ability → `AbilityPanel` hidden; `SubmitPlayerAction` called with `[{"type":0,"abilityId":"<guid>","targetCreatureId":"<opponentId>"}]`
+4. Player presses **Items** → `ActionMenu` hidden, `BattleBagPanelHandler.Open` called; on confirm `BattleCoordinator.SubmitPlayerAction` is called (or `EndBattle` on capture)
+5. Player presses **Run** → submits `[{"type":4}]`
+
+Ability button labels show `"Name (Power)"` e.g. `"Fire Bolt (50)"`. Buttons with no ability are disabled and styled with `.ability-btn--disabled`. `BattleActionType` enum: Ability=0, Item=2, Switch=3, Run=4.
+
+`playerAbilities` is populated by `BattleCoordinator.BuildAbilityListAsync` — it queries `IAbilityRepository.GetAbilitiesForProgressionSetAtLevelAsync` for the player's active creature and maps to `WildAbilityDto` for the HUD. `BattleStateDto` (DLL type) does not include ability lists; they are assembled client-side.
 
 ## `WildBattleRequest`
 
@@ -263,7 +263,7 @@ public record WildBattleRequest(
 1. Player enters `NpcInteractionBehaviour` trigger radius and presses **E**
 2. `NpcInteractionBehaviour` checks `NpcTrainerBehaviour.CanBattle` and that no creature grant is pending
 3. Builds an `NpcBattleRequest` and calls `BattleCoordinator.StartNpcBattle(request)`
-4. `BattleCoordinator` calls `IBattleClient.StartBattleAsync` → `GetRoundKeyAsync` → fires `OnBattleStarted`
+4. `BattleCoordinator` calls `IBattleDomainService.StartBattleAsync` → `GetBattleStartResultAsync` → fires `OnBattleStarted`
 
 ## Wild Creature Battle Flow
 
@@ -275,7 +275,7 @@ public record WildBattleRequest(
 
 ## Gotchas
 
-**`CurrentTrainerId` null check.** `BattleCoordinator` verifies a trainer session is active before calling `IBattleClient`. If `GameSessionManager.CurrentTrainerId` is null, the call is dropped and an error is logged.
+**`CurrentTrainerId` null check.** `BattleCoordinator` verifies a trainer session is active before calling `IBattleDomainService`. If the session trainer ID is null, the call is dropped and an error is logged.
 
 **Battle already in progress.** `BattleCoordinator` guards against concurrent starts with a `_battleInProgress` flag. A second `StartWildBattle` while a battle is active is ignored with a warning.
 
@@ -285,7 +285,7 @@ public record WildBattleRequest(
 
 **`OperationCanceledException` in the turn loop.** When `EndBattle` cancels the `_playerActionSource` TCS during a forced exit, the awaited `_playerActionSource.Task` throws `OperationCanceledException`. A dedicated `catch (OperationCanceledException)` block before the generic `catch (Exception ex)` swallows this silently — it is not an error, and `EndBattle` in `finally` handles cleanup.
 
-**`IBattleClient` server address.** `BattleClientUnityHttp` reads `game_config.yaml` key `battle_server_http_address`. In local dev this is `http://localhost:8080`. Ensure the AIO host is running.
+**`BattleHttpDomainAdapter` server address.** Reads `game_config.yaml` key `battle_server_http_address`. In local dev this is `http://localhost:8080`. Ensure the AIO host is running.
 
 **`BattleArenaRegistry` requires world init.** Arenas are indexed during `IWorldInitializable.InitializeAsync`. If a battle starts before world init completes, `TryGetArena` returns false and the arena step is skipped gracefully.
 
@@ -295,4 +295,4 @@ public record WildBattleRequest(
 - [Content Registry](?page=unity/08-content-registry) — content keys and `SpawnerDefinition`
 - [World Behaviours](?page=unity/03-world-behaviours) — `SpawnerWorldBehaviour`, `IWorldInitializable`
 - [NPC Interaction](?page=unity/04-npc-interaction) — `NpcInteractionBehaviour` fires `OnBattleRequested`
-- [Dependency Injection](?page=unity/02-dependency-injection) — `IBattleCoordinator` and `IBattleClient` bindings
+- [Dependency Injection](?page=unity/02-dependency-injection) — `IBattleCoordinator` and `IBattleDomainService` bindings

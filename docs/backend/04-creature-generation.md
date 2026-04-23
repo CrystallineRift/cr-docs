@@ -65,8 +65,8 @@ public class CreateCreatureRequest
 
 The implementation in `CreatureGenerationService` follows these steps:
 
-1. **Validate** — calls `ValidateRequestAsync`; throws `ArgumentException` on failure
-2. **Fetch base creature** — `ICreatureRepository.GetCreature(BaseCreatureId)`; throws if not found
+1. **Validate** — calls `ValidateRequestAsync`; throws `ArgumentException("Invalid creature creation request")` on failure. Logs a specific `LogWarning` message per check so the reason is visible in the console.
+2. **Fetch base creature** — `ICreatureRepository.GetCreature(BaseCreatureId)`; throws `ArgumentException` if null
 3. **Fetch growth profile** — `IGrowthProfileRepository.Get(GrowthProfileId)`; throws if not found
 4. **Build `GeneratedCreature`** — assigns all fields, calls `CalculateExperienceForLevel(level)`, calls `GenerateSigningKeyId(trainerId, baseCreatureId)`
 5. **Calculate stats** — `CalculateBaseStats(creature, baseCreature, growthProfile, level)`
@@ -133,10 +133,24 @@ This method bridges the Spawner system to the creature generation pipeline:
 
 1. Validate `spawnerTemplateId` and `trainerId` are non-empty
 2. Fetch `CreatureSpawnerTemplate` — throws `InvalidOperationException` if not found or not active
-3. `SelectBaseCreatureFromTemplate` — returns `template.BaseCreatureId`; throws if empty
-4. `DetermineLevelFromTemplate` — picks a random level in `[template.MinLevel, template.MaxLevel]` using `seed` if provided
-5. `SelectGrowthProfileFromTemplate` — returns `template.GrowthProfileId`; throws if empty
+3. `ResolveBaseCreatureIdAsync` — resolves the creature UUID with stale-reference fallback (see below)
+4. `DetermineLevelFromTemplate` — picks a random level in `[template.MinLevel, template.MaxLevel]` using `seed` if provided; defaults to level 1 if no range set
+5. `ResolveGrowthProfileIdAsync` — resolves the growth profile UUID with stale-reference fallback (see below)
 6. Builds `CreateCreatureRequest` with `Gender = Unknown`, `FirstNature = default(Nature)`, and delegates to `CreateAsync`
+
+### Stale-UUID Fallback {#staleuuid-fallback}
+
+When the cr-api backend Postgres database is rebuilt (e.g., during development or a migration rollback), the UUIDs assigned to `BaseCreature` and `GrowthProfile` rows change. The SQLite offline cache (Unity) stores these UUIDs in `creature_spawner_template.base_creature_id` and `growth_profile_id`. If the server then re-syncs content with new UUIDs, the stored foreign keys become stale.
+
+`ResolveBaseCreatureIdAsync` and `ResolveGrowthProfileIdAsync` handle this transparently:
+
+1. **Fast path** — look up by UUID; return immediately if found.
+2. **Fallback** — if not found AND the template stores `creature_content_key` / `growth_profile_name`, look up by that key/name instead.
+3. **Self-heal** — update `template.BaseCreatureId` / `template.GrowthProfileId` with the newly resolved UUID and persist via `UpdateCreatureSpawnerTemplateAsync`. Subsequent calls hit the fast path.
+
+The fallback keys (`creature_content_key`, `growth_profile_name`) are written to `creature_spawner_template` by `LocalSpawnerSyncClient` when syncing zone configs and `SpawnerDefinition` SOs (migration M5014).
+
+> **Prevention:** `ServerContentSyncService.SyncCreaturesAsync` and `SyncGrowthProfilesAsync` now use `ON CONFLICT(content_key/name) DO UPDATE SET … (without id)` instead of `INSERT OR REPLACE`. This preserves existing UUIDs across re-syncs, eliminating the problem for healthy databases going forward.
 
 ## `BaseCreature` Model
 
@@ -148,6 +162,7 @@ This method bridges the Spawner system to the creature generation pipeline:
 | `ContentKey` | `string` | Designer-facing identifier (e.g. `"cindris"`) — NOT NULL, UNIQUE (enforced by M1015) |
 | `AssetKey` | `string?` | Addressables address or Resources path for the primary art asset (e.g. `"creatures/cindris"`). Replaced `AssetId: Guid?` in migration M1016. |
 | `AbilityProgressionSetId` | `Guid?` | FK to `ability_progression_set_entry.ability_progression_set_id`; the default progression set for this species. Added by M1017. Null means no default set assigned. |
+| `GrowthProfileId` | `Guid?` | FK to `growth_profile`; the default growth profile for this species. Added by M1018. Null means no growth profile is pinned to the template (spawner template overrides still apply). |
 | `BaseHitPoints` | `int` | Base stat used by the generation formula |
 | `BaseAttack` | `int` | — |
 | `BaseDefense` | `int` | — |
@@ -155,7 +170,12 @@ This method bridges the Spawner system to the creature generation pipeline:
 | `BaseSpecialAttack` | `int` | — |
 | `BaseSpecialDefense` | `int` | — |
 
-> **Migration note:** `M1016ReplaceAssetIdWithAssetKeyOnCreature` dropped the `asset_id UUID` column and added `asset_key TEXT` in its place. If you have existing data with `asset_id` values, those UUIDs must be translated to string keys via the `game_assets` table before running M1016.
+> **Migration notes:**
+> - `M1016ReplaceAssetIdWithAssetKeyOnCreature` dropped the `asset_id UUID` column and added `asset_key TEXT`.
+> - `M1017AddAbilityProgressionSetIdToBaseCreature` added `ability_progression_set_id UUID NULL`.
+> - `M1018AddGrowthProfileIdToBaseCreature` added `growth_profile_id UUID NULL`, linking a species template to its default growth curve.
+> - `M1019NormalizeCreatureIdsToLowercase` normalises existing `id` values in the `creature` table to lowercase hyphenated format. Required because Dapper's `GuidTypeHandler` always writes lowercase UUIDs; migration seed data used uppercase literals, causing `WHERE id = @id` mismatches on SQLite's case-sensitive TEXT comparison.
+> - `M1020NormalizeGrowthProfileIdsToLowercase` applies the same lowercase normalisation to `growth_profile.id`.
 
 ## `GeneratedCreature` Model
 
@@ -298,6 +318,91 @@ If `abilitySetId` is null (no progression sets configured), the creature is crea
 If `abilitySetId` is set but no `ability_progress` rows exist for that set at the requested level, the creature is created with null abilities (the failure is logged but does not throw).
 
 **Edge case:** If `GetAvailableAbilityProgressionSetsAsync` is called for a base creature, it returns set IDs extracted from `ability_progress.set_name` where the set_name parses as a GUID. If designers use non-GUID set names (e.g. `"starter_set"`), they will not appear in this list. Use UUID-formatted set names stored in the progression entries.
+
+## Ability Status Condition Endpoints
+
+Three endpoints manage inline status conditions on abilities. All use inline Dapper SQL against the `CreatureDatabase` connection string (not the keyed `IAbilityRepository`).
+
+### `GET /api/v1/abilities`
+
+Returns a paginated list of abilities with an embedded `conditions` array on each ability. The response is enriched via a multi-join query:
+
+```
+ability_status_conditions → status_conditions → status_condition_stat_changes → stat_changes
+```
+
+Conditions and stat changes are filtered to `deleted = false`. The join uses `ANY(@ids)` for a single round-trip regardless of page size.
+
+Response shape per ability:
+```json
+{
+  "id": "...",
+  "name": "Flame Pounce",
+  "elementType": 1,
+  "conditions": [
+    {
+      "name": "Burn",
+      "applyToUser": false,
+      "probability": 30,
+      "durationTurns": 3,
+      "statChanges": [
+        { "impactedStat": "Attack", "calculation": "Subtract", "amountMin": 10, "amountMax": 10, "durationTurns": 3 }
+      ]
+    }
+  ]
+}
+```
+
+`durationTurns` on each `statChange` is `-1` when `duration_kind != 'Turns'` or `duration = -1`.
+
+### `POST /api/v1/abilities/{id}/sync-conditions`
+
+Atomically replaces all status conditions for an ability. Body is a JSON array of condition entries:
+
+```json
+[
+  {
+    "name": "Burn",
+    "applyToUser": false,
+    "probability": 30,
+    "durationTurns": 3,
+    "statChanges": [
+      { "impactedStat": "Attack", "calculation": "Subtract", "amountMin": 10, "amountMax": 10 }
+    ]
+  }
+]
+```
+
+**Cascade order (teardown):**
+1. For each old `status_condition_id`: soft-delete its `stat_changes`, hard-DELETE `status_condition_stat_changes`
+2. Hard-DELETE `ability_status_conditions` for this ability
+3. Soft-delete old `status_conditions`
+
+**Cascade order (rebuild):**
+1. INSERT new `status_conditions` (`type = 'ability'`, `duration_turns` = request value or NULL if -1)
+2. INSERT new `stat_changes` (`duration_kind = 'Turns'`, `duration = condition.DurationTurns`)
+3. INSERT `status_condition_stat_changes` join rows
+4. INSERT `ability_status_conditions` join rows
+
+Returns `{ "conditionCount": N }` on success. Returns 404 if the ability does not exist or is soft-deleted.
+
+> **Schema note:** `ability_status_conditions` and `status_condition_stat_changes` have no `deleted` column; they are hard-deleted during sync and rebuild.
+
+### `GET /ability/status_conditions`
+
+Returns a paginated list of all status conditions (not scoped to a specific ability). Used by the Unity `ItemDefinitionEditor` condition picker to populate `CureStatus` and `HeldStatusImmune` dropdowns.
+
+Query params: `offset` (default 0), `limit` (default 100). Uses `[FromKeyedServices("AbilitiesDB")] IAbilityRepository.GetStatusConditionsPaginated(offset, limit)`. Returns `IEnumerable<BaseStatusCondition>`.
+
+### `DELETE /api/v1/abilities/{id}`
+
+Soft-deletes an ability and cascades through all its conditions:
+
+1. 404 if the ability is not found or is already deleted
+2. Same cascade teardown as sync-conditions (hard-delete join rows, soft-delete conditions and stat changes)
+3. Soft-deletes the `abilities` row itself (`deleted = true, updated_at = now()`)
+
+Returns `{ "id": "..." }` on success.
 
 ## Creature List and Upsert Endpoints
 

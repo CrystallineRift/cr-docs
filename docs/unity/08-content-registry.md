@@ -259,6 +259,7 @@ Add entries to `ContentKeys` whenever a new creature, NPC, or spawner is created
 | `baseSpecialDefense` | int | Base Special Defense stat |
 | `baseSpeed` | int | Base Speed stat |
 | `abilityProgressionSetId` | string | Optional GUID referencing the `AbilityProgressionSet` that drives this creature's level-up moves. Empty = none. |
+| `growthProfileId` | string | Optional GUID referencing the `GrowthProfile` that governs how this creature's stats scale per level. Empty = none. Synced bidirectionally with the backend `creature.growth_profile_id` column (added by M1018). |
 
 ### `SpawnerDefinition` Inspector Fields
 
@@ -409,7 +410,7 @@ foreach (var key in _registry.CreatureKeys)
 
 | Type | Fields |
 |------|--------|
-| `ServerCreatureDto` | `contentKey`, `name`, `description`, `assetKey`, `elementType` (string), `abilityProgressionSetId`, `updatedAt`, and all base stat ints |
+| `ServerCreatureDto` | `contentKey`, `name`, `description`, `assetKey`, `elementType` (string), `abilityProgressionSetId`, `growthProfileId`, `updatedAt`, and all base stat ints |
 | `ServerNpcDto` | `contentKey`, `npcType` (string) |
 | `ServerSpawnerDto` | `contentKey`, `name`, `description`, `battleArenaKey`, `maxCapacity`, `spawnCooldownSeconds`, `updatedAt` |
 
@@ -474,7 +475,7 @@ The **Content Studio** is a unified EditorWindow (`CR/Core/Data/Editor/ContentSt
 Window → CR → Content Studio
 ```
 
-**Tab layout (7 tabs):**
+**Tab layout (9 tabs):**
 
 | Index | Tab | Data Source | Sync |
 |-------|-----|-------------|------|
@@ -485,6 +486,8 @@ Window → CR → Content Studio
 | 4 | Abilities | `AssetDatabase.FindAssets("t:AbilityConfig")` | `AbilityEditorSyncHelper` |
 | 5 | Progression Sets | `AssetDatabase.FindAssets("t:AbilityProgressionSetConfig")` | `AbilityEditorSyncHelper` |
 | 6 | Growth Profiles | `AssetDatabase.FindAssets("t:GrowthProfileConfig")` | `AbilityEditorSyncHelper` |
+| 7 | Quests | `AssetDatabase.FindAssets("t:QuestDefinition")` | `QuestEditorSyncHelper` |
+| 8 | Conditions | Live server fetch via `GET /api/v1/status-conditions` | `AbilityEditorSyncHelper` |
 
 **Features:**
 - **Provider header** — auto-finds the `ContentDefinitionProvider` asset on open; `[Find]` re-runs the search; count badge shows all 4 registry totals (e.g. `5C · 3I · 2N · 1S`)
@@ -494,6 +497,7 @@ Window → CR → Content Studio
 - **`Unregister` button** — shown in the detail panel toolbar for tabs 0–3; removes from the provider array while keeping the `.asset` file. For Creatures and Spawners, a dialog appears after unregistering asking "Also delete from server?" — choosing **Delete from server** calls `ContentCreatorSyncHelper.DeleteCreature/DeleteSpawner`; any server-side block (e.g. 409 creature guard) is surfaced in a follow-up dialog.
 - **`↕ Sync` button** — available on all tabs except Items; triggers the bidirectional sync review workflow
 - **File-dialog `New` button** (tabs 4–6) — opens a save dialog to create a new `AbilityConfig`, `AbilityProgressionSetConfig`, or `GrowthProfileConfig` SO
+- **Status Conditions tab (8)** — server-browser with no local SO; `↻ Fetch from Server` loads all conditions; `+ New Condition` / `✎ Edit` open an inline form with name, applyToUser, probability, duration, and a per-condition stat changes sub-list; `Delete` soft-deletes on server. Backed by `AbilityEditorSyncHelper.FetchAllStatusConditions/CreateStatusCondition/UpdateStatusCondition/DeleteStatusCondition` and new `POST /PUT /DELETE /api/v1/status-conditions` endpoints.
 
 `ContentStudioTool.AddConstantToContentKeys(contentKey, contentType)` is a `public static` method so tooling such as `ContentAuditTool` can trigger ContentKeys.cs updates without opening the window.
 
@@ -575,7 +579,7 @@ Each definition type has a `[CustomEditor]` that replaces the default Inspector:
 | Editor class | Target type | Color |
 |---|---|---|
 | `CreatureDefinitionEditor` | `CreatureDefinition` | Deep red banner + element color pill |
-| `ItemDefinitionEditor` | `ItemDefinition` | Steel blue banner |
+| `ItemDefinitionEditor` | `ItemDefinition` | Steel blue banner; structured effect/trigger param fields (typed dropdowns — no raw JSON TextArea); condition picker via `GET /ability/status_conditions` |
 | `NpcDefinitionEditor` | `NpcDefinition` | Teal banner |
 | `SpawnerDefinitionEditor` | `SpawnerDefinition` | Dark green banner |
 | `SpawnerZoneConfigEditor` | `SpawnerZoneConfig` | Blue banner, pool/template foldouts, SO reference for `abilityProgressionSet` |
@@ -828,6 +832,7 @@ The Inspector renders a two-column grid for the six stat fields and shows a live
 | `ServerGrowthProfileDto` | `id`, `name`, `description`, `experienceGrowth` (float), `hitPointsGrowth`, `attackGrowth`, `defenseGrowth`, `specialAttackGrowth`, `specialDefenseGrowth`, `speedGrowth`, `updatedAt` |
 | `ServerProgressionSetDto` | `id`, `name`, `description`, `isActive`, `updatedAt`, `entries` (list of `ServerProgressionEntryDto`) |
 | `ServerProgressionEntryDto` | `level`, `abilityId`, `abilitySlot` |
+| `ServerStatusConditionDto` | `id`, `name`, `applyToUser`, `probability`, `durationTurns` (nullable int), `statChanges` (list of `ServerStatChangeDto`) |
 
 **Fetch methods** — blocking GET calls using `System.Text.Json.JsonDocument` (not `JsonUtility`; required for top-level JSON arrays):
 
@@ -836,6 +841,15 @@ The Inspector renders a two-column grid for the six stat fields and shows a live
 | `FetchAllAbilities()` | `GET /api/v1/abilities` |
 | `FetchAllGrowthProfiles()` | `GET /api/v1/growth-profiles` |
 | `FetchAllProgressionSets()` | `GET /api/v1/ability-progression/sets` |
+| `FetchAllStatusConditions()` | `GET /api/v1/status-conditions?limit=500` |
+
+**Status condition CRUD** — used by the Content Studio Conditions tab (tab 8):
+
+| Method | HTTP call | Returns |
+|--------|-----------|---------|
+| `CreateStatusCondition(dto)` | `POST /api/v1/status-conditions` | `(bool ok, string message, string id)` |
+| `UpdateStatusCondition(id, dto)` | `PUT /api/v1/status-conditions/{id}` | `(bool ok, string message)` |
+| `DeleteStatusCondition(id)` | `DELETE /api/v1/status-conditions/{id}` | `(bool ok, string message)` |
 
 Each returns `(bool ok, string error, List<T> data)`.
 

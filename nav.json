@@ -55,6 +55,11 @@
     "path": "backend/10-asset-management"
   },
   {
+    "section": "Introduction",
+    "title": "Changelog",
+    "path": "changelog"
+  },
+  {
     "section": "Guides",
     "title": "Scene Setup Overview",
     "path": "guides/01-scene-setup-overview"
@@ -123,5 +128,35 @@
     "section": "Unity",
     "title": "Addressables Setup",
     "path": "unity/09-addressables-setup"
+  },
+  {
+    "section": "Unity",
+    "title": "Unity — Player Menu UI",
+    "path": "unity/10-player-menu-ui"
+  },
+  {
+    "section": "Unity",
+    "title": "Dialogue System Integration",
+    "path": "unity/11-dialogue-integration"
+  },
+  {
+    "section": "Unity",
+    "title": "Scriptable Objects",
+    "path": "unity/12-scriptable-objects"
+  },
+  {
+    "section": "Unity",
+    "title": "Battle Bag Panel",
+    "path": "unity/13-battle-bag-ui"
+  },
+  {
+    "section": "Unity",
+    "title": "Capture Mechanic",
+    "path": "unity/14-capture-mechanic"
+  },
+  {
+    "section": "Unity",
+    "title": "Event Wiring",
+    "path": "unity/15-event-wiring"
   }
 ]
