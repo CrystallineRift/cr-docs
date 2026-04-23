@@ -58,9 +58,9 @@ public void Init(
 The panel is opened from `BattleHUD` via the Bag button:
 
 ```csharp
-// In BattleHUD
-var bagPanel = FindObjectOfType<BattleBagPanelHandler>();
-bagPanel.Open(trainerId, playerCreatureId, battleId, roundNumber);
+// In BattleHUD — _bagPanelHandler is assigned in the Inspector via a [SerializeField]
+// reference ("Bag Panel Handler"). Do not call FindObjectOfType here.
+_bagPanelHandler.Open(trainerId, playerCreatureId, battleId, roundNumber);
 ```
 
 ## Item Display Logic
