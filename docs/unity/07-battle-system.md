@@ -217,7 +217,8 @@ The `game.bytes` file is keyed as `LocalDataSources.GameOfflineRepository` and r
 
 **Files:**
 - `BattleHUD.cs` — MonoBehaviour; queries elements and wires button callbacks
-- `BattleBagPanelHandler.cs` — MonoBehaviour; manages the in-battle Items/Bag panel
+- `BattleBagPanelHandler.cs` — MonoBehaviour; manages the in-battle Items/Bag panel. Reads pre-cached data from `TeamSync.Team` and `InventorySync.Inventory` — no async fetch on `Open()`.
+- `Battle/BattleSync.cs` — MonoBehaviour; subscribes to `BattleEvents` and pushes HP/turn state into Obvious.Soap `IntVariable`/`BoolVariable` assets. Implements `IDomainSync` (no-op `RefreshAsync`). Assign five SOAP variables in the inspector: `PlayerHp`, `PlayerHpMax`, `EnemyHp`, `EnemyHpMax`, `IsPlayerTurn`.
 - `Resources/BattleHUD.uxml` — layout: opponent panel (top-right), player panel (bottom-left), battle log, action menu (Battle / Items / Run), ability panel
 - `Resources/BattleHUD.uss` — styles; root has `picking-mode="Ignore"` so clicks pass through to the 3D world
 - `UI/Battle/BattleBagPanel.uxml` — bag panel layout (item list, party slots, confirm/cancel)
@@ -226,6 +227,8 @@ The `game.bytes` file is keyed as `LocalDataSources.GameOfflineRepository` and r
 1. Add a `UIDocument` + `BattleHUD` MonoBehaviour to a GameObject in the scene. `BattleHUD.Awake` auto-loads `Resources/BattleHUD.uxml` if none is assigned.
 2. Add `BattleBagPanelHandler` as a second component on the **same GameObject** (or a sibling with its own UIDocument). Assign its `UIDocument` field.
 3. On the `BattleHUD` component, assign the `BattleBagPanelHandler` component to the **Bag Panel Handler** SerializeField.
+4. Add a `BattleSync` MonoBehaviour to any persistent GameObject in the battle scene. Assign its five SOAP variable slots in the Inspector.
+5. Ensure `TeamSync` and `InventorySync` MonoBehaviours are present in the scene (see [Domain Sync Pattern](16-domain-sync-pattern.md)).
 
 The root is hidden (`DisplayStyle.None`) on start and shown when `BattleEvents.BattleStarted` fires.
 

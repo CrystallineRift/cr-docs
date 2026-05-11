@@ -236,10 +236,25 @@
         "cr-api-unity/Assets/CR/UI/Battle/BattleHUD.cs",
         "cr-api-unity/Assets/CR/Game/World/Behaviours/NpcInteractionBehaviour.cs",
         "cr-api-unity/Assets/CR/Game/World/Behaviours/SpawnerEncounterBehaviour.cs",
-        "cr-api-unity/Assets/CR/Game/World/Behaviours/SpawnerWorldBehaviour.cs"
+        "cr-api-unity/Assets/CR/Game/World/Behaviours/SpawnerWorldBehaviour.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/BattleSync.cs",
+        "cr-api-unity/Assets/CR/UI/Battle/BattleBagPanelHandler.cs"
       ]
     },
-    "description": "BattleCoordinator sequential turn loop, BattleHttpDomainAdapter + OnlineOfflineBattleDomainService stack, BattleEvents static events, Arena system, BattleHUD, StartNpcBattle/StartWildBattle, SpawnerEncounterBehaviour with encounter delay"
+    "description": "BattleCoordinator sequential turn loop, BattleHttpDomainAdapter + OnlineOfflineBattleDomainService stack, BattleEvents static events, Arena system, BattleHUD, BattleSync SOAP bridge, StartNpcBattle/StartWildBattle, SpawnerEncounterBehaviour with encounter delay"
+  },
+  "unity/16-domain-sync-pattern": {
+    "docPath": "docs/unity/16-domain-sync-pattern.md",
+    "repos": {
+      "cr-data": [
+        "cr-api-unity/Assets/CR/Game/World/IDomainSync.cs",
+        "cr-api-unity/Assets/CR/Game/World/Behaviours/TeamSync.cs",
+        "cr-api-unity/Assets/CR/Game/World/Behaviours/InventorySync.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/BattleSync.cs",
+        "cr-api-unity/Assets/CR/Core/DI/LocalDevGameInstaller.cs"
+      ]
+    },
+    "description": "IDomainSync pattern: BattleSync (SOAP bridge via events), TeamSync (world-scoped team cache), InventorySync (world-scoped backpack cache), Zenject bindings"
   },
   "unity/08-content-registry": {
     "docPath": "docs/unity/08-content-registry.md",
