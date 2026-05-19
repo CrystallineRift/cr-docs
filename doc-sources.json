@@ -398,7 +398,10 @@
         "Game/CR.Game.Data.Migration/M8004CreateBattleTables.cs",
         "Game/CR.Game.Data.Migration/M8006AddActiveTurnToBattleRound.cs",
         "Creatures/CR.Creatures.Data.Migration/M1017AddAbilityProgressionSetIdToBaseCreature.cs",
+        "Creatures/CR.Creatures.Data.Migration/M1029CreateGeneratedCreatureStatusConditionsTable.cs",
         "Creatures/CR.Creatures.Data.Migration/M9003AddAnimationKeyToAbilities.cs",
+        "Creatures/CR.Creatures.Data/Interface/IGeneratedCreatureRepository.cs",
+        "Creatures/CR.Creatures.Data/GeneratedCreatureStatusCondition.cs",
         "Game/CR.Game.Data/Interface/IBattleRepository.cs",
         "Game/CR.Game.Data/Implementation/BaseBattleRepository.cs",
         "Game/CR.Game.Data.Postgres/BattleRepository.cs",
@@ -418,7 +421,7 @@
         "cr-api-unity/Assets/CR/Game/Battle/OnlineOfflineBattleDomainService.cs"
       ]
     },
-    "description": "Battle DB tables (battle, battle_round, battle_round_input, battle_creature_state, battle_action_log), IBattleRepository, BattleDomainService, BattleHttpDomainAdapter, REST endpoints, DI wiring, ability progression, animation_key + VFX/SFX keys on abilities"
+    "description": "Battle DB tables (battle with active creature IDs, battle_round, battle_round_input, battle_action_log), persistent HP/conditions on generated_creature_current_stats + generated_creature_status_conditions, IBattleRepository, IGeneratedCreatureRepository, BattleDomainService, BattleHttpDomainAdapter, REST endpoints, DI wiring, ability progression, animation_key + VFX/SFX keys on abilities"
   },
   "unity/11-dialogue-integration": {
     "docPath": "docs/unity/11-dialogue-integration.md",
