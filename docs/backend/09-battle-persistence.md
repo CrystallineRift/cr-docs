@@ -93,7 +93,7 @@ Persistent active status conditions per creature (hard-delete, composite PK). Wr
 
 Composite PK: `(generated_creature_id, status_condition_id)`.
 
-> **Note:** `battle_creature_state` and the per-battle condition/stat-change tables still exist in the schema and on `IBattleRepository`, but are no longer written by `BattleDomainService`. They will be removed in a follow-up migration.
+> **Note:** The legacy `battle_creature_state` table has been dropped (migration M8015) and the old per-battle creature-state / condition-change repository methods removed from `IBattleRepository`. HP and status conditions now live exclusively on the persistent creature tables above. The `battle_state_stat_changes` table survives for in-battle standalone stat changes and is now keyed directly by `(battle_id, creature_id)` (migration M8014).
 
 ### `battle_action_log`
 
@@ -127,8 +127,9 @@ Task<IReadOnlyList<BattleRoundInputRecord>> GetRoundInputsAsync(Guid battleId, i
 Task InsertActionLogAsync(BattleActionLogRecord entry);
 Task<IReadOnlyList<BattleActionLogRecord>> GetActionLogAsync(Guid battleId);
 
-// Standalone (in-battle, not condition-linked) stat changes for the new schema
+// Standalone (in-battle, not condition-linked) stat changes, keyed by (battle, creature)
 Task<IReadOnlyList<BattleStateStatChange>> GetStandaloneStatChangesByBattleCreatureAsync(Guid battleId, Guid creatureId);
+Task UpsertStandaloneStatChangesByBattleCreatureAsync(Guid battleId, Guid creatureId, IEnumerable<BattleStateStatChange> statChanges);
 ```
 
 Persistent HP and conditions are written through `IGeneratedCreatureRepository`:
