@@ -86,7 +86,7 @@ The artifact ships **two ways**:
 
 At **cold start** the client adopts the artifact: an atomic copy into the working game-data path, gated by a **schema-version check**. The gate **fails closed** — if the artifact's schema version is newer than the binary's migration set can understand, adoption is refused rather than risking a half-understood schema.
 
-> **Status:** The two-database split and the build-time artifact + integrity checks are in place. The Unity cold-start adopt (atomic copy + schema-version gate, reusing `AddressablesCatalogUpdater`) is tracked as **Part C-2** and is marked `TODO` in `DatabaseMigration.cs` / `LocalDataSources.cs`. Until it lands, the client runs the unified migrator against both files at startup (see [Project Setup — Hit Play](?page=unity/01-project-setup)).
+> **Status:** Implemented. The two-database split, the build-time artifact + integrity checks, and the cold-start adopt are all in place. `GameDataAdopter` (execution order -200) copies the bundled `game-data.bytes` from StreamingAssets into the working path via an atomic temp-and-rename, gated by a fail-closed schema-version check, before `DatabaseMigrations` (-100) migrates only the player-data + online-cache DBs. As a dev fallback, when no baked artifact is present the client migrates the game-data DB at startup instead (see [Project Setup — Hit Play](?page=unity/01-project-setup)). Remote artifact delivery via `AddressablesCatalogUpdater` is the next layer.
 
 ### How content is patched (no save loss)
 

@@ -331,7 +331,7 @@ A static `async Task<IGameContentRegistry> BuildAsync(manifestClient, fallbackPr
 
 Only compiled when the `CR_ADDRESSABLES` scripting define is active. Wraps `Addressables.CheckForCatalogUpdates` and `Addressables.UpdateCatalogs`. Call `AddressablesCatalogUpdater.UpdateAsync()` early in the startup flow — before any Addressables asset loads — to ensure remote catalog updates are applied. Add the `CR_ADDRESSABLES` define in **Project Settings → Player → Scripting Define Symbols** when `com.unity.addressables` is present in `manifest.json`.
 
-This same catalog-update path is what delivers **game-data content patches**: the baked `game-data.bytes` artifact ships as an Addressable, so pushing a newer game-data database is just another catalog update. The cold-start adopt (atomic copy of the artifact into the working game-data path, gated by a fail-closed schema-version check) is tracked as Part C-2. See [Content Pipeline (Two-Database Model)](?page=unity/17-content-pipeline).
+This same catalog-update path is what delivers **game-data content patches**: the baked `game-data.bytes` artifact ships as an Addressable, so pushing a newer game-data database is just another catalog update. The cold-start adopt (atomic copy of the artifact into the working game-data path, gated by a fail-closed schema-version check) is implemented in `GameDataAdopter`. See [Content Pipeline (Two-Database Model)](?page=unity/17-content-pipeline).
 
 ## DI Wiring
 
