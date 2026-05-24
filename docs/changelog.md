@@ -4,6 +4,27 @@ Reverse-chronological log of significant additions to the codebase. Each entry l
 
 ---
 
+## 2026-05-24
+
+### Two-database content pipeline — game-data artifact, spawner/NPC globalization
+
+The offline SQLite store is split into two databases with separate lifecycles: a read-only **game-data DB** (global authored content) and a mutable **player-data DB** (per-trainer saves). Content ships as a versioned `game-data.bytes` artifact and is patched via Addressables; player saves are migrated in place. Spawner and NPC content are globalized.
+
+**Backend (cr-api)**
+- `CR.Data.Migrations.Tool` (`Program.cs`) — default output renamed `crgame.bytes` → `game-data.bytes`; after running all migrations it runs **12 referential-integrity checks** (spawner/template/pool, ability progression, status-condition stat changes, quest template→objective/reward/requirement) and exits non-zero on any dangling content reference, failing the build.
+- `build-packages.sh` — generates the pre-built `game-data.bytes` (+ `game-data_schema_version.txt`) into `bin/unity-package/StreamingAssets/CR/`; aborts the package build if generation or the integrity checks fail.
+- `M5016RetirePerTrainerSpawner` — soft-deletes per-trainer spawner clones (`account_id`/`trainer_id` non-null); global template rows are the sole source of truth. `account_id`/`trainer_id`/`current_count` columns kept dormant.
+- `CreatureSpawnDomainService` — spawning is stateless: no capacity/cooldown enforcement; validation checks only `is_active` (with a `BypassValidation` flag); spawning never mutates the template. Falls back to the global template's pools by `content_key`.
+- `M2010GlobalizeNpcContent` — NPC content globalized via the `ContentWorldId` sentinel (`00000000-0000-0000-0000-000000000001` as both account/trainer); dedups stray content-world rows, re-points child rows, adds a partial content-key index. Genuine player NPC instances untouched.
+- → [Spawner System](?page=backend/03-spawner-system) · [NPC System](?page=backend/02-npc-system)
+
+**Unity (cr-api-unity)**
+- `LocalDataSources` — adds `GameData` (`database_path_game_data`) and `PlayerData` (`database_path_player_data`) offline sources; content repos route to game-data, player-state repos to player-data (Part C-1).
+- `DatabaseMigrations.RunMigrations()` — migrates both offline databases plus online-cache DBs. Cold-start adopt of the baked artifact (atomic copy + fail-closed schema-version gate, reusing `AddressablesCatalogUpdater`) tracked as Part C-2 (TODO).
+- → [Content Pipeline (Two-Database Model)](?page=unity/17-content-pipeline) · [Project Setup](?page=unity/01-project-setup) · [Content Registry](?page=unity/08-content-registry) · [Addressables Setup](?page=unity/09-addressables-setup)
+
+---
+
 ## 2026-04-19
 
 ### Ability + condition asset content keys

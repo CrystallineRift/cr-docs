@@ -18,9 +18,18 @@ This is Unity Hub's default project name and has not been changed. It is an inte
 
 The `IGameConfiguration` abstraction means the rest of the codebase never directly reads YAML — it calls `TryGet("key", out var value)`, making it easy to swap the backing format in the future if needed.
 
-### Why a Single `.bytes` File for All Databases?
+### Why a Two-Database Split (game-data vs player-data)?
 
-In production, the actual device `game_config.yaml` points all `database_path_*` keys to the same file (`crgame.bytes`). SQLite supports multiple schemas in a single file via `ATTACH DATABASE`. Using one file simplifies backup and deletion. During local development you can point each key to a separate `.db` file to inspect schemas independently — see the local dev example below.
+The offline SQLite store is split into **two databases** with different lifecycles:
+
+- **game-data DB** (`game-data.bytes`) — global authored content (base creatures, abilities, status conditions, growth profiles, items, spawner templates + pools, NPC definitions + teams + inventory, quest templates/objectives/requirements/rewards, `game_assets`, level/exp tables). Read-only at runtime. Built at build time as a versioned artifact and patched via Addressables.
+- **player-data DB** (`player-data.bytes`) — per-account/per-trainer saves (trainers, inventories, generated creatures, quest instances, stats, battles, spawn history, auth). Mutable; migrated in place on app update.
+
+Splitting them means a content update never touches player saves, and each side uses the update mechanism that fits (Addressables for content, in-place migrations for saves). The two offline databases are wired via `LocalDataSources.GameData.OfflineSource` (config key `database_path_game_data`) and `LocalDataSources.PlayerData.OfflineSource` (config key `database_path_player_data`). The unified migrator currently creates the full schema in each file; unused tables on each side are harmless.
+
+See the dedicated [Content Pipeline (Two-Database Model)](?page=unity/17-content-pipeline) page for the full build/ship/adopt flow, the 12 build-time referential-integrity checks, and the content-vs-player taxonomy.
+
+> The single-file model (formerly `crgame.bytes`, where all `database_path_*` keys pointed at one file via `ATTACH DATABASE`) has been retired. The build-time content artifact is now named `game-data.bytes`.
 
 ### Why `DatabaseConnectionStringFactory` Instead of Hardcoded Paths?
 
@@ -149,10 +158,13 @@ trainer_creature_inventory_server_http_address: "http://localhost:8080/trainer-c
 # Database paths — absolute paths work best for local dev
 # Leave these as-is to use Application.persistentDataPath defaults,
 # or set to absolute paths to a known directory for easier inspection.
-database_path_trainer: "/path/to/dev/databases/trainer.bytes"
-database_path_auth: "/path/to/dev/databases/auth.bytes"
-database_path_creature: "/path/to/dev/databases/creature.bytes"
-database_path_spawner: "/path/to/dev/databases/spawner.bytes"
+# Two offline databases (the two-DB split): authored content vs player saves.
+database_path_game_data: "/path/to/dev/databases/game-data.bytes"
+database_path_player_data: "/path/to/dev/databases/player-data.bytes"
+# Online-cache databases (used when playing online)
+database_path_trainer_online_cache: "/path/to/dev/databases/trainer-online.bytes"
+database_path_auth_online_cache: "/path/to/dev/databases/auth-online.bytes"
+database_path_creature_online_cache: "/path/to/dev/databases/creature-online.bytes"
 ```
 
 If you omit the `database_path_*` keys entirely, `DatabaseConnectionStringFactory` falls back to `Application.persistentDataPath`, which on macOS is `~/Library/Application Support/DefaultCompany/My project/`.
@@ -169,7 +181,7 @@ Verify the server is healthy at `http://localhost:8080/swagger`. All registered 
 ### Step 7 — Hit Play
 
 Open the main scene (typically `Assets/Scenes/Game.unity`) and press **Play**. On first play:
-1. `LocalDevGameInstaller.InstallBindings()` runs synchronously, executing all FluentMigrator migrations against each SQLite file.
+1. `LocalDevGameInstaller.InstallBindings()` runs synchronously. `DatabaseMigrations.RunMigrations()` runs the unified migrator against the two offline databases (`game-data` and `player-data`) plus the online-cache databases. (Once the cold-start adopt lands — Part C-2 — game-data will be adopted from the baked `game-data.bytes` artifact instead of migrated; see [Content Pipeline](?page=unity/17-content-pipeline).)
 2. `GameSessionManager` reads any cached session from SQLite.
 3. If no session exists, the login/auth flow starts.
 4. Once a trainer is selected, `GameInitializer` fires `RunAsync` and all `IWorldInitializable` behaviours in the scene initialize.
@@ -188,10 +200,11 @@ The `IGameConfiguration` reads from a YAML file at runtime via `ConfigurationRep
 | `creature_server_http_address` | Base URL for creature and growth-profile endpoints |
 | `quest_server_http_address` | Base URL for quest endpoints |
 | `stat_server_http_address` | Base URL for stats debug endpoints |
-| `database_path_trainer` | Absolute or relative path for the trainer SQLite file |
-| `database_path_auth` | Absolute or relative path for the auth SQLite file |
-| `database_path_creature` | Absolute or relative path for the creature SQLite file |
-| `database_path_spawner` | Absolute or relative path for the spawner SQLite file |
+| `database_path_game_data` | Path for the **game-data** offline SQLite file (global authored content; read-only) |
+| `database_path_player_data` | Path for the **player-data** offline SQLite file (per-trainer saves; mutable) |
+| `database_path_trainer_online_cache` | Path for the trainer online-cache SQLite file |
+| `database_path_auth_online_cache` | Path for the auth online-cache SQLite file |
+| `database_path_creature_online_cache` | Path for the creature online-cache SQLite file |
 
 `GameConfigurationKeys` (static class in `CR.Core.Data.Repository`) holds string constants for all keys. Always use these constants instead of string literals:
 
@@ -268,9 +281,11 @@ Unity creates SQLite files at the configured `database_path_*` locations. `Datab
 
 Database files use the `.bytes` extension (not `.db`) so Unity's asset pipeline does not try to import them as binary assets. SQLite itself does not care about the extension.
 
+The offline store is two databases: `game-data.bytes` (global authored content, read-only) and `player-data.bytes` (per-trainer saves, mutable). See [Content Pipeline](?page=unity/17-content-pipeline) for how each is built and updated.
+
 If you need to reset all local state (e.g., after a breaking schema migration):
 1. Stop the Unity Player.
-2. Delete the `.bytes` files from the configured paths.
+2. Delete the `.bytes` files from the configured paths. To reset only saves while keeping content, delete `player-data.bytes` and leave `game-data.bytes`.
 3. Hit Play — migrations recreate them fresh.
 
 The database files should be listed in `.gitignore` and never committed. They are local developer state.
@@ -300,6 +315,7 @@ See [Introduction](?page=00-introduction) for more on the `content_key` vs UUID 
 
 ## Related Pages
 
+- [Content Pipeline (Two-Database Model)](?page=unity/17-content-pipeline) — game-data vs player-data, baked `game-data.bytes` artifact, cold-start adopt
 - [Dependency Injection](?page=unity/02-dependency-injection) — `LocalDevGameInstaller`, migration runner, binding order
 - [HTTP Clients](?page=unity/05-http-clients) — how `game_config.yaml` keys are used to configure HTTP clients
 - [Localization](?page=unity/06-localization) — YAML localization files alongside `game_config.yaml`

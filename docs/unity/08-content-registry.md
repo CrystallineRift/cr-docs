@@ -8,6 +8,15 @@ The registry bridges two concerns:
 - **Level designers** author scene content using the content key string (Inspector fields on `NpcTrainerBehaviour`, `SpawnerWorldBehaviour`, etc.).
 - **Runtime systems** (UI, battle, inventory) need typed, structured information about each entity — not just a raw key.
 
+## Where Content Lives: the Two-Database Model
+
+This in-memory registry is the fast lookup layer. The durable offline store underneath it is split into **two databases**:
+
+- **game-data DB** (`game-data.bytes`) — all global authored content (base creatures, abilities, status conditions, growth profiles, items, spawner templates + pools, NPC definitions + teams + inventory, quest templates/objectives/requirements/rewards, `game_assets`, level/exp tables). Read-only at runtime, built as a versioned artifact at build time, and patched via Addressables.
+- **player-data DB** (`player-data.bytes`) — per-account/per-trainer saves. Mutable; migrated in place on app update.
+
+The registry's data ultimately originates from game-data content (offline) or the server manifest (online). A content update patches the game-data Addressable and **never touches player saves**. See the [Content Pipeline (Two-Database Model)](?page=unity/17-content-pipeline) page for the full build/ship/adopt flow and the build-time referential-integrity checks.
+
 ## System Files
 
 | File | Location |
@@ -321,6 +330,8 @@ A static `async Task<IGameContentRegistry> BuildAsync(manifestClient, fallbackPr
 ### `AddressablesCatalogUpdater` (conditional)
 
 Only compiled when the `CR_ADDRESSABLES` scripting define is active. Wraps `Addressables.CheckForCatalogUpdates` and `Addressables.UpdateCatalogs`. Call `AddressablesCatalogUpdater.UpdateAsync()` early in the startup flow — before any Addressables asset loads — to ensure remote catalog updates are applied. Add the `CR_ADDRESSABLES` define in **Project Settings → Player → Scripting Define Symbols** when `com.unity.addressables` is present in `manifest.json`.
+
+This same catalog-update path is what delivers **game-data content patches**: the baked `game-data.bytes` artifact ships as an Addressable, so pushing a newer game-data database is just another catalog update. The cold-start adopt (atomic copy of the artifact into the working game-data path, gated by a fail-closed schema-version check) is tracked as Part C-2. See [Content Pipeline (Two-Database Model)](?page=unity/17-content-pipeline).
 
 ## DI Wiring
 
@@ -938,6 +949,7 @@ Container.Bind<IAbilityLibrarySyncClient>()
 
 ## Related Pages
 
+- [Content Pipeline (Two-Database Model)](?page=unity/17-content-pipeline) — game-data vs player-data, baked artifact, Addressables content patching
 - [Dependency Injection](?page=unity/02-dependency-injection) — how singletons like `IGameContentRegistry` are registered
 - [Localization](?page=unity/06-localization) — resolving `DisplayNameKey` strings via `ILocalizationRepository`
 - [World Behaviours](?page=unity/03-world-behaviours) — `NpcWorldBehaviour` and `SpawnerWorldBehaviour` use content keys at bootstrap

@@ -17,6 +17,19 @@ The `asset_key` string (`"creatures/cindris"`) is the only identifier that cross
 
 ---
 
+## Two Things Addressables Carry: Asset Bundles and the game-data Database
+
+Addressables deliver **two** kinds of content in Crystalline Rift:
+
+1. **Asset bundles** — the prefabs/sprites described above, resolved at runtime by `IGameAssetLoader`.
+2. **The game-data content database** — the baked `game-data.bytes` artifact ships as an Addressable so the design team can push content updates (new creatures, abilities, quest templates, etc.) without a binary release.
+
+The game-data database is part of the **two-database split**: a read-only **game-data DB** (global authored content) and a mutable **player-data DB** (per-trainer saves). Because content lives in its own database, a content patch **never touches player saves**, and player saves are migrated in place on app update (their migration DLLs ship in the binary, not via Addressables).
+
+`game-data.bytes` is built at build time by `CR.Data.Migrations.Tool` via `build-packages.sh`, which runs all migrations and then 12 referential-integrity checks that fail the build on any dangling content reference. The artifact also ships bundled in **StreamingAssets** as the offline first-run floor. At cold start the client adopts it (atomic copy + fail-closed schema-version gate, reusing `AddressablesCatalogUpdater`). See [Content Pipeline (Two-Database Model)](?page=unity/17-content-pipeline) for the complete flow.
+
+---
+
 ## Package Requirements
 
 1. Install **Addressables** via Package Manager (`com.unity.addressables`).
@@ -228,5 +241,6 @@ For rapid iteration during development, stay on **Use Asset Database** and skip 
 
 ## Related Pages
 
+- [Content Pipeline (Two-Database Model)](?page=unity/17-content-pipeline) — baked `game-data.bytes` artifact, build-time integrity checks, cold-start adopt, content patching
 - [Asset Management](?page=backend/10-asset-management) — `game_assets` table, publish endpoint, three-system architecture, S3/MinIO CDN scripts
 - [Content Registry](?page=unity/08-content-registry) — `CreatureDefinition` ScriptableObjects, `IGameContentRegistry`, `IGameAssetLoader`, editor tooling

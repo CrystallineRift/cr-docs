@@ -1,6 +1,16 @@
 # NPC System
 
-NPCs are world entities scoped to a specific trainer's world. Each NPC can hold a team of up to six creatures and an item inventory. The NPC system is one of the most actively used domains during early gameplay — every new trainer triggers the starter NPC flow on their first world load.
+NPCs come in two flavours: **content NPC definitions** (global, authored) and **player NPC instances** (per-trainer). Each NPC can hold a team of up to six creatures and an item inventory. The NPC system is one of the most actively used domains during early gameplay — every new trainer triggers the starter NPC flow on their first world load.
+
+## NPC Content Globalization (`ContentWorldId`)
+
+NPC **definitions** are global, authored content. Rather than introducing a separate template table, the design reuses the `npcs` table with a well-known sentinel account/trainer pair — the **`ContentWorldId`** GUID `00000000-0000-0000-0000-000000000001` — as both `account_id` and `trainer_id`. A content-registry NPC is just a row with `account_id = trainer_id = ContentWorldId`, one row per `content_key`.
+
+- `NpcDomainService.ContentWorldId` is the sentinel constant. `UpsertContentRegistryNpcAsync` / `DeleteContentRegistryNpcAsync` route all content writes through it (calling `EnsureNpcAsync(ContentWorldId, ContentWorldId, ...)`), so content rows and genuine player rows coexist in the same tables.
+- **Migration `M2010GlobalizeNpcContent`** consolidates content-world rows: it keeps the oldest row per `content_key` under `ContentWorldId`, soft-deletes any stray duplicates, and re-points related `npc_creature_team_storage` / `npc_inventory` rows to the surviving canonical NPC id. It then adds a partial index `idx_npcs_content_world_key` on `content_key` (filtered to `ContentWorldId` rows) for fast content lookups. The migration is idempotent and makes no schema/column changes (SQLite-safe).
+- **Genuine player NPC instances** (rows where `account_id != ContentWorldId`) are untouched by `M2010` — the two coexist in the `npcs` table.
+
+In the offline two-database split, NPC content (definitions, teams, inventory) lives in the read-only **game-data DB**; player-owned NPC instances and their state live in the mutable **player-data DB**. See [Content Pipeline (Two-Database Model)](?page=unity/17-content-pipeline).
 
 ## Why This Design?
 
@@ -400,7 +410,7 @@ All NPC endpoints are prefixed `/api/v1/npc`.
 | `POST` | `/api/v1/npc` | Create NPC |
 | `PUT` | `/api/v1/npc/{id}` | Update NPC |
 | `DELETE` | `/api/v1/npc/{id}` | Soft-delete NPC |
-| `GET` | `/api/v1/npc/content-registry` | Returns all distinct `(contentKey, npcType)` pairs across all NPC rows for editor sync tooling |
+| `GET` | `/api/v1/npc/content-registry` | Returns the global NPC content definitions — `(contentKey, npcType)` pairs from the `ContentWorldId` rows — for editor sync tooling |
 
 ### `POST /api/v1/npc/ensure` — EnsureNpc
 
@@ -514,7 +524,7 @@ cr-api/Npcs/
 ## Common Mistakes / Tips
 
 - **Missing content_key in Unity Inspector.** If `_npcContentKey` is empty or whitespace, `NpcWorldBehaviour.InitializeAsync` returns early without calling the backend. The NPC will appear in the scene but never initialize. Always verify the Inspector field is set.
-- **Duplicate content_key across trainers is intentional.** Two different trainers can each have their own NPC with the same `content_key` — this is correct and expected (same NPC definition, different trainer worlds). The uniqueness constraint is per `(account_id, trainer_id, content_key)`, not globally unique.
+- **Duplicate content_key across trainers is intentional for player instances.** Two different trainers can each have their own player NPC with the same `content_key` — this is correct (same definition, different trainer worlds). The uniqueness constraint is per `(account_id, trainer_id, content_key)`, not globally unique. For **content** NPCs, however, there is exactly one row per `content_key` under `ContentWorldId` — `M2010` dedups any strays so the content registry has a single canonical definition per key.
 - **Calling `give-creature` before `ensure-starter` completes.** `NpcInteractionBehaviour` checks `HasCreatureToGive` before allowing the interaction. If world init fails silently, `HasCreatureToGive` stays false. Check backend logs for the `ensure-starter` POST to confirm it succeeded.
 - **Base creature has no growth profiles.** `EnsureNpcCreatureTeamAsync` throws on step 3 if `GetAvailableGrowthProfilesAsync` returns empty. Seed the `growth_profile` table before seeding NPCs.
 - **Slot conflicts on team add.** `AddCreatureToNpcTeamAsync` throws `InvalidOperationException` if the target slot is already occupied and `slotNumber` is outside 1–6. `EnsureNpcCreatureTeamAsync` avoids this by checking occupancy first — only call `AddCreatureToNpcTeamAsync` directly if you own the idempotency check.
@@ -525,6 +535,7 @@ cr-api/Npcs/
 
 ## Related Pages
 
+- [Content Pipeline (Two-Database Model)](?page=unity/17-content-pipeline) — NPC content (definitions/teams/inventory) lives in the read-only game-data DB; player NPC instances in player-data
 - [Starter Creature Flow](?page=backend/05-starter-creature-flow) — end-to-end walkthrough of `EnsureStarterNpc` through player interaction
 - [Creature Generation](?page=backend/04-creature-generation) — how the starter creature is generated when the NPC is first created
 - [NPC Interaction](?page=unity/04-npc-interaction) — Unity-side composable MonoBehaviours that drive NPC initialization and player interaction

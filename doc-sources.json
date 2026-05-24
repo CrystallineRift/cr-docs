@@ -43,7 +43,7 @@
         "Assets/Scripts/Npcs/**/*INpcSubInitializable*.cs"
       ]
     },
-    "description": "NPC CRUD, team management, domain service, REST endpoints, NpcCreatureSlotSpec"
+    "description": "NPC CRUD, team management, domain service, REST endpoints, NpcCreatureSlotSpec; NPC content globalization via ContentWorldId sentinel and M2010GlobalizeNpcContent"
   },
   "backend/03-spawner-system": {
     "docPath": "docs/backend/03-spawner-system.md",
@@ -58,7 +58,7 @@
         "cr-api-unity/Assets/CR/Game/World/Behaviours/SpawnerEncounterBehaviour.cs"
       ]
     },
-    "description": "Weighted spawn pools, spawn history, spawner tables, SpawnerDefinition.battleArenaKey, Wild Trainer GUID integration"
+    "description": "Weighted spawn pools, spawn history, spawner tables, SpawnerDefinition.battleArenaKey, Wild Trainer GUID integration; global read-only spawner template (per-trainer clones retired by M5016RetirePerTrainerSpawner), stateless spawning (no capacity/cooldown)"
   },
   "backend/04-creature-generation": {
     "docPath": "docs/backend/04-creature-generation.md",
@@ -133,10 +133,12 @@
       "cr-data": [
         "Packages/manifest.json",
         "ProjectSettings/**",
-        "Assets/Scripts/Installers/**/*.cs"
+        "Assets/Scripts/Installers/**/*.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Repository/LocalDataSources.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Repository/DatabaseMigration.cs"
       ]
     },
-    "description": "Unity project structure, packages, folder layout"
+    "description": "Unity project structure, packages, folder layout; two-database (game-data vs player-data) config keys and startup migration flow"
   },
   "unity/02-dependency-injection": {
     "docPath": "docs/unity/02-dependency-injection.md",
@@ -230,6 +232,9 @@
         "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleArena.cs",
         "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleArenaRegistry.cs",
         "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleCameraController.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Arena/IBattleStager.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleStager.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleStagingResult.cs",
         "cr-api-unity/Assets/CR/Game/Battle/Arena/Editor/BattleArenaCreator.cs",
         "cr-api-unity/Assets/CR/Game/Battle/Events/BattleEvents.cs",
         "cr-api-unity/Assets/CR/Game/Battle/DTOs/WildBattleStateDtos.cs",
@@ -241,7 +246,7 @@
         "cr-api-unity/Assets/CR/UI/Battle/BattleBagPanelHandler.cs"
       ]
     },
-    "description": "BattleCoordinator sequential turn loop, BattleHttpDomainAdapter + OnlineOfflineBattleDomainService stack, BattleEvents static events, Arena system, BattleHUD, BattleSync SOAP bridge, StartNpcBattle/StartWildBattle, SpawnerEncounterBehaviour with encounter delay"
+    "description": "BattleCoordinator sequential turn loop with battle-scoped CancellationToken, BattleHttpDomainAdapter + OnlineOfflineBattleDomainService stack, BattleEvents static events (incl. StagingFailed), Arena system with IBattleStager returning BattleStagingResult (player teleport + creature visual spawn at PlayerCreaturePosition/OpponentCreaturePosition), self-registering BattleArenaRegistry, BattleCameraController with ICRLogger, BattleHUD with Guid-typed creature IDs and HP cache replay, BattleSync SOAP bridge, StartNpcBattle/StartWildBattle, NpcBattleRequest.BattleArenaKey, SpawnerEncounterBehaviour with encounter delay"
   },
   "unity/16-domain-sync-pattern": {
     "docPath": "docs/unity/16-domain-sync-pattern.md",
@@ -365,18 +370,22 @@
   "unity/09-addressables-setup": {
     "docPath": "docs/unity/09-addressables-setup.md",
     "repos": {
-      "cr-api": [],
+      "cr-api": [
+        "Convenience/CR.Data.Migrations.Tool/Program.cs",
+        "Convenience/CR.Game.Compat/build-packages.sh"
+      ],
       "cr-data": [
         "cr-api-unity/Assets/CR/Core/Assets/GameAssetLoader.cs",
         "cr-api-unity/Assets/CR/Core/Assets/IGameAssetLoader.cs",
         "cr-api-unity/Assets/CR/Core/Player/CreatureSpawner.cs",
         "cr-api-unity/Assets/CR/Core/Data/Editor/ContentPublishTool.cs",
         "cr-api-unity/Assets/CR/Core/Data/Editor/ContentDeployTool.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/AddressablesCatalogUpdater.cs",
         "scripts/deploy-content.sh",
         "scripts/setup-minio-bucket.sh"
       ]
     },
-    "description": "Unity Addressables end-to-end setup: Groups/Profiles windows, Play Mode Script, making assets Addressable, ContentPublishTool Seed to SQLite, Deploy Content tool, MinIO/S3 gotchas, CreatureSpawner MonoBehaviour"
+    "description": "Unity Addressables end-to-end setup: Groups/Profiles windows, Play Mode Script, making assets Addressable, ContentPublishTool Seed to SQLite, Deploy Content tool, MinIO/S3 gotchas, CreatureSpawner MonoBehaviour; baked game-data.bytes artifact shipped as Addressable + StreamingAssets (CR.Data.Migrations.Tool + build-packages.sh)"
   },
   "unity/10-player-menu-ui": {
     "docPath": "docs/unity/10-player-menu-ui.md",
@@ -514,5 +523,22 @@
       ]
     },
     "description": "Designer-facing event + variable wiring: EventWiringManifest, VariableWiringManifest, IEventSourceRegistry, BattleEventsAdapter, TrainerSessionAdapter, QuestRewardAdapter, capture/exp/level events, editor window, codegen for IL2CPP, how to add new events and data payloads"
+  },
+  "unity/17-content-pipeline": {
+    "docPath": "docs/unity/17-content-pipeline.md",
+    "repos": {
+      "cr-api": [
+        "Convenience/CR.Data.Migrations.Tool/Program.cs",
+        "Convenience/CR.Data.Migrations/**/*.cs",
+        "Convenience/CR.Game.Compat/build-packages.sh"
+      ],
+      "cr-data": [
+        "cr-api-unity/Assets/CR/Core/Data/Repository/DatabaseMigration.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Repository/LocalDataSources.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/AddressablesCatalogUpdater.cs",
+        "cr-api-unity/Assets/CR/Core/DI/LocalDevGameInstaller.cs"
+      ]
+    },
+    "description": "Two-database content pipeline: game-data DB (global authored content, read-only) vs player-data DB (per-trainer saves, mutable); build-time game-data.bytes artifact from CR.Data.Migrations.Tool + build-packages.sh with 12 referential-integrity checks; ships as Addressable + StreamingAssets first-run floor; cold-start adopt (atomic copy + fail-closed schema-version gate); content patched via Addressables, player-data migrated in place; content-vs-player taxonomy"
   }
 }
