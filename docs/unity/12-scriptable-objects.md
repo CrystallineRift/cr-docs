@@ -322,15 +322,6 @@ Controls XP rate and per-stat scaling multipliers for a creature. Referenced by 
 
 These SOs configure client presentation and are never sent to the server.
 
-### SpawnerZoneConfig
-
-**Menu:** `CR/Content/Spawner Zone Config`  
-**Backend sync:** None — attaches to `SpawnerWorldBehaviour` on scene objects
-
-A scene-level spawner config used by `SpawnerWorldBehaviour`. Overlaps with `SpawnerDefinition` but is structured for direct scene attachment rather than the central registry. Contains the same pool/template nested types as `SpawnerDefinition`.
-
----
-
 ### BattleAnimationConfig
 
 **Menu:** `CR/Battle/Animation Config`  
@@ -398,7 +389,6 @@ This asset is authored in the Pixel Crushers **Dialogue Editor** window (`Tools 
 | `AbilityProgressionSetConfig` | Content Studio tool | `/api/v1/ability-progression-sets` |
 | `GrowthProfileConfig` | Content Studio tool | `/api/v1/growth-profiles` |
 | `ContentDefinitionProvider` | — | Client-only registry |
-| `SpawnerZoneConfig` | — | Client-only scene config |
 | `BattleAnimationConfig` | — | Client-only |
 | `CreatureAnimationProfile` | — | Client-only |
 | `CR Dialog.asset` (DialogueDatabase) | — | Client-only (Pixel Crushers) |

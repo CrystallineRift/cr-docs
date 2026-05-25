@@ -39,7 +39,6 @@ The registry's data ultimately originates from game-data content (offline) or th
 | `ItemDefinition` | `CR/Core/Data/Registry/Definitions/ItemDefinition.cs` |
 | `NpcDefinition` | `CR/Core/Data/Registry/Definitions/NpcDefinition.cs` |
 | `SpawnerDefinition` | `CR/Core/Data/Registry/Definitions/SpawnerDefinition.cs` |
-| `SpawnerZoneConfig` | `CR/Core/Data/Registry/Definitions/SpawnerZoneConfig.cs` |
 | `AbilityConfig` | `CR/Core/Data/Registry/Definitions/AbilityConfig.cs` |
 | `AbilityProgressionSetConfig` | `CR/Core/Data/Registry/Definitions/AbilityProgressionSetConfig.cs` |
 | `GrowthProfileConfig` | `CR/Core/Data/Registry/Definitions/GrowthProfileConfig.cs` |
@@ -167,8 +166,7 @@ Each entity type has a dedicated ScriptableObject that designers create via the 
 | `Assets > Create > CR > Content > Creature Definition` | `CreatureDefinition` | One SO per creature species |
 | `Assets > Create > CR > Content > Item Definition` | `ItemDefinition` | One SO per item type |
 | `Assets > Create > CR > Content > NPC Definition` | `NpcDefinition` | One SO per NPC |
-| `Assets > Create > CR > Content > Spawner Definition` | `SpawnerDefinition` | One SO per spawner zone |
-| `Assets > Create > CR > Content > Spawner Zone Config` | `SpawnerZoneConfig` | Full zone config for spawner sync |
+| `Assets > Create > CR > Content > Spawner Definition` | `SpawnerDefinition` | One SO per spawner zone (holds pools + templates) |
 | `Assets > Create > CR > Content > Ability Config` | `AbilityConfig` | One SO per ability (auto-generates stable GUID) |
 | `Assets > Create > CR > Content > Ability Progression Set Config` | `AbilityProgressionSetConfig` | Ordered list of (level, ability, slot) entries |
 | `Assets > Create > CR > Content > Growth Profile Config` | `GrowthProfileConfig` | Stat and XP growth multipliers per creature species |
@@ -592,8 +590,7 @@ Each definition type has a `[CustomEditor]` that replaces the default Inspector:
 | `CreatureDefinitionEditor` | `CreatureDefinition` | Deep red banner + element color pill |
 | `ItemDefinitionEditor` | `ItemDefinition` | Steel blue banner; structured effect/trigger param fields (typed dropdowns — no raw JSON TextArea); condition picker via `GET /ability/status_conditions` |
 | `NpcDefinitionEditor` | `NpcDefinition` | Teal banner |
-| `SpawnerDefinitionEditor` | `SpawnerDefinition` | Dark green banner |
-| `SpawnerZoneConfigEditor` | `SpawnerZoneConfig` | Blue banner, pool/template foldouts, SO reference for `abilityProgressionSet` |
+| `SpawnerDefinitionEditor` | `SpawnerDefinition` | Dark green banner; pool/template editing |
 | `AbilityConfigEditor` | `AbilityConfig` | Purple banner, element/category popups, status-move power warning |
 | `AbilityProgressionSetConfigEditor` | `AbilityProgressionSetConfig` | Brown banner, entry list with duplicate (level, slot) detection |
 | `GrowthProfileConfigEditor` | `GrowthProfileConfig` | Green banner, two-column stat grid, live base-50 stat preview |
@@ -883,7 +880,7 @@ Each returns `(bool ok, string error, List<T> data)`.
 
 ### Spawner Template `abilityProgressionSet` Field
 
-`SpawnerTemplateConfig.abilityProgressionSet` is now a `AbilityProgressionSetConfig?` SO reference (previously a raw UUID string). The `SpawnerZoneConfigEditor` renders it as an object drag field with a warning if empty. Both `SpawnerSyncHttpClient` and `LocalSpawnerSyncClient` read `t.abilityProgressionSet?.id` to extract the UUID.
+`SpawnerTemplateConfig.abilityProgressionSet` is now a `AbilityProgressionSetConfig?` SO reference (previously a raw UUID string). The `SpawnerDefinitionEditor` renders it as an object drag field with a warning if empty. Both `SpawnerSyncHttpClient` and `LocalSpawnerSyncClient` read `t.abilityProgressionSet?.id` to extract the UUID.
 
 ### Ability Sync Workflow (Tabs 4–6 in Content Studio)
 
