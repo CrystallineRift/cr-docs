@@ -423,21 +423,22 @@ foreach (var key in _registry.CreatureKeys)
 | `ServerNpcDto` | `contentKey`, `npcType` (string) |
 | `ServerSpawnerDto` | `contentKey`, `name`, `description`, `battleArenaKey`, `maxCapacity`, `spawnCooldownSeconds`, `updatedAt` |
 
-**Fetch methods** — called by the sync review panel in Content Studio (tabs 0, 2, 3):
+**Fetch methods** — called by the **⬇ Pull** action in Content Studio (tabs 0, 2, 3):
 
 | Method | HTTP call |
 |--------|-----------|
 | `FetchAllCreatures()` | `GET /api/v1/creatures` |
 | `FetchAllNpcs()` | `GET /api/v1/npc/content-registry` |
-| `FetchAllSpawners()` | `GET /api/v1/spawners/templates` |
+| `FetchAllSpawners()` | `GET /api/v1/spawners/content-registry` |
 
-**Push methods:**
+**Push methods** — called by the **⬆ Push All** action (one PUT/POST per local SO; the server upserts by `content_key`, so no fetch-compare is needed):
 
 | Method | HTTP call | Notes |
 |--------|-----------|-------|
 | `SyncCreature(def)` | `PUT /api/v1/creatures/by-content-key/{contentKey}` | Pushes all base stat fields |
-| `SyncSpawner(def)` | `PUT /api/v1/spawners/by-content-key/{contentKey}` | Pushes display fields + `battleArenaKey` |
-| `SyncNpc(def)` | — | Returns `(false, "NPC content keys are world-specific; only pull is available.")` — NPC push is not supported |
+| `SyncSpawner(def)` | `PUT /api/v1/spawners/by-content-key/{contentKey}` | Pushes spawner metadata + `battleArenaKey` only |
+| `SyncSpawnerFull(def)` | `POST /api/v1/spawners/sync-config` | Pushes metadata **and** pools + templates atomically — this is what **Push All** uses for spawners |
+| `SyncNpc(def)` | `PUT /api/v1/npc/content-registry` | Upserts the NPC content-registry row (`contentKey`, `npcType`) |
 
 **Delete methods** — call the soft-delete backend endpoints; return `(ok, message)` where `ok = false` means the server rejected the delete (surfaces the error text to the user):
 
@@ -456,23 +457,14 @@ NPC delete is not supported — NPC rows are per-trainer instances (no global te
 | `ApplyToNpc(def, dto)` | Sets `npcType`. Auto-generates `displayNameKey` (`npc_{contentKey}_display`) with the `contentKey` as a placeholder value. |
 | `ApplyToSpawner(def, dto)` | Sets `displayName`, `description`, `maxCapacity`, `spawnCooldownSeconds`, `battleArenaKey`. |
 
-**Diff methods** — return `string[]` of changed field names:
-
-- `CreatureDiffersFromServer(local, server, out differentFields)`
-- `NpcDiffersFromServer(local, server, out differentFields)`
-- `SpawnerDiffersFromServer(local, server, out differentFields)`
-
 #### Content Studio Sync UI (tabs 0, 2, 3)
 
-Content Studio exposes a **↕ Sync** button on the Creatures, NPCs, and Spawners tabs (hidden on Items) that triggers the sync review workflow:
+Sync is **drift-free**: SOs are the source of truth and pushes are idempotent upserts keyed by `content_key`, so there is no fetch-compare-resolve step. Each synced tab shows two buttons (hidden on Items):
 
-1. **Fetching phase** — calls `FetchAll*()` for the active tab, shows a status label
-2. **Reviewing phase** — draws a sync review panel grouping definitions into four categories:
-   - **Only Local** — SO exists locally but not on server. For Creatures/Spawners: auto-queued for push. For NPCs: info badge (push not supported).
-   - **Only Server** — server has a record but no local SO. **For Creatures and Spawners:** requires an explicit choice per row — each row shows **[Pull]** and **[Delete]** toggle buttons. Apply is blocked until every row has a resolution. **For NPCs, Abilities, Progression Sets, and Growth Profiles:** auto-queued for pull (no delete option available).
-   - **In Sync** — local and server match; shown collapsed.
-   - **Conflict** — both exist but differ. Shows a diff table of changed field names with per-field values. User must choose **Use Local** or **Use Server** per conflict before Apply is enabled.
-3. **Apply** — disabled until all conflicts and OnlyServer rows (for Creatures/Spawners) are resolved. The Apply button label shows counts: `↑ push`, `↓ pull`, `✕ delete`, `✓ resolved`. Calls `ApplyContentSyncDecisions()` which iterates each category and applies the appropriate `Apply*`, `Sync*`, or `Delete*` call. New SOs created on pull are registered into `ContentDefinitionProvider`. If a creature delete is blocked (409 — trainer-owned creatures exist), an error dialog is shown and the server record is left intact.
+- **⬆ Push All** — loops every local definition on the tab and upserts it (`SyncCreature` / `SyncNpc` / `SyncSpawnerFull`). No server fetch; the server overwrites by `content_key`. A status line reports `N pushed, M failed`, and per-row badges show each result.
+- **⬇ Pull** — the rare reverse-bootstrap. After a confirm dialog, calls `FetchAll*()`, then for each server entry overwrites the matching local SO (`ApplyTo*`) or creates one (`CreateAssetSilent` + register into `ContentDefinitionProvider`) for server-only keys. Spawners additionally fetch `/by-content-key/{key}/config` so pools + templates come down too. Reports `N updated, M created`.
+
+There is no diff preview, conflict resolution, or in-review delete step — push always wins, and removing a backend record is done explicitly via **Unregister** (below).
 
 `CreateAssetSilent<T>()` is an internal helper that creates a definition SO asset at a default path without opening a save dialog, handling name collisions by appending `_1`, `_2`, etc.
 
@@ -504,7 +496,7 @@ Window → CR → Content Studio
 - **Orphan strip** (tabs 0–3) — detects unregistered definition assets on disk; `[Register All]` appends them to the provider; orphan rows are selectable so you can inspect before registering
 - **`+ New` button** (tabs 0–3) — toggles an inline create panel with content-key field and type-specific extras (element for Creatures, npcType for NPCs); `Create & Register` creates the SO and selects it in the detail panel
 - **`Unregister` button** — shown in the detail panel toolbar for tabs 0–3; removes from the provider array while keeping the `.asset` file. For Creatures and Spawners, a dialog appears after unregistering asking "Also delete from server?" — choosing **Delete from server** calls `ContentCreatorSyncHelper.DeleteCreature/DeleteSpawner`; any server-side block (e.g. 409 creature guard) is surfaced in a follow-up dialog.
-- **`↕ Sync` button** — available on all tabs except Items; triggers the bidirectional sync review workflow
+- **`⬆ Push All` / `⬇ Pull` buttons** — available on all tabs except Items. **Push All** upserts every local SO on the tab; **Pull** (confirm-gated) overwrites local from server and creates SOs for server-only keys. No diff/review step.
 - **File-dialog `New` button** (tabs 4–6) — opens a save dialog to create a new `AbilityConfig`, `AbilityProgressionSetConfig`, or `GrowthProfileConfig` SO
 - **Status Conditions tab (8)** — server-browser with no local SO; `↻ Fetch from Server` loads all conditions; `+ New Condition` / `✎ Edit` open an inline form with name, applyToUser, probability, duration, and a per-condition stat changes sub-list; `Delete` soft-deletes on server. Backed by `AbilityEditorSyncHelper.FetchAllStatusConditions/CreateStatusCondition/UpdateStatusCondition/DeleteStatusCondition` and new `POST /PUT /DELETE /api/v1/status-conditions` endpoints.
 
@@ -622,18 +614,13 @@ All deletes are **soft-deletes** (`deleted = true`). The row is never physically
 2. Click **Unregister** in the detail panel toolbar — this removes the SO from the `ContentDefinitionProvider` array and clears the selection. The `.asset` file is kept on disk.
 3. A dialog appears: **"Also delete from server?"**
    - **Delete from server** → calls `ContentCreatorSyncHelper.DeleteCreature/DeleteSpawner`, which sends `DELETE /api/v1/creatures/by-content-key/{contentKey}` or `DELETE /api/v1/spawners/by-content-key/{contentKey}`. If the server rejects the delete (e.g. 409 for a creature that trainers own), an error dialog shows the server's message and the record is left intact.
-   - **Keep on server** → record stays in the backend; it will show up again as **Only Server** on the next sync.
+   - **Keep on server** → record stays in the backend. It will no longer have a local SO; **⬇ Pull** would recreate one.
 
 > NPC definitions cannot be deleted from the backend this way — NPC rows are per-trainer instances (no global template table to delete from). Delete individual NPC instances via admin tooling or direct SQL.
 
-### Via Sync — "Only Server" rows
+### Server-only records (no local SO)
 
-When a content key exists on the server but has no local SO (e.g. the `.asset` file was deleted), the Sync review panel shows it in the **Only Server** section. For Creatures and Spawners each row now shows two buttons:
-
-- **[Pull]** — creates a new local SO and registers it (same as before).
-- **[Delete]** — soft-deletes the backend record. For creatures, blocked with a dialog if any trainer-owned `generated_creature` rows reference the species.
-
-Apply is blocked until every Only Server row has an explicit choice.
+When a content key exists on the server but has no local SO (e.g. the `.asset` file was deleted), **⬇ Pull** recreates the local SO and registers it. There is no in-sync "delete server-only record" affordance — to remove a backend record, recreate or select its SO and use **Unregister → Delete from server** (above), or delete it via admin tooling. Creature deletes are still guarded server-side (see below).
 
 ### Player-data guard for Creatures
 
@@ -686,7 +673,7 @@ Open `Window → CR → Localization Editor` → **Creatures** tab → **Missing
 
 The backend must have a row in the `creatures` table with a matching `content_key`. Options:
 
-- **Sync from Unity** — use the `[↕ Sync]` button in the Creatures tab of Content Studio. This calls `PUT /api/v1/creatures/by-content-key/{contentKey}` to push your local SO values to the server (creates the row if missing).
+- **Sync from Unity** — use the `[⬆ Push All]` button in the Creatures tab of Content Studio. This calls `PUT /api/v1/creatures/by-content-key/{contentKey}` for each local SO to push its values to the server (creates the row if missing).
 - **Manual migration seed** — add the key to the creature seed migration and re-run migrations.
 
 #### Step 5 — Testing in-editor / local dev (no publish required)
@@ -710,7 +697,7 @@ The flow is the same as creatures with these differences:
 |------|---------------------|--------------|-----------------|
 | Item | No — set `assetKey` to the Addressable address | No direct sync (no backend service) | Items |
 | NPC | Not typically | Pull-only (server is authoritative for `npcType`) | NPCs |
-| Spawner | No — see backend spawner system | Push via `[↕ Sync]` → `PUT /api/v1/spawners/by-content-key/{contentKey}` | Spawners |
+| Spawner | No — see backend spawner system | Push via `[⬆ Push All]` → `POST /api/v1/spawners/sync-config` (metadata + pools + templates) | Spawners |
 
 For all types: `[+ New]` in Content Studio creates, registers, and adds the `ContentKeys` constant in one step.
 
@@ -830,7 +817,7 @@ The Inspector renders a two-column grid for the six stat fields and shows a live
 
 #### Bidirectional sync support
 
-`AbilityEditorSyncHelper` also provides fetch and conflict-detection methods used by the Content Studio sync review workflow (tabs 4–6):
+`AbilityEditorSyncHelper` also provides fetch and apply methods used by the Content Studio **⬆ Push All** / **⬇ Pull** actions (tabs 4–6):
 
 **Server response DTOs** (defined in the same file, `namespace CR.Game.World.Editor`):
 
@@ -868,14 +855,6 @@ Each returns `(bool ok, string error, List<T> data)`.
 | `ApplyToAbility(config, dto)` | Copies all fields; converts `elementType` int back to string via reverse lookup |
 | `ApplyToGrowthProfile(config, dto)` | Copies all growth fields |
 
-**Conflict detection** — pure functions, no side effects:
-
-| Method | Returns |
-|--------|---------|
-| `AbilityDiffersFromServer(local, server, out string[] differentFields)` | `true` if any field differs; populates `differentFields` |
-| `GrowthProfileDiffersFromServer(local, server, out string[] differentFields)` | same |
-| `ProgressionSetDiffersFromServer(local, server, out string[] differentFields)` | compares name, description, isActive, entry count |
-
 **Element type reverse lookup** — `IntToElementType` dictionary maps server int values (0–11) back to the `elementType` string used by `AbilityConfig`.
 
 ### Spawner Template `abilityProgressionSet` Field
@@ -884,29 +863,17 @@ Each returns `(bool ok, string error, List<T> data)`.
 
 ### Ability Sync Workflow (Tabs 4–6 in Content Studio)
 
-The Abilities, Progression Sets, and Growth Profiles tabs in **Content Studio** each have a **"↕ Sync with Server"** button that triggers a full bidirectional sync review. (These tabs formerly lived in the standalone `AbilityLibraryTool` window.)
+The Abilities, Progression Sets, and Growth Profiles tabs in **Content Studio** each have **"⬆ Push All"** and **"⬇ Pull"** buttons (plus a per-row **Sync** button). (These tabs formerly lived in the standalone `AbilityLibraryTool` window.) Sync is drift-free — no fetch-compare or conflict resolution.
 
-#### Bidirectional sync workflow
+#### Push All / Pull workflow
 
-1. Click **"↕ Sync with Server"** on any tab (Abilities, Growth Profiles, or Progression Sets).
-2. The tool fetches all records from the server for that type.
-3. A **Sync Review** panel replaces the normal list, grouped by status:
+- **⬆ Push All** — upserts every local SO on the tab via `SyncAbility` / `SyncProgressionSet` / `SyncGrowthProfile` (matched on server `id`). Reports `N pushed, M failed`.
+- **Per-row Sync** — pushes a single SO and shows the `(ok, message)` result inline.
+- **⬇ Pull** (confirm-gated) — fetches all server records, then `ApplyTo*` overwrites each matching local SO (by `id`), or `CreateAssetSilent` creates one for server-only records. Reports `N updated, M created`.
 
-| Status | Color badge | Description |
-|--------|------------|-------------|
-| **Only Local** | Green | Asset exists locally but not on the server — will push on Apply |
-| **Only Server** | Blue | Record on server but no matching local SO — will create local SO on Apply |
-| **In Sync** | Gray | ID matches, all fields equal — no action |
-| **Conflict** | Orange | ID matches but one or more fields differ — requires manual resolution |
+#### Progression Set pull note
 
-4. For each **Conflict**, a diff table shows the differing field names with Local and Server values side by side.
-5. Resolution buttons per conflict: **Use Local** (push local to server), **Use Server** (pull server data into local SO), **Skip** (take no action).
-6. The **Apply** button is disabled until all conflicts have a resolution chosen. Its label shows the pending action count: `Apply (N push, M pull, K resolved)`.
-7. On Apply, all decisions are executed in order, `AssetDatabase.SaveAssets()` is called, and the panel closes.
-
-#### Progression Set conflict notes
-
-For Progression Set conflicts resolved as **Use Server**, only the top-level fields (`name`, `description`, `isActive`) are updated. Entries are not overwritten — they reference `AbilityConfig` SOs by object reference and cannot be reconstructed from server UUIDs without a full lookup pass. A HelpBox warning `"Entries require manual update"` appears in the conflict row when UseServer is selected.
+On **Pull**, only the top-level fields (`name`, `description`, `isActive`) of a Progression Set are updated. Entries are **not** overwritten — they reference `AbilityConfig` SOs by object reference and cannot be reconstructed from server UUIDs without a full lookup pass. Update entries manually.
 
 #### Silent asset creation
 

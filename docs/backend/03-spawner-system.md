@@ -312,11 +312,11 @@ POST /spawner/{spawnerId}/spawn
 
 Request body mirrors `SpawnerConfigSyncRequest` (contentKey, displayName, maxCapacity, spawnCooldownSeconds, pools[]).
 
-### Content Creator sync (bidirectional)
+### Content Studio sync (push / pull)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/v1/spawners/templates` | Returns all global spawner template rows (AccountId = null, TrainerId = null) for editor sync. Includes `contentKey`, `displayName`, `description`, `maxCapacity`, `spawnCooldownSeconds`, `battleArenaKey`, `updatedAt`. |
+| `GET` | `/api/v1/spawners/content-registry` | Returns all global spawner rows as a bare JSON array for the editor **Pull** action. Each item: `id`, `contentKey`, `name`, `description`, `battleArenaKey`, `maxCapacity`, `spawnCooldownSeconds`, `updatedAt`. |
 | `PUT` | `/api/v1/spawners/by-content-key/{contentKey}` | Upserts a spawner definition by `content_key`. Creates the global template row if it doesn't exist; updates display fields if it does. Body: `SpawnerDefinitionSyncRequest` (`DisplayName`, `Description`, `MaxCapacity`, `SpawnCooldownSeconds`, `BattleArenaKey`). Returns `{ contentKey }` on success. |
 | `DELETE` | `/api/v1/spawners/by-content-key/{contentKey}` | Soft-deletes the global spawner template row with the given `content_key`. Per-trainer spawner rows are unaffected. Returns 204 on success, 404 if not found. Spawner templates have no per-trainer player-data guard — the delete is always safe. |
 
