@@ -233,13 +233,41 @@ The pure calculation logic lives in `Convenience/CR.Game.Compat/Battle/` (target
 
 ### Damage Formula
 
+Physical/special damage is **data-driven** via a tunable `damage_curve` (see *Damage curves* below). `BattleResolver` applies a fixed formula *shape* whose constants come from the resolved curve:
+
 ```
-Physical:  damage = floor(Power × Attack / Defense)
-Special:   damage = floor(Power × SpecialAttack / SpecialDefense)
-Status:    damage = 0
+levelFactor = curve.LevelCoeff × attackerLevel + curve.LevelConst
+atkStat     = Physical ? Attack  : SpecialAttack
+defStat     = Physical ? Defense : SpecialDefense
+damage      = floor( levelFactor × Power × atkStat / max(1, defStat) / curve.Divisor + curve.FlatAdd )
+              × STAB × typeMultiplier × ability.PowerMultiplier
+Status:     damage = 0
 ```
 
-Minimum damage is 1 for damaging abilities. Active `StatChange` modifiers are applied to snapshot stats before calling `Resolve`.
+- **STAB** (same-type attack bonus): when the attacker's element matches the ability's element (and is not `Normal`), damage is multiplied by `curve.StabMultiplier` (default 1.5). Computed in-resolver.
+- **typeMultiplier**: elemental effectiveness from the `elemental_damage` table (attack element vs defender element), pre-resolved by `BattleDomainService` and passed into `Resolve` (1.0 when no mapping exists). The elemental table is loaded once per battle and cached.
+- **ability.PowerMultiplier**: per-ability scalar (1.0 default; e.g. 1.5 for a rare/legendary ability).
+- Minimum damage is 1 for damaging abilities. Active `StatChange` modifiers are applied to snapshot stats before calling `Resolve`.
+
+#### Damage curves (`damage_curve` table)
+
+Damage tuning lives in a dual-DB (SQLite + Postgres) `damage_curve` table, authored as `DamageCurveDefinition` ScriptableObjects in Unity and synced from the Content Studio **Battle Tuning** tab.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `content_key` | text (UNIQUE) | designer key; `"default"` is the global curve |
+| `level_coeff` | float | `levelFactor = level_coeff × Level + level_const` |
+| `level_const` | float | |
+| `divisor` | float | normalization divisor (higher = less damage) |
+| `flat_add` | float | flat damage added after normalization |
+| `stab_multiplier` | float | same-type-attack bonus (default 1.5) |
+| `deleted`, `created_at`, `updated_at` | — | soft-delete + timestamps |
+
+An ability picks a curve via `abilities.damage_curve_key` (nullable → falls back to `"default"`); `abilities.power_multiplier` (float, default 1.0) scales that ability's damage. `BattleDomainService` resolves the effective curve (`ability.DamageCurveKey ?? "default"`, cached per battle) and passes it plus the pre-resolved `typeMultiplier` into `BattleResolver.Resolve` (the resolver stays pure / DB-free).
+
+**REST:** `GET /api/v1/abilities/damage-curves` (list), `PUT /api/v1/abilities/damage-curves/{contentKey}` (upsert).
+
+**Default curve:** `level_coeff = 0.4`, `level_const = 2`, `divisor = 50`, `flat_add = 2`, `stab_multiplier = 1.5` — seeded by migration `M1030`. The `abilities` columns are added by `M1031`.
 
 ### Accuracy Check
 
