@@ -17,25 +17,9 @@ public interface IDomainSync
 
 | Class | Scope | Caches | Events Subscribed |
 |-------|-------|--------|-------------------|
-| `BattleSync` | Battle scene | — (push-only via events) | `BattleEvents.*` |
 | `TeamSync` | World | `IReadOnlyList<GeneratedCreature> Team` | `ICreatureInventoryService.OnTeamUpdated/Added/Removed` |
 | `InventorySync` | World | `IReadOnlyList<ItemInventoryEntry> Inventory` | `IItemInventoryService.OnBackpackUpdated/Added/Removed` |
 
-### BattleSync
-
-`Assets/CR/Game/Battle/BattleSync.cs` — subscribes to the static `BattleEvents` bus and writes HP/turn data into Obvious.Soap SOAP variables. No Zenject injection needed.
-
-Inspector fields (all required):
-
-| Field | Type | Purpose |
-|-------|------|---------|
-| `_playerHp` | `IntVariable` | Player current HP |
-| `_playerHpMax` | `IntVariable` | Player max HP |
-| `_enemyHp` | `IntVariable` | Enemy current HP |
-| `_enemyHpMax` | `IntVariable` | Enemy max HP |
-| `_isPlayerTurn` | `BoolVariable` | True when it is the player's turn |
-
-`RefreshAsync` is a no-op — all state is pushed via events. `Clear()` resets all variables to zero/false.
 
 ### TeamSync
 

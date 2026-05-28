@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-05-28
+
+### Unity — battle wiring consolidated
+
+- **BattleStateBridge + BattleSync deleted.** All event→SO and event→Variable routing now flows through `EventWiringManifest` (codegen) and `VariableWiringManifest` (reflection). Single source of truth, no duplicate raises.
+- **`EventChannelInstaller`** + `EventChannelIds` constants — consumers use `[Inject(Id = EventChannelIds.X)]` instead of `[SerializeField]` SO drags. Adding a new event = one manifest row, zero per-consumer Inspector work.
+- **`BattleCoordinator.EndBattle` split into `EndBattle` + `CloseBattle`.** EndBattle raises resolution; CloseBattle exits the arena. New `BattleEvents.BattleClosed` + `ScriptableEventBattleClosed` SO. `_battleInProgress` stays true across the summary so input gates suppress the full lifecycle.
+- **`BattleSummaryScreen`** — new post-battle modal (UI Toolkit). Outcome banner + Experience Gained list + Items Received + scrollable Synopsis of every notable battle event. OK calls `CloseBattle`. Run-away auto-dismisses after 1.2s.
+- **`PlayerInputGate`** also gates on battle (Player map disabled from `BattleStarted` until `BattleClosed`). Trainer movement runs through `TrainerMovementController` → `IMovementController` → `MalbersMovementController`; gating the Player map naturally stops the shim.
+- **Starter selection (cr-api):** `BattleDomainService.SeedForTrainerAsync` now picks the first non-fainted creature by slot order (fallback to slot 0 if all fainted). Locked with a new test.
+- **Combat HUD redesign** — Figma "Monster Curator" light theme. Command card swaps modes (Attack / Bag / Swap / Run). Focus = navy fill + scale lift (USS has no box-shadow).
+- **Bag** — real `BaseItem.Name` / `Description` in both dashboard and combat bags (no more GUID prefixes).
+- **Team-availability dots** on the player card: full fill = fightable, ~15% = fainted, empty = no slot.
+
+
 Reverse-chronological log of significant additions to the codebase. Each entry links to the relevant documentation section.
 
 ---

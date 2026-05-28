@@ -12,7 +12,14 @@ The battle system connects scene-level events (NPC interaction, wild encounter t
 
 ## `BattleCoordinator`
 
-`BattleCoordinator` is a MonoBehaviour singleton bound as `IBattleCoordinator`. It is the only component that may call `IBattleDomainService` to start a battle or drive the turn loop. Scene components inject `IBattleCoordinator` — never the concrete class.
+`BattleCoordinator` is a MonoBehaviour singleton bound via `BindInterfacesAndSelfTo<BattleCoordinator>()` (the concrete type is required by the event wiring manifest to subscribe to its `OnBattleStarted`/`OnBattleEnded`/`OnBattleClosed` events). It is the only component that may call `IBattleDomainService` to start a battle or drive the turn loop. Scene components inject `IBattleCoordinator` — never the concrete class.
+
+### Resolution vs Close — two lifecycle moments
+
+- `EndBattle(winner, reason)` marks the battle resolved and raises `OnBattleEnded` / `BattleEvents.BattleEnded`. The arena is **not** exited; the post-battle summary screen shows.
+- `CloseBattle()` is called by `BattleSummaryScreen` on OK (or auto-dismiss for `ran_away`). Restores camera + trainer position via `BattleStager.ExitArenaAsync` and raises `OnBattleClosed` / `BattleEvents.BattleClosed`.
+
+Gameplay systems (input gates, ambient audio) release on `BattleClosed`, not `BattleEnded`, so the world doesn't unlock behind the summary modal.
 
 ### Installer Binding
 
@@ -149,9 +156,54 @@ The HTTP base URL is read from `game_config.yaml` via `GameConfigurationKeys.Bat
 
 Use **CR > Battle > Create Placeholder Arena** (editor menu) to scaffold a new arena GameObject with all child transforms pre-wired and `arenaKey` set to `"arena_placeholder"`.
 
-`BattleArenaRegistry` implements `IWorldInitializable` and indexes all `BattleArena` components in the scene by `arenaKey` at world init. It is bound as `IBattleArenaRegistry`.
+### `BattleArenaRegistry`
 
-`BattleCameraController` is a MonoBehaviour that saves and restores camera position. `EnterBattle(lookTarget)` lerps the main camera toward the arena; `ExitBattle()` lerps back.
+`BattleArenaRegistry` exposes `IBattleArenaRegistry.TryGetArena(key, out arena)`. Arenas **self-register** via a static dictionary — `BattleArena.OnEnable` calls `BattleArenaRegistry.RegisterArena(this)` and `OnDisable` removes it. No `FindObjectsOfType` scan, no `IWorldInitializable` dependency, no timing coupling to `GameInitializer.RunAsync`. Arenas loaded into additive scenes after world init are picked up automatically.
+
+### `BattleCameraController`
+
+MonoBehaviour that saves and restores camera position. Injects `ICRLogger`; logs Awake camera resolution, Enter/Exit transitions, and any null state (no main camera tagged `MainCamera`, null `lookTarget`, etc.). `EnterBattle(lookTarget)` lerps the main camera toward the arena; `ExitBattle()` lerps back.
+
+### `IBattleStager`
+
+Owns the visual side of arena entry/exit. `BattleCoordinator` calls it in step 5 of `StartWildBattleAsync` / `StartNpcBattle` after the arena is resolved.
+
+```csharp
+public interface IBattleStager
+{
+    Task<BattleStagingResult> EnterArenaAsync(
+        BattleArena arena,
+        Guid playerTrainerId,
+        Guid opponentTrainerId,
+        Guid playerCreatureId,
+        Guid opponentCreatureId,
+        CancellationToken ct = default);
+
+    Task ExitArenaAsync(CancellationToken ct = default);
+}
+
+public readonly struct BattleStagingResult
+{
+    public bool PlayerTeleported       { get; init; }
+    public bool PlayerVisualSpawned    { get; init; }
+    public bool OpponentVisualSpawned  { get; init; }
+}
+```
+
+`BattleStager` (default impl, bound `FromNewComponentOnNewGameObject` in `LocalDevGameInstaller`):
+
+| Stage | What happens |
+|-------|--------------|
+| **Player teleport** | Finds the active `TrainerWorldBehaviour` via `WorldRegistry`, caches its origin transform, moves it to `arena.PlayerTrainerPosition`. Origin restored on `ExitArenaAsync`. |
+| **Player creature visual** | Loads `BaseCreature.AssetKey` via `IGameAssetLoader.LoadAssetByKeyAsync<GameObject>`, instantiates the prefab at `arena.PlayerCreaturePosition`, destroys on exit. |
+| **Opponent creature visual** | Same flow at `arena.OpponentCreaturePosition`. |
+| **Opponent trainer** | Not teleported. Wild battles have no NPC GO. |
+
+Lookups go `GeneratedCreature` (via `IGeneratedCreatureRepository.GetCreature`) → `BaseCreature` (via `ICreatureRepository.GetCreature`) → `BaseCreature.AssetKey` → `IGameAssetLoader.LoadAssetByKeyAsync`. The chain is fully async + cancellation-aware. Each individual visual step can fail silently — the returned `BattleStagingResult` flags which steps succeeded so the caller can react.
+
+`BattleCoordinator` inspects the result after `EnterArenaAsync` and logs an Error + raises `BattleEvents.StagingFailed("opponent visual" | "player visual")` when a creatureId was passed in but no visual spawned. The battle still proceeds.
+
+`BattleCoordinator.EndBattle` calls `_stager.ExitArenaAsync` alongside `_cameraController.ExitBattle()`, so the same teardown path covers both player teleport restore and creature visual cleanup.
 
 ## `SpawnerEncounterBehaviour`
 
@@ -213,12 +265,11 @@ The `game.bytes` file is keyed as `LocalDataSources.GameOfflineRepository` and r
 
 ## `BattleHUD`
 
-`BattleHUD` (`Assets/CR/UI/Battle/BattleHUD.cs`) is a MonoBehaviour overlay built with **UI Toolkit** (UIDocument). It subscribes to `BattleEvents` and never calls the API directly.
+`BattleHUD` (`Assets/CR/UI/Battle/BattleHUD.cs`) is a MonoBehaviour overlay built with **UI Toolkit** (UIDocument). It subscribes to Soap `ScriptableEvent` channels via `[Inject(Id = EventChannelIds.X)]` (auto-bound by `EventChannelInstaller`) and never calls the API directly.
 
 **Files:**
 - `BattleHUD.cs` — MonoBehaviour; queries elements and wires button callbacks
 - `BattleBagPanelHandler.cs` — MonoBehaviour; manages the in-battle Items/Bag panel. Reads pre-cached data from `TeamSync.Team` and `InventorySync.Inventory` — no async fetch on `Open()`.
-- `Battle/BattleSync.cs` — MonoBehaviour; subscribes to `BattleEvents` and pushes HP/turn state into Obvious.Soap `IntVariable`/`BoolVariable` assets. Implements `IDomainSync` (no-op `RefreshAsync`). Assign five SOAP variables in the inspector: `PlayerHp`, `PlayerHpMax`, `EnemyHp`, `EnemyHpMax`, `IsPlayerTurn`.
 - `Resources/BattleHUD.uxml` — layout: opponent panel (top-right), player panel (bottom-left), battle log, action menu (Battle / Items / Run), ability panel
 - `Resources/BattleHUD.uss` — styles; root has `picking-mode="Ignore"` so clicks pass through to the 3D world
 - `UI/Battle/BattleBagPanel.uxml` — bag panel layout (item list, party slots, confirm/cancel)
@@ -227,8 +278,8 @@ The `game.bytes` file is keyed as `LocalDataSources.GameOfflineRepository` and r
 1. Add a `UIDocument` + `BattleHUD` MonoBehaviour to a GameObject in the scene. `BattleHUD.Awake` auto-loads `Resources/BattleHUD.uxml` if none is assigned.
 2. Add `BattleBagPanelHandler` as a second component on the **same GameObject** (or a sibling with its own UIDocument). Assign its `UIDocument` field.
 3. On the `BattleHUD` component, assign the `BattleBagPanelHandler` component to the **Bag Panel Handler** SerializeField.
-4. Add a `BattleSync` MonoBehaviour to any persistent GameObject in the battle scene. Assign its five SOAP variable slots in the Inspector.
-5. Ensure `TeamSync` and `InventorySync` MonoBehaviours are present in the scene (see [Domain Sync Pattern](16-domain-sync-pattern.md)).
+4. Ensure `TeamSync` and `InventorySync` MonoBehaviours are present in the scene (see [Domain Sync Pattern](16-domain-sync-pattern.md)).
+5. Ensure `EventChannelInstaller` is in the `SceneContext` Installers list with `EventWiringManifest.asset` assigned (see [Event Wiring](15-event-wiring.md)) — the HUD's event subscriptions are auto-injected.
 
 The root is hidden (`DisplayStyle.None`) on start and shown when `BattleEvents.BattleStarted` fires.
 
@@ -259,14 +310,31 @@ public record WildBattleRequest(
 );
 ```
 
-`BattleArenaKey` is optional. When empty, `BattleCoordinator` skips arena teleportation and camera transition.
+`BattleArenaKey` is optional. When empty, `BattleCoordinator` skips arena staging and camera transition.
+
+## `NpcBattleRequest`
+
+```csharp
+public record NpcBattleRequest(
+    Guid NpcId,
+    Guid AccountId,
+    Guid TrainerId,
+    IReadOnlyList<CreatureInventoryEntry> NpcTeam,
+    IReadOnlyList<NpcInventoryEntry> NpcItems,
+    string BattleArenaKey = ""
+);
+```
+
+`BattleArenaKey` is set from `NpcInteractionBehaviour._battleArenaKey` (Inspector field on the NPC GameObject). Empty = no arena staging.
 
 ## NPC Trainer Battle Flow
 
 1. Player enters `NpcInteractionBehaviour` trigger radius and presses **E**
 2. `NpcInteractionBehaviour` checks `NpcTrainerBehaviour.CanBattle` and that no creature grant is pending
-3. Builds an `NpcBattleRequest` and calls `BattleCoordinator.StartNpcBattle(request)`
-4. `BattleCoordinator` calls `IBattleDomainService.StartBattleAsync` → `GetBattleStartResultAsync` → fires `OnBattleStarted`
+3. Builds an `NpcBattleRequest` (including `_battleArenaKey` from the Inspector) and calls `BattleCoordinator.StartNpcBattle(request)`
+4. `BattleCoordinator` calls `IBattleDomainService.StartBattleAsync` → `GetBattleStartResultAsync` → `GetBattleStateAsync` to identify active creatures
+5. If `BattleArenaKey` resolves, calls `_stager.EnterArenaAsync(...)` → `_cameraController.EnterBattle(arena.CameraLookTarget)` — player teleport + both creature visuals + camera lerp
+6. Fires `OnBattleStarted`
 
 ## Wild Creature Battle Flow
 
@@ -290,7 +358,11 @@ public record WildBattleRequest(
 
 **`BattleHttpDomainAdapter` server address.** Reads `game_config.yaml` key `battle_server_http_address`. In local dev this is `http://localhost:8080`. Ensure the AIO host is running.
 
-**`BattleArenaRegistry` requires world init.** Arenas are indexed during `IWorldInitializable.InitializeAsync`. If a battle starts before world init completes, `TryGetArena` returns false and the arena step is skipped gracefully.
+**`BattleStager` missing creature `AssetKey`.** If `BaseCreature.AssetKey` is empty or the addressable cannot be loaded, the stager logs and returns null for that visual. `BattleCoordinator` then reads the returned `BattleStagingResult`, logs an Error, and raises `BattleEvents.StagingFailed("opponent visual" | "player visual")`. The battle still runs — only the on-arena prefab is missing.
+
+**`BattleStager` no `TrainerWorldBehaviour` in `WorldRegistry`.** Means no player trainer GO is in the scene yet. Stager logs a warning and skips the teleport; creature visuals still spawn. Usually indicates a scene without `TrainerWorldBehaviour` registered (e.g. main menu testing).
+
+**`BattleHUD` IDs are now `Guid`, not `string`.** Comparisons inside the HUD use `Guid` equality; HpChanged events arriving before `CreaturesIdentified` are cached in `_hpCache` and replayed when the IDs land. Out-of-order or dropped events no longer leave the opponent panel blank.
 
 ## Related Pages
 

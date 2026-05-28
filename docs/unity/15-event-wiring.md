@@ -361,13 +361,30 @@ The generated class uses typed `+= handler` subscriptions and direct `.Value =` 
 | Entry logs "sink arg mismatch" | Data struct/SO mismatch | Ensure `ScriptableEvent<T>` uses the same `T` as the event payload |
 | Wiring fires twice | Old bridge `MonoBehaviour` still present | Disable/delete the legacy bridge component in the scene |
 
-## Migration from bridges
+## Migration from bridges — complete for battle
 
-The legacy bridges in `Assets/CR/Core/State/Bridge/` (e.g. `BattleStateBridge`, `QuestStateBridge`) are still present and do two jobs:
+`BattleStateBridge` (Assets/CR/Core/State/Bridge/) and `BattleSync` (Assets/CR/Game/Battle/) have been **deleted**. Every routing they did now flows through the two manifests:
 
-1. Raise SOAP events (now replaceable by wiring).
-2. Update SOAP `StringVariable`/`BoolVariable`/`IntVariable` state.
+- **Event-to-SO** — `EventWiringManifest` (codegen → `GeneratedEventWiringBridge`).
+- **Event-to-Variable** — `VariableWiringManifest` (reflection → `VariableWiringExecutor`).
 
-Job #1 can be migrated piecemeal: add wire entries for each bridge raise, then remove the bridge line. Leave the bridge in place until all its raises are covered by wiring.
+For consumers, see [Event Channel Auto-Bind](#event-channel-auto-bind) — drop `[Inject(Id = EventChannelIds.X)]` on a field instead of `[SerializeField]` + Inspector drag.
 
-Job #2 (variable updates) is not yet covered by this system — keep the bridge, or replace with a dedicated state-variable adapter in a follow-up.
+For other subsystems (e.g. quests), follow the same playbook:
+1. Add `EventWiringManifest` rows for each SO raise the bridge does.
+2. Add `VariableWiringManifest` rows for each variable assignment.
+3. Run the codegen menu (`CR → Wiring → Generate Bridge From Selected Manifest`).
+4. Delete the bridge `MonoBehaviour` and any leftover scene GameObjects.
+
+## Event Channel Auto-Bind
+
+`EventChannelInstaller` (`Assets/CR/Core/Wiring/EventChannelInstaller.cs`) registers every SO sink in the assigned `EventWiringManifest` into the Zenject container by its asset name. Consumers drop `[SerializeField]` slots for SO refs and use:
+
+```csharp
+[Inject(Id = EventChannelIds.BattleResult)]
+private ScriptableEventBattleResult? onBattleEnded;
+```
+
+Stable string keys live in `Assets/CR/Core/State/EventChannelIds.cs`. Renaming a SO asset must be paired with renaming its constant — that's the one trade-off vs Inspector drags (which survive renames via GUID).
+
+Scene wiring: add `EventChannelInstaller` to the `SceneContext` Installers list, drag the manifest, done. Empty `extras` list is the expected state.
