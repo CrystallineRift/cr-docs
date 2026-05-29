@@ -161,7 +161,7 @@ Plain POCOs in `Game/CR.Game.Model/Battle/` — one file per table:
 - `BattleCreatureSnapshot` — in-battle view of a creature (`TrainerId`, `CreatureId`, `CurrentHp`, `IsActive`), built from persistent creature tables; replaces `BattleCreatureStateRecord` in `BattleStateDto`
 - `BattleActionLogRecord` — maps to `battle_action_log`
 - `BattleAction` — represents a single submitted action (type, abilityId, itemId, etc.)
-- `ActionOutcome` — full resolution result returned from `SubmitActionAsync` (includes `AbilityKey`, `ConditionsApplied`, `AttackerConditionsApplied`)
+- `ActionOutcome` — full resolution result returned from `SubmitActionAsync` (includes `AbilityKey`, `ConditionsApplied`, `AttackerConditionsApplied`, `NeedsSwap`)
 - `ActiveBattleCondition` / `ActiveStatChange` — live conditions used by the resolver and in `ActionOutcome`
 - `ResolvedConditionDefinition` — pre-loaded condition + stat changes passed into the resolver (lives in `CR.Game.Model/Battle/`)
 
@@ -200,9 +200,10 @@ public interface IBattleDomainService
 7. Resolve the action immediately via `BattleResolver.Resolve()` (from `CR.Game.Compat`)
 8. Persist HP **live** via `IGeneratedCreatureRepository.UpsertCurrentHitPointsAsync`, and apply/remove conditions via `ApplyStatusConditionAsync` / `RemoveStatusConditionAsync`
 9. Write action log entry
-10. Check battle-end condition (the acting trainer's creature fainted, or the opponent's did)
-11. If battle not over: create new round with `active_trainer_id = opposingTrainerId`
-12. Return `ActionOutcome` including `NextActiveTrainerId` + `NextRoundKey`
+10. Check battle-end condition (a creature fainted — but **only end the battle if the owner has no alive backup**, see *Force-Swap on Faint* below). The true winner is threaded through to battle end rather than recording any active-creature faint as an instant Loss.
+11. If a creature fainted but its owner has an alive backup: keep the battle Active and set `ActionOutcome.NeedsSwap = true` (with `NextActiveTrainerId` = the trainer who must swap)
+12. If battle not over and no swap is forced: create new round with `active_trainer_id = opposingTrainerId`
+13. Return `ActionOutcome` including `NextActiveTrainerId` + `NextRoundKey`
 
 HP is written on **every resolved action**, so a creature's damage persists immediately — no end-of-battle write-back step is needed.
 
@@ -309,6 +310,29 @@ escaped = roll < escapeChance
 - **Escape fails:** the opponent acts next — a new round is opened with `active_trainer_id = opponentId`, and `ActionOutcome.BattleEnded = false`. No round key is returned for the fleeing trainer.
 
 The RNG is seeded deterministically from `battleId.GetHashCode() ^ roundNumber`, so the outcome for a given battle state is reproducible.
+
+## Force-Swap on Faint
+
+A battle no longer ends the instant a trainer's active creature faints. If the owner has **at least one alive backup creature** on their team, the battle stays Active and the trainer is required to swap in a replacement.
+
+`BattleDomainService` resolves this via a private check `HasAliveBackupAsync(trainerId, activeCreatureId, ct)` — it loads the trainer's team and returns `true` if any creature other than the now-fainted active one still has HP. When the faint occurs:
+
+- **Owner has an alive backup:** battle status stays `"Active"`, `ActionOutcome.NeedsSwap = true`, and `ActionOutcome.NextActiveTrainerId` is set to the trainer who must choose a replacement. No new round is opened until the swap is submitted.
+- **Owner has no alive backup:** battle ends as before; the opponent is the winner.
+
+The wild-trainer sentinel `00000000-0000-0000-0000-000000000001` has no team, so a fainting wild creature still ends the battle (player win) exactly as before.
+
+> **Bug fix:** previously any active-creature faint was recorded as an instant Loss regardless of the remaining team. The backup-aware end check threads the **real** winner through to battle end.
+
+## Switch Action
+
+`BattleActionType.Switch` (enum value `3`) swaps the acting trainer's active creature for a backup. JSON payload shape:
+
+```json
+[{"type":3,"newCreatureId":"<guid>"}]
+```
+
+The handler validates the target creature is **owned by the acting trainer, alive, and not already active**, then sets it active via `SetActiveCreatureAsync` and passes the turn to the opponent (a new round is opened with `active_trainer_id = opponentId`). A Switch is the action a client submits in response to `ActionOutcome.NeedsSwap`.
 
 ## Wild Trainer
 

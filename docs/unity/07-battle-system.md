@@ -82,6 +82,7 @@ public interface IBattleCoordinator
 | `CreatureHit` | `(string creatureId, int damage)` | Display damage number |
 | `HpChanged` | `(string creatureId, int finalHp, int maxHp)` | Update HP bar |
 | `CreatureFainted` | `(string creatureId)` | Play faint animation |
+| `PlayerMustSwap` | `(string trainerId)` | Player's active creature fainted but has a backup; HUD must force a swap |
 | `BattleEnded` | `(bool playerWon, string outcomeLabel)` | Show result screen |
 | `RunAttempted` | `(bool success)` | Show escape message |
 
@@ -105,6 +106,28 @@ StartBattleAsync
 `SubmitPlayerAction(string actionJson)` is called by the HUD (or any input handler) to unblock the `TaskCompletionSource` awaited in the loop. The action JSON matches the backend's action format, e.g. `[{"type":0,"abilityId":"...","targetCreatureId":"..."}]`.
 
 The wild trainer GUID is `00000000-0000-0000-0000-000000000001` (defined in `WildTrainerIds.WildTrainerId`).
+
+## Force-Swap on Faint
+
+When the player's active creature faints but the team still has an alive backup, the server keeps the battle Active and returns `ActionOutcome.NeedsSwap = true` (see [Battle Persistence — Force-Swap on Faint](?page=backend/09-battle-persistence)). The client turns this into a forced swap rather than ending the battle.
+
+**Event flow:**
+
+```
+BattleCoordinator (outcome.NeedsSwap && outcome.NextActiveTrainerId == playerTrainerId)
+    └─ BattleEvents.PlayerMustSwap(trainerId)
+       └─ BattleEventsAdapter re-emits
+          └─ EventWiringManifest routes to Soap SO PlayerMustSwap.asset (ScriptableEventString)
+             └─ BattleHUD consumes via [Inject(Optional = true, Id = EventChannelIds.PlayerMustSwap)]
+```
+
+`BattleCoordinator` only raises `PlayerMustSwap` when `outcome.NeedsSwap` is set **and** `outcome.NextActiveTrainerId` is the local player's trainer ID (a wild/NPC opponent swaps server-side).
+
+On the event, `BattleHUD` **force-enters Swap mode**:
+
+- The player must pick a backup creature or Run — the swap panel cannot be dismissed (no back-out).
+- While the swap is forced, the panel's back button becomes a **Run** button.
+- Selecting a creature submits a Switch action: `[{"type":3,"newCreatureId":"<guid>"}]`.
 
 ## `BattleSession`
 
@@ -295,6 +318,8 @@ The root is hidden (`DisplayStyle.None`) on start and shown when `BattleEvents.B
 5. Player presses **Run** → submits `[{"type":4}]`
 
 Ability button labels show `"Name (Power)"` e.g. `"Fire Bolt (50)"`. Buttons with no ability are disabled and styled with `.ability-btn--disabled`. `BattleActionType` enum: Ability=0, Item=2, Switch=3, Run=4.
+
+> **Action-payload fix:** the Item action must serialize as `"type":2`. It previously serialized as `"type":3`, which the server interprets as **Switch** — so item actions silently fell through the Switch handler (item effects still applied only because `UseItemAsync` runs separately). Items now correctly use `BattleActionType.Item` (`"type":2`).
 
 `playerAbilities` is populated by `BattleCoordinator.BuildAbilityListAsync` — it queries `IAbilityRepository.GetAbilitiesForProgressionSetAtLevelAsync` for the player's active creature and maps to `WildAbilityDto` for the HUD. `BattleStateDto` (DLL type) does not include ability lists; they are assembled client-side.
 
