@@ -129,6 +129,19 @@ On the event, `BattleHUD` **force-enters Swap mode**:
 - While the swap is forced, the panel's back button becomes a **Run** button.
 - Selecting a creature submits a Switch action: `[{"type":3,"newCreatureId":"<guid>"}]`.
 
+## Whiteout on Team KO
+
+When the player's **whole team** is knocked out the battle resolves as a loss (after force-swap-on-faint, a loss only happens once every team creature is down). `PlayerWhiteoutHandler` — a pure-DI listener on `IBattleCoordinator` end/close events (no scene object, bound `NonLazy` in `LocalDevGameInstaller`) — owns this path. `BattleSummaryScreen` skips the defeat recap when `BattleOutcome.IsPlayerLoss(result, playerTrainerId)` is true, so the whiteout drives the moment instead.
+
+Sequence:
+
+1. **`OnBattleEnded`** → `"{name} passed out!"` (trainer name via `ITrainerDomainService`), then `CloseBattle()`.
+2. **`OnBattleClosed`** (arena already restored) → `ICreatureInventoryService.HealTeamAsync(trainerId)` → teleport the player to the merchant → `"Your team was healed."`
+
+The heal + teleport run on `OnBattleClosed` (not `OnBattleEnded`) because the arena stager restores the player to the pre-battle position synchronously inside `CloseBattle`; running after that restore means the merchant teleport lands last and sticks. Teleport moves `TrainerWorldBehaviour` → `NpcMerchantBehaviour` (both resolved via `WorldRegistry`) — the same transform the stager moves.
+
+`MessageDialog` (`Assets/CR/UI/Common/MessageDialog.cs`, USS in `Resources/MessageDialog.uss`) is a self-spawning awaitable UI Toolkit modal that reuses a scene `PanelSettings`, so the whiteout needs **no new scene wiring**.
+
 ## `BattleSession`
 
 `BattleSession` is the payload of `OnBattleStarted`. It is a snapshot — it does not update as the battle progresses.

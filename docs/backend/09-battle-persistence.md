@@ -334,6 +334,18 @@ The wild-trainer sentinel `00000000-0000-0000-0000-000000000001` has no team, so
 
 The handler validates the target creature is **owned by the acting trainer, alive, and not already active**, then sets it active via `SetActiveCreatureAsync` and passes the turn to the opponent (a new round is opened with `active_trainer_id = opponentId`). A Switch is the action a client submits in response to `ActionOutcome.NeedsSwap`.
 
+## Whiteout Team Heal
+
+When a trainer's whole team is knocked out, the team is fully restored via `ICreatureInventoryService.HealTeamAsync(trainerId, ct)` (`Game/CR.Game.Domain.Services`). For each team creature it sets `current_hit_points` to max — reviving fainted creatures — and clears all status conditions (`UpsertCurrentHitPointsAsync` + `RemoveAllStatusConditionsAsync`), returning the number restored. Unity injects the same domain service directly, so one implementation covers the server, Unity-online, and Unity-offline paths.
+
+A REST surface is exposed for the server path (`Game/CR.Game.Service.BFF/Endpoints/TeamEndpoints.cs`):
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| `POST` | `/api/v1/trainers/{trainerId}/team/heal` | Full team heal + revive + status clear; returns `{ trainerId, healed }` |
+
+The endpoint resolves the caller's account from the request context and requires it to own `trainerId` (else `404`), preventing one account from healing another's team (IDOR). The in-process Unity caller invokes the domain service directly as the owning session.
+
 ## Wild Trainer
 
 A system "Wild" trainer with well-known GUID `00000000-0000-0000-0000-000000000001` is seeded by `M9990SeedGameData`. All spawned wild creatures are assigned to this trainer. When a battle ends, `WriteBackHpAsync` soft-deletes the wild trainer's active creature (if uncaptured) and clears its `generated_creature_current_stats` row.

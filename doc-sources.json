@@ -243,7 +243,10 @@
         "cr-api-unity/Assets/CR/Game/World/Behaviours/SpawnerEncounterBehaviour.cs",
         "cr-api-unity/Assets/CR/Game/World/Behaviours/SpawnerWorldBehaviour.cs",
         "cr-api-unity/Assets/CR/Game/Battle/BattleSync.cs",
-        "cr-api-unity/Assets/CR/UI/Battle/BattleBagPanelHandler.cs"
+        "cr-api-unity/Assets/CR/UI/Battle/BattleBagPanelHandler.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/PlayerWhiteoutHandler.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/BattleOutcome.cs",
+        "cr-api-unity/Assets/CR/UI/Common/MessageDialog.cs"
       ]
     },
     "description": "BattleCoordinator sequential turn loop with battle-scoped CancellationToken, BattleHttpDomainAdapter + OnlineOfflineBattleDomainService stack, BattleEvents static events (incl. StagingFailed), Arena system with IBattleStager returning BattleStagingResult (player teleport + creature visual spawn at PlayerCreaturePosition/OpponentCreaturePosition), self-registering BattleArenaRegistry, BattleCameraController with ICRLogger, BattleHUD with Guid-typed creature IDs and HP cache replay, BattleSync SOAP bridge, StartNpcBattle/StartWildBattle, NpcBattleRequest.BattleArenaKey, SpawnerEncounterBehaviour with encounter delay"
@@ -419,6 +422,9 @@
         "Game/CR.Game.Domain.Services/Interfaces/Battle/IBattleDomainService.cs",
         "Game/CR.Game.Domain.Services/Interfaces/Battle/IWildBattleAIDomainService.cs",
         "Game/CR.Game.Domain.Services/Implementation/Battle/BattleDomainService.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Creature/CreatureInventoryService.cs",
+        "Game/CR.Game.Domain.Services/Interfaces/Creature/ICreatureInventoryService.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/TeamEndpoints.cs",
         "Game/CR.Game.Domain.Services/Implementation/Battle/WildBattleAIDomainService.cs",
         "Game/CR.Game.Service.BFF/Endpoints/BattleEndpoints.cs",
         "Game/CR.Game.Service.BFF/Endpoints/WildBattleEndpoints.cs",
