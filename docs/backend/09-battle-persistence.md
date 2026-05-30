@@ -334,6 +334,23 @@ The wild-trainer sentinel `00000000-0000-0000-0000-000000000001` has no team, so
 
 The handler validates the target creature is **owned by the acting trainer, alive, and not already active**, then sets it active via `SetActiveCreatureAsync` and passes the turn to the opponent (a new round is opened with `active_trainer_id = opponentId`). A Switch is the action a client submits in response to `ActionOutcome.NeedsSwap`.
 
+## Battle Experience
+
+When the player (`Trainer1`) knocks out an opponent creature (`ActionOutcome.TargetFainted`), `BattleDomainService` awards XP through the existing `ICreatureProgressionService.ApplyExperienceAsync`, which handles level-up, stat growth (`growth_profile`), and ability unlocks.
+
+- **Amount**: `5 × defeatedLevel` (tunable `XpPerDefeatedLevel`).
+- **Split**: the fighter (the active creature at the KO) takes `1 − benchShare`; the remainder is divided evenly across the **living bench**. With no living bench, the fighter takes all of it.
+- **`benchShare`** = base **10%** + the trainer's `exp_share_bonus_percent` stat (read via `IStatService`), clamped to `[10%, 100%]`.
+
+Per-creature results are returned on `ActionOutcome.ExperienceAwards` (`CreatureId`, `Amount`, `LeveledUp`, `NewLevel`) for the client to render. XP is awarded on **every** opponent knockout, independent of whether the battle ends (so multi-creature trainer battles award per KO).
+
+### EXP-share modifiers (items / skills)
+
+Because `benchShare` reads the `exp_share_bonus_percent` trainer stat, any writer raises the bench's cut:
+
+- **Item** — the `IncreaseExpShare` effect (`ItemEffectType = 12`) increments the stat by its `Percent` parameter (`IncreaseExpShareHandler` on the server; `OfflineItemUseService` mirrors it offline). The sample item `exp_share_charm` ("Mentor's Charm", seeded by `M6009SeedExpShareItem`) grants +20%.
+- **Skill / perk** — any future progression that records to the same stat raises it identically.
+
 ## Whiteout Team Heal
 
 When a trainer's whole team is knocked out, the team is fully restored via `ICreatureInventoryService.HealTeamAsync(trainerId, ct)` (`Game/CR.Game.Domain.Services`). For each team creature it sets `current_hit_points` to max — reviving fainted creatures — and clears all status conditions (`UpsertCurrentHitPointsAsync` + `RemoveAllStatusConditionsAsync`), returning the number restored. Unity injects the same domain service directly, so one implementation covers the server, Unity-online, and Unity-offline paths.

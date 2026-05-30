@@ -142,6 +142,10 @@ The heal + teleport run on `OnBattleClosed` (not `OnBattleEnded`) because the ar
 
 `MessageDialog` (`Assets/CR/UI/Common/MessageDialog.cs`, USS in `Resources/MessageDialog.uss`) is a self-spawning awaitable UI Toolkit modal that reuses a scene `PanelSettings`, so the whiteout needs **no new scene wiring**.
 
+## Experience
+
+XP is awarded **server-side** on a knockout (see *Battle Experience* on the backend battle-persistence page for the 90/10 fighter/bench split and EXP-share). `BattleCoordinator.FireOutcomeEvents` reads `ActionOutcome.ExperienceAwards` and raises `BattleEvents.ExpGained(creatureId, amount, leveledUp)` (plus `LevelUp` when a creature levels). The **battle summary** collects these into its XP section and "LEVEL UP" chip — the client does no XP math, it only renders what the outcome reports.
+
 ## `BattleSession`
 
 `BattleSession` is the payload of `OnBattleStarted`. It is a snapshot — it does not update as the battle progresses.
