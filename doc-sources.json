@@ -229,9 +229,26 @@
         "cr-api-unity/Assets/CR/Game/Battle/WildBattleRequest.cs",
         "cr-api-unity/Assets/CR/Game/Battle/BattleAnimationConfig.cs",
         "cr-api-unity/Assets/CR/Game/Battle/CreatureAnimationProfile.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Presentation/CreatureBattlePresenter.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Presentation/CreatureReactionProfile.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Presentation/CreatureBattleReactions.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Presentation/CreatureReaction.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Presentation/CreatureReactionDefaults.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Presentation/CreatureVibrationTier.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Presentation/BattleVisualRegistry.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Presentation/BattleAbilityFxResponder.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Events/AbilityFxCue.cs",
         "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleArena.cs",
         "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleArenaRegistry.cs",
-        "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleCameraController.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleCinematicDirector.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Arena/IBattleCameraController.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleCameraRig.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleCameraProfile.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleCameraRole.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleFormation.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleCameraShakeResponder.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleCameraRigContext.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Arena/Editor/BattleCameraRigBuilder.cs",
         "cr-api-unity/Assets/CR/Game/Battle/Arena/IBattleStager.cs",
         "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleStager.cs",
         "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleStagingResult.cs",
@@ -245,11 +262,11 @@
         "cr-api-unity/Assets/CR/Game/Battle/BattleSync.cs",
         "cr-api-unity/Assets/CR/UI/Battle/BattleBagPanelHandler.cs",
         "cr-api-unity/Assets/CR/Game/Battle/PlayerWhiteoutHandler.cs",
-        "cr-api-unity/Assets/CR/Game/Battle/BattleOutcome.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/BattleLossRules.cs",
         "cr-api-unity/Assets/CR/UI/Common/MessageDialog.cs"
       ]
     },
-    "description": "BattleCoordinator sequential turn loop with battle-scoped CancellationToken, BattleHttpDomainAdapter + OnlineOfflineBattleDomainService stack, BattleEvents static events (incl. StagingFailed), Arena system with IBattleStager returning BattleStagingResult (player teleport + creature visual spawn at PlayerCreaturePosition/OpponentCreaturePosition), self-registering BattleArenaRegistry, BattleCameraController with ICRLogger, BattleHUD with Guid-typed creature IDs and HP cache replay, BattleSync SOAP bridge, StartNpcBattle/StartWildBattle, NpcBattleRequest.BattleArenaKey, SpawnerEncounterBehaviour with encounter delay"
+    "description": "BattleCoordinator sequential turn loop with battle-scoped CancellationToken, BattleHttpDomainAdapter + OnlineOfflineBattleDomainService stack, BattleEvents static events (incl. StagingFailed), Arena system with IBattleStager returning BattleStagingResult (player teleport + creature visual spawn at PlayerCreaturePosition/OpponentCreaturePosition), self-registering BattleArenaRegistry, reactive Cinemachine 3 cinematic camera (BattleCinematicDirector conductor driven by CameraCue*/TurnStarted, editor-authored BattleCameraRig role vCams + BattleCameraProfile feel SO + decoupled BattleCameraShakeResponder via BattleCameraRigContext, BattleFormation slot model for 1v1->NvN, one-click rig builder + beat simulator), per-creature CreatureBattlePresenter (added to creature prefabs; the stager resolves the creature's shared CreatureReactionProfile from its CreatureDefinition by content key, flattens any base→variant inheritance via Resolve(), and hands the result to Bind; subscribes to BattleEvents and plays the creature's own body — animation+cry+feedback — per beat, with a standard Animator state-name convention in CreatureReactionDefaults and HasState-guarded fallbacks), ability VFX/SFX sourced from AbilityConfig keys on the outcome and played positionally by BattleAbilityFxResponder via a single positioned AbilityFxCue + BattleVisualRegistry (id→transform), BattleHUD with Guid-typed creature IDs and HP cache replay, BattleSync SOAP bridge, StartNpcBattle/StartWildBattle, NpcBattleRequest.BattleArenaKey, SpawnerEncounterBehaviour with encounter delay"
   },
   "unity/16-domain-sync-pattern": {
     "docPath": "docs/unity/16-domain-sync-pattern.md",
@@ -473,10 +490,14 @@
         "cr-api-unity/Assets/CR/Core/Data/Registry/Definitions/GrowthProfileConfig.cs",
         "cr-api-unity/Assets/CR/Core/Data/Registry/ContentDefinitionProvider.cs",
         "cr-api-unity/Assets/CR/Game/Battle/BattleAnimationConfig.cs",
-        "cr-api-unity/Assets/CR/Game/Battle/CreatureAnimationProfile.cs"
+        "cr-api-unity/Assets/CR/Game/Battle/CreatureAnimationProfile.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleCameraProfile.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Presentation/CreatureReactionProfile.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Presentation/CreatureBattleReactions.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Presentation/CreatureReaction.cs"
       ]
     },
-    "description": "All ScriptableObject types: what each does, every field, which sync to the backend and via which endpoint, ContentDefinitionProvider registry wiring, Dialogue Database note"
+    "description": "All ScriptableObject types: what each does, every field, which sync to the backend and via which endpoint, ContentDefinitionProvider registry wiring, BattleCameraProfile cinematic-camera feel SO, CreatureReactionProfile shared body-reaction SO (animation+cry+feedback per beat, baseProfile inheritance/override for evolutions, Resolve() flatten; referenced by CreatureDefinition.reactionProfile; offensive VFX comes from AbilityConfig), Dialogue Database note"
   },
   "unity/13-battle-bag-ui": {
     "docPath": "docs/unity/13-battle-bag-ui.md",

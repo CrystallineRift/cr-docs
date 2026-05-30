@@ -186,7 +186,9 @@ The HTTP base URL is read from `game_config.yaml` via `GameConfigurationKeys.Bat
 | `opponentTrainerPosition` | Transform | Where the opponent trainer stands |
 | `playerCreaturePosition` | Transform | Where the player's active creature spawns |
 | `opponentCreaturePosition` | Transform | Where the opponent's active creature spawns |
-| `cameraLookTarget` | Transform | `BattleCameraController` lerps to look at this |
+| `cameraLookTarget` | Transform | Center the cinematic camera orbits/frames (falls back to the midpoint of the lead slots) |
+| `cameraRig` | `BattleCameraRig` | The authored cinematic rig for this arena (role vCams + target group + impulse). Empty → camera stays on the overworld |
+| `playerCreatureSlots` / `opponentCreatureSlots` | `List<Transform>` | Optional per-side stand points for 2v2/NvN/boss; empty → the single creature position above is slot 0 |
 | `defaultBiome` | `BiomeType` | The biome active when the arena awakens |
 | `biomes` | `BiomeEnvironment[]` | Maps each `BiomeType` to a root `GameObject` to activate/deactivate |
 
@@ -200,9 +202,33 @@ Use **CR > Battle > Create Placeholder Arena** (editor menu) to scaffold a new a
 
 `BattleArenaRegistry` exposes `IBattleArenaRegistry.TryGetArena(key, out arena)`. Arenas **self-register** via a static dictionary — `BattleArena.OnEnable` calls `BattleArenaRegistry.RegisterArena(this)` and `OnDisable` removes it. No `FindObjectsOfType` scan, no `IWorldInitializable` dependency, no timing coupling to `GameInitializer.RunAsync`. Arenas loaded into additive scenes after world init are picked up automatically.
 
-### `BattleCameraController`
+### Cinematic Camera (`BattleCinematicDirector`)
 
-MonoBehaviour that saves and restores camera position. Injects `ICRLogger`; logs Awake camera resolution, Enter/Exit transitions, and any null state (no main camera tagged `MainCamera`, null `lookTarget`, etc.). `EnterBattle(lookTarget)` lerps the main camera toward the arena; `ExitBattle()` lerps back.
+The battle camera is a **reactive, editor-authored Cinemachine 3 system**. `BattleCinematicDirector` (the conductor, bound as `IBattleCameraController`) listens to the `BattleEvents` cues the coordinator already raises and, per beat, picks a **shot role** and aims the matching authored virtual camera at the right anchors. It owns no framing and no shake — those live in the editor-authored rig and a decoupled responder.
+
+| Type | Role |
+|------|------|
+| `BattleCinematicDirector` | Conductor. Subscribes to `BattleEvents` in `OnEnable`/`OnDisable`, gated on `_inBattle`. Resolves the attacker side from `TurnStarted.isPlayer` (swap-safe), enables exactly one role vCam at a time and sets its `Follow`/`LookAt`, runs the idle orbit + intro radius ease, and overrides the Brain's blend. `EnterBattle(BattleArena)` / `ExitBattle()`. |
+| `BattleCameraRig` | Editor-authored prefab: one `CinemachineCamera` per `BattleCameraRole` (`Establishing`, `Action`, `Reaction`, `LowAngle`, `Hero`), a `CinemachineTargetGroup`, a `CinemachineImpulseSource`, and a `BattleCameraProfile`. Assigned to `BattleArena.cameraRig`. |
+| `BattleCameraProfile` | ScriptableObject of feel values (blend seconds, action/faint holds, orbit °/s, intro radius multiplier, shake force). Persists across Play-mode tuning; framing lives on the vCams. |
+| `BattleFormation` | Maps the live battle onto arena slot anchors (`AttackerAnchor`/`DefenderAnchor`/`AllActiveAnchors`). 1v1 today; shaped for NvN / N-v-1. |
+| `BattleCameraShakeResponder` | Decoupled shake. Reacts to `CameraCueDefender`/`HeavyHit`/`CameraCueFaint`, coalesces same-frame signals into one force-scaled impulse, fires the rig's impulse source. Reaches the active rig via the shared `BattleCameraRigContext`. |
+
+**Beat → shot role**
+
+| Cue | Shot |
+|-----|------|
+| `CameraCueIntro` | `Establishing` — wide sweep eased into a slow idle orbit |
+| `TurnStarted(isPlayer)` | sets attacker side; the first turn ends the intro |
+| `CameraCueAttacker` | `Action` — over-shoulder behind the attacker, looking at the defender |
+| `CameraCueDefender` / `HeavyHit` | shake (responder); framing holds on the action |
+| `CameraCueFaint` | `LowAngle` on the faller + heavy shake |
+| `CameraCueVictory` / `CameraCueCapture` | `Hero` — rises on the player's creature |
+| `TurnEnded` | settle back to idle (backstop) |
+
+**Camera ownership / handoff.** The `MainCamera` already carries a `CinemachineBrain`; Malbers drives the overworld transform directly (the Brain is dormant with no live vCam). Enabling a battle vCam makes the Brain blend to it; `ExitBattle` disables them all so the Brain goes dormant again and the overworld resumes (a saved-pose restore is the no-Brain safety net). The director keeps **one** vCam live at a time and sets a short blend from the profile (the Brain default is 2s — too slow for cuts). It never writes `Camera.main` during battle (that fought the Brain — the reason the old static camera looked dead).
+
+**Authoring is first-class.** `CR → Battle → Build Camera Rig Prefab` scaffolds a complete, working rig (five role vCams with framing, target group, impulse source, per-vCam listeners, profile). The `BattleCameraRig` Inspector adds **Preview Shot** / **Preview Formation** (1v1/2v2/N-v-1), scene gizmos, and **drift detection with one-click fixes** (missing role cam, missing impulse listener, no Brain on Main Camera). `CR → Battle → Camera Director Simulator` fires the real cues so you can dry-run the entire choreography with **no real battle** — Begin Sim Battle in Play mode, then click the beats. Rigs are prefabs: committable and revert-safe.
 
 ### `IBattleStager`
 
@@ -287,6 +313,74 @@ A `ScriptableObject` created via `Assets > Create > CR > Battle > Creature Anima
 | `idleClip` | `"Idle"` | Animator state during idle |
 
 Assign a `CreatureAnimationProfile` to `BattleCoordinator._defaultAnimProfile`. `BattleCoordinator.FireOutcomeEvents` resolves clip names as: `BattleAnimationConfig.attackClipOverride` → `CreatureAnimationProfile.defaultAttackClip` → hard-coded fallback `"Attack"`.
+
+## Battle presentation: creature body vs. ability signature
+
+Performance splits along ownership, and the two halves are sourced and played independently:
+
+- **The creature owns its body** — flinch, faint, idle, its **cry**, hit-flash. This is identity, authored in a **shared `CreatureReactionProfile`** the creature's `CreatureDefinition` points at, and played by `CreatureBattlePresenter` on the prefab.
+- **The ability owns its signature** — cast VFX, travel projectile, impact burst, and cast/hit/miss SFX. This is per-move, authored on **`AbilityConfig`**, and played positionally by `BattleAbilityFxResponder`.
+
+### `CreatureBattlePresenter` (the creature's body)
+
+`CreatureAnimationProfile`/`BattleAnimationConfig` only decide *which attack clip name* to broadcast. `CreatureBattlePresenter` (`Assets/CR/Game/Battle/Presentation/`) performs the creature's own body language. **Add it to each creature prefab.** It is a self-contained `MonoBehaviour` (no DI — the visual is `Instantiate`d by the stager, not Zenject). The flow:
+
+1. `BattleStager.SpawnCreatureVisualAsync` instantiates the prefab, resolves the creature's `CreatureDefinition` by `baseCreature.ContentKey` (`ContentDefinitionProvider.TryGetCreature`), and calls `presenter.Bind(creatureId, isPlayer, def.reactionProfile.Resolve())`. `Resolve()` flattens any base→variant inheritance chain into the final reactions. This stamps identity (so the presenter answers only to *its own* cues) **and** hands it the resolved reactions.
+2. The presenter subscribes to the static `BattleEvents` bus in `OnEnable` / unsubscribes in `OnDisable` (dies cleanly when the stager `Destroy`s the visual on arena exit).
+3. Each id-filtered event plays the matching named `CreatureReaction` from the resolved `CreatureBattleReactions` block.
+
+Event → beat map (all filtered to the bound creature id, except victory which uses the bound side):
+
+| `BattleEvents` signal | Beat (named field on `CreatureBattleReactions`) |
+|---|---|
+| `Bind()` (spawn) | `spawn` |
+| `TurnStarted` | `turnStart` |
+| `CreatureAttacking` (carries the ability attack clip → drives the Animator; the `attack` beat only layers optional grunt/feedback) | `attack` |
+| `CreatureHit` | `hit` |
+| `HeavyHit` (same-frame `Hit`+`HeavyHit` coalesced to one) | `heavyHit` → falls back to `hit` |
+| `CreatureFainted` | `faint` |
+| `LowHpEntered` / `CriticalHpEntered` | `lowHp` / `criticalHp` (→ falls back to `lowHp`) |
+| `StatusApplied` | `statusApplied` |
+| `CreatureCaptured` | `captured` |
+| `LevelUp` | `levelUp` |
+| `CameraCueVictory(playerWon)` | `victory` if on the winning side, else `defeat` |
+| `TurnEnded` | `idle` |
+
+Each `CreatureReaction` (see [ScriptableObjects → CreatureDefinition](./12-scriptable-objects.md)) bundles three optional **body** channels: **animation** (cross-fade state or `SetTrigger`), **sound** (random `AudioClip` cry, auto-created positional `AudioSource`), and **feedback** (scale-punch, color flash via `MaterialPropertyBlock`, and a `CreatureVibrationTier` that re-raises the shared `BattleEvents.RaiseVibration*` haptics). Its `vfxPrefab` slot is for body-only effects (a faint puff, a level-up sparkle) — **not** the move's VFX.
+
+**Zero-config fallback:** if a beat is unauthored, the presenter still cross-fades default Animator states for the core combat beats (`Attack`/`Hit`/`Faint`/`Idle`) — a freshly-added prefab animates immediately; cry/feedback are opt-in.
+
+#### Standard Animator state names
+
+There is a documented naming convention so creature Animator controllers stay consistent. The canonical names live in one place — `CreatureReactionDefaults` — and are shared by the presenter (its fallback states) and the **`CreatureDefinition` → "Set Standard Defaults"** button, which pre-fills them onto any un-authored beat (non-destructively, plus a little impact feedback). Build a controller with whichever of these states you want:
+
+| Beat | Standard state | Notes |
+|---|---|---|
+| `spawn` | `Spawn` | entrance; falls back to `Idle` |
+| `turnStart` | `Ready` | optional ready stance |
+| `attack` | *(ability clip)* | animation comes from the ability's `animationKey`/clip, not a fixed name; `Attack` is only the fallback |
+| `hit` | `Hit` | default feedback: small punch + white flash + Medium vibration |
+| `heavyHit` | `HeavyHit` | falls back to `Hit`; default feedback: bigger punch + Strong vibration |
+| `faint` | `Faint` | default feedback: Strong vibration |
+| `lowHp` / `criticalHp` | `LowHp` / `CriticalHp` | optional; `criticalHp` falls back to the `lowHp` reaction |
+| `statusApplied` | `Status` | optional |
+| `captured` | `Captured` | optional |
+| `victory` / `defeat` | `Victory` / `Defeat` | optional, battle-end |
+| `levelUp` | `LevelUp` | optional; default feedback: small punch |
+| `idle` | `Idle` | resting state |
+
+Every cross-fade is guarded by `Animator.HasState(layer 0, …)`, so a convention name with **no matching state is skipped silently** (no console spam) — the beat's sound and feedback still play. The presenter tries states in order **ability clip → the beat's authored state → the safe default**, playing the first that exists, so a partial controller degrades gracefully (e.g. `HeavyHit` missing → falls back to `Hit`). Prefer states; `animatorTrigger` is the opt-in alternative (guarded by a parameter check).
+
+### `BattleAbilityFxResponder` (the move's VFX/SFX)
+
+The ability's effects flow from `AbilityConfig` (`useVfx`/`travelVfx`/`hitVfx`, `useSfx`/`hitSfx`/`missSfx` — Addressables `AssetReference`s with synced string keys). Those keys ride the battle `outcome`, and `BattleCoordinator.FireOutcomeEvents` packs them — with the caster and target ids it already has — into a single positioned **`AbilityFxCue`** (`BattleEvents.AbilityFx`). This replaced the old scattered, position-less `Sfx/VfxRequested` raises for the attack.
+
+`BattleAbilityFxResponder` (DI'd, bound `FromNewComponentOnNewGameObject().AsSingle().NonLazy()`) consumes the cue:
+- resolves caster/target world positions from **`BattleVisualRegistry`** (id→transform; the stager registers each visual on spawn, `Clear()`s on exit),
+- loads each effect by key via `IGameAssetLoader`, and spawns **cast** VFX at the caster, **travel** VFX lerping caster→target, **impact** VFX at the target (on a miss: cast + miss SFX only),
+- plays cast/hit/miss SFX positionally via `AudioSource.PlayClipAtPoint`.
+
+Positions are captured at cue time, so an effect still lands correctly even if a creature despawns mid-load; any missing piece (no key, no registered visual) is skipped. Status-condition VFX/SFX still use the older position-less `Sfx/VfxRequested` events for now.
 
 ## Offline Battle Stack
 
