@@ -234,6 +234,7 @@
         "cr-api-unity/Assets/CR/Game/Battle/Presentation/CreatureBattleReactions.cs",
         "cr-api-unity/Assets/CR/Game/Battle/Presentation/CreatureReaction.cs",
         "cr-api-unity/Assets/CR/Game/Battle/Presentation/CreatureReactionDefaults.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Presentation/Editor/CreatureBattleControllerBuilder.cs",
         "cr-api-unity/Assets/CR/Game/Battle/Presentation/CreatureVibrationTier.cs",
         "cr-api-unity/Assets/CR/Game/Battle/Presentation/BattleVisualRegistry.cs",
         "cr-api-unity/Assets/CR/Game/Battle/Presentation/BattleAbilityFxResponder.cs",

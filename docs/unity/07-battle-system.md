@@ -352,24 +352,34 @@ Each `CreatureReaction` (see [ScriptableObjects → CreatureDefinition](./12-scr
 
 #### Standard Animator state names
 
-There is a documented naming convention so creature Animator controllers stay consistent. The canonical names live in one place — `CreatureReactionDefaults` — and are shared by the presenter (its fallback states) and the **`CreatureDefinition` → "Set Standard Defaults"** button, which pre-fills them onto any un-authored beat (non-destructively, plus a little impact feedback). Build a controller with whichever of these states you want:
+There is a documented naming convention so creature Animator controllers stay consistent. The canonical names live in one place — `CreatureReactionDefaults` — and are shared by the presenter (its fallback states), the **`CreatureReactionProfile` → "Set Standard Defaults"** button, and the controller generator (below).
 
-| Beat | Standard state | Notes |
-|---|---|---|
-| `spawn` | `Spawn` | entrance; falls back to `Idle` |
-| `turnStart` | `Ready` | optional ready stance |
-| `attack` | *(ability clip)* | animation comes from the ability's `animationKey`/clip, not a fixed name; `Attack` is only the fallback |
-| `hit` | `Hit` | default feedback: small punch + white flash + Medium vibration |
-| `heavyHit` | `HeavyHit` | falls back to `Hit`; default feedback: bigger punch + Strong vibration |
-| `faint` | `Faint` | default feedback: Strong vibration |
-| `lowHp` / `criticalHp` | `LowHp` / `CriticalHp` | optional; `criticalHp` falls back to the `lowHp` reaction |
-| `statusApplied` | `Status` | optional |
-| `captured` | `Captured` | optional |
-| `victory` / `defeat` | `Victory` / `Defeat` | optional, battle-end |
-| `levelUp` | `LevelUp` | optional; default feedback: small punch |
-| `idle` | `Idle` | resting state |
+| Beat | Standard state | Settle | Notes |
+|---|---|---|---|
+| `spawn` | `Appear` | → Idle | entrance; falls back to `Idle` |
+| `turnStart` | `Ready` | loop | optional ready stance |
+| `attack` | `Attack` *(or ability clip)* | → Idle | basic attack; the ability's `animationKey`/clip overrides this name per-move |
+| *(heavy move)* | `HeavyAttack` | → Idle | larger creatures / high-power moves; routed via the ability's attack clip override |
+| `hit` | `Hit` | → Idle | default feedback: small punch + white flash + Medium vibration |
+| `heavyHit` | `HeavyHit` | → Idle | falls back to `Hit`; default feedback: bigger punch + Strong vibration |
+| `faint` | `Faint` | hold | default feedback: Strong vibration |
+| `lowHp` / `criticalHp` | `LowHp` / `CriticalHp` | loop | optional hurt idles; `criticalHp` falls back to `lowHp` |
+| `statusApplied` | `Status` | → Idle | optional |
+| `captured` | `Captured` | hold | optional |
+| `victory` / `defeat` | `Win` / `Defeat` | hold | optional, battle-end pose |
+| `levelUp` | `LevelUp` | → Idle | optional; default feedback: small punch |
+| `idle` | `Idle` | loop | resting state (controller default) |
 
-Every cross-fade is guarded by `Animator.HasState(layer 0, …)`, so a convention name with **no matching state is skipped silently** (no console spam) — the beat's sound and feedback still play. The presenter tries states in order **ability clip → the beat's authored state → the safe default**, playing the first that exists, so a partial controller degrades gracefully (e.g. `HeavyHit` missing → falls back to `Hit`). Prefer states; `animatorTrigger` is the opt-in alternative (guarded by a parameter check).
+"Settle" is how the generator wires the state: **→ Idle** = a one-shot with an exit-time transition back to Idle; **loop** = plays in place; **hold** = stays on the last frame. No other transitions are needed — the presenter enters states by name via `CrossFadeInFixedTime`, which ignores the transition graph. Every cross-fade is guarded by `Animator.HasState(layer 0, …)`, so a convention name with **no matching state is skipped silently** — the beat's sound and feedback still play. The presenter tries states in order **ability clip → the beat's authored state → the safe default**, playing the first that exists, so a partial controller degrades gracefully (e.g. `HeavyAttack`/`HeavyHit` missing → falls back to `Attack`/`Hit`). Prefer states; `animatorTrigger` is the opt-in alternative (guarded by a parameter check).
+
+#### Generating controllers (no per-creature hand-wiring)
+
+You do **not** build a controller per creature by hand, and you do **not** wire `Idle → every state` arrows. The cute-monster packs ship one stock controller per monster with pack-specific clip names (`Slash Attack`, `Take Damage`, `Die`) that don't match the convention. Two menu items generate proper battle controllers from those clips:
+
+- **`CR → Battle → Build Battle Controller (Selected Prefabs)`** — for the selected creature prefab(s).
+- **`CR → Battle → Build Battle Controllers (All CR Creatures)`** — every prefab under `Assets/CR/Prefabs/Creatures`.
+
+For each creature `CreatureBattleControllerBuilder` finds its clips (in its current controller's folder), creates `<Creature>_Battle.controller` with the convention states, maps each to the best name-matched clip (e.g. `Attack`→`Slash Attack`, `Hit`→`Take Damage`, `Faint`→`Die`), adds the one-shot → Idle returns, and assigns it back to the prefab. States with no matching clip (often `Appear`/`Win`/`HeavyAttack`) are skipped — drop a clip into the creature's folder and re-run to fill them. The generator is re-runnable; just make sure each creature's `Idle` clip has **Loop Time** enabled in its import settings.
 
 ### `BattleAbilityFxResponder` (the move's VFX/SFX)
 
