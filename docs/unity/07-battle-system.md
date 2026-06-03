@@ -82,6 +82,9 @@ public interface IBattleCoordinator
 | `CreatureHit` | `(string creatureId, int damage)` | Display damage number |
 | `HpChanged` | `(string creatureId, int finalHp, int maxHp)` | Update HP bar |
 | `CreatureFainted` | `(string creatureId)` | Play faint animation |
+| `CreatureRecalled` | `(string creatureId)` | The outgoing creature is being recalled ("collected back") — play its recall beat |
+| `CreatureWithdrawn` | `(string creatureId)` | The recall effect finished — despawn the body (consumed by `BattleStager`) |
+| `CreatureSwitchedIn` | `(bool isPlayer, string newCreatureId)` | Send out the incoming creature (stager spawns it at the side anchor with a pop) |
 | `PlayerMustSwap` | `(string trainerId)` | Player's active creature fainted but has a backup; HUD must force a swap |
 | `BattleEnded` | `(bool playerWon, string outcomeLabel)` | Show result screen |
 | `RunAttempted` | `(bool success)` | Show escape message |
@@ -98,14 +101,37 @@ StartBattleAsync
        else
            IWildBattleAIDomainService.DecideActionAsync → submit via IBattleDomainService
            IBattleDomainService.SubmitActionAsync → ActionOutcome
-    └─ FireOutcomeEvents (HP bars, faint animations)
+    └─ await IBattlePresentationSequencer.PlayOutcomeAsync(outcome, action, ctx)   ← paced beats
     └─ if outcome.BattleEnded → RaiseBattleEnded → break
        else advance activeTrainerId (Guid) + NextRoundKey
 ```
 
+The loop **awaits** the sequencer, so an outcome's beats finish playing before the next turn resolves (see [Presentation Orchestrator](#presentation-orchestrator)).
+
 `SubmitPlayerAction(string actionJson)` is called by the HUD (or any input handler) to unblock the `TaskCompletionSource` awaited in the loop. The action JSON matches the backend's action format, e.g. `[{"type":0,"abilityId":"...","targetCreatureId":"..."}]`.
 
 The wild trainer GUID is `00000000-0000-0000-0000-000000000001` (defined in `WildTrainerIds.WildTrainerId`).
+
+## Presentation Orchestrator
+
+The backend `ActionOutcome` is authoritative for *what happened*; `BattlePresentationSequencer` (in `CR.Game.Battle.Presentation`, bound `IBattlePresentationSequencer`) decides *how it is played*. It converts one outcome into an ordered, timed **beat sequence** and raises the existing `BattleEvents` one phase at a time, so combat flows instead of firing every signal on one frame.
+
+`BattleBeatPlan.Build(BeatInput)` (pure, in `CR.Game.Battle.Logic`, unit-tested) yields the phase order:
+
+```
+Resolve → Strike → Impact/Miss → Faint → Recall → SendOut → Aftermath → TurnEnd
+```
+
+- **Ability** outcomes plan `Resolve, Strike` then `Impact` (hit) or `Miss`.
+- A **faint** appends `Faint` then `Recall` (the fainted creature) — unless the battle ended.
+- A **Switch** plans `Recall` (outgoing) then `SendOut` (incoming).
+- Status/XP/level-up are grouped into `Aftermath`.
+
+**Send-out without a server round-trip.** `ActionOutcome` does not carry the incoming creature id; the submitted **action** does (`BattleAction.NewCreatureId`). The coordinator parses it from the action JSON and passes it via `SideContext`, so the swap plays immediately. The old state-diff `ReconcileActiveVisuals` is retired.
+
+**Recall is an injected effect with a completion event.** `RecallEffect` (default `ScaleDissolveRecallEffect`, bound via DI, single reused instance) plays the creature's exit and raises `Completed`; the sequencer waits on that event — with a hard **timeout** so a misconfigured effect can never freeze the turn loop — then raises `CreatureWithdrawn` (stager despawns) and, for a switch, `CreatureSwitchedIn` (stager spawns the incoming creature with a scale-up pop). The default needs no art or prefab; swap the bound `RecallEffect` to upgrade the visual.
+
+**Threading.** The sequencer runs the beats as a coroutine (all `WaitForSeconds`/effect-waits on the Unity main thread, matching `BattleCinematicDirector`); the async loop awaits a `Task` the coroutine completes via `TaskCompletionSource`. No `Task.Delay`, no background threads — non-blocking, no stutter.
 
 ## Force-Swap on Faint
 
@@ -312,7 +338,7 @@ A `ScriptableObject` created via `Assets > Create > CR > Battle > Creature Anima
 | `faintClip` | `"Faint"` | Animator state when the creature faints |
 | `idleClip` | `"Idle"` | Animator state during idle |
 
-Assign a `CreatureAnimationProfile` to `BattleCoordinator._defaultAnimProfile`. `BattleCoordinator.FireOutcomeEvents` resolves clip names as: `BattleAnimationConfig.attackClipOverride` → `CreatureAnimationProfile.defaultAttackClip` → hard-coded fallback `"Attack"`.
+> **Note:** As of the presentation-orchestrator refactor, the `Strike` beat in `BattlePresentationSequencer` raises `CreatureAttacking` with the hard-coded `"Attack"` clip (the serialized anim-config fields on `BattleCoordinator` were removed along with `FireOutcomeEvents`). These `ScriptableObject` types still exist; re-wiring per-ability clip overrides through the sequencer (`BattleAnimationConfig.attackClipOverride` → `CreatureAnimationProfile.defaultAttackClip` → `"Attack"`) is a future enhancement.
 
 ## Battle presentation: creature body vs. ability signature
 
