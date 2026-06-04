@@ -239,6 +239,9 @@ The battle camera is a **reactive, editor-authored Cinemachine 3 system**. `Batt
 | `BattleCameraProfile` | ScriptableObject of feel values (blend seconds, action/faint holds, orbit °/s, intro radius multiplier, shake force). Persists across Play-mode tuning; framing lives on the vCams. |
 | `BattleFormation` | Maps the live battle onto arena slot anchors (`AttackerAnchor`/`DefenderAnchor`/`AllActiveAnchors`). 1v1 today; shaped for NvN / N-v-1. |
 | `BattleCameraShakeResponder` | Decoupled shake. Reacts to `CameraCueDefender`/`HeavyHit`/`CameraCueFaint`, coalesces same-frame signals into one force-scaled impulse, fires the rig's impulse source. Reaches the active rig via the shared `BattleCameraRigContext`. |
+| `ScreenFader` | Full-screen white overlay (code-built top-most UGUI canvas, no prefab) that **masks the camera cut** into and out of battle. The coordinator awaits `FadeAsync(target, seconds)` around staging/`EnterBattle` and around `CloseBattle`'s teardown. |
+
+**Battle in/out transition (fade-masked cut).** Rather than easing the camera back to the player on exit, the coordinator fades to white (`~0.3s`), then switches the camera under the cover. On entry: fade to white → stage + `EnterBattle` → fade from white (the intro sweep plays as it clears). On exit: fade to white → `ExitBattle` (which now sets the Brain blend to **`Cut`** for an instant snap back to the player, restoring the overworld's saved blend a frame later) + arena teardown → fade from white onto the overworld. Applies to both wild and NPC battles.
 
 **Beat → shot role**
 
