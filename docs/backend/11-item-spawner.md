@@ -56,6 +56,10 @@ A merchant is linked to a spawner via the Unity `NpcDefinition.itemSpawnerConten
 (authored on Merchant-type NPCs); the link is passed to the stock call rather than persisted
 on the NPC row.
 
+At runtime, `NpcMerchantBehaviour` (a composable `INpcSubInitializable`) calls
+`StockFromSpawnerAsync` on world-init using its serialized `itemSpawnerContentKey`, so a
+merchant fills its stock the first time its zone loads (and re-rolls once the cooldown elapses).
+
 ## REST
 
 | Method | Route | Purpose |
@@ -70,7 +74,9 @@ Create an **`ItemSpawnerDefinition`** (`Assets → Create → CR → Content →
 Definition`): set `contentKey`, `maxSlots`, optional `restockCooldownSeconds`, then add pools
 and item templates (item content-key picker, probability slider, quantity range). **Sync Full
 Config** pushes it to the backend. On a Merchant `NpcDefinition`, set **Item Spawner Key** to
-the spawner's content key.
+the spawner's content key. Content Studio also has an **Item Spawners** tab (list / create /
+sync), and `ContentAuditTool` flags item-spawner templates or merchant links that reference
+unknown items/spawners.
 
 ## Related
 
