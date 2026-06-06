@@ -1,6 +1,16 @@
 # Spawner System
 
-The Spawner system manages generation, storage, and lifecycle of spawnable creatures. It uses a **weighted pool** model: spawners hold pools, pools hold creature templates, and templates define how a creature is generated. Understanding the spawn algorithm and the intentional simplicity of the MVP design is key to extending this system correctly.
+The Spawner system manages generation of spawnable creatures from a **weighted pool** model: spawners hold pools, pools hold creature templates, and templates define how a creature is generated. A spawner is now a **global, read-only content template** — there are no per-trainer copies, and spawning is stateless.
+
+## Spawners Are Global, Read-Only Content
+
+The spawner is global, authored content shared by all trainers — it is **not** per-trainer state.
+
+- **Per-trainer spawner clones are retired.** Earlier, `EnsureSpawnerForTrainerAsync` created a copy of the global template for each `(account_id, trainer_id)`. **Migration `M5016RetirePerTrainerSpawner`** soft-deletes every per-trainer clone (rows where `account_id IS NOT NULL OR trainer_id IS NOT NULL`); the template rows are the sole source of truth. **Migration `M5017DropVestigialOwnerColumns`** then drops the now-dead `account_id`, `trainer_id`, `current_count`, and `last_spawn_time` columns entirely (Postgres `DROP COLUMN`; SQLite table-rebuild) and replaces the `(account_id, trainer_id, content_key)` unique index with one on `content_key` alone.
+- **Spawning is stateless.** The service enforces **no capacity and no cooldown**. A spawner only needs to be active and have at least one active pool/template; wild creatures are generated fresh on demand. There are no per-player runtime counters to track or reset.
+- In the offline two-database split, spawner templates and pools live in the read-only **game-data DB**; the resulting wild creatures and spawn-history rows are player state in **player-data**. See [Content Pipeline (Two-Database Model)](?page=unity/17-content-pipeline).
+
+> The `EnsureSpawnerForTrainerAsync` / `EnsureSpawnerForTrainerByKeyAsync` methods still exist on `ISpawnerDomainService`, but with clones retired the spawn path resolves pools directly from the global template by `content_key` (`CreatureSpawnDomainService` falls back to `GetSpawnerTemplateByContentKeyAsync` when a spawner has no pools of its own).
 
 ## Why This Design?
 
@@ -10,16 +20,13 @@ The two-level hierarchy (spawner → pools → templates) exists to support rari
 
 The pool selection uses `weight × rarity_multiplier` as a composite weight. This means you can define a "Legendary" pool with a low weight and boost it situationally (e.g., during an event) by temporarily raising its `rarity_multiplier` without touching the individual template probabilities inside it.
 
-### Why Is the MVP Intentionally Simple?
+### Why Is Spawning Stateless?
 
-The spawner was designed to ship creature encounters as quickly as possible. The current MVP has no:
-- Per-trainer spawn tracking (the same spawner generates for any trainer)
-- Real-time cooldown enforcement across multiple API instances
-- Area-of-effect region filtering (all spawners are globally accessible by ID)
+The spawner is global, read-only content and holds no per-player runtime counters. The service deliberately enforces **no capacity and no cooldown** — wild creatures are generated fresh on demand. This keeps the same template usable by every trainer simultaneously with no contention and nothing to "reset."
 
-These features will be added incrementally. The `row_version` column on the `spawner` table already exists specifically to support future optimistic concurrency control when multiple server instances might simultaneously try to update the same spawner's `current_count`.
-
-The `spawnCooldownSeconds` field exists in the schema and is checked in the validation phase, but in practice most development spawners use a cooldown of 0 to make iteration fast. Tune this in production to prevent flooding.
+- `current_count`, `last_spawn_time`, `account_id`, and `trainer_id` were **dropped** by `M5017` (they were never read/written by stateless spawning). `row_version` remains.
+- `max_capacity` and `spawnCooldownSeconds` persist in the schema and the `SpawnerDefinition` SO for descriptive/admin purposes, but are not enforced during a spawn.
+- Validation now checks only that the spawner exists and is active (`is_active`). A `BypassValidation` flag on the request skips even the active check (used by quest rewards and other deterministic spawns).
 
 ### Why Does `CreateFromSpawnerAsync` Accept an Optional `seed`?
 
@@ -43,7 +50,7 @@ CR.Spawner.Service.REST    ← ASP.NET minimal-API endpoints
 
 | Table | Purpose |
 |-------|---------|
-| `spawner` | Spawner config (capacity, cooldown, type, current_count, row_version) |
+| `spawner` | Global, read-only spawner template config. Owner/runtime columns (`account_id`, `trainer_id`, `current_count`, `last_spawn_time`) were dropped by `M5017`; `capacity`/`cooldown` persist but are not enforced |
 | `spawner_pool` | Weighted pools within a spawner |
 | `creature_spawner_template` | Creature blueprints per pool |
 | `ability_progression_set` | Reusable ability sets for templates |
@@ -51,12 +58,11 @@ CR.Spawner.Service.REST    ← ASP.NET minimal-API endpoints
 | `spawner_spawn_history` | Full spawn event log |
 
 Key columns on `spawner`:
-- `current_count` — how many creatures have been spawned (incremented after each spawn, checked against `max_capacity`)
-- `last_spawn_time` — timestamp of the most recent spawn (used for cooldown calculation)
-- `row_version` — incremented on every update, reserved for future optimistic concurrency
-- `is_active` — only active spawners accept spawn requests
+- `row_version` — incremented on update; reserved for optimistic concurrency
+- `is_active` — only active spawners accept spawn requests (the one runtime check)
+- `current_count`, `last_spawn_time`, `account_id`, `trainer_id` — **dropped** by `M5017` (per-trainer scoping + stateful spawning are gone)
 - `deleted` — soft delete flag
-- `content_key` — optional designer-facing key (e.g. `"starter-wild-zone"`); unique per trainer when set
+- `content_key` — designer-facing key (e.g. `"starter-wild-zone"`); the lookup key for the global template
 - `battle_arena_key` — optional string matching `BattleArena.ArenaKey` in the Unity scene; added by migration M5013. Stored server-side so the Content Creator sync tool can read/write it bidirectionally.
 
 The Unity-side `SpawnerDefinition` ScriptableObject mirrors the backend `content_key` and stores additional fields synced from the server:
@@ -69,22 +75,9 @@ The Unity-side `SpawnerDefinition` ScriptableObject mirrors the backend `content
 | `description` | Description text (synced from server). |
 | `maxCapacity` | Max creatures alive at once (default 5). Synced from server. |
 | `spawnCooldownSeconds` | Seconds between spawn cycles (default 300). Synced from server. |
+| `pools[]` | One or more weighted pools, each containing creature templates (see below). |
 
-### `SpawnerZoneConfig` ScriptableObject
-
-A richer SO that designers use to define an entire spawner zone — including pools, creature templates, and level ranges — directly in the Unity Editor without touching the database.
-
-```
-Assets → Create → CR → Content → Spawner Zone Config
-```
-
-| Field | Description |
-|-------|-------------|
-| `contentKey` | Stable identifier shared with the backend (e.g. `"forest-wild-zone"`). Set once, never change. |
-| `displayName` | Label shown in admin tools. |
-| `maxCapacity` | Max creatures alive at once for this zone. |
-| `spawnCooldownSeconds` | Seconds between spawns. |
-| `pools[]` | One or more weighted pools. Each pool contains templates. |
+`SpawnerDefinition` is the **single** source of truth for spawner content — it holds the zone's pools and templates directly. (The older scene-attached `SpawnerZoneConfig` SO has been removed; everything is authored as a `SpawnerDefinition` in the content registry, via the Spawners / Spawn Pools tabs of Content Studio or `Assets → Create → CR → Content → Spawner Definition`.)
 
 Each `SpawnerPoolConfig`:
 | Field | Description |
@@ -104,7 +97,7 @@ Each `SpawnerTemplateConfig`:
 | `spawnProbability` | Probability 1–100 within the pool. |
 | `abilityProgressionSet` | Optional `AbilityProgressionSetConfig` SO reference. Leave empty for default abilities. |
 
-**How the sync works:** When `SpawnerWorldBehaviour.InitializeAsync` runs and `_zoneConfig` is set, it calls `POST /api/v1/spawners/sync-config`. The backend upserts the global template spawner by `contentKey`, soft-deletes existing pools/templates, and recreates them from the request. `EnsureSpawnerForTrainerByKeyAsync` then creates or retrieves the per-trainer copy and inherits the global template's pools automatically.
+**How the sync works:** `SpawnerDefinitionSyncBehaviour` syncs every `SpawnerDefinition` in the content registry to the backend at world init, calling `POST /api/v1/spawners/sync-config`. The backend upserts the global template spawner by `contentKey`, soft-deletes existing pools/templates, and recreates them from the request. `SpawnerWorldBehaviour` no longer syncs anything — it just resolves the spawner by its `_spawnerContentKey` and activates the encounter. The global template is the sole source of truth; the spawn path reads pools directly by `contentKey`.
 
 Key columns on `creature_spawner_template`:
 - `base_creature_id` — which creature species to generate
@@ -122,14 +115,14 @@ Key columns on `creature_spawner_template`:
 
 The full spawn flow in `CreatureSpawnDomainService.SpawnCreaturesAsync`:
 
-1. **Validation phase** — fetch the spawner; verify it exists, `is_active = true`, `current_count < max_capacity`, and cooldown not active (`last_spawn_time + cooldown_seconds < now`)
-2. **Pool selection phase** — fetch all active pools for the spawner; compute `totalWeight = SUM(pool.spawn_weight × pool.rarity_multiplier)`; pick a uniform random value in `[0, totalWeight]`; walk the pools accumulating weight until the random value is covered; fall back to the last pool if floating-point rounding overshoots
+1. **Validation phase** — fetch the spawner; verify it exists and `is_active = true`. **No capacity or cooldown check** — the spawner is global, read-only content with no per-player counters. (A `BypassValidation` request flag skips even the active check.)
+2. **Pool selection phase** — fetch all active pools for the spawner; compute `totalWeight = SUM(pool.spawn_weight × pool.rarity_multiplier)`; pick a uniform random value in `[0, totalWeight]`; walk the pools accumulating weight until the random value is covered; fall back to the last pool if floating-point rounding overshoots. With per-trainer clones retired, a spawner with no pools of its own falls back to the global template's pools (resolved by `content_key`).
 3. **Template selection phase** — fetch all active templates for the selected pool via `GetTemplatesByProbabilityAsync`; normalize by `SUM(spawn_probability)`; same weighted random walk; fall back to last template
 4. **Quantity generation** — use `request.RequestedQuantity` (future: clamp to `[min_quantity, max_quantity]` from the template)
 5. **Creature generation** — call `ICreatureGenerationService.CreateFromSpawnerAsync(template.Id, trainerId, seed)` for each creature; null results (e.g., from a missing trainer ID) are silently skipped
-6. **Spawn execution (transactional)** — open a connection, begin a transaction; write one `spawner_spawn_history` row per spawned creature; increment `spawner.current_count` and set `spawner.last_spawn_time`; commit; roll back if either step fails
+6. **Spawn execution (transactional)** — open a connection, begin a transaction; write one `spawner_spawn_history` row per spawned creature; commit; roll back on failure. The template is global, read-only content, so spawning **never mutates the spawner** (`current_count` / `last_spawn_time` are not touched).
 
-The transaction in step 6 ensures that if history recording fails, the spawner count is not incremented and vice versa.
+The transaction in step 6 ensures spawn-history rows are written atomically.
 
 ## Configuration Example
 
@@ -151,44 +144,27 @@ Effective pool weights: Common = 70×1.0 = 70, Rare = 25×1.5 = 37.5, Legendary 
 
 ## `EnsureSpawnerForTrainerAsync`
 
-`SpawnerDomainService` exposes an idempotent upsert method used during world bootstrap:
+`SpawnerDomainService` still exposes these idempotent resolution methods:
 
 ```csharp
-Task<SpawnerDomain> EnsureSpawnerForTrainerAsync(
+Task<SpawnerDomain?> EnsureSpawnerForTrainerAsync(
+    Guid accountId, Guid trainerId, string contentKey,
+    CancellationToken ct = default);
+
+Task<SpawnerDomain> EnsureSpawnerForTrainerByKeyAsync(
     Guid accountId, Guid trainerId, string contentKey,
     CancellationToken ct = default);
 ```
 
-This method:
-1. Calls `GetSpawnerByContentKeyAsync(accountId, trainerId, contentKey)` — if found, returns the existing spawner
-2. If not found, calls `GetSpawnerTemplateByContentKeyAsync(contentKey)` to load a shared template
-3. Creates a new spawner row from the template (including all pools and creature templates) for this specific `(accountId, trainerId)` pair
-4. Returns the new spawner
+With per-trainer clones **retired** (`M5016`), the global template by `content_key` is the source of truth. The spawn path resolves pools directly from the template — `CreatureSpawnDomainService` falls back to `GetSpawnerTemplateByContentKeyAsync(contentKey)` when a spawner record has no pools of its own. There is no longer a separate, mutable per-trainer spawner row to maintain.
 
-This mirrors the NPC system's `EnsureStarterNpcAsync` pattern — the same content_key on different trainers results in separate but identically configured spawner instances.
+## No Capacity to Reset
 
-## How to Reset Spawner Capacity
+Spawning is stateless: there is no `current_count` gate and no cooldown. Wild creatures are generated fresh on every spawn, so there is nothing to reset. `current_count` / `last_spawn_time` columns remain on the table but are not used by the spawn path.
 
-During development it is common for `current_count` to accumulate to `max_capacity` and block all spawns. There are two approaches:
+If you need to stop a spawner, deactivate it (`POST /spawner/{id}/deactivate` sets `is_active = false`). Reactivate with `/spawner/{id}/activate`. The `spawner_spawn_history` audit log is immutable and is never cleared by activation changes.
 
-**Option A: Deactivate and reactivate** — calling `/spawner/{id}/deactivate` followed by `/spawner/{id}/activate` does NOT reset `current_count`. This only toggles `is_active`.
-
-**Option B: Direct SQL update** — the intended way to reset capacity for testing:
-
-```sql
--- Postgres / SQLite
-UPDATE spawner
-SET current_count = 0, updated_at = NOW()
-WHERE id = '<spawner-uuid>';
-```
-
-A future admin endpoint should wrap this as `POST /spawner/{id}/reset-capacity`. Until then, use direct SQL or create a test-only utility that calls the repository directly.
-
-After resetting, the spawner will accept spawn requests again on the next `POST /spawner/{id}/spawn` provided `is_active = true` and the cooldown has elapsed.
-
-**What happens after reset:** The `spawner_spawn_history` is NOT cleared — the audit log is immutable. `current_count` is the only counter that gates new spawns. History entries from before the reset remain queryable via `/spawner/{id}/history`.
-
-## Wild Battle Proxy and Capacity Reduction
+## Wild Battle Proxy
 
 `SpawnerEncounterBehaviour` in Unity triggers a spawn before initiating the battle. The spawn call:
 
@@ -201,9 +177,9 @@ POST /spawner/{spawnerId}/spawn
 }
 ```
 
-This increments `current_count` by 1 and writes a `spawner_spawn_history` row. The generated creature is stored under the Wild Trainer account (GUID `00000000-0000-0000-0000-000000000001` — see the Unity Integration section below). The battle engine loads this creature via `ICreatureInventoryService.GetTeamAsync(wildTrainerId)`.
+This writes a `spawner_spawn_history` row and generates the creature — it does **not** mutate the spawner template. The generated creature is stored under the Wild Trainer account (GUID `00000000-0000-0000-0000-000000000001` — see the Unity Integration section below). The battle engine loads this creature via `ICreatureInventoryService.GetTeamAsync(wildTrainerId)`.
 
-If the player flees the battle, the capacity is NOT restored — the spawn already happened. This means spawner capacity represents "total encounters generated" not "currently active encounters". Size your `max_capacity` accordingly (e.g., set it to a very large number like 1,000,000 for perpetual wild zones, or a small number like 5 for a limited-event spawner).
+If the player flees the battle, nothing about the spawner changes — spawning never consumed any capacity to begin with. Wild zones are perpetual by default.
 
 ## Admin/Debug Patterns for Spawner State
 
@@ -221,6 +197,8 @@ GET /spawner/{id}/status
   "cooldownSeconds": 0
 }
 ```
+
+> `currentCount`, `maxCapacity`, `lastSpawnTime`, and `cooldownSeconds` are reported for descriptive/admin purposes only — they are **not** enforced. `isActive` is the only field that affects whether a spawn is accepted.
 
 **View spawn history (who spawned what):**
 
@@ -252,12 +230,12 @@ The spawner retains all its pools, templates, and history. Reactivate with `POST
 
 ## Quick Start
 
-### Option A: SpawnerZoneConfig ScriptableObject (recommended for designers)
+### Option A: SpawnerDefinition ScriptableObject (recommended for designers)
 
-1. In Unity: `Assets → Create → CR → Content → Spawner Zone Config`
-2. Set `contentKey` to a unique string (e.g. `"forest-wild-zone"`), fill in pools and templates
-3. Drag the SO to the `Zone Config` field on a `SpawnerWorldBehaviour` in the scene
-4. On next play, `SpawnerWorldBehaviour` automatically calls `POST /api/v1/spawners/sync-config` — the backend creates the global template and all pools
+1. In Unity: `Assets → Create → CR → Content → Spawner Definition` (or create one from the Spawners tab in Content Studio)
+2. Set `contentKey` to a unique string (e.g. `"forest-wild-zone"`), fill in pools and templates (the Spawn Pools tab gives a pool/template-focused editor)
+3. Place a `SpawnerWorldBehaviour` in the scene and set its `_spawnerContentKey` to the same key
+4. On next play, `SpawnerDefinitionSyncBehaviour` syncs the definition (`POST /api/v1/spawners/sync-config`) — the backend creates the global template and all pools; `SpawnerWorldBehaviour` resolves it by key and runs encounters
 
 ### Option B: Manual REST (admin / tooling)
 
@@ -330,15 +308,15 @@ POST /spawner/{spawnerId}/spawn
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/api/v1/spawners/sync-config` | Upsert a full zone config from a `SpawnerZoneConfig` SO |
+| `POST` | `/api/v1/spawners/sync-config` | Upsert a full spawner (pools + templates) from a `SpawnerDefinition` SO |
 
 Request body mirrors `SpawnerConfigSyncRequest` (contentKey, displayName, maxCapacity, spawnCooldownSeconds, pools[]).
 
-### Content Creator sync (bidirectional)
+### Content Studio sync (push / pull)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/v1/spawners/templates` | Returns all global spawner template rows (AccountId = null, TrainerId = null) for editor sync. Includes `contentKey`, `displayName`, `description`, `maxCapacity`, `spawnCooldownSeconds`, `battleArenaKey`, `updatedAt`. |
+| `GET` | `/api/v1/spawners/content-registry` | Returns all global spawner rows as a bare JSON array for the editor **Pull** action. Each item: `id`, `contentKey`, `name`, `description`, `battleArenaKey`, `maxCapacity`, `spawnCooldownSeconds`, `updatedAt`. |
 | `PUT` | `/api/v1/spawners/by-content-key/{contentKey}` | Upserts a spawner definition by `content_key`. Creates the global template row if it doesn't exist; updates display fields if it does. Body: `SpawnerDefinitionSyncRequest` (`DisplayName`, `Description`, `MaxCapacity`, `SpawnCooldownSeconds`, `BattleArenaKey`). Returns `{ contentKey }` on success. |
 | `DELETE` | `/api/v1/spawners/by-content-key/{contentKey}` | Soft-deletes the global spawner template row with the given `content_key`. Per-trainer spawner rows are unaffected. Returns 204 on success, 404 if not found. Spawner templates have no per-trainer player-data guard — the delete is always safe. |
 
@@ -347,7 +325,7 @@ Request body mirrors `SpawnerConfigSyncRequest` (contentKey, displayName, maxCap
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/api/v1/spawners/{id}/spawn` | Spawn creatures |
-| `GET`  | `/api/v1/spawners/{id}/status` | Spawner status (current_count, cooldown, is_active) |
+| `GET`  | `/api/v1/spawners/{id}/status` | Spawner status (`is_active` / `canSpawn`; stateless — no count or cooldown) |
 | `GET`  | `/api/v1/spawners/{id}/history` | Paginated spawn history |
 
 ## `SpawnRequest` Model
@@ -368,10 +346,10 @@ public class SpawnRequest
 | Status | Meaning |
 |--------|---------|
 | 404 | Spawner not found / no templates available |
-| 400 | Validation error (invalid request) |
-| 409 | Spawner at capacity (`current_count >= max_capacity`) |
-| 429 | Cooldown active |
+| 400 | Validation error (e.g. spawner inactive, invalid request) |
 | 500 | Internal error |
+
+> Capacity (409) and cooldown (429) responses are gone — spawning is stateless, so neither is enforced.
 
 ## `spawner_spawn_history` Schema
 
@@ -413,16 +391,16 @@ See [Battle System](?page=unity/07-battle-system) for the complete wild encounte
 - **No templates in the pool.** If a pool has no active templates, `SelectTemplateAsync` returns null and the spawn returns `NoTemplatesAvailable`. Verify templates are marked `is_active = true`.
 - **Spawn probabilities don't need to sum to 1.** The service normalizes by the total. However, all templates in a pool with `spawn_probability = 0` will never be selected. Use at least 0.01 for any template you want to include.
 - **Missing `trainerId` in spawn request.** Spawns succeed but generate zero creatures. Add `trainerId` to the request body.
-- **Capacity not reset after testing.** After testing, `current_count` accumulates. Reset it via direct SQL update (`UPDATE spawner SET current_count = 0`) or delete and recreate the spawner. A future admin endpoint should support count reset without direct DB access.
-- **Using the wrong `content_key` in the world behaviour.** If `_spawnerContentKey` does not match any spawner template row, `GetSpawnerTemplateByContentKeyAsync` returns null and the trainer-scoped spawner is created with defaults (no pools). Use a `SpawnerZoneConfig` SO to avoid this — the sync creates the global template automatically.
-- **`growthProfileName` typo in SpawnerZoneConfig.** If the name doesn't match an existing `GrowthProfile` row, the template is skipped with a warning and no creature will spawn. Check server logs for `GrowthProfile named '...' not found`. Seeded growth profiles are `"Gains more strength"` and `"Fast Experience"`.
+- **Expecting capacity to gate spawns.** Spawning is stateless — there is no `current_count`/`max_capacity` gate and no cooldown (`M5016` retired per-trainer clones and stateful spawning). A spawner only needs to exist and be active. Nothing to reset after testing.
+- **Using the wrong `content_key` in the world behaviour.** If a `SpawnerWorldBehaviour`'s `_spawnerContentKey` does not match any `SpawnerDefinition` (and thus any global spawner template row), `GetSpawnerTemplateByContentKeyAsync` returns null and no pools resolve, so no creature spawns. Make sure a `SpawnerDefinition` with that exact `contentKey` exists in the content registry so `SpawnerDefinitionSyncBehaviour` creates the global template.
+- **`growthProfileName` typo in a SpawnerDefinition template.** If the name doesn't match an existing `GrowthProfile` row, the template is skipped with a warning and no creature will spawn. Check server logs for `GrowthProfile named '...' not found`. Seeded growth profiles are `"Gains more strength"` and `"Fast Experience"`.
 - **`creatureContentKey` mismatch.** If the creature content key doesn't match a `BaseCreature` row, the template is skipped silently. Verify via `GET /api/v1/creatures?contentKey=...`.
 - **Sync overwrites pools on every startup.** The sync-config endpoint soft-deletes all existing pools and recreates them. If you have manually added pools via REST and then the SO syncs, the manual pools will be replaced. Use the SO as the single source of truth.
-- **Assuming `deactivate` resets capacity.** Deactivation only sets `is_active = false`. `current_count` is preserved. If you want to "reset" a spawner, reset `current_count` via SQL and re-activate separately.
-- **Forgetting that capacity reduction is permanent.** Each spawn call increments `current_count` permanently (there is no decrement on battle flee). Size `max_capacity` appropriately for your use case. For indefinitely repeating wild zones, use a very large value like 999999 or periodically reset via admin tooling.
+- **`deactivate` only toggles `is_active`.** It does not affect spawn state — there is none. Deactivation makes the validation phase reject spawns until you reactivate.
 
 ## Related Pages
 
+- [Content Pipeline (Two-Database Model)](?page=unity/17-content-pipeline) — spawner templates/pools live in the read-only game-data DB; spawn history is player state
 - [Creature Generation](?page=backend/04-creature-generation) — how `ICreatureGenerationService.CreateFromSpawnerAsync` builds a creature from a template
 - [Backend Architecture](?page=backend/01-architecture) — `row_version`, transaction patterns, soft deletes
 - [Introduction](?page=00-introduction) — dual SQLite/Postgres design rationale

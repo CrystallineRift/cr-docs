@@ -43,7 +43,7 @@
         "Assets/Scripts/Npcs/**/*INpcSubInitializable*.cs"
       ]
     },
-    "description": "NPC CRUD, team management, domain service, REST endpoints, NpcCreatureSlotSpec"
+    "description": "NPC CRUD, team management, domain service, REST endpoints, NpcCreatureSlotSpec; NPC content globalization via ContentWorldId sentinel and M2010GlobalizeNpcContent"
   },
   "backend/03-spawner-system": {
     "docPath": "docs/backend/03-spawner-system.md",
@@ -58,7 +58,7 @@
         "cr-api-unity/Assets/CR/Game/World/Behaviours/SpawnerEncounterBehaviour.cs"
       ]
     },
-    "description": "Weighted spawn pools, spawn history, spawner tables, SpawnerDefinition.battleArenaKey, Wild Trainer GUID integration"
+    "description": "Weighted spawn pools, spawn history, spawner tables, SpawnerDefinition.battleArenaKey, Wild Trainer GUID integration; global read-only spawner template (per-trainer clones retired by M5016RetirePerTrainerSpawner), stateless spawning (no capacity/cooldown)"
   },
   "backend/04-creature-generation": {
     "docPath": "docs/backend/04-creature-generation.md",
@@ -133,10 +133,12 @@
       "cr-data": [
         "Packages/manifest.json",
         "ProjectSettings/**",
-        "Assets/Scripts/Installers/**/*.cs"
+        "Assets/Scripts/Installers/**/*.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Repository/LocalDataSources.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Repository/DatabaseMigration.cs"
       ]
     },
-    "description": "Unity project structure, packages, folder layout"
+    "description": "Unity project structure, packages, folder layout; two-database (game-data vs player-data) config keys and startup migration flow"
   },
   "unity/02-dependency-injection": {
     "docPath": "docs/unity/02-dependency-injection.md",
@@ -227,19 +229,58 @@
         "cr-api-unity/Assets/CR/Game/Battle/WildBattleRequest.cs",
         "cr-api-unity/Assets/CR/Game/Battle/BattleAnimationConfig.cs",
         "cr-api-unity/Assets/CR/Game/Battle/CreatureAnimationProfile.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Presentation/CreatureBattlePresenter.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Presentation/CreatureReactionProfile.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Presentation/CreatureBattleReactions.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Presentation/CreatureReaction.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Presentation/CreatureReactionDefaults.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Presentation/Editor/CreatureBattleControllerBuilder.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Presentation/CreatureVibrationTier.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Presentation/BattleVisualRegistry.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Presentation/BattleAbilityFxResponder.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Events/AbilityFxCue.cs",
         "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleArena.cs",
         "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleArenaRegistry.cs",
-        "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleCameraController.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleCinematicDirector.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Arena/IBattleCameraController.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleCameraRig.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleCameraProfile.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleCameraRole.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleFormation.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleCameraShakeResponder.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleCameraRigContext.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Arena/Editor/BattleCameraRigBuilder.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Arena/IBattleStager.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleStager.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleStagingResult.cs",
         "cr-api-unity/Assets/CR/Game/Battle/Arena/Editor/BattleArenaCreator.cs",
         "cr-api-unity/Assets/CR/Game/Battle/Events/BattleEvents.cs",
         "cr-api-unity/Assets/CR/Game/Battle/DTOs/WildBattleStateDtos.cs",
         "cr-api-unity/Assets/CR/UI/Battle/BattleHUD.cs",
         "cr-api-unity/Assets/CR/Game/World/Behaviours/NpcInteractionBehaviour.cs",
         "cr-api-unity/Assets/CR/Game/World/Behaviours/SpawnerEncounterBehaviour.cs",
-        "cr-api-unity/Assets/CR/Game/World/Behaviours/SpawnerWorldBehaviour.cs"
+        "cr-api-unity/Assets/CR/Game/World/Behaviours/SpawnerWorldBehaviour.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/BattleSync.cs",
+        "cr-api-unity/Assets/CR/UI/Battle/BattleBagPanelHandler.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/PlayerWhiteoutHandler.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/BattleLossRules.cs",
+        "cr-api-unity/Assets/CR/UI/Common/MessageDialog.cs"
       ]
     },
-    "description": "BattleCoordinator sequential turn loop, BattleHttpDomainAdapter + OnlineOfflineBattleDomainService stack, BattleEvents static events, Arena system, BattleHUD, StartNpcBattle/StartWildBattle, SpawnerEncounterBehaviour with encounter delay"
+    "description": "BattleCoordinator sequential turn loop with battle-scoped CancellationToken, BattleHttpDomainAdapter + OnlineOfflineBattleDomainService stack, BattleEvents static events (incl. StagingFailed), Arena system with IBattleStager returning BattleStagingResult (player teleport + creature visual spawn at PlayerCreaturePosition/OpponentCreaturePosition), self-registering BattleArenaRegistry, reactive Cinemachine 3 cinematic camera (BattleCinematicDirector conductor driven by CameraCue*/TurnStarted, editor-authored BattleCameraRig role vCams + BattleCameraProfile feel SO + decoupled BattleCameraShakeResponder via BattleCameraRigContext, BattleFormation slot model for 1v1->NvN, one-click rig builder + beat simulator), per-creature CreatureBattlePresenter (added to creature prefabs; the stager resolves the creature's shared CreatureReactionProfile from its CreatureDefinition by content key, flattens any base→variant inheritance via Resolve(), and hands the result to Bind; subscribes to BattleEvents and plays the creature's own body — animation+cry+feedback — per beat, with a standard Animator state-name convention in CreatureReactionDefaults and HasState-guarded fallbacks), ability VFX/SFX sourced from AbilityConfig keys on the outcome and played positionally by BattleAbilityFxResponder via a single positioned AbilityFxCue + BattleVisualRegistry (id→transform), BattleHUD with Guid-typed creature IDs and HP cache replay, BattleSync SOAP bridge, StartNpcBattle/StartWildBattle, NpcBattleRequest.BattleArenaKey, SpawnerEncounterBehaviour with encounter delay"
+  },
+  "unity/16-domain-sync-pattern": {
+    "docPath": "docs/unity/16-domain-sync-pattern.md",
+    "repos": {
+      "cr-data": [
+        "cr-api-unity/Assets/CR/Game/World/IDomainSync.cs",
+        "cr-api-unity/Assets/CR/Game/World/Behaviours/TeamSync.cs",
+        "cr-api-unity/Assets/CR/Game/World/Behaviours/InventorySync.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/BattleSync.cs",
+        "cr-api-unity/Assets/CR/Core/DI/LocalDevGameInstaller.cs"
+      ]
+    },
+    "description": "IDomainSync pattern: BattleSync (SOAP bridge via events), TeamSync (world-scoped team cache), InventorySync (world-scoped backpack cache), Zenject bindings"
   },
   "unity/08-content-registry": {
     "docPath": "docs/unity/08-content-registry.md",
@@ -350,18 +391,22 @@
   "unity/09-addressables-setup": {
     "docPath": "docs/unity/09-addressables-setup.md",
     "repos": {
-      "cr-api": [],
+      "cr-api": [
+        "Convenience/CR.Data.Migrations.Tool/Program.cs",
+        "Convenience/CR.Game.Compat/build-packages.sh"
+      ],
       "cr-data": [
         "cr-api-unity/Assets/CR/Core/Assets/GameAssetLoader.cs",
         "cr-api-unity/Assets/CR/Core/Assets/IGameAssetLoader.cs",
         "cr-api-unity/Assets/CR/Core/Player/CreatureSpawner.cs",
         "cr-api-unity/Assets/CR/Core/Data/Editor/ContentPublishTool.cs",
         "cr-api-unity/Assets/CR/Core/Data/Editor/ContentDeployTool.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/AddressablesCatalogUpdater.cs",
         "scripts/deploy-content.sh",
         "scripts/setup-minio-bucket.sh"
       ]
     },
-    "description": "Unity Addressables end-to-end setup: Groups/Profiles windows, Play Mode Script, making assets Addressable, ContentPublishTool Seed to SQLite, Deploy Content tool, MinIO/S3 gotchas, CreatureSpawner MonoBehaviour"
+    "description": "Unity Addressables end-to-end setup: Groups/Profiles windows, Play Mode Script, making assets Addressable, ContentPublishTool Seed to SQLite, Deploy Content tool, MinIO/S3 gotchas, CreatureSpawner MonoBehaviour; baked game-data.bytes artifact shipped as Addressable + StreamingAssets (CR.Data.Migrations.Tool + build-packages.sh)"
   },
   "unity/10-player-menu-ui": {
     "docPath": "docs/unity/10-player-menu-ui.md",
@@ -383,7 +428,10 @@
         "Game/CR.Game.Data.Migration/M8004CreateBattleTables.cs",
         "Game/CR.Game.Data.Migration/M8006AddActiveTurnToBattleRound.cs",
         "Creatures/CR.Creatures.Data.Migration/M1017AddAbilityProgressionSetIdToBaseCreature.cs",
+        "Creatures/CR.Creatures.Data.Migration/M1029CreateGeneratedCreatureStatusConditionsTable.cs",
         "Creatures/CR.Creatures.Data.Migration/M9003AddAnimationKeyToAbilities.cs",
+        "Creatures/CR.Creatures.Data/Interface/IGeneratedCreatureRepository.cs",
+        "Creatures/CR.Creatures.Data/GeneratedCreatureStatusCondition.cs",
         "Game/CR.Game.Data/Interface/IBattleRepository.cs",
         "Game/CR.Game.Data/Implementation/BaseBattleRepository.cs",
         "Game/CR.Game.Data.Postgres/BattleRepository.cs",
@@ -392,6 +440,13 @@
         "Game/CR.Game.Domain.Services/Interfaces/Battle/IBattleDomainService.cs",
         "Game/CR.Game.Domain.Services/Interfaces/Battle/IWildBattleAIDomainService.cs",
         "Game/CR.Game.Domain.Services/Implementation/Battle/BattleDomainService.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Creature/CreatureInventoryService.cs",
+        "Game/CR.Game.Domain.Services/Interfaces/Creature/ICreatureInventoryService.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/TeamEndpoints.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Creature/CreatureProgressionService.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Item/Handlers/IncreaseExpShareHandler.cs",
+        "Stats/CR.Stats.Data/Constants/StatKey.cs",
+        "Items/CR.Items.Data.Migration/M6009SeedExpShareItem.cs",
         "Game/CR.Game.Domain.Services/Implementation/Battle/WildBattleAIDomainService.cs",
         "Game/CR.Game.Service.BFF/Endpoints/BattleEndpoints.cs",
         "Game/CR.Game.Service.BFF/Endpoints/WildBattleEndpoints.cs",
@@ -403,7 +458,7 @@
         "cr-api-unity/Assets/CR/Game/Battle/OnlineOfflineBattleDomainService.cs"
       ]
     },
-    "description": "Battle DB tables (battle, battle_round, battle_round_input, battle_creature_state, battle_action_log), IBattleRepository, BattleDomainService, BattleHttpDomainAdapter, REST endpoints, DI wiring, ability progression, animation_key + VFX/SFX keys on abilities"
+    "description": "Battle DB tables (battle with active creature IDs, battle_round, battle_round_input, battle_action_log), persistent HP/conditions on generated_creature_current_stats + generated_creature_status_conditions, IBattleRepository, IGeneratedCreatureRepository, BattleDomainService, BattleHttpDomainAdapter, REST endpoints, DI wiring, ability progression, animation_key + VFX/SFX keys on abilities"
   },
   "unity/11-dialogue-integration": {
     "docPath": "docs/unity/11-dialogue-integration.md",
@@ -436,10 +491,14 @@
         "cr-api-unity/Assets/CR/Core/Data/Registry/Definitions/GrowthProfileConfig.cs",
         "cr-api-unity/Assets/CR/Core/Data/Registry/ContentDefinitionProvider.cs",
         "cr-api-unity/Assets/CR/Game/Battle/BattleAnimationConfig.cs",
-        "cr-api-unity/Assets/CR/Game/Battle/CreatureAnimationProfile.cs"
+        "cr-api-unity/Assets/CR/Game/Battle/CreatureAnimationProfile.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Arena/BattleCameraProfile.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Presentation/CreatureReactionProfile.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Presentation/CreatureBattleReactions.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Presentation/CreatureReaction.cs"
       ]
     },
-    "description": "All ScriptableObject types: what each does, every field, which sync to the backend and via which endpoint, ContentDefinitionProvider registry wiring, Dialogue Database note"
+    "description": "All ScriptableObject types: what each does, every field, which sync to the backend and via which endpoint, ContentDefinitionProvider registry wiring, BattleCameraProfile cinematic-camera feel SO, CreatureReactionProfile shared body-reaction SO (animation+cry+feedback per beat, baseProfile inheritance/override for evolutions, Resolve() flatten; referenced by CreatureDefinition.reactionProfile; offensive VFX comes from AbilityConfig), Dialogue Database note"
   },
   "unity/13-battle-bag-ui": {
     "docPath": "docs/unity/13-battle-bag-ui.md",
@@ -496,5 +555,22 @@
       ]
     },
     "description": "Designer-facing event + variable wiring: EventWiringManifest, VariableWiringManifest, IEventSourceRegistry, BattleEventsAdapter, TrainerSessionAdapter, QuestRewardAdapter, capture/exp/level events, editor window, codegen for IL2CPP, how to add new events and data payloads"
+  },
+  "unity/17-content-pipeline": {
+    "docPath": "docs/unity/17-content-pipeline.md",
+    "repos": {
+      "cr-api": [
+        "Convenience/CR.Data.Migrations.Tool/Program.cs",
+        "Convenience/CR.Data.Migrations/**/*.cs",
+        "Convenience/CR.Game.Compat/build-packages.sh"
+      ],
+      "cr-data": [
+        "cr-api-unity/Assets/CR/Core/Data/Repository/DatabaseMigration.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Repository/LocalDataSources.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Registry/AddressablesCatalogUpdater.cs",
+        "cr-api-unity/Assets/CR/Core/DI/LocalDevGameInstaller.cs"
+      ]
+    },
+    "description": "Two-database content pipeline: game-data DB (global authored content, read-only) vs player-data DB (per-trainer saves, mutable); build-time game-data.bytes artifact from CR.Data.Migrations.Tool + build-packages.sh with 12 referential-integrity checks; ships as Addressable + StreamingAssets first-run floor; cold-start adopt (atomic copy + fail-closed schema-version gate); content patched via Addressables, player-data migrated in place; content-vs-player taxonomy"
   }
 }

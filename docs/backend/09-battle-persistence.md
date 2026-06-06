@@ -1,6 +1,8 @@
 # Battle Persistence
 
-The battle system uses fully DB-backed state. All battle data — sessions, round keys, submitted inputs, creature HP, and action logs — is stored in five relational tables and survives server restarts. There is no in-memory state.
+The battle system uses fully DB-backed state. Battle session data — sessions, round keys, submitted inputs, and action logs — is stored in relational tables and survives server restarts. There is no in-memory state.
+
+Creature **HP and status conditions are persistent across battles**: they live on the creature's own tables (`generated_creature_current_stats`, `generated_creature_status_conditions`), not per-battle. HP is written live during a battle on every resolved action, so a creature that took damage still shows that damage in the team menu after the battle ends. The active creature for each trainer is tracked on the `battle` record itself.
 
 ## Turn Model
 
@@ -28,9 +30,13 @@ Tracks the overall battle session.
 | `battle_type` | VARCHAR(50) | `"ONEvONE"`, `"Wild"`, etc. |
 | `status` | VARCHAR(50) | `"Active"` or `"Ended"` |
 | `winner_id` | UUID NULL | Set when status → `"Ended"` |
+| `trainer1_active_creature_id` | UUID NULL | Trainer 1's creature currently on field |
+| `trainer2_active_creature_id` | UUID NULL | Trainer 2's creature currently on field |
 | `started_at` | DATETIME | |
 | `ended_at` | DATETIME NULL | |
 | `deleted` | BOOLEAN | Soft delete |
+
+`trainer{1,2}_active_creature_id` is set at battle start (first team creature) and updated when a creature faints and is swapped. It is the source of truth for "whose creature is fighting" — there are no per-battle HP rows.
 
 ### `battle_round`
 
@@ -63,22 +69,31 @@ Stores each trainer's submitted moves for a round.
 
 Unique constraint: `(battle_id, round_number, trainer_id)` — one submission per trainer per round.
 
-### `battle_creature_state`
+### `generated_creature_current_stats`
 
-Mutable per-creature state during a battle (HP, status conditions). Updated each time an action resolves.
+Persistent current HP per creature, **not** scoped to a battle. Written live during a battle and surviving after it ends. **No row means full HP** (healer pattern — clearing the row restores the creature).
 
 | Column | Type | Notes |
 |--------|------|-------|
-| `id` | UUID PK | |
-| `battle_id` | UUID | |
-| `trainer_id` | UUID | Owner |
-| `creature_id` | UUID | `generated_creature.id` |
-| `slot_number` | INT | Team position (1-N) |
-| `current_hp` | INT | |
-| `is_active` | BOOLEAN | Currently on field |
-| `status_conditions_json` | TEXT NULL | JSON array of `ActiveBattleCondition` |
+| `generated_creature_id` | UUID PK | `generated_creature.id` |
+| `current_hp` | INT | Current HP between/within battles |
 
-Unique constraint: `(battle_id, creature_id)`.
+`GeneratedCreature.CurrentHitPoints` (`int?`) is populated via a LEFT JOIN on this table in every `generated_creature` SELECT. `null` → use `HitPoints` (max HP).
+
+### `generated_creature_status_conditions`
+
+Persistent active status conditions per creature (hard-delete, composite PK). Written live during a battle.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `generated_creature_id` | UUID | `generated_creature.id` |
+| `status_condition_id` | UUID | `status_conditions.id` |
+| `turns_remaining` | INT NULL | `null` = indefinite (burn/poison) |
+| `applied_in_battle_id` | UUID NULL | Battle that applied the condition |
+
+Composite PK: `(generated_creature_id, status_condition_id)`.
+
+> **Note:** The legacy `battle_creature_state` table has been dropped (migration M8015) and the old per-battle creature-state / condition-change repository methods removed from `IBattleRepository`. HP and status conditions now live exclusively on the persistent creature tables above. The `battle_state_stat_changes` table survives for in-battle standalone stat changes and is now keyed directly by `(battle_id, creature_id)` (migration M8014).
 
 ### `battle_action_log`
 
@@ -100,19 +115,32 @@ Append-only log of resolved round outcomes.
 Task<Guid>    CreateBattleAsync(BattleRecord battle);
 Task<BattleRecord?> GetBattleAsync(Guid battleId);
 Task UpdateBattleStatusAsync(Guid battleId, string status, Guid? winnerId, DateTime? endedAt);
+Task SetActiveCreatureAsync(Guid battleId, Guid trainerId, Guid creatureId);
 
 Task CreateRoundAsync(BattleRoundRecord round);
 Task<BattleRoundRecord?> GetRoundAsync(Guid battleId, int roundNumber);
 Task<BattleRoundRecord?> GetCurrentRoundAsync(Guid battleId);
-
-Task UpsertCreatureStateAsync(BattleCreatureStateRecord state);
-Task<IReadOnlyList<BattleCreatureStateRecord>> GetCreatureStatesAsync(Guid battleId);
 
 Task InsertRoundInputAsync(BattleRoundInputRecord input);
 Task<IReadOnlyList<BattleRoundInputRecord>> GetRoundInputsAsync(Guid battleId, int roundNumber);
 
 Task InsertActionLogAsync(BattleActionLogRecord entry);
 Task<IReadOnlyList<BattleActionLogRecord>> GetActionLogAsync(Guid battleId);
+
+// Standalone (in-battle, not condition-linked) stat changes, keyed by (battle, creature)
+Task<IReadOnlyList<BattleStateStatChange>> GetStandaloneStatChangesByBattleCreatureAsync(Guid battleId, Guid creatureId);
+Task UpsertStandaloneStatChangesByBattleCreatureAsync(Guid battleId, Guid creatureId, IEnumerable<BattleStateStatChange> statChanges);
+```
+
+Persistent HP and conditions are written through `IGeneratedCreatureRepository`:
+
+```csharp
+Task UpsertCurrentHitPointsAsync(Guid creatureId, int currentHp);
+Task DeleteCurrentStatsAsync(Guid creatureId);
+Task ApplyStatusConditionAsync(Guid creatureId, Guid statusConditionId, int? turnsRemaining, Guid? appliedInBattleId);
+Task RemoveStatusConditionAsync(Guid creatureId, Guid statusConditionId);
+Task<IReadOnlyList<GeneratedCreatureStatusCondition>> GetStatusConditionsAsync(Guid creatureId);
+Task RemoveAllStatusConditionsAsync(Guid creatureId);
 ```
 
 ### Implementation
@@ -127,15 +155,17 @@ Task<IReadOnlyList<BattleActionLogRecord>> GetActionLogAsync(Guid battleId);
 
 Plain POCOs in `Game/CR.Game.Model/Battle/` — one file per table:
 
-- `BattleRecord` — maps to `battle`
+- `BattleRecord` — maps to `battle` (includes `Trainer1ActiveCreatureId` / `Trainer2ActiveCreatureId`)
 - `BattleRoundRecord` — maps to `battle_round` (includes `ActiveTrainerId`)
 - `BattleRoundInputRecord` — maps to `battle_round_input`
-- `BattleCreatureStateRecord` — maps to `battle_creature_state`
+- `BattleCreatureSnapshot` — in-battle view of a creature (`TrainerId`, `CreatureId`, `CurrentHp`, `IsActive`), built from persistent creature tables; replaces `BattleCreatureStateRecord` in `BattleStateDto`
 - `BattleActionLogRecord` — maps to `battle_action_log`
 - `BattleAction` — represents a single submitted action (type, abilityId, itemId, etc.)
-- `ActionOutcome` — full resolution result returned from `SubmitActionAsync` (includes `AbilityKey`, `ConditionsApplied`, `AttackerConditionsApplied`)
-- `ActiveBattleCondition` / `ActiveStatChange` — live conditions stored as JSON in creature state
+- `ActionOutcome` — full resolution result returned from `SubmitActionAsync` (includes `AbilityKey`, `ConditionsApplied`, `AttackerConditionsApplied`, `NeedsSwap`)
+- `ActiveBattleCondition` / `ActiveStatChange` — live conditions used by the resolver and in `ActionOutcome`
 - `ResolvedConditionDefinition` — pre-loaded condition + stat changes passed into the resolver (lives in `CR.Game.Model/Battle/`)
+
+`GeneratedCreatureStatusCondition` (in `CR.Creatures.Data`) maps to `generated_creature_status_conditions`.
 
 ## `IBattleDomainService`
 
@@ -153,12 +183,11 @@ public interface IBattleDomainService
 
 ### `StartBattleAsync`
 
-1. Load both trainers' teams via `ICreatureInventoryService`
-2. Insert `battle` row (`status = "Active"`, `battle_type`)
-3. Insert one `battle_creature_state` row per creature from both teams
-4. Determine first-turn trainer by comparing active creature Speed stats (ties → trainer1)
-5. Generate round 1 keys, insert `battle_round` row with `active_trainer_id`
-6. Return `BattleStartResult` (includes `BattleId`, `ActiveTrainerId`, round keys)
+1. Insert `battle` row (`status = "Active"`, `battle_type`)
+2. For each trainer, load their team and set the first creature as active via `SetActiveCreatureAsync` (writes `trainer{1,2}_active_creature_id`). No per-battle creature rows are written.
+3. Determine first-turn trainer by comparing the two active creatures' Speed stats (ties → trainer1)
+4. Generate round 1 keys, insert `battle_round` row with `active_trainer_id`
+5. Return `BattleStartResult` (includes `BattleId`, `ActiveTrainerId`, round keys)
 
 ### `SubmitActionAsync`
 
@@ -167,18 +196,29 @@ public interface IBattleDomainService
 3. Validate round key
 4. Guard against double-submission (unique constraint on `battle_round_input`)
 5. Insert `battle_round_input`
-6. Resolve the action immediately via `BattleResolver.Resolve()` (from `CR.Game.Compat`)
-7. Persist updated HP and conditions for both creatures
-8. Write action log entry
-9. Check battle-end condition (all of one trainer's creatures at HP ≤ 0)
-10. If battle not over: create new round with `active_trainer_id = opposingTrainerId`
-11. Return `ActionOutcome` including `NextActiveTrainerId` + `NextRoundKey`
+6. Read attacker/defender active creature IDs from the `battle` record; build `CreatureSnapshot`s
+7. Resolve the action immediately via `BattleResolver.Resolve()` (from `CR.Game.Compat`)
+8. Persist HP **live** via `IGeneratedCreatureRepository.UpsertCurrentHitPointsAsync`, and apply/remove conditions via `ApplyStatusConditionAsync` / `RemoveStatusConditionAsync`
+9. Write action log entry
+10. Check battle-end condition (a creature fainted — but **only end the battle if the owner has no alive backup**, see *Force-Swap on Faint* below). The true winner is threaded through to battle end rather than recording any active-creature faint as an instant Loss.
+11. If a creature fainted but its owner has an alive backup: keep the battle Active and set `ActionOutcome.NeedsSwap = true` (with `NextActiveTrainerId` = the trainer who must swap)
+12. If battle not over and no swap is forced: create new round with `active_trainer_id = opposingTrainerId`
+13. Return `ActionOutcome` including `NextActiveTrainerId` + `NextRoundKey`
 
-### HP Write-Back and Wild Cleanup
+HP is written on **every resolved action**, so a creature's damage persists immediately — no end-of-battle write-back step is needed.
 
-When the battle ends:
-- Each creature's final `battle_creature_state.current_hp` is written back to `generated_creature.hit_points`
-- All creatures belonging to the Wild Trainer (GUID `00000000-0000-0000-0000-000000000001`) are soft-deleted
+### Snapshot Building (`BuildSnapshotAsync`)
+
+For a `(battleId, creatureId)` pair the service loads the `GeneratedCreature` (which already carries `CurrentHitPoints` from the LEFT JOIN), then layers active modifiers:
+
+- Persistent conditions from `GetStatusConditionsAsync`, resolved to their stat changes via `IAbilityRepository.GetStatusConditionsWithStatChanges`.
+- In-battle standalone stat changes from `GetStandaloneStatChangesByBattleCreatureAsync(battleId, creatureId)`.
+
+The resulting stat values are floored at 1 before being handed to the resolver.
+
+### Wild Cleanup
+
+When the battle ends, only the Wild Trainer's active creature needs cleanup: if it still belongs to the Wild Trainer (GUID `00000000-0000-0000-0000-000000000001`) and was not captured, it is soft-deleted and its `generated_creature_current_stats` row is cleared via `DeleteCurrentStatsAsync`. Player creatures keep their persistent current HP.
 
 ## Shared Battle Engine (`CR.Game.Compat`)
 
@@ -194,13 +234,41 @@ The pure calculation logic lives in `Convenience/CR.Game.Compat/Battle/` (target
 
 ### Damage Formula
 
+Physical/special damage is **data-driven** via a tunable `damage_curve` (see *Damage curves* below). `BattleResolver` applies a fixed formula *shape* whose constants come from the resolved curve:
+
 ```
-Physical:  damage = floor(Power × Attack / Defense)
-Special:   damage = floor(Power × SpecialAttack / SpecialDefense)
-Status:    damage = 0
+levelFactor = curve.LevelCoeff × attackerLevel + curve.LevelConst
+atkStat     = Physical ? Attack  : SpecialAttack
+defStat     = Physical ? Defense : SpecialDefense
+damage      = floor( levelFactor × Power × atkStat / max(1, defStat) / curve.Divisor + curve.FlatAdd )
+              × STAB × typeMultiplier × ability.PowerMultiplier
+Status:     damage = 0
 ```
 
-Minimum damage is 1 for damaging abilities. Active `StatChange` modifiers are applied to snapshot stats before calling `Resolve`.
+- **STAB** (same-type attack bonus): when the attacker's element matches the ability's element (and is not `Normal`), damage is multiplied by `curve.StabMultiplier` (default 1.5). Computed in-resolver.
+- **typeMultiplier**: elemental effectiveness from the `elemental_damage` table (attack element vs defender element), pre-resolved by `BattleDomainService` and passed into `Resolve` (1.0 when no mapping exists). The elemental table is loaded once per battle and cached.
+- **ability.PowerMultiplier**: per-ability scalar (1.0 default; e.g. 1.5 for a rare/legendary ability).
+- Minimum damage is 1 for damaging abilities. Active `StatChange` modifiers are applied to snapshot stats before calling `Resolve`.
+
+#### Damage curves (`damage_curve` table)
+
+Damage tuning lives in a dual-DB (SQLite + Postgres) `damage_curve` table, authored as `DamageCurveDefinition` ScriptableObjects in Unity and synced from the Content Studio **Battle Tuning** tab.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `content_key` | text (UNIQUE) | designer key; `"default"` is the global curve |
+| `level_coeff` | float | `levelFactor = level_coeff × Level + level_const` |
+| `level_const` | float | |
+| `divisor` | float | normalization divisor (higher = less damage) |
+| `flat_add` | float | flat damage added after normalization |
+| `stab_multiplier` | float | same-type-attack bonus (default 1.5) |
+| `deleted`, `created_at`, `updated_at` | — | soft-delete + timestamps |
+
+An ability picks a curve via `abilities.damage_curve_key` (nullable → falls back to `"default"`); `abilities.power_multiplier` (float, default 1.0) scales that ability's damage. `BattleDomainService` resolves the effective curve (`ability.DamageCurveKey ?? "default"`, cached per battle) and passes it plus the pre-resolved `typeMultiplier` into `BattleResolver.Resolve` (the resolver stays pure / DB-free).
+
+**REST:** `GET /api/v1/abilities/damage-curves` (list), `PUT /api/v1/abilities/damage-curves/{contentKey}` (upsert).
+
+**Default curve:** `level_coeff = 0.4`, `level_const = 2`, `divisor = 50`, `flat_add = 2`, `stab_multiplier = 1.5` — seeded by migration `M1030`. The `abilities` columns are added by `M1031`.
 
 ### Accuracy Check
 
@@ -214,7 +282,7 @@ Miss → no damage, no conditions, `ActionOutcome.Missed = true`.
 
 On an ability hit, `BattleResolver` iterates the `resolvedConditions` list passed by the caller. For each condition a probability roll is made; if it succeeds an `ActiveBattleCondition` is constructed with pre-rolled `StatChange` amounts and the condition's `DurationTurns` (or -1 for permanent). Conditions with `ApplyToUser = true` land in `SingleActionResult.AttackerConditionsApplied`; all others in `ConditionsApplied` (defender).
 
-`BattleDomainService` bulk-fetches conditions via `IAbilityRepository.GetStatusConditionsWithStatChanges` (two queries: one for conditions, one JOIN for their stat changes) before calling the resolver. Self-applied (attacker) conditions are merged into `AttackerRemainingConditions` before writing back to `battle_creature_state.status_conditions_json`. Both `ConditionsApplied` and `AttackerConditionsApplied` are included in the `ActionOutcome` returned to the client.
+`BattleDomainService` bulk-fetches conditions via `IAbilityRepository.GetStatusConditionsWithStatChanges` (two queries: one for conditions, one JOIN for their stat changes) before calling the resolver. After resolution, defender conditions in `ConditionsApplied` / `ConditionsRemoved` and attacker conditions in `AttackerConditionsApplied` are persisted directly to `generated_creature_status_conditions` via `ApplyStatusConditionAsync` / `RemoveStatusConditionAsync`. Both `ConditionsApplied` and `AttackerConditionsApplied` are included in the `ActionOutcome` returned to the client.
 
 Miss → no conditions applied regardless of probability.
 
@@ -226,7 +294,7 @@ After resolving an action, `SingleActionResult` exposes `AttackerRemainingCondit
 - Conditions with TurnsRemaining > 1 decremented by 1.
 - Conditions with TurnsRemaining == 1 moved to `ConditionsRemoved` and dropped from the list.
 
-`BattleDomainService` writes this list back to `battle_creature_state.status_conditions_json` on every resolved action, replacing the original (unmodified) condition snapshot.
+`BattleDomainService` syncs this list to `generated_creature_status_conditions` on every resolved action: conditions no longer present are removed via `RemoveStatusConditionAsync`, and remaining conditions are re-applied (updating `turns_remaining`) via `ApplyStatusConditionAsync`.
 
 ## Run / Escape Mechanics
 
@@ -238,14 +306,66 @@ roll = new Random(battleId.GetHashCode() ^ roundNumber).Next(0, 100)
 escaped = roll < escapeChance
 ```
 
-- **Escape succeeds:** battle status → `"Ended"`, `ActionOutcome.BattleOutcome = Escaped`, `ActionOutcome.BattleEnded = true`. HP is written back and wild creatures are soft-deleted.
+- **Escape succeeds:** battle status → `"Ended"`, `ActionOutcome.BattleOutcome = Escaped`, `ActionOutcome.BattleEnded = true`. The wild trainer's active creature is soft-deleted (player HP is already persisted).
 - **Escape fails:** the opponent acts next — a new round is opened with `active_trainer_id = opponentId`, and `ActionOutcome.BattleEnded = false`. No round key is returned for the fleeing trainer.
 
 The RNG is seeded deterministically from `battleId.GetHashCode() ^ roundNumber`, so the outcome for a given battle state is reproducible.
 
+## Force-Swap on Faint
+
+A battle no longer ends the instant a trainer's active creature faints. If the owner has **at least one alive backup creature** on their team, the battle stays Active and the trainer is required to swap in a replacement.
+
+`BattleDomainService` resolves this via a private check `HasAliveBackupAsync(trainerId, activeCreatureId, ct)` — it loads the trainer's team and returns `true` if any creature other than the now-fainted active one still has HP. When the faint occurs:
+
+- **Owner has an alive backup:** battle status stays `"Active"`, `ActionOutcome.NeedsSwap = true`, and `ActionOutcome.NextActiveTrainerId` is set to the trainer who must choose a replacement. No new round is opened until the swap is submitted.
+- **Owner has no alive backup:** battle ends as before; the opponent is the winner.
+
+The wild-trainer sentinel `00000000-0000-0000-0000-000000000001` has no team, so a fainting wild creature still ends the battle (player win) exactly as before.
+
+> **Bug fix:** previously any active-creature faint was recorded as an instant Loss regardless of the remaining team. The backup-aware end check threads the **real** winner through to battle end.
+
+## Switch Action
+
+`BattleActionType.Switch` (enum value `3`) swaps the acting trainer's active creature for a backup. JSON payload shape:
+
+```json
+[{"type":3,"newCreatureId":"<guid>"}]
+```
+
+The handler validates the target creature is **owned by the acting trainer, alive, and not already active**, then sets it active via `SetActiveCreatureAsync` and passes the turn to the opponent (a new round is opened with `active_trainer_id = opponentId`). A Switch is the action a client submits in response to `ActionOutcome.NeedsSwap`.
+
+## Battle Experience
+
+When the player (`Trainer1`) knocks out an opponent creature (`ActionOutcome.TargetFainted`), `BattleDomainService` awards XP through the existing `ICreatureProgressionService.ApplyExperienceAsync`, which handles level-up, stat growth (`growth_profile`), and ability unlocks.
+
+- **Amount**: `5 × defeatedLevel` (tunable `XpPerDefeatedLevel`).
+- **Split**: the fighter (the active creature at the KO) takes `1 − benchShare`; the remainder is divided evenly across the **living bench**. With no living bench, the fighter takes all of it.
+- **`benchShare`** = base **10%** + the trainer's `exp_share_bonus_percent` stat (read via `IStatService`), clamped to `[10%, 100%]`.
+
+Per-creature results are returned on `ActionOutcome.ExperienceAwards` (`CreatureId`, `Amount`, `LeveledUp`, `NewLevel`) for the client to render. XP is awarded on **every** opponent knockout, independent of whether the battle ends (so multi-creature trainer battles award per KO).
+
+### EXP-share modifiers (items / skills)
+
+Because `benchShare` reads the `exp_share_bonus_percent` trainer stat, any writer raises the bench's cut:
+
+- **Item** — the `IncreaseExpShare` effect (`ItemEffectType = 12`) increments the stat by its `Percent` parameter (`IncreaseExpShareHandler` on the server; `OfflineItemUseService` mirrors it offline). The sample item `exp_share_charm` ("Mentor's Charm", seeded by `M6009SeedExpShareItem`) grants +20%.
+- **Skill / perk** — any future progression that records to the same stat raises it identically.
+
+## Whiteout Team Heal
+
+When a trainer's whole team is knocked out, the team is fully restored via `ICreatureInventoryService.HealTeamAsync(trainerId, ct)` (`Game/CR.Game.Domain.Services`). For each team creature it sets `current_hit_points` to max — reviving fainted creatures — and clears all status conditions (`UpsertCurrentHitPointsAsync` + `RemoveAllStatusConditionsAsync`), returning the number restored. Unity injects the same domain service directly, so one implementation covers the server, Unity-online, and Unity-offline paths.
+
+A REST surface is exposed for the server path (`Game/CR.Game.Service.BFF/Endpoints/TeamEndpoints.cs`):
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| `POST` | `/api/v1/trainers/{trainerId}/team/heal` | Full team heal + revive + status clear; returns `{ trainerId, healed }` |
+
+The endpoint resolves the caller's account from the request context and requires it to own `trainerId` (else `404`), preventing one account from healing another's team (IDOR). The in-process Unity caller invokes the domain service directly as the owning session.
+
 ## Wild Trainer
 
-A system "Wild" trainer with well-known GUID `00000000-0000-0000-0000-000000000001` is seeded by `M9990SeedGameData`. All spawned wild creatures are assigned to this trainer. After battle they are soft-deleted via `WriteBackHpAsync`.
+A system "Wild" trainer with well-known GUID `00000000-0000-0000-0000-000000000001` is seeded by `M9990SeedGameData`. All spawned wild creatures are assigned to this trainer. When a battle ends, `WriteBackHpAsync` soft-deletes the wild trainer's active creature (if uncaptured) and clears its `generated_creature_current_stats` row.
 
 ## Wild Turn Endpoint
 
@@ -293,12 +413,15 @@ app.MapWildBattleEndpoints();
 ## Migrations
 
 ```
-M8004CreateBattleTables              ← creates the 5 battle tables
+M8004CreateBattleTables              ← creates the battle tables
 M8006AddActiveTurnToBattleRound      ← adds active_trainer_id to battle_round
+M1029CreateGeneratedCreatureStatusConditionsTable  ← persistent per-creature conditions
 M1017AddAbilityProgressionSetIdToBaseCreature  ← adds ability_progression_set_id (UUID NULL) to creature table
 M9003AddAnimationKeyToAbilities      ← adds animation_key (VARCHAR NULL) to abilities table
 M9990SeedGameData                    ← seeds Wild Trainer (guarded: skips if account table absent)
 ```
+
+Additional migrations add `trainer{1,2}_active_creature_id` to `battle` and create `generated_creature_current_stats` for persistent HP.
 
 `ability_progression_set_id` links a `creature` row to an `AbilityProgressionSet`, enabling wild AI to restrict ability selection to the abilities the creature has actually learned at its current level. `null` means no set assigned — the AI falls back to a global ability query.
 
@@ -339,6 +462,8 @@ Pure logic tests — `BattleResolver.Resolve()` called directly with `ResolvedCo
 **`ActionOutcome.NextRoundKey` is single-use.** Returned from `SubmitActionAsync` for the next round; valid only until that round resolves.
 
 **`ActiveBattleCondition` / `ActiveStatChange` are plain classes (not records) in `CR.Game.Model`.** Using `record` + `init` in a multi-TFM assembly causes `MissingMethodException` at runtime when the net8.0 build is loaded by a netstandard2.1 consumer. Condition objects are constructed with object-initializer syntax.
+
+**HP and conditions are persistent, not per-battle.** A creature with `current_hp` damage carries it into the next battle and shows it in the team menu. To "heal" a creature, delete its `generated_creature_current_stats` row (`DeleteCurrentStatsAsync`) and its conditions (`RemoveAllStatusConditionsAsync`) — no row means full HP.
 
 ## Related Pages
 

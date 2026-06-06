@@ -322,15 +322,6 @@ Controls XP rate and per-stat scaling multipliers for a creature. Referenced by 
 
 These SOs configure client presentation and are never sent to the server.
 
-### SpawnerZoneConfig
-
-**Menu:** `CR/Content/Spawner Zone Config`  
-**Backend sync:** None — attaches to `SpawnerWorldBehaviour` on scene objects
-
-A scene-level spawner config used by `SpawnerWorldBehaviour`. Overlaps with `SpawnerDefinition` but is structured for direct scene attachment rather than the central registry. Contains the same pool/template nested types as `SpawnerDefinition`.
-
----
-
 ### BattleAnimationConfig
 
 **Menu:** `CR/Battle/Animation Config`  
@@ -372,6 +363,59 @@ Defines the default animation clip names for a creature's Animator. Assigned per
 
 ---
 
+### BattleCameraProfile
+
+**Menu:** `CR/Battle/Camera Profile`  
+**Backend sync:** None
+
+Feel/timing values for the cinematic battle camera (see [Battle System → Cinematic Camera](?page=unity/07-battle-system)). Lives on an asset so tweaks made while in Play mode persist. Per-shot **framing** is authored on the `vcam_*` children of the `BattleCameraRig` prefab, not here. Created automatically by `CR → Battle → Build Camera Rig Prefab`.
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `blendSeconds` | float | Brain blend time between shots during battle (overrides the slow 2s default) |
+| `orbitDegreesPerSecond` | float | Idle/establishing orbit speed |
+| `introRadiusMultiplier` | float | Intro sweep starts this × the authored orbit radius, then eases in |
+| `introHoldSeconds` | float | Intro sweep duration (also ends on the first turn) |
+| `actionHoldSeconds` | float | Dwell on the attack shot so the push-in/impact read |
+| `faintHoldSeconds` | float | Dwell on the low-angle faint shot |
+| `shakeForceNormal` / `shakeForceHeavy` | float | Impulse force for a normal hit vs a heavy hit / faint |
+
+---
+
+### CreatureReactionProfile
+
+**Menu:** `CR/Battle/Creature Reaction Profile`  
+**Backend sync:** None — client-only.
+
+A creature's in-battle **body language** (animation + its cry + feedback), authored once and **shared** across many creatures. A `CreatureDefinition` points at one via its `reactionProfile` field; the battle stager resolves it by content key, calls `Resolve()`, and hands the result to the `CreatureBattlePresenter` on the prefab (see [Battle System → CreatureBattlePresenter](./07-battle-system.md)). This covers the creature's **own body only**: a move's offensive VFX/SFX come from `AbilityConfig`, not here.
+
+**Inheritance / overrides.** A profile has an optional **`baseProfile`**. Leave it empty for a standalone/base profile (author all beats). Set it to derive a variant — fill in only the beats you want to change; blank beats inherit from the base. Chain them for per-evolution flavor (base → evolved → shiny), or just duplicate an asset to fork it. `Resolve()` flattens the chain (most-derived beat wins) into the final `CreatureBattleReactions`. The inspector shows a **Resolved (source per beat)** readout — `local` / `inherited` / `—` — and a **Create Variant…** button that makes a child profile in one click.
+
+The reactions themselves are a flat `CreatureBattleReactions` set of named `CreatureReaction` fields: `spawn`, `turnStart`, `attack`, `hit`, `heavyHit`, `faint`, `lowHp`, `criticalHp`, `statusApplied`, `captured`, `victory`, `defeat`, `levelUp`, `idle`. Within a resolved profile, blank beats fall back (`heavyHit`→`hit`, `criticalHp`→`lowHp`) or to a default Animator state for the core combat beats.
+
+The inspector's **"Set Standard Defaults"** button pre-fills the standard Animator state-name convention (`Spawn`, `Hit`, `HeavyHit`, `Faint`, `Victory`, `Idle`, …) plus a little impact feedback onto any un-authored beat — non-destructively. (Use it on a **base** profile; on a derived one it would override the inherited beats.) See the convention table in [Battle System → Standard Animator state names](./07-battle-system.md). Names with no matching state in the controller are skipped safely, so you only build the states you want.
+
+Each `CreatureReaction` field (all optional):
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `animatorState` | string | Animator state to cross-fade into (empty = use the presenter's default for the beat) |
+| `animatorTrigger` | string | If set, `SetTrigger(this)` instead of cross-fading a state |
+| `crossfadeSeconds` | float | Cross-fade duration (ignored when using a trigger) |
+| `sounds` | `AudioClip[]` | The creature's cry/grunt — one chosen at random, played at its position |
+| `volume` / `pitchJitter` | float | One-shot volume; random ± pitch so repeats vary |
+| `vfxPrefab` | `GameObject` | **Body-only** effect (faint puff, level-up sparkle) — *not* the move's VFX. Empty = none |
+| `vfxAnchor` | string | Child transform name to spawn at (recursive search; empty = root) |
+| `vfxParented` | bool | Parent the VFX to the creature so it follows movement |
+| `vfxLifetime` | float | Auto-destroy the VFX after N seconds (0 = self-managed) |
+| `scalePunch` / `scalePunchSeconds` | float | Scale-pop amount (e.g. 0.15 = 15%) and duration (0 = none) |
+| `flashColor` / `flashSeconds` | Color / float | Brief color flash via `MaterialPropertyBlock` (alpha 0 = no flash) |
+| `vibration` | `CreatureVibrationTier` | `None`/`Light`/`Medium`/`Strong` — re-raises the shared `BattleEvents` haptic event |
+
+> Move VFX/SFX (the fireball, impact burst, cast whoosh) live on **`AbilityConfig`** (`useVfx`/`travelVfx`/`hitVfx`, `useSfx`/`hitSfx`/`missSfx`) and are played positionally by `BattleAbilityFxResponder` — see the [Battle System](./07-battle-system.md) page.
+
+---
+
 ### Dialogue Database (`CR Dialog.asset`)
 
 **Location:** `Assets/CR/CR Dialog.asset`  
@@ -398,7 +442,8 @@ This asset is authored in the Pixel Crushers **Dialogue Editor** window (`Tools 
 | `AbilityProgressionSetConfig` | Content Studio tool | `/api/v1/ability-progression-sets` |
 | `GrowthProfileConfig` | Content Studio tool | `/api/v1/growth-profiles` |
 | `ContentDefinitionProvider` | — | Client-only registry |
-| `SpawnerZoneConfig` | — | Client-only scene config |
 | `BattleAnimationConfig` | — | Client-only |
 | `CreatureAnimationProfile` | — | Client-only |
+| `CreatureReactionProfile` | — | Client-only |
+| `BattleCameraProfile` | — | Client-only |
 | `CR Dialog.asset` (DialogueDatabase) | — | Client-only (Pixel Crushers) |

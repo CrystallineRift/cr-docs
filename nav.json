@@ -158,5 +158,15 @@
     "section": "Unity",
     "title": "Event Wiring",
     "path": "unity/15-event-wiring"
+  },
+  {
+    "section": "Unity",
+    "title": "Domain Sync Pattern",
+    "path": "unity/16-domain-sync-pattern"
+  },
+  {
+    "section": "Unity",
+    "title": "Content Pipeline (Two-Database Model)",
+    "path": "unity/17-content-pipeline"
   }
 ]
