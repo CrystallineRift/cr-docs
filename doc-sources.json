@@ -408,7 +408,9 @@
       "cr-data": [
         "cr-api-unity/Assets/CR/Core/Data/Registry/Definitions/ItemSpawnerDefinition.cs",
         "cr-api-unity/Assets/CR/Core/Data/Editor/ItemSpawnerDefinitionEditor.cs",
-        "cr-api-unity/Assets/CR/Game/World/Behaviours/NpcMerchantBehaviour.cs"
+        "cr-api-unity/Assets/CR/Game/World/Behaviours/NpcMerchantBehaviour.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Editor/ContentStudioTool.cs",
+        "cr-api-unity/Assets/CR/Game/World/Editor/ContentCreatorSyncHelper.cs"
       ]
     },
     "description": "Item spawner mirroring the creature spawner: item_spawner/_pool/_template tables (M6010–M6012), weighted roll (pool by weight×rarity, template by probability, guaranteed at p=1.0), NpcMerchantService.StockFromSpawnerAsync into npc_inventory, sync-config + roll + stock-from-spawner endpoints, ItemSpawnerDefinition authoring + NpcDefinition.itemSpawnerContentKey"

@@ -66,6 +66,7 @@ merchant fills its stock the first time its zone loads (and re-rolls once the co
 |---|---|---|
 | POST | `/api/v1/item-spawners/sync-config` | Create/replace a spawner (header + pools + templates) by content key — used by Content Studio |
 | GET  | `/api/v1/item-spawners/{contentKey}/roll?seed=` | Preview a roll (distinct item ids + quantities) |
+| GET  | `/api/v1/item-spawners/by-content-key/{contentKey}/config` | Full config (header + pools + templates) — used by Content Studio **Pull** |
 | POST | `/api/v1/merchants/{npcId}/stock-from-spawner` | Roll a spawner into a merchant's inventory (`{ accountId, trainerId, spawnerContentKey, force }`) |
 
 ## Authoring (Unity)
@@ -77,6 +78,17 @@ Config** pushes it to the backend. On a Merchant `NpcDefinition`, set **Item Spa
 the spawner's content key. Content Studio also has an **Item Spawners** tab (list / create /
 sync), and `ContentAuditTool` flags item-spawner templates or merchant links that reference
 unknown items/spawners.
+
+## Content Studio sync
+
+Every content tab has **Push** (SOs → server, upsert by content key) and **Pull** (server →
+SOs, overwriting local), plus a global **Push All Content** / **Pull All Content** toolbar that
+runs every type in one click (Pull confirms once). Item spawners push via `SyncItemSpawnerFull`
+and pull via the config endpoint above. Items **merge** on push — the thin `ItemDefinition` SO
+only authors a subset (effect, usage flags, capture modifier, held-item trigger, asset key), so
+the push overlays those onto the existing server row and preserves server-only fields (name,
+item type, value, stack, tradable/sellable). Spawn pools have no rows of their own — their
+Push/Pull operates on the owning spawners.
 
 ## Related
 
