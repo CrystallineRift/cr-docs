@@ -429,6 +429,7 @@
         "cr-api-unity/Assets/CR/Core/Data/Editor/ContentPublishTool.cs",
         "cr-api-unity/Assets/CR/Core/Data/Editor/ContentDeployTool.cs",
         "cr-api-unity/Assets/CR/Core/Data/Registry/AddressablesCatalogUpdater.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Editor/AddressableContentRegistrar.cs",
         "scripts/deploy-content.sh",
         "scripts/setup-minio-bucket.sh"
       ]

@@ -239,6 +239,27 @@ For rapid iteration during development, stay on **Use Asset Database** and skip 
 
 ---
 
+## Consistent content addressables (CR Studio)
+
+Every content ScriptableObject synced from CR Studio should be a registered Addressable so the
+runtime can load definitions by key. `AddressableContentRegistrar` centralizes this:
+
+- **Address = the SO's content key** (`contentKey`, falling back to `id`), resolved by reflection
+  so it works for every type uniformly.
+- **Group** = `CRContent` (get-or-created; falls back to the default group if creation is blocked).
+  Referenced art keeps using the `CRArt` convention at `address = assetKey`.
+
+In **Content Studio**:
+- Each content row shows a **✓ Addr / + Addr** badge; clicking registers that SO in one step.
+- Each tab's action row shows **Fix Addr (N)** — registers every definition on that tab missing its entry.
+- The header has a global **✦ Fix All Addressables** — registers everything missing across all types.
+
+`ContentAuditTool` adds an **Addressables** pass that lists every content SO not yet registered
+(and any `assetKey` with no Addressable entry), so gaps are easy to find. All of this is behind
+the `CR_ADDRESSABLES` define.
+
+---
+
 ## Related Pages
 
 - [Content Pipeline (Two-Database Model)](?page=unity/17-content-pipeline) — baked `game-data.bytes` artifact, build-time integrity checks, cold-start adopt, content patching
