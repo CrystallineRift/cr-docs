@@ -50,7 +50,10 @@ The merchant's stock itself comes from its item spawner
 ## Scene wiring (Editor)
 
 1. Add a GameObject with a `UIDocument` (sortingOrder above the HUD) +
-   `MerchantShopScreenHandler` to the world UI rig.
+   `MerchantShopScreenHandler` to the world UI rig. Leave the UIDocument's
+   **Source Asset (visualTreeAsset) empty** — the handler instantiates the UXML
+   from Resources itself; an assigned source asset just bakes a stylesheet-less
+   copy at startup (the handler hides it defensively, but empty is cleaner).
 2. Assign the shared `isMenuOpen` BoolVariable (the stylesheet auto-loads from
    Resources if unassigned).
 3. On the merchant NPC: `NpcMerchantBehaviour._itemSpawnerContentKey`
