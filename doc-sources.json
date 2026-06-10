@@ -388,6 +388,33 @@
     },
     "description": "game_assets table, app_config singleton row, version-check endpoint, content-publish endpoint, content-manifest endpoint, X-Pipeline-Key auth, three-system asset architecture (Addressables CDN, cr-api backend, local SQLite), S3/MinIO CDN setup, deploy scripts"
   },
+  "backend/11-item-spawner": {
+    "docPath": "docs/backend/11-item-spawner.md",
+    "repos": {
+      "cr-api": [
+        "Game/CR.Game.Model/ItemSpawner/**/*.cs",
+        "Items/CR.Items.Data.Migration/M6010CreateItemSpawnerTable.cs",
+        "Items/CR.Items.Data.Migration/M6011CreateItemSpawnerPoolTable.cs",
+        "Items/CR.Items.Data.Migration/M6012CreateItemSpawnerTemplateTable.cs",
+        "Items/CR.Items.Data/Interface/IItemSpawnerRepository.cs",
+        "Items/CR.Items.Data/Implementation/BaseItemSpawnerRepository.cs",
+        "Items/CR.Items.Domain.Services/Implementation/ItemSpawnerRoller.cs",
+        "Items/CR.Items.Domain.Services/Implementation/ItemSpawnerDomainService.cs",
+        "Items/CR.Items.Domain.Services/Interfaces/IItemSpawnerDomainService.cs",
+        "Npcs/CR.Npcs.Domain.Services/Implementation/NpcMerchantService.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/ItemSpawnerEndpoints.cs",
+        "Convenience/CR.Data.Migrations.Tool/Program.cs"
+      ],
+      "cr-data": [
+        "cr-api-unity/Assets/CR/Core/Data/Registry/Definitions/ItemSpawnerDefinition.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Editor/ItemSpawnerDefinitionEditor.cs",
+        "cr-api-unity/Assets/CR/Game/World/Behaviours/NpcMerchantBehaviour.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Editor/ContentStudioTool.cs",
+        "cr-api-unity/Assets/CR/Game/World/Editor/ContentCreatorSyncHelper.cs"
+      ]
+    },
+    "description": "Item spawner mirroring the creature spawner: item_spawner/_pool/_template tables (M6010–M6012), weighted roll (pool by weight×rarity, template by probability, guaranteed at p=1.0), NpcMerchantService.StockFromSpawnerAsync into npc_inventory, sync-config + roll + stock-from-spawner endpoints, ItemSpawnerDefinition authoring + NpcDefinition.itemSpawnerContentKey"
+  },
   "unity/09-addressables-setup": {
     "docPath": "docs/unity/09-addressables-setup.md",
     "repos": {
@@ -402,6 +429,7 @@
         "cr-api-unity/Assets/CR/Core/Data/Editor/ContentPublishTool.cs",
         "cr-api-unity/Assets/CR/Core/Data/Editor/ContentDeployTool.cs",
         "cr-api-unity/Assets/CR/Core/Data/Registry/AddressablesCatalogUpdater.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Editor/AddressableContentRegistrar.cs",
         "scripts/deploy-content.sh",
         "scripts/setup-minio-bucket.sh"
       ]

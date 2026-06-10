@@ -55,6 +55,11 @@
     "path": "backend/10-asset-management"
   },
   {
+    "section": "Backend",
+    "title": "Item Spawner & Merchant Stock",
+    "path": "backend/11-item-spawner"
+  },
+  {
     "section": "Introduction",
     "title": "Changelog",
     "path": "changelog"
