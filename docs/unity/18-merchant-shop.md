@@ -28,7 +28,8 @@ The merchant's stock itself comes from its item spawner
 |------|------|
 | `Assets/CR/UI/Shop/MerchantShopScreenHandler.cs` | UI Toolkit screen: rows, wallet, qty stepper, Buy, status line. `IContextAwareScreen` — force-closes when leaving the Overworld context. |
 | `Assets/CR/UI/Shop/MerchantShopItem.cs` | Resolved row struct (itemId, name, desc, unitPrice, stock, assetKey). |
-| `Assets/CR/UI/Resources/MerchantShopScreen.uxml` | Layout (named elements, zero inline styles). |
+| `Assets/CR/UI/Resources/MerchantShopScreen.uxml` | Screen layout (named elements, zero inline styles). |
+| `Assets/CR/UI/Resources/MerchantShopItemRow.uxml` | One stock row — designer-editable template; the handler only binds data/callbacks by element name. |
 | `Assets/CR/UI/Resources/MerchantShopScreen.uss` | All styling via named classes (BattleBagPanel design language: deep navy, blue borders, dimmed overlay). Loaded from Resources as a fallback when the Inspector field is unassigned, so the screen never renders unstyled. |
 | `Assets/CR/Game/World/Behaviours/NpcInteractionBehaviour.cs` | Merchant interact branch; locates the screen lazily (`FindFirstObjectByType`) so shop-less scenes still resolve DI. |
 
@@ -56,8 +57,16 @@ The merchant's stock itself comes from its item spawner
    copy at startup (the handler hides it defensively, but empty is cleaner).
 2. Assign the shared `isMenuOpen` BoolVariable (the stylesheet auto-loads from
    Resources if unassigned).
-3. On the merchant NPC: `NpcMerchantBehaviour._itemSpawnerContentKey`
-   (e.g. `starting-merchant-items`).
+3. On the merchant NPC GameObject (all required):
+   - `NpcWorldBehaviour` — `_npcContentKey` set to the NPC's content key
+     (e.g. `demo-merchant`); this bootstraps the NPC and runs sub-initializers.
+   - `NpcMerchantBehaviour` — `_itemSpawnerContentKey`
+     (e.g. `starting-merchant-items`); stocks the merchant on world init.
+   - `NpcInteractionBehaviour` — `Tags To Interact With` must contain the
+     player's Malbers Tag, and `Interact Action` should reference
+     CR_GameInput ▸ Player/Interact. Both now warn in the console when missing;
+     with no action assigned it falls back to polling the E key while in range.
+   - A trigger `SphereCollider` (added/configured automatically).
 
 ## Offline stock source
 
