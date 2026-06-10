@@ -60,6 +60,11 @@
     "path": "backend/11-item-spawner"
   },
   {
+    "section": "Backend",
+    "title": "Trainer Currency",
+    "path": "backend/12-trainer-currency"
+  },
+  {
     "section": "Introduction",
     "title": "Changelog",
     "path": "changelog"
@@ -173,5 +178,10 @@
     "section": "Unity",
     "title": "Content Pipeline (Two-Database Model)",
     "path": "unity/17-content-pipeline"
+  },
+  {
+    "section": "Unity",
+    "title": "Merchant Shop UI",
+    "path": "unity/18-merchant-shop"
   }
 ]

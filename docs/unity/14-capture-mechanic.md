@@ -174,6 +174,29 @@ BattleEvents.RaiseCreatureCaptured(capturedCreatureId, "");
 
 The `BattleCoordinator` then ends the battle with reason `"capture"`.
 
+## Offline Support
+
+Offline (local SQLite) battles roll **identical odds** to the server:
+
+- The pure formula lives in `CR.Game.Domain.Services/Implementation/Item/CaptureChanceCalculator.cs`
+  (shipped to Unity in the DLL package) and is used by both the server
+  `CaptureCreatureHandler` and the Unity `OfflineItemUseService`
+  (`Assets/CR/Game/Battle/Offline/OfflineItemUseService.cs`).
+- The offline `CaptureCreature` case mirrors the server handler: wild-battle /
+  opponent / fainted validations, ownership reassignment
+  (`CurrentTrainerId`, `FirstCaughtByTrainerId`, `CaptureDate`), and
+  `ICreatureInventoryService.AddToStorageAsync`.
+
+### Opponent target resolution
+
+Clients may use a capture crystal against "the opponent" without knowing its
+creature id (`targetCreatureId == Guid.Empty`). Both the server handler and the
+offline service resolve the wild side's active creature from the battle record
+(`Trainer1/2ActiveCreatureId` on the side whose trainer is the well-known
+`BattleDomainService.WildTrainerId`). The `BattleHUD` additionally passes its
+tracked opponent id through `BattleBagPanelHandler.PrepareAsync/Open`, so the
+empty-target path is only a fallback.
+
 ## Migration History
 
 | Migration | Description |
