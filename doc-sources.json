@@ -403,7 +403,8 @@
         "Items/CR.Items.Domain.Services/Interfaces/IItemSpawnerDomainService.cs",
         "Npcs/CR.Npcs.Domain.Services/Implementation/NpcMerchantService.cs",
         "Game/CR.Game.Service.BFF/Endpoints/ItemSpawnerEndpoints.cs",
-        "Convenience/CR.Data.Migrations.Tool/Program.cs"
+        "Convenience/CR.Data.Migrations.Tool/Program.cs",
+        "Items/CR.Items.Data.Migration/M6014SeedStartingMerchantSpawner.cs"
       ],
       "cr-data": [
         "cr-api-unity/Assets/CR/Core/Data/Registry/Definitions/ItemSpawnerDefinition.cs",
@@ -634,7 +635,7 @@
       "cr-data": [
         "cr-api-unity/Assets/CR/UI/Shop/MerchantShopScreenHandler.cs",
         "cr-api-unity/Assets/CR/UI/Shop/MerchantShopItem.cs",
-        "cr-api-unity/Assets/CR/UI/Shop/MerchantShopScreen.uss",
+        "cr-api-unity/Assets/CR/UI/Resources/MerchantShopScreen.uss",
         "cr-api-unity/Assets/CR/UI/Resources/MerchantShopScreen.uxml",
         "cr-api-unity/Assets/CR/Game/World/Behaviours/NpcInteractionBehaviour.cs",
         "cr-api-unity/Assets/CR/Game/World/Behaviours/NpcMerchantBehaviour.cs"
