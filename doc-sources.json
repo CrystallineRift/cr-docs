@@ -180,10 +180,12 @@
         "Assets/Scripts/**/*NpcBattleRequest*.cs",
         "Assets/Scripts/**/*NpcCreatureGrantBehaviour*.cs",
         "Assets/Scripts/**/*NpcTrainerBehaviour*.cs",
-        "Assets/Scripts/**/*NpcMerchantBehaviour*.cs"
+        "Assets/Scripts/**/*NpcMerchantBehaviour*.cs",
+        "cr-api-unity/Assets/CR/Game/World/Behaviours/NpcDialogueBehaviour.cs",
+        "cr-api-unity/Assets/CR/Game/World/Behaviours/NpcInteractionBehaviour.cs"
       ]
     },
-    "description": "Composable NPC interaction: NpcInteractionBehaviour dispatch, NpcBattleRequest, OnBattleRequested event, grant vs battle flow"
+    "description": "Composable NPC interaction: NpcInteractionBehaviour dispatch, NpcBattleRequest, OnBattleRequested event, grant vs battle vs merchant vs dialogue flow"
   },
   "unity/05-http-clients": {
     "docPath": "docs/unity/05-http-clients.md",
@@ -517,12 +519,14 @@
         "cr-api-unity/Assets/CR/Dialogue/Interface/IDialogueHandler.cs",
         "cr-api-unity/Assets/CR/Dialogue/Implementation/PixelCrushersDialogueHandler.cs",
         "cr-api-unity/Assets/CR/Quests/Dialogue/QuestDialogueBridge.cs",
+        "cr-api-unity/Assets/CR/Game/World/Behaviours/NpcDialogueBehaviour.cs",
+        "cr-api-unity/Assets/CR/Game/World/Behaviours/NpcInteractionBehaviour.cs",
         "cr-api-unity/Assets/CR/Core/Data/Registry/Definitions/QuestDefinition.cs",
         "cr-api-unity/Assets/CR/Core/Data/Editor/QuestDefinitionEditor.cs",
         "cr-api-unity/Assets/CR/Core/DI/LocalDevGameInstaller.cs"
       ]
     },
-    "description": "Dialogue System abstraction: IDialogueHandler interface, PixelCrushersDialogueHandler MonoBehaviour, QuestDialogueBridge, conversation dropdown in QuestObjectiveDefinition editor, abort-detection flag pattern"
+    "description": "Dialogue System abstraction: IDialogueHandler interface, PixelCrushersDialogueHandler MonoBehaviour, QuestDialogueBridge, NpcDialogueBehaviour interact-driven conversation start (replaces ProximitySelector use-key), conversation dropdown in QuestObjectiveDefinition editor, abort-detection flag pattern"
   },
   "unity/12-scriptable-objects": {
     "docPath": "docs/unity/12-scriptable-objects.md",

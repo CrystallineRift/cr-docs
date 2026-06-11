@@ -86,6 +86,29 @@ Container.Bind<QuestDialogueBridge>()
 
 `PixelCrushersDialogueHandler` is a `MonoBehaviour` bound via `FromNewComponentOnNewGameObject()`. Its event subscriptions to the Pixel Crushers plugin happen in `Start()`, after Zenject installation completes.
 
+## Starting Conversations: NpcDialogueBehaviour
+
+Conversations start through the same Interact flow as every other NPC interaction —
+**not** through the Pixel Crushers `ProximitySelector`/`Selector` use-key, which polls
+its own raw key globally and fires whichever `Usable` is in range even when the player
+is interacting with a different NPC (e.g. a merchant standing nearby).
+
+Setup on a dialogue NPC GameObject:
+
+| Component | Role |
+|-----------|------|
+| `DialogueSystemTrigger` | Pixel Crushers trigger, set to **On Use**, with the conversation assigned |
+| `NpcDialogueBehaviour` | CR wrapper: exposes `HasConversation` / `StartConversation` to the interaction system; assign the shared `isInConversation` BoolVariable so an open conversation can't re-trigger |
+| `NpcInteractionBehaviour` | Proximity + Interact action; its dialogue branch (lowest priority, after grant/trainer/merchant) calls `NpcDialogueBehaviour.StartConversation(player)` |
+
+On the **player**, disable or remove the `ProximitySelector` (and `Selector`) components —
+otherwise both systems respond to E and conversations fire while shopping.
+
+The dialogue branch deliberately does **not** call `QuestManager.OnNpcInteracted`
+directly: `QuestDialogueBridge` records the interaction when the conversation
+*completes*, so recording at trigger time would double-count (and would count
+aborted conversations).
+
 ## TalkToNpc Quest Objectives with Conversation Binding
 
 `QuestObjectiveDefinition` has two game-client-only fields that bind a TalkToNpc objective to a specific Dialogue System conversation:

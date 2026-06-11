@@ -64,8 +64,9 @@ The merchant's stock itself comes from its item spawner
      (e.g. `starting-merchant-items`); stocks the merchant on world init.
    - `NpcInteractionBehaviour` — `Tags To Interact With` must contain the
      player's Malbers Tag, and `Interact Action` should reference
-     CR_GameInput ▸ Player/Interact. Both now warn in the console when missing;
-     with no action assigned it falls back to polling the E key while in range.
+     CR_GameInput ▸ Player/Interact (when unassigned it resolves "Interact"
+     from the project-wide input asset and warns). The action must not have a
+     Hold interaction, or a tap of E never fires `performed`.
    - A trigger `SphereCollider` (added/configured automatically).
 
 ## Offline stock source
