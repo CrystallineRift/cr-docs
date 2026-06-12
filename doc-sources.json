@@ -182,7 +182,8 @@
         "Assets/Scripts/**/*NpcTrainerBehaviour*.cs",
         "Assets/Scripts/**/*NpcMerchantBehaviour*.cs",
         "cr-api-unity/Assets/CR/Game/World/Behaviours/NpcDialogueBehaviour.cs",
-        "cr-api-unity/Assets/CR/Game/World/Behaviours/NpcInteractionBehaviour.cs"
+        "cr-api-unity/Assets/CR/Game/World/Behaviours/NpcInteractionBehaviour.cs",
+        "cr-api-unity/Assets/CR/Game/World/Behaviours/NpcInteractionIndicator.cs"
       ]
     },
     "description": "Composable NPC interaction: NpcInteractionBehaviour dispatch, NpcBattleRequest, OnBattleRequested event, grant vs battle vs merchant vs dialogue flow"
