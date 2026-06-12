@@ -158,7 +158,7 @@ Container.Bind<CR.Game.World.GameInitializer>().FromNewComponentOnNewGameObject(
 Without `NonLazy()`, the object is not created unless something else resolves `GameInitializer` — and nothing does.
 
 **"Warning: Zenject is resolving during install which is not recommended."**
-`LocalDevGameInstaller` calls `Container.Resolve<IDatabaseConnectionStringFactory>()` inside `InstallBindings()` to get connection strings before repository bindings run. This is a known pattern in this codebase and the warning is safe to ignore.
+`LocalDevGameInstaller` no longer triggers this — `ConfigurationRepository` and `DatabaseConnectionStringFactory` are constructed directly and bound with `FromInstance` instead of being resolved during `InstallBindings()`. If you see this warning, a new install-time `Container.Resolve<...>()` was added; replace it with direct construction + `FromInstance`.
 
 **Migrations fail with "table already exists" or similar.**
 FluentMigrator tracks applied migrations in a `VersionInfo` table. If a database file is corrupted or was created by an older migration run, you may need to delete the `.bytes` database files from `Application.persistentDataPath/databases/` and let them be recreated. On macOS, persistent data is under `~/Library/Application Support/<CompanyName>/<ProductName>/`.

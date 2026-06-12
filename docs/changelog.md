@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-06-12
+
+### Unity — warning cleanup + ability sync repair
+
+- **Ability content sync fixed.** `ServerContentSyncService.SyncAbilitiesAsync` still inserted the `asset_id` column dropped by `M1021` — every boot logged `table abilities has no column named asset_id` and abilities never synced. The INSERT now matches the current schema and carries the full fx-key set (`use/hit/miss_sfx_key`, `use/travel/hit_vfx_key`, `camera_cue_key`), `damage_curve_key`, and `power_multiplier` from the server instead of nulling them.
+- **Zenject install-time resolve removed.** `LocalDevGameInstaller` constructs `ConfigurationRepository` + `DatabaseConnectionStringFactory` directly and binds `FromInstance` — no more "resolving during install" warning. ([Dependency Injection](unity/02-dependency-injection.md))
+- **USS pseudo-classes.** UI Toolkit doesn't support `:first-child`/`:last-child`; replaced with explicit `--first`/`--last` classes (BagScreen tabs, BattleSummary xp rows) and removed the cosmetic rule from the content-editor sheets.
+- **Malbers** `IKProcessorOnAnimIK` gets `[Serializable]` (SerializeReference warning).
+
 ## 2026-06-09
 
 ### Capture offline + trainer currency + merchant shop
