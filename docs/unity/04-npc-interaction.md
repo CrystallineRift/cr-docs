@@ -270,15 +270,21 @@ example, or `NpcDialogueBehaviour` for a plain marker wrapper):
    `PerformInteraction`.
 4. Add the component to the relevant NPC GameObjects.
 
-## Prompt Customization
+## In-Range Indicator
 
-NPC dialogue prompt strings (e.g., "Press E to receive creature", "Press E to battle") are controlled in `NpcInteractionBehaviour` via calls to `IUIManager.ShowPrompt(promptType)`. The prompt type maps to a UI panel configuration.
+While the player is inside an interactable NPC's range, `NpcInteractionBehaviour`
+shows a world-space badge above the NPC's head (`NpcInteractionIndicator`): a
+billboarded, gently bobbing gold "E" built procedurally from TextMeshPro.
 
-To change dialogue text:
-- Add or edit the corresponding localization key in `Resources/configuration/localization/` (see [Localization](?page=unity/06-localization))
-- `NpcInteractionBehaviour` reads prompt text via `LocalizationRepository.Instance.TryGetText("npc_prompt_battle", out var text)` — add any new prompt keys there
-
-The `_npcContentKey` value is not used for dialogue text directly — it is the backend identity key only. NPC-specific dialogue strings use their own keys in the localization YAML, e.g. `npc_kael_trainer_greeting`.
+- **Custom visual**: assign a prefab to the behaviour's `Prompt Indicator Prefab`
+  field — it is parented to the NPC at `Prompt Height` (default 2.2) and toggled
+  with range. Add `NpcInteractionIndicator` to the prefab root if you want the
+  billboard + bob animation; leave it off for static visuals.
+- The indicator appears only when an interaction is actually available (same
+  gate as the Interact subscription: grant/trainer/merchant/dialogue).
+- Range state self-heals at interact time: disabled Malbers bone colliders never
+  raise `OnTriggerExit`, so the behaviour prunes stale colliders and re-checks
+  distance before performing.
 
 ## Subscribing to Battle Events
 
@@ -329,7 +335,7 @@ finally { _isInteracting = false; }
 - **Not unsubscribing `OnBattleRequested`.** A destroyed coordinator with a live subscription can cause `NullReferenceException` after scene unload. Always unsubscribe in `OnDisable`.
 - **Wrong `content_key` in Inspector.** `EnsureNpcAsync` creates a new NPC row each time it sees an unknown key. Check the NPC count in the database if you suspect duplicates — each distinct `content_key` creates its own row per trainer.
 - **`NpcTrainerBehaviour._items` using a non-GUID string.** Each `itemId` must be a valid UUID string. The behaviour logs a warning and skips invalid entries. Future work: replace `itemId` string with a `contentKey` string once items have `content_key` support.
-- **`_npcType` not set to `Trainer` on a trainer NPC.** The NPC will be created with type `Npc` in the database. This is first-write-wins — to fix an already-created NPC, update the `npc_type` column directly in the local SQLite database and restart Unity.
+- **`_npcType` not set on a typed NPC.** The NPC is created with type `Npc` in the database. Since the drift-reconcile change, setting the Inspector field to an explicit type (Merchant/Trainer/QuestGiver) heals the stored row on the next world init — `EnsureNpcAsync` updates `npc_type` when an explicit non-default type differs. The default `Npc` never downgrades an existing row.
 - **SphereCollider radius too small.** The player must physically enter the sphere for `OnTriggerEnter` to fire. If the trigger radius is smaller than the player's collider, the player may walk through without triggering. Set `_interactionRadius` to at least 1.5f for standard NPC interactions.
 - **Missing `INpcSubInitializable` injection binding.** If `NpcDialogueBehaviour` (or any custom sub-behaviour) injects a service that is not bound in `LocalDevGameInstaller`, Zenject will throw at scene load. Always add the binding before adding the component to a scene object.
 
