@@ -5,7 +5,7 @@
       "cr-api": [],
       "cr-data": []
     },
-    "description": "Top-level overview \u2014 no single source file; changes whenever any major subsystem changes"
+    "description": "Top-level overview — no single source file; changes whenever any major subsystem changes"
   },
   "changelog": {
     "docPath": "docs/changelog.md",
@@ -180,10 +180,13 @@
         "Assets/Scripts/**/*NpcBattleRequest*.cs",
         "Assets/Scripts/**/*NpcCreatureGrantBehaviour*.cs",
         "Assets/Scripts/**/*NpcTrainerBehaviour*.cs",
-        "Assets/Scripts/**/*NpcMerchantBehaviour*.cs"
+        "Assets/Scripts/**/*NpcMerchantBehaviour*.cs",
+        "cr-api-unity/Assets/CR/Game/World/Behaviours/NpcDialogueBehaviour.cs",
+        "cr-api-unity/Assets/CR/Game/World/Behaviours/NpcInteractionBehaviour.cs",
+        "cr-api-unity/Assets/CR/Game/World/Behaviours/NpcInteractionIndicator.cs"
       ]
     },
-    "description": "Composable NPC interaction: NpcInteractionBehaviour dispatch, NpcBattleRequest, OnBattleRequested event, grant vs battle flow"
+    "description": "Composable NPC interaction: NpcInteractionBehaviour dispatch, NpcBattleRequest, OnBattleRequested event, grant vs battle vs merchant vs dialogue flow"
   },
   "unity/05-http-clients": {
     "docPath": "docs/unity/05-http-clients.md",
@@ -403,7 +406,8 @@
         "Items/CR.Items.Domain.Services/Interfaces/IItemSpawnerDomainService.cs",
         "Npcs/CR.Npcs.Domain.Services/Implementation/NpcMerchantService.cs",
         "Game/CR.Game.Service.BFF/Endpoints/ItemSpawnerEndpoints.cs",
-        "Convenience/CR.Data.Migrations.Tool/Program.cs"
+        "Convenience/CR.Data.Migrations.Tool/Program.cs",
+        "Items/CR.Items.Data.Migration/M6014SeedStartingMerchantSpawner.cs"
       ],
       "cr-data": [
         "cr-api-unity/Assets/CR/Core/Data/Registry/Definitions/ItemSpawnerDefinition.cs",
@@ -414,6 +418,26 @@
       ]
     },
     "description": "Item spawner mirroring the creature spawner: item_spawner/_pool/_template tables (M6010–M6012), weighted roll (pool by weight×rarity, template by probability, guaranteed at p=1.0), NpcMerchantService.StockFromSpawnerAsync into npc_inventory, sync-config + roll + stock-from-spawner endpoints, ItemSpawnerDefinition authoring + NpcDefinition.itemSpawnerContentKey"
+  },
+  "backend/12-trainer-currency": {
+    "docPath": "docs/backend/12-trainer-currency.md",
+    "repos": {
+      "cr-api": [
+        "Trainers/CR.Trainers.Data.Migration/M4012AddCurrencyToTrainer.cs",
+        "Trainers/CR.Trainers.Data/Interface/ITrainerRepository.cs",
+        "Trainers/CR.Trainers.Data/Implementation/BaseTrainerRepository.cs",
+        "Game/CR.Game.Model/Trainers/TrainerBase.cs",
+        "Game/CR.Game.Model/Npcs/PurchaseResult.cs",
+        "Game/CR.Game.Model/Npcs/SellResult.cs",
+        "Npcs/CR.Npcs.Domain.Services/Implementation/NpcMerchantService.cs",
+        "Quests/CR.Quests.Domain.Services/Implementation/QuestDomainService.cs"
+      ],
+      "cr-data": [
+        "cr-api-unity/Assets/CR/Core/Data/Repository/Implementation/TrainerRepositories/TrainerOnlineOfflineRepository.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Repository/Implementation/TrainerRepositories/TrainerOnlineRepository.cs"
+      ]
+    },
+    "description": "Trainer currency: trainers.currency (M4012, default 500), race-safe TryAdjustCurrency conditional UPDATE, merchant purchase debit / sell credit inside the transaction, QuestRewardType.Currency payout, no client adjust endpoint by design"
   },
   "unity/09-addressables-setup": {
     "docPath": "docs/unity/09-addressables-setup.md",
@@ -496,12 +520,14 @@
         "cr-api-unity/Assets/CR/Dialogue/Interface/IDialogueHandler.cs",
         "cr-api-unity/Assets/CR/Dialogue/Implementation/PixelCrushersDialogueHandler.cs",
         "cr-api-unity/Assets/CR/Quests/Dialogue/QuestDialogueBridge.cs",
+        "cr-api-unity/Assets/CR/Game/World/Behaviours/NpcDialogueBehaviour.cs",
+        "cr-api-unity/Assets/CR/Game/World/Behaviours/NpcInteractionBehaviour.cs",
         "cr-api-unity/Assets/CR/Core/Data/Registry/Definitions/QuestDefinition.cs",
         "cr-api-unity/Assets/CR/Core/Data/Editor/QuestDefinitionEditor.cs",
         "cr-api-unity/Assets/CR/Core/DI/LocalDevGameInstaller.cs"
       ]
     },
-    "description": "Dialogue System abstraction: IDialogueHandler interface, PixelCrushersDialogueHandler MonoBehaviour, QuestDialogueBridge, conversation dropdown in QuestObjectiveDefinition editor, abort-detection flag pattern"
+    "description": "Dialogue System abstraction: IDialogueHandler interface, PixelCrushersDialogueHandler MonoBehaviour, QuestDialogueBridge, NpcDialogueBehaviour interact-driven conversation start (replaces ProximitySelector use-key), conversation dropdown in QuestObjectiveDefinition editor, abort-detection flag pattern"
   },
   "unity/12-scriptable-objects": {
     "docPath": "docs/unity/12-scriptable-objects.md",
@@ -555,16 +581,20 @@
         "Game/CR.Game.Domain.Services/Implementation/Item/Handlers/CaptureCreatureHandler.cs",
         "Items/CR.Items.Data.Migration/M6006AddCaptureModifierToItem.cs",
         "Items/CR.Items.Data.Migration/M6007SeedCaptureCrystals.cs",
-        "Game/CR.Game.Model/Items/BaseItem.cs"
+        "Game/CR.Game.Model/Items/BaseItem.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Item/CaptureChanceCalculator.cs"
       ],
       "cr-data": [
         "cr-api-unity/Assets/CR/Game/Battle/Events/BattleEvents.cs",
         "cr-api-unity/Assets/CR/Core/Data/Registry/Definitions/ItemDefinition.cs",
         "cr-api-unity/Assets/CR/Core/Data/Registry/Definitions/ItemEnums.cs",
-        "cr-api-unity/Assets/CR/Core/Data/Repository/Implementation/GameConfigurationKeys.cs"
+        "cr-api-unity/Assets/CR/Core/Data/Repository/Implementation/GameConfigurationKeys.cs",
+        "cr-api-unity/Assets/CR/Game/Battle/Offline/OfflineItemUseService.cs",
+        "cr-api-unity/Assets/CR/UI/Battle/BattleBagPanelHandler.cs",
+        "cr-api-unity/Assets/CR/UI/Battle/BattleHUD.cs"
       ]
     },
-    "description": "Capture crystal tiers (Shard/Standard/Fine/Radiant), capture formula, capture_modifier property, Backend IItemEffectHandler wiring, BattleEvents.RaiseCreatureCaptured, USS visual indicators"
+    "description": "Capture crystal tiers (Shard/Standard/Fine/Radiant), capture formula, capture_modifier property, Backend IItemEffectHandler wiring, BattleEvents.RaiseCreatureCaptured, USS visual indicators; shared CaptureChanceCalculator + OfflineItemUseService capture mirror + opponent-id resolution from battle record"
   },
   "unity/15-event-wiring": {
     "docPath": "docs/unity/15-event-wiring.md",
@@ -600,5 +630,22 @@
       ]
     },
     "description": "Two-database content pipeline: game-data DB (global authored content, read-only) vs player-data DB (per-trainer saves, mutable); build-time game-data.bytes artifact from CR.Data.Migrations.Tool + build-packages.sh with 12 referential-integrity checks; ships as Addressable + StreamingAssets first-run floor; cold-start adopt (atomic copy + fail-closed schema-version gate); content patched via Addressables, player-data migrated in place; content-vs-player taxonomy"
+  },
+  "unity/18-merchant-shop": {
+    "docPath": "docs/unity/18-merchant-shop.md",
+    "repos": {
+      "cr-api": [
+        "Items/CR.Items.Data.Migration/M6013SeedHealPotion.cs"
+      ],
+      "cr-data": [
+        "cr-api-unity/Assets/CR/UI/Shop/MerchantShopScreenHandler.cs",
+        "cr-api-unity/Assets/CR/UI/Shop/MerchantShopItem.cs",
+        "cr-api-unity/Assets/CR/UI/Resources/MerchantShopScreen.uss",
+        "cr-api-unity/Assets/CR/UI/Resources/MerchantShopScreen.uxml",
+        "cr-api-unity/Assets/CR/Game/World/Behaviours/NpcInteractionBehaviour.cs",
+        "cr-api-unity/Assets/CR/Game/World/Behaviours/NpcMerchantBehaviour.cs"
+      ]
+    },
+    "description": "Player-facing merchant shop UI: NpcInteractionBehaviour merchant branch, MerchantShopScreenHandler (stock list, live prices, wallet, qty stepper, buy via PurchaseItemFromMerchantAsync), isMenuOpen input lock, sell tab stub"
   }
 }

@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-06-12
+
+### Unity — warning cleanup + ability sync repair
+
+- **Ability content sync fixed.** `ServerContentSyncService.SyncAbilitiesAsync` still inserted the `asset_id` column dropped by `M1021` — every boot logged `table abilities has no column named asset_id` and abilities never synced. The INSERT now matches the current schema and carries the full fx-key set (`use/hit/miss_sfx_key`, `use/travel/hit_vfx_key`, `camera_cue_key`), `damage_curve_key`, and `power_multiplier` from the server instead of nulling them.
+- **Zenject install-time resolve removed.** `LocalDevGameInstaller` constructs `ConfigurationRepository` + `DatabaseConnectionStringFactory` directly and binds `FromInstance` — no more "resolving during install" warning. ([Dependency Injection](unity/02-dependency-injection.md))
+- **USS pseudo-classes.** UI Toolkit doesn't support `:first-child`/`:last-child`; replaced with explicit `--first`/`--last` classes (BagScreen tabs, BattleSummary xp rows) and removed the cosmetic rule from the content-editor sheets.
+- **Malbers** `IKProcessorOnAnimIK` gets `[Serializable]` (SerializeReference warning).
+
+## 2026-06-09
+
+### Capture offline + trainer currency + merchant shop
+
+- **Offline capture works.** `OfflineItemUseService` now handles `CaptureCreature`, sharing the exact server formula via the new `CaptureChanceCalculator` (clamp 5–95%). Ownership reassignment + storage add mirror the server handler. ([Capture Mechanic](unity/14-capture-mechanic.md))
+- **Opponent-target fix (online too).** Capture against `Guid.Empty` now resolves the wild side's active creature from the battle record; `BattleHUD` also passes its real opponent id into the bag panel.
+- **Trainer currency.** `trainers.currency` (M4012, default 500), race-safe conditional-UPDATE adjust methods, merchant purchase debit / sell credit inside the purchase transaction, `QuestRewardType.Currency` payouts, `NewBalance` on purchase/sell results. No client adjust endpoint by design. ([Trainer Currency](backend/12-trainer-currency.md))
+- **Merchant shop UI.** E on a merchant opens `MerchantShopScreenHandler`: stock from the item spawner, live prices (BaseValue × BuyMultiplier), wallet, qty stepper, Buy disabled when unaffordable. Sell tab stubbed. ([Merchant Shop](unity/18-merchant-shop.md))
+- **Content:** `StartingMerchantItems` spawner authored (crystals + heal potion), `demo-merchant` wired as Merchant, `M6013` seeds Heal Potion (base_value 50), legacy `item_capture_crystal` orphan deleted.
+- `run-all-tests.sh` fixed (cd leak + unsupported `--parallel` switch) — Docker repo suites run again.
+
 ## 2026-05-28
 
 ### Unity — battle wiring consolidated

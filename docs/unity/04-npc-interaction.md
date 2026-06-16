@@ -230,72 +230,61 @@ Any scene-level UI (e.g., battle screen controller) subscribes to `OnBattleStart
 4. Add `NpcInteractionBehaviour`
 5. In a scene coordinator, query `_merchantBehaviour.MerchantNpcId` to open the shop UI
 
+## Dialogue NPCs: NpcDialogueBehaviour
+
+`NpcDialogueBehaviour` is the dialogue marker sub-behaviour. It wraps the Pixel Crushers
+`DialogueSystemTrigger` on the same GameObject (configured with trigger = **On Use**) and
+exposes two members to the interaction system:
+
+- `HasConversation` — true when a conversation is assigned and none is currently running
+  (guarded by the shared `isInConversation` BoolVariable set by `DialogueStateBridge`)
+- `StartConversation(Transform actor)` — forwards to `DialogueSystemTrigger.OnUse(actor)`,
+  which checks the trigger's accepted tags/conditions against the player transform
+
+The dialogue branch is the **lowest-priority** dispatch in `NpcInteractionBehaviour`
+(after grant, trainer battle, and merchant). It does not call
+`QuestManager.OnNpcInteracted` — `QuestDialogueBridge` records that when the conversation
+completes, so triggering would double-count.
+
+> **Do not use the Pixel Crushers `ProximitySelector`/`Selector` use-key on the player.**
+> It polls its own raw key globally and fires whichever `Usable` is in range, even while
+> the player is interacting with a different NPC. Disable or remove those components;
+> all interaction flows through the single `Player/Interact` input action.
+
+Setup: add `DialogueSystemTrigger` (On Use, conversation assigned) + `NpcDialogueBehaviour`
+(assign the shared `isInConversation` BoolVariable) + `NpcInteractionBehaviour` to the NPC.
+See [Dialogue Integration](?page=unity/11-dialogue-integration) for the conversation/quest
+bridge details.
+
 ## Adding a New Sub-Behaviour Type
 
-To add a new `INpcSubInitializable` type (e.g., a dialogue-triggering sub-behaviour):
+To add a new sub-behaviour (see `NpcMerchantBehaviour` for an `INpcSubInitializable`
+example, or `NpcDialogueBehaviour` for a plain marker wrapper):
 
-### Step 1 — Implement the interface
+1. Implement the component. If it needs NPC identity at world init, implement
+   `INpcSubInitializable` — `NpcWorldBehaviour` discovers and drives it (sub-behaviours do
+   NOT register with `WorldRegistry`).
+2. Register any new service dependencies in `LocalDevGameInstaller`.
+3. If it affects interaction, add a `GetComponent` query in `NpcInteractionBehaviour`'s
+   `Awake`, include it in the range gate, and extend the dispatch flow in
+   `PerformInteraction`.
+4. Add the component to the relevant NPC GameObjects.
 
-```csharp
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-using CR.Npcs;
-using CR.Game.Common;
-using UnityEngine;
-using Zenject;
+## In-Range Indicator
 
-public class NpcDialogueBehaviour : MonoBehaviour, INpcSubInitializable
-{
-    [SerializeField] private string _dialogueKey = string.Empty;
+While the player is inside an interactable NPC's range, `NpcInteractionBehaviour`
+shows a world-space badge above the NPC's head (`NpcInteractionIndicator`): a
+billboarded, gently bobbing gold "E" built procedurally from TextMeshPro.
 
-    private ICRLogger _logger;
-    private IDialogueService _dialogueService;
-
-    [Inject]
-    public void Init(IDialogueService dialogueService, ICRLogger logger)
-    {
-        _dialogueService = dialogueService;
-        _logger = logger;
-    }
-
-    // Sub-behaviours do NOT register with WorldRegistry — NpcWorldBehaviour drives them
-    public async Task InitializeAsync(Guid npcId, Guid accountId, Guid trainerId,
-        CancellationToken ct = default)
-    {
-        _logger.Debug($"[NpcDialogueBehaviour] init. npcId={npcId} key={_dialogueKey}");
-        var lines = await _dialogueService.GetDialogueAsync(_dialogueKey, ct);
-        CacheDialogue(lines);
-    }
-
-    public string[] CachedDialogueLines { get; private set; }
-    private void CacheDialogue(string[] lines) => CachedDialogueLines = lines;
-}
-```
-
-### Step 2 — Register the dependency in `LocalDevGameInstaller`
-
-```csharp
-Container.Bind<IDialogueService>().To<DialogueService>().AsSingle();
-```
-
-### Step 3 — Wire in `NpcInteractionBehaviour`
-
-If the new sub-behaviour affects interaction logic (e.g., showing a dialogue prompt instead of a battle prompt), add a `GetComponent` query in `NpcInteractionBehaviour` and extend the dispatch flow.
-
-### Step 4 — Add to NPC GameObjects
-
-Add `NpcDialogueBehaviour` to any NPC GameObject that should trigger dialogue. Set `_dialogueKey` in the Inspector.
-
-## Prompt Customization
-
-NPC dialogue prompt strings (e.g., "Press E to receive creature", "Press E to battle") are controlled in `NpcInteractionBehaviour` via calls to `IUIManager.ShowPrompt(promptType)`. The prompt type maps to a UI panel configuration.
-
-To change dialogue text:
-- Add or edit the corresponding localization key in `Resources/configuration/localization/` (see [Localization](?page=unity/06-localization))
-- `NpcInteractionBehaviour` reads prompt text via `LocalizationRepository.Instance.TryGetText("npc_prompt_battle", out var text)` — add any new prompt keys there
-
-The `_npcContentKey` value is not used for dialogue text directly — it is the backend identity key only. NPC-specific dialogue strings use their own keys in the localization YAML, e.g. `npc_kael_trainer_greeting`.
+- **Custom visual**: assign a prefab to the behaviour's `Prompt Indicator Prefab`
+  field — it is parented to the NPC at `Prompt Height` (default 2.2) and toggled
+  with range. Add `NpcInteractionIndicator` to the prefab root if you want the
+  billboard + bob animation; leave it off for static visuals.
+- The indicator appears only when an interaction is actually available (same
+  gate as the Interact subscription: grant/trainer/merchant/dialogue).
+- Range state self-heals at interact time: disabled Malbers bone colliders never
+  raise `OnTriggerExit`, so the behaviour prunes stale colliders and re-checks
+  distance before performing.
 
 ## Subscribing to Battle Events
 
@@ -346,7 +335,7 @@ finally { _isInteracting = false; }
 - **Not unsubscribing `OnBattleRequested`.** A destroyed coordinator with a live subscription can cause `NullReferenceException` after scene unload. Always unsubscribe in `OnDisable`.
 - **Wrong `content_key` in Inspector.** `EnsureNpcAsync` creates a new NPC row each time it sees an unknown key. Check the NPC count in the database if you suspect duplicates — each distinct `content_key` creates its own row per trainer.
 - **`NpcTrainerBehaviour._items` using a non-GUID string.** Each `itemId` must be a valid UUID string. The behaviour logs a warning and skips invalid entries. Future work: replace `itemId` string with a `contentKey` string once items have `content_key` support.
-- **`_npcType` not set to `Trainer` on a trainer NPC.** The NPC will be created with type `Npc` in the database. This is first-write-wins — to fix an already-created NPC, update the `npc_type` column directly in the local SQLite database and restart Unity.
+- **`_npcType` not set on a typed NPC.** The NPC is created with type `Npc` in the database. Since the drift-reconcile change, setting the Inspector field to an explicit type (Merchant/Trainer/QuestGiver) heals the stored row on the next world init — `EnsureNpcAsync` updates `npc_type` when an explicit non-default type differs. The default `Npc` never downgrades an existing row.
 - **SphereCollider radius too small.** The player must physically enter the sphere for `OnTriggerEnter` to fire. If the trigger radius is smaller than the player's collider, the player may walk through without triggering. Set `_interactionRadius` to at least 1.5f for standard NPC interactions.
 - **Missing `INpcSubInitializable` injection binding.** If `NpcDialogueBehaviour` (or any custom sub-behaviour) injects a service that is not bound in `LocalDevGameInstaller`, Zenject will throw at scene load. Always add the binding before adding the component to a scene object.
 

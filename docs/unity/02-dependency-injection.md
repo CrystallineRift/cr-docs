@@ -40,7 +40,7 @@ Rule: **`FromInstance` always pairs with `AsCached`.** `AsSingle` is for binding
 
 1. **Anti-cheat / SQLite init** — `DeviceIdHolder.ForceLockToDeviceInit()`, `SQLiteInitializer.Initialize()` — must run before any SQLite connection is opened
 2. **Core singletons** — `IUIManager`, `IGameConfiguration`, `IDatabaseConnectionStringFactory` — needed by almost everything else
-3. **Resolve the connection string factory** — `Container.Resolve<IDatabaseConnectionStringFactory>()` is called once here; all subsequent `FromInstance` repository bindings use the resolved factory to build their connection strings
+3. **Construct the connection string factory** — `ConfigurationRepository` and `DatabaseConnectionStringFactory` are constructed directly and bound with `FromInstance` (avoids an install-time `Container.Resolve`, which Zenject warns about); all subsequent `FromInstance` repository bindings use the same factory instance to build their connection strings
 4. **Repositories** — online/offline pairs for each domain — registered before migrations so the connection strings are resolved
 5. **Run migrations** — `RunDatabaseMigrationsSynchronously(connectionStringFactory)` — blocks the installer until all schemas exist (offline and online-cache databases)
 6. **Auth** — `IAuthRepository`, `ITokenManager`, `ITokenValidator` — auth comes after repos so it can store tokens in the auth SQLite
