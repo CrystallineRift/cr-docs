@@ -65,6 +65,16 @@
     "path": "backend/12-trainer-currency"
   },
   {
+    "section": "Backend",
+    "title": "Loot System",
+    "path": "backend/13-loot-system"
+  },
+  {
+    "section": "Backend",
+    "title": "World Pickups",
+    "path": "backend/14-world-pickups"
+  },
+  {
     "section": "Introduction",
     "title": "Changelog",
     "path": "changelog"

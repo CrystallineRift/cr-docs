@@ -647,5 +647,29 @@
       ]
     },
     "description": "Player-facing merchant shop UI: NpcInteractionBehaviour merchant branch, MerchantShopScreenHandler (stock list, live prices, wallet, qty stepper, buy via PurchaseItemFromMerchantAsync), isMenuOpen input lock, sell tab stub"
+  },
+  "backend/13-loot-system": {
+    "docPath": "docs/backend/13-loot-system.md",
+    "repos": {
+      "cr-api": [
+        "Loot/**/*.cs",
+        "Game/CR.Game.Model/Rewards/*.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Reward/*.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Battle/BattleDomainService.cs",
+        "Game/CR.Game.Data.Migration/M8016AddSpawnerContentKeyToBattle.cs"
+      ],
+      "cr-data": []
+    },
+    "description": "Battle-victory loot: layered spawner+creature loot tables, independent per-entry drop chance, LootRollService, RewardGrantService, LootAward on the battle outcome, M7100-M7102 + M8016 spawner linkage"
+  },
+  "backend/14-world-pickups": {
+    "docPath": "docs/backend/14-world-pickups.md",
+    "repos": {
+      "cr-api": [
+        "Pickups/**/*.cs"
+      ],
+      "cr-data": []
+    },
+    "description": "World pickups: pickup_definition (rewards JSON) + pickup_collected (per-trainer, revive-on-write upsert), one-time persistent grants, consumer-routed Quest rewards, M7200-M7202"
   }
 }

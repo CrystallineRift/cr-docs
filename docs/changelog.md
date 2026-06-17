@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-06-17
+
+### Loot tables + world pickups (backend)
+
+- **Battle-victory loot.** New `CR.Loot` domain: loot tables layered by spawner (zone) and creature (species), independent per-entry drop chance, pure `LootRollService`. `BattleDomainService` rolls + grants on victory and returns `LootAward[]` on the outcome. `M8016` adds `spawner_content_key` to `battle` so the spawner table can roll. Loot `Experience` grants trainer XP, separate from per-creature combat XP. ([Loot System](backend/13-loot-system.md))
+- **World pickups.** New `CR.Pickups` domain: reusable `pickup_definition` (rewards JSON) + per-trainer `pickup_collected` (one-time persistent, revive-on-write upsert). Rewards grant a creature/item/currency/XP/quest set; `Quest` is consumer-routed. ([World Pickups](backend/14-world-pickups.md))
+- **Shared reward core.** `RewardType` + `RewardGrant` + `IRewardGrantService` extracted from `QuestDomainService.GrantRewardAsync`; quests now delegate. No new dependency cycles.
+- Unity client (offline repos/routers, `PickupBehaviour`, DI, migrators, Content Studio authoring) is a follow-on phase.
+
 ## 2026-06-12
 
 ### Unity — warning cleanup + ability sync repair
