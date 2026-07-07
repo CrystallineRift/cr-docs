@@ -75,6 +75,11 @@
     "path": "backend/14-world-pickups"
   },
   {
+    "section": "Backend",
+    "title": "Achievements",
+    "path": "backend/15-achievements"
+  },
+  {
     "section": "Introduction",
     "title": "Changelog",
     "path": "changelog"
@@ -193,5 +198,15 @@
     "section": "Unity",
     "title": "Merchant Shop UI",
     "path": "unity/18-merchant-shop"
+  },
+  {
+    "section": "Unity",
+    "title": "Account Mode &amp; Startup",
+    "path": "unity/19-account-mode-startup"
+  },
+  {
+    "section": "Unity",
+    "title": "Ability Workbench",
+    "path": "unity/20-ability-workbench"
   }
 ]

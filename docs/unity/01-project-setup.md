@@ -22,8 +22,10 @@ The `IGameConfiguration` abstraction means the rest of the codebase never direct
 
 The offline SQLite store is split into **two databases** with different lifecycles:
 
-- **game-data DB** (`game-data.bytes`) — global authored content (base creatures, abilities, status conditions, growth profiles, items, spawner templates + pools, NPC definitions + teams + inventory, quest templates/objectives/requirements/rewards, `game_assets`, level/exp tables). Read-only at runtime. Built at build time as a versioned artifact and patched via Addressables.
-- **player-data DB** (`player-data.bytes`) — per-account/per-trainer saves (trainers, inventories, generated creatures, quest instances, stats, battles, spawn history, auth). Mutable; migrated in place on app update.
+- **game-data DB** (`game-data.bytes`) — global authored content (base creatures, abilities, status conditions, growth profiles, items, spawner templates + pools, quest templates/objectives/requirements/rewards, `game_assets`, level/exp tables). Read-only at runtime. Built at build time as a versioned artifact and patched via Addressables.
+- **player-data DB** (`player-data.bytes`) — per-account/per-trainer saves (trainers, inventories, generated creatures, quest instances, stats, battles, spawn history, auth) **plus the per-trainer NPC instance tables** (`npcs`, `npc_creature_team`, `npc_inventory`). Mutable; migrated in place on app update.
+
+> **NPC instance tables live in player-data, not game-data.** `INpcRepository` and `INpcCreatureTeamRepository` are bound to `LocalDataSources.PlayerData.OfflineSource` in `LocalDevGameInstaller`, co-located with `npc_inventory` (so merchant-purchase transactions and FK integrity stay on one physical DB). The `npcs` rows are per-`(account, trainer)` runtime save-data created by `EnsureNpcAsync` at world bootstrap — not designer content — so binding them to the adopted, read-only `game-data.bytes` was wrong: adoption could wipe runtime NPCs. NPC *definitions* (designer content) still flow through the content registry, not the offline `npcs` table.
 
 Splitting them means a content update never touches player saves, and each side uses the update mechanism that fits (Addressables for content, in-place migrations for saves). The two offline databases are wired via `LocalDataSources.GameData.OfflineSource` (config key `database_path_game_data`) and `LocalDataSources.PlayerData.OfflineSource` (config key `database_path_player_data`). The unified migrator currently creates the full schema in each file; unused tables on each side are harmless.
 
@@ -181,7 +183,7 @@ Verify the server is healthy at `http://localhost:8080/swagger`. All registered 
 ### Step 7 — Hit Play
 
 Open the main scene (typically `Assets/Scenes/Game.unity`) and press **Play**. On first play:
-1. `LocalDevGameInstaller.InstallBindings()` runs synchronously. `DatabaseMigrations.RunMigrations()` runs the unified migrator against the two offline databases (`game-data` and `player-data`) plus the online-cache databases. (Once the cold-start adopt lands — Part C-2 — game-data will be adopted from the baked `game-data.bytes` artifact instead of migrated; see [Content Pipeline](?page=unity/17-content-pipeline).)
+1. `LocalDevGameInstaller.InstallBindings()` runs synchronously. `GameDataAdopter` adopts the baked `game-data.bytes` content artifact into `persistentDataPath`, and `DatabaseMigrations.RunMigrations()` runs the unified migrator against `player-data` plus the online-cache databases (see [Content Pipeline](?page=unity/17-content-pipeline)). `GameDataAdopter` re-adopts when **either** the bundled schema version (`game-data_schema_version.txt`, = `MAX(VersionInfo)`) exceeds the adopted copy's, **or** a SHA-256 of the bundled `game-data.bytes` differs from a `.srchash` marker written next to the adopted copy. The content-hash gate fixes the "offline content keeps vanishing" bug: a content-only re-bake at the same migration head used to leave the version unchanged and silently never re-adopt; now any byte difference triggers re-adoption.
 2. `GameSessionManager` reads any cached session from SQLite.
 3. If no session exists, the login/auth flow starts.
 4. Once a trainer is selected, `GameInitializer` fires `RunAsync` and all `IWorldInitializable` behaviours in the scene initialize.

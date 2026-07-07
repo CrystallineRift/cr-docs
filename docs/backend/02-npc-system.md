@@ -10,7 +10,7 @@ NPC **definitions** are global, authored content. Rather than introducing a sepa
 - **Migration `M2010GlobalizeNpcContent`** consolidates content-world rows: it keeps the oldest row per `content_key` under `ContentWorldId`, soft-deletes any stray duplicates, and re-points related `npc_creature_team_storage` / `npc_inventory` rows to the surviving canonical NPC id. It then adds a partial index `idx_npcs_content_world_key` on `content_key` (filtered to `ContentWorldId` rows) for fast content lookups. The migration is idempotent and makes no schema/column changes (SQLite-safe).
 - **Genuine player NPC instances** (rows where `account_id != ContentWorldId`) are untouched by `M2010` — the two coexist in the `npcs` table.
 
-In the offline two-database split, NPC content (definitions, teams, inventory) lives in the read-only **game-data DB**; player-owned NPC instances and their state live in the mutable **player-data DB**. See [Content Pipeline (Two-Database Model)](?page=unity/17-content-pipeline).
+In the offline two-database split, NPC **definitions** reach the client through the content registry (not the offline `npcs` table); the per-trainer NPC instance tables (`npcs`, `npc_creature_team`, `npc_inventory`) are runtime save-data and live in the mutable **player-data DB**. See [Content Pipeline (Two-Database Model)](?page=unity/17-content-pipeline).
 
 ## Why This Design?
 
@@ -34,7 +34,7 @@ The `content_key` is **unique per trainer** — the database enforces a unique i
 
 The NPC initialization flow runs every time the player loads the world. On the very first load, the NPC needs to be created and optionally stocked with a creature team and items. On every subsequent load, it just needs to return the existing NPC's state. Making these operations idempotent (safe to call multiple times) avoids the need for the Unity client to track "have I initialized this NPC?" across sessions, app restarts, or crashes.
 
-`EnsureNpcAsync` checks: "does an NPC with this `content_key` exist for this trainer?" If yes, return it. If no, create it. `EnsureNpcCreatureTeamAsync` extends this per slot — each slot is only filled if it is currently empty. `EnsureNpcItemsAsync` extends this per itemId — each item is only added if it is not already present.
+`EnsureNpcAsync` is a single **atomic upsert** rather than a check-then-insert: it runs one `INSERT … ON CONFLICT(account_id, trainer_id, content_key) DO UPDATE … RETURNING id` and returns the surviving row. If the row exists it is returned (and revived if it was soft-deleted); if not, it is created. `EnsureNpcCreatureTeamAsync` extends this per slot — each slot is only filled if it is currently empty. `EnsureNpcItemsAsync` extends this per itemId — each item is only added if it is not already present. Because the upsert is a single statement, `EnsureNpcAsync` is also race-safe against concurrent ensures (e.g. a double world-bootstrap) — two callers cannot both insert the same `(account_id, trainer_id, content_key)`.
 
 ### Why Random Seeds Per Creature Instead of a Fixed Seed?
 
@@ -267,12 +267,24 @@ Task<NpcBase> EnsureNpcAsync(
     CancellationToken ct = default);
 ```
 
-The `npcType` parameter controls what type is written when the NPC is **first created**. It is a **first-write-wins** field: if the NPC already exists, its type is returned as-is and `npcType` is ignored.
+The `npcType` parameter controls what type is written when the NPC is **first created**. On a conflict (the NPC already exists) the upsert keeps the existing type when the incoming `npcType` is the default `NpcType.Npc` — a **no-downgrade** rule — so a later, more-specific ensure (e.g. `Trainer`) can still upgrade the type, but a generic ensure never clobbers an established one.
 
-Internally:
-1. Calls `GetNpcByContentKeyAsync` — if found, returns immediately (type not updated)
-2. Builds a `NpcBase` with `Name = contentKey` (the name defaults to the content key on creation)
-3. Calls `CreateNpcAsync` (transactional: NPC row + empty team inventory)
+Internally, `EnsureNpcAsync` no longer does check-then-insert. It delegates to `BaseNpcRepository.EnsureNpcAsync`, a single dual-engine statement:
+
+```sql
+INSERT INTO npcs (id, account_id, trainer_id, content_key, npc_type, name, deleted, …)
+VALUES (@id, @accountId, @trainerId, @contentKey, @npcType, @name, false, …)
+ON CONFLICT(account_id, trainer_id, content_key) DO UPDATE SET
+    deleted  = false,                       -- SQLite branch: 0
+    npc_type = CASE WHEN @npcType = <Npc default> THEN npcs.npc_type ELSE @npcType END
+RETURNING id, creature_team_inventory_id;
+```
+
+This does two things a check-then-insert could not:
+1. **Revives soft-deleted rows.** The `npcs` UNIQUE index `uix_npc_account_trainer_content_key` is **non-partial**, so a soft-deleted row still occupies the `(account_id, trainer_id, content_key)` slot. A plain `INSERT` would collide with `23505`; the `ON CONFLICT … SET deleted = false` revives the existing row in place.
+2. **Is race-safe.** A single atomic statement cannot interleave two inserts of the same key.
+
+The team inventory is created (via the `CreateNpcAsync` transaction below) **only when the returned row is genuinely new** — i.e. the upsert's `RETURNING creature_team_inventory_id` came back `null`. An existing/revived NPC keeps its current team inventory and is returned as-is.
 
 ### `EnsureNpcCreatureTeamAsync`
 
@@ -430,7 +442,7 @@ POST /api/v1/npc/ensure
 }
 ```
 
-`npcType` is optional and defaults to `"Npc"`. First-write-wins: if the NPC already exists, the returned `npcType` is whatever was set on creation.
+`npcType` is optional and defaults to `"Npc"`. No-downgrade on conflict: a default `Npc` ensure never overwrites an existing type, but a specific type (e.g. `Trainer`) upgrades a row previously created as a generic `Npc`. A soft-deleted NPC is revived rather than re-created.
 
 ### `POST /api/v1/npc/{npcId}/ensure-items` — EnsureNpcItems
 
@@ -516,6 +528,7 @@ cr-api/Npcs/
   CR.Npcs.Data.Migration/       ← FluentMigrator migrations
   CR.Npcs.Data.Postgres/        ← PostgreSQL implementations
   CR.Npcs.Data.Sqlite/          ← SQLite implementations
+  CR.Npcs.Data.Sqlite.Test/     ← SQLite integration tests (EnsureNpc idempotency, soft-delete revive, no-downgrade)
   CR.Npcs.Domain.Services/      ← INpcDomainService
   CR.Npcs.Model.REST/           ← request/response models
   CR.Npcs.Service.REST/         ← ASP.NET endpoints
@@ -535,7 +548,7 @@ cr-api/Npcs/
 
 ## Related Pages
 
-- [Content Pipeline (Two-Database Model)](?page=unity/17-content-pipeline) — NPC content (definitions/teams/inventory) lives in the read-only game-data DB; player NPC instances in player-data
+- [Content Pipeline (Two-Database Model)](?page=unity/17-content-pipeline) — NPC definitions reach the client via the content registry; per-trainer NPC instance tables (`npcs`/`npc_creature_team`/`npc_inventory`) live in player-data
 - [Starter Creature Flow](?page=backend/05-starter-creature-flow) — end-to-end walkthrough of `EnsureStarterNpc` through player interaction
 - [Creature Generation](?page=backend/04-creature-generation) — how the starter creature is generated when the NPC is first created
 - [NPC Interaction](?page=unity/04-npc-interaction) — Unity-side composable MonoBehaviours that drive NPC initialization and player interaction

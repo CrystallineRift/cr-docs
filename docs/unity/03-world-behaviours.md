@@ -139,9 +139,9 @@ public interface IWorldContext
 
 ```
 LocalDevGameInstaller.InstallBindings
-  └─ Container.Bind<GameInitializer>().FromNewComponentOnNewGameObject().AsSingle().NonLazy()
+  └─ Container.Bind<GameInitializer>().FromComponentInHierarchy().AsSingle().NonLazy()
 
-  → GameInitializer created immediately, [Inject] is called:
+  → GameInitializer (the one placed in the boot scene) is resolved, [Inject] is called:
       _sessionManager.OnTrainerChanged += OnTrainerChanged
       SceneManager.sceneUnloaded += OnSceneUnloaded
 
@@ -161,6 +161,8 @@ LocalDevGameInstaller.InstallBindings
 ```
 
 `[DefaultExecutionOrder(50)]` on `GameInitializer` ensures its Unity lifecycle methods run after most other components, but Zenject injection via `[Inject]` is called before any `Start`, so the subscription is always in place before `GameSessionManager` can fire.
+
+> **Use `FromComponentInHierarchy`, not `FromNewComponentOnNewGameObject`.** `GameInitializer` is already placed in the boot scene. The binding previously used `FromNewComponentOnNewGameObject().NonLazy()`, which **created a second instance** alongside the scene one. Both ran `[Inject]`, so `OnTrainerChanged` was subscribed **twice** and a single trainer-changed event kicked off **two concurrent `RunAsync` passes** — a double world bootstrap. That double pass is what surfaced the NPC `UNIQUE` crash (two `EnsureNpcAsync` calls racing the same `(account, trainer, content_key)` before the upsert fix). The binding is now `FromComponentInHierarchy().AsSingle().NonLazy()`, which resolves the existing scene component so exactly one `GameInitializer` exists and world bootstrap runs once.
 
 Errors thrown by individual `InitializeAsync` calls are caught and logged with the component name and elapsed time. The loop continues to the next component — a single NPC failing to initialize does not block other NPCs. The final log line includes the count of successes and failures.
 
@@ -444,6 +446,7 @@ This means behaviours in a new scene are always initialized fresh with the curre
 - **Using `context.AccountId` after `InitializeAsync` returns.** Store the ID values you need as fields. The context object is not guaranteed to remain valid beyond the method.
 - **Dynamically instantiated behaviours not getting initialized.** Use a separate post-initialization hook or check `GameSessionManager.GetCurrentSession()` in the behaviour's `Awake` to self-initialize if a session is already active.
 - **Not using `NonLazy()` for `GameInitializer`.** Without `NonLazy()`, `GameInitializer` is never created unless something resolves it, meaning `OnTrainerChanged` is never subscribed and world initialization never happens. See [Dependency Injection](?page=unity/02-dependency-injection).
+- **Binding `GameInitializer` with `FromNewComponentOnNewGameObject` when it is also in the scene.** This creates a second instance, double-subscribes `OnTrainerChanged`, and runs world bootstrap twice (which raced the NPC `EnsureNpcAsync` into a `UNIQUE` crash). Use `FromComponentInHierarchy().AsSingle().NonLazy()` so the scene instance is the only one.
 - **`WorldRegistry is empty` warning on Play.** Every `IWorldInitializable` component in the scene must call `WorldRegistry.Register(this)` in its `Awake`. If you see this warning, at least one component is missing the call.
 - **`SpawnerEncounterBehaviour` zone never triggers.** If `SpawnerWorldBehaviour.InitializeAsync` did not complete (init error, missing `_spawnerContentKey`, or world bootstrap not running), `Activate` is never called and the `SphereCollider` stays disabled. Check the GameInitializer log for errors during spawner init.
 - **Adding `INpcSubInitializable` components without `NpcWorldBehaviour`.** Sub-behaviours are driven by `NpcWorldBehaviour.InitializeAsync`. If `NpcWorldBehaviour` is missing from the GameObject, sub-behaviours' `InitializeAsync` is never called — they will silently remain uninitialized.

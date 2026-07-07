@@ -1,5 +1,145 @@
 # Changelog
 
+## 2026-07-07
+
+### Test infrastructure repaired + suite fully green (979 tests, 29.2% line coverage)
+
+Round 2 added 206 tests — a new Auth test suite (61 tests, 3 projects: SQLite repo, JWT/model, password/claims security) and +145 Game.Domain.Services tests (wild AI, item-use service + 5 untested handlers, creature inspection/progression, battle FX-key propagation, read paths). **Testing exposed 7 production bugs**: 4 in Auth (OAuth SQL vs missing columns, `PasswordHashed` never mapped on read, `GetAccountId()` claim-type mismatch, unenforced email uniqueness — dormant while the game is device-bound, must be repaired before online-account work) and 3 in Game (creature summary computes level from XP instead of stored `Level`; dead replace-ability branch means full-roster creatures learn nothing on level-up; wild-AI heal heuristic documented but absent). All pinned as regression tests.
+
+`run-all-tests.sh` had been running a hardcoded 6 of 25 test projects (one nonexistent) and its `--coverage` flag produced broken MSBuild switches — "all tests green" covered a quarter of the suite. Fixed: auto-discovery of every `*Test*.csproj`, working coverage collection (bash-array quoting), `coverlet.collector` added to the 5 projects that silently emitted no data. Six broken projects repaired (stale damage-formula expectations, missing `SKIP_DOCKER_TESTS` guards, an NUnit setup-ordering NRE, test DDL missing evolution columns, a `CS0104` build ambiguity, xUnit throw-instead-of-skip fixtures, a quest-objective upsert test-data bug). Currency test gaps closed with a new `CR.Trainers.Data.Sqlite.Test` project. Unity: Ability Workbench decision logic extracted into `CR.AbilityWorkbench.Logic` with ~47 tests across 6 fixtures. Full report: `CR/guides/cr-coverage-report.html`.
+
+### Ability Workbench — guided FX authoring for abilities
+
+New editor tooling so a designer ships a fully-effected ability without touching GUIDs, key strings, or the Addressables window (branch `feature/ability-workbench`). Built after research confirmed the battle FX pipeline itself was intact and effects weren't playing purely because ability FX/SFX keys were never authored (17 of 18 abilities had no VFX keys, none had SFX).
+
+- **Reworked `AbilityConfig` inspector**: readiness strip (`Basics ✓ · Effects 2/3 · Sound 0/3 · Not published`), visual Cast/Travel/Impact effect slot cards, auditionable sound rows, status-effect summary rows, and a single **Publish** button; every technical field (keys, raw AssetReferences, individual sync buttons) moved under an **Advanced** foldout. ([Ability Workbench](?page=unity/20-ability-workbench))
+- **FX Library picker**: virtualized thumbnail grid over the project's ~400 FX prefabs (ParticleSystem + VFX Graph detection) with element filter chips and heavy-asset warnings; one pick assigns the slot, registers the asset addressable (`fx/<name>` / `sfx/<name>` in `CRContent`, collision-uniquified), and derives the key.
+- **Publish pipeline**: validate → register addressables → derive keys → sync ability → sync status effects, reported as a plain-language checklist; Content Studio **Publish All** adds a reachability probe and cancelable progress bar. Readiness logic lives in a pure, unit-tested asmdef (`CR.AbilityWorkbench.Logic`).
+- **Edit-mode FX preview**: ▶ Preview plays cast → travel → impact between marker capsules using explicit `ParticleSystem.Simulate`/`VisualEffect.Simulate` ticking, reading the scene sequencer's timing values when present; leak-proof cleanup incl. domain-reload sweep and a **CR → Ability Workbench → Clear FX Preview** safety.
+- **FX templates**: `AbilityFxTemplate` SO + "Start from template…" fills all six slots in one click (starter set hand-authored under `Assets/CR/Content/Editor/FxTemplates/`).
+- **Visibility**: Content Studio ability rows show readiness chips (`FX 2/3 · SFX 0/3 · Published`); Content Audit gained an **Ability FX** category — assigned-but-not-addressable (with Fix), keys addressing nothing, and keys resolving to non-FX assets (catches the mis-authored `Scratch → creatures/crabby`).
+
+## 2026-06-26
+
+### NPC ensure crash + offline content adoption — durable fix
+
+A fresh offline character could crash at world bootstrap with an NPC `UNIQUE` violation, and re-baked offline content kept vanishing. Four root causes, all fixed durably (branch `feature/account-mode-startup`).
+
+- **NPC ensure is now an atomic, revive-aware upsert (cr-api).** `NpcDomainService.EnsureNpcAsync` no longer does check-then-insert; `BaseNpcRepository.EnsureNpcAsync` runs one dual-engine `INSERT … ON CONFLICT(account_id, trainer_id, content_key) DO UPDATE SET deleted = 0/false, npc_type = <no-downgrade: keep existing when the incoming type is the default Npc> RETURNING id`. Because the `npcs` UNIQUE index `uix_npc_account_trainer_content_key` is **non-partial**, soft-deleted rows still occupy the slot — so a plain insert collided; the upsert revives them in place and is race-safe against concurrent ensures. Team inventory is created only when the returned row is genuinely new (`CreatureTeamInventoryId == null`). New `CR.Npcs.Data.Sqlite.Test` covers idempotency, soft-delete revive, and no-downgrade. ([NPC System](?page=backend/02-npc-system))
+- **Per-trainer NPC tables → player-data (Unity).** `INpcRepository` / `INpcCreatureTeamRepository` were wrongly bound to `LocalDataSources.GameData.OfflineSource` (read-only, adoption-overwritten content DB); now bound to `PlayerData.OfflineSource` in `LocalDevGameInstaller`, co-located with `npc_inventory` (FK integrity + merchant purchase on one physical DB). `npcs` rows are per-`(account, trainer)` runtime save-data created by `EnsureNpcAsync`, not designer content — binding them to the adopted `game-data.bytes` let adoption wipe runtime NPCs. ([Project Setup](?page=unity/01-project-setup) · [Content Pipeline](?page=unity/17-content-pipeline))
+- **Single `GameInitializer` (Unity).** It is placed in the boot scene **and** was bound `FromNewComponentOnNewGameObject().NonLazy()`, creating a second instance → `OnTrainerChanged` subscribed twice → two concurrent `RunAsync` passes (double world bootstrap, which surfaced the NPC `UNIQUE` crash). Binding changed to `FromComponentInHierarchy().AsSingle().NonLazy()` so exactly one (scene) instance runs. ([World Behaviours](?page=unity/03-world-behaviours))
+- **Content-hash adoption gate + auto-bake (Unity).** `GameDataAdopter` previously re-adopted only when the bundled schema version (`game-data_schema_version.txt` = `MAX(VersionInfo)`) exceeded the adopted copy — so content-only re-bakes at the same migration head silently never re-adopted (the "offline content keeps vanishing" bug). It now also compares a SHA-256 of the bundled `game-data.bytes` against a `.srchash` marker next to the adopted copy and re-adopts on any byte difference. `build-packages.sh` now auto-copies the freshly baked `game-data.bytes` + version file into `cr-api-unity/Assets/StreamingAssets/CR` (the manual `CR → Bake Game-Data DB` editor menu is now optional). ([Project Setup](?page=unity/01-project-setup) · [Content Pipeline](?page=unity/17-content-pipeline))
+
+### Offline content floor — authored demo content seeded into migrations
+
+Fixes the recurring "no creatures / no wild encounters / no merchant" on a fresh offline character. Root cause: the baked GameData floor (`StreamingAssets/CR/game-data.bytes`, adopted into `persistentDataPath` by `GameDataAdopter`) is produced by `build-packages.sh` from **migration seeds only** — but the demo spawner chain and its creatures had only ever been authored at runtime (they lived in the old shared `crgame.bytes`), so they were absent from every bake and vanished on each adopt/re-bake. The persistentDataPath copy is a disposable cache regenerated from the floor, so it could not be hand-edited "forward" either.
+
+Fix: the authored content is now seeded as migrations, so `build-packages.sh` bakes it every time.
+- `Creatures/CR.Creatures.Data.Migration/M9994SeedDemoCreatures.cs` — 3 creatures (Cindris/Crabby/Mudcalf), 1 growth profile, 4 abilities.
+- `Spawner/CR.Spawner.Data.Migration/M5018SeedDemoSpawnerContent.cs` — `welcome-npc-reward-spawner`, 2 spawner pools, 2 creature-spawner templates, 2 ability-progression sets + 5 entries.
+
+Both dual-engine (Postgres + SQLite, `isSqlite`-guarded) and idempotent (`INSERT OR IGNORE` / `ON CONFLICT DO NOTHING`). The bumped schema version (9994) makes `GameDataAdopter` re-adopt automatically. (At the time of this entry, content-only floor changes at the same version did **not** auto-readopt and needed a version bump or deleting the adopted copy — **superseded later the same day** by the SHA-256 content-hash adoption gate; see "NPC ensure crash + offline content adoption — durable fix" above.) Verified: a clean `build-packages.sh --clean` bake now yields creature=7, spawner_pool=2, creature_spawner_template=2, ability_progression_set_entry=5, FK-clean, with the `starter-wild-zone → pool → template → Cindris` chain intact.
+
+## 2026-06-25
+
+### Content Studio — editable server address
+
+The target server is no longer buried in `game_config.yaml`. The Content Studio banner has a **Server** field (with a ⟳ apply-&-test button) that overrides `game_server_http_address` per-machine via EditorPrefs (`ContentCreatorSyncHelper.ServerAddressPrefKey`) — no yaml edit or Unity restart, and it shows exactly what every sync/ping targets. Both `ContentCreatorSyncHelper.GetBaseUrl` and `AbilityEditorSyncHelper.GetBaseUrl` honor the override (empty = fall back to the config value, exposed as `ConfigBaseUrl`). Note the AIO's default `dotnet run` binds **http://localhost:5124** (its launch profile), not `:8080` — so either run it with `--urls http://localhost:8080` or point this field at `:5124`.
+
+### Content Studio — connection-poll fixes (lag + stuck "Checking…")
+
+Follow-up to the live-status/server-field work:
+- **Lag:** removed `EditorGUIUtility.AddCursorRect` on the status dot — it forced the window to repaint every frame while hovered, and Content Studio's heavy OnGUI made that lag the editor.
+- **Stuck on "Checking…":** the background ping task touched Unity APIs off the main thread — first resolving the URL (`EditorPrefs`/`Resources`), then updating the UI from the `ContinueWith` (`Repaint`/`EditorApplication.delayCall`). Off-thread Unity calls fail silently, so the dot never repainted out of "Checking…" and `_pingInFlight` looked wedged. Rewritten so the URL resolves on the main thread, the `Task.Run` body touches **no** Unity APIs (it only writes plain result fields), and the main-thread `OnEditorTick` drains the result to log + repaint. Added an 8s watchdog and made the dot click / ⟳ always re-check (abandon any in-flight ping) so it can never get wedged.
+
+### Content Studio — live connection status
+
+The banner connection dot now polls on a timer instead of only when the window repaints (so it no longer reads stale "Disconnected" while the server is up). `ContentStudioTool` drives `SchedulePingIfNeeded` from `EditorApplication.update` (subscribed in `OnEnable`, removed in `OnDisable`), the poll interval is 30s, and the dot is now a click-to-recheck button (`ForcePing` backdates the last-ping time and re-pings immediately, showing a transient "● Checking…").
+
+## 2026-06-24
+
+### Online mode — inventory sync, config paths, dead menu object
+
+Three follow-on fixes from the online-mode build log:
+
+- **Item-inventory client was a stub.** `InventorySync.RefreshAsync` (online) threw `NotImplementedException` because `TrainerItemInventoryClientUnityHttp.GetItems/GetItemInventories/AddItemToInventory` were unimplemented. Implemented all three against the existing server routes (`GET/POST /trainer/{trainerId}/inventory/item[/{inventoryId}]`), modeled on the working creature client.
+- **Inventory base-address 404s.** `trainer_inventory_server_http_address` / `trainer_creature_inventory_server_http_address` carried bogus `/trainer-inventory` / `/trainer-creature-inventory` prefixes, but the server mounts inventory routes at **root** (`/trainer/...`) — so every call 404'd (`ITrainerCreatureInventoryClient … Not Found`). Dropped both to `http://localhost:8080`. (Same class as the `game_server_http_address` vs service-prefixed-address gotcha.) Also fixed `TrainerCreatureInventoryClientUnityHttp.AddCreatureToInventory` to `POST` (server's verb) instead of `PUT`.
+- **Config DB paths were machine-specific absolutes.** `game_config.yaml` hardcoded every `database_path_*` to `/Users/efranford/Library/Application Support/DefaultCompany/My project/crgame.bytes` — wrong (default) product dir, single-file (defeating the two-DB split), and unportable. Replaced with relative `database_path_game_data: game-data.bytes` + `database_path_player_data: playerData.bytes` (resolve under the real `persistentDataPath`); dropped the stale per-domain `*_offline`/`*_online_cache` overrides so online-cache DBs fall back to their own per-domain files (now migrated via `MigratableSources`). Removed a dead `StartMenuController` GameObject (deleted-script reference) from the boot scene.
+
+### Online mode boot crash — unmigrated online-cache databases
+
+A standalone build in **online** mode crashed with `no such table: creature` / `no such table: trainer_item_inventory_items`, spamming thousands of `SqliteException`s. Root cause: the online repos are **cache-then-server-fill** (e.g. `CreatureOnlineRepository.GetCreature` reads the local cache; on a miss it fetches from the server and writes the row back into a per-domain **online-cache SQLite**). Those cache DBs (`baseCreatureOnlineCache.bytes`, `trainerItemInventoryOnline.bytes`, …) are neither adopted (game-data only) nor populated from game-data/player-data — and startup migrated **only 4** of them (player-data + trainer/auth/creature caches). The other caches had no schema, so the server-fill `INSERT` threw `no such table`. (Offline mode was unaffected — its content repos read the adopted, populated game-data DB.)
+
+- New `LocalDataSources.MigratableSources` enumerates **every** writable local DB to migrate (player-data + all `OnlineCacheSource`; game-data excluded — it's adopted).
+- `LocalDevGameInstaller.KickOffMigrations` now resolves + dedupes that whole set on the main thread and migrates each off-thread behind `DbReadyGate`, instead of a hand-picked four. Add new cached domains' `OnlineCacheSource` to the list.
+
+### Ability VFX-on-hit — auto-derive the synced content key
+
+Move VFX wasn't playing on hit. The runtime chain (`BattleDomainService` → `outcome` → `BattlePresentationSequencer` `Strike` beat → `AbilityFxCue` → `BattleAbilityFxResponder` → `BattleVisualRegistry`) was wired correctly and the responder is bound `NonLazy`; the break was in authoring. `AbilityConfig` carries each effect as a pair — the `AssetReference` a designer assigns, and the **string key** that actually syncs and drives the runtime — and the key was only populated when the designer manually clicked "← from asset". Assign-but-don't-click left the key blank → backend stored `null` → the cue carried `""` → the responder skipped the spawn, silently.
+
+- **`AbilityConfigEditor.DrawAssetWithKeyRow`** now auto-fills a blank key from the asset's Addressables address whenever the asset is set (the inspector comment finally matches the code). Designers can still override.
+- **`AbilityEditorSyncHelper.SyncAbility`** self-heals at push time via a new `KeyOrDerived(storedKey, assetRef)` helper (and an `AssetReference` overload of `TryDeriveAddressableKey`), so a bulk/Content-Studio push can't ship a null VFX/SFX key.
+- **Prerequisite:** the VFX/SFX prefab must be **Addressable** — derivation reads `FindAssetEntry`. Recovery for existing abilities: ensure the prefab is addressable (Content Studio "Fix All Addressables"), then re-open or re-sync the ability. Disambiguator in the log — `[BattleAbilityFx] load '<key>' failed` means key present but address unbuilt; silence means the key is still empty.
+
+### Migration seed idempotency — content_key collisions
+
+The AIO Postgres migration crashed with `23505 duplicate key … idx_item_spawner_content_key_unique`: content seeds used `ON CONFLICT (id) DO NOTHING`, which only guards the primary key, but content tables have a UNIQUE on `content_key` — and Content Studio pushes content with fresh UUIDs, so the same `content_key` can already exist under a different id.
+
+- **Single-table seeds:** `ON CONFLICT (id) DO NOTHING` → `ON CONFLICT DO NOTHING` (no target) across all cr-api migrations — ignores a conflict on *any* unique constraint, the true equivalent of SQLite `INSERT OR IGNORE`.
+- **FK-chain seeds (parent + child rows under hardcoded ids):** `ON CONFLICT` alone isn't enough — skipping just the parent orphans the child FKs. These now gate the whole seed on the parent's `content_key` being absent (`INSERT … SELECT … WHERE NOT EXISTS`), so it's all-or-nothing per parent and a clean no-op once the content exists. Fixed: item-spawner (`M6014`), creature spawner (`M5009`), quests (`M7006`/`M7008`), loot (`M7102`), achievements (`M7303`).
+- Runtime `ON CONFLICT … DO UPDATE` upserts (achievement-unlocked did-I-win, pickup-collected, etc.) are a different, correct pattern and were left untouched.
+
+## 2026-06-23
+
+### Startup — database migration moved off the main thread
+
+Boot no longer freezes on the database. SQLite is synchronous under Dapper (`await` doesn't yield), so the every-boot, reflection-heavy FluentMigrator pass was blocking the Unity main thread.
+
+- **Removed a duplicate migration pass.** The `DatabaseMigrations` (-100) component re-ran the same player-data + online-cache migrations the installer already ran — roughly half the boot migration cost, deleted.
+- **Migration runs off the main thread behind `DbReadyGate`.** `LocalDevGameInstaller.KickOffMigrations` captures connection strings + does the working-dir repoint on the main thread, then runs the writable-DB migrations in a `Task.Run` and signals `DbReadyGate`. Startup DB consumers — `GameSessionManager.Start` (after the version check, which is network and overlaps migration) and `MainMenuController` (in the play action) — `await DbReadyGate.Ready` before their first query, which is what guarantees the schema exists (replacing the old synchronous install-time block). A migration failure faults the gate and is logged, instead of hard-aborting the Zenject container.
+- **Menu shows instantly.** `MainMenuController.Start` no longer does a redundant session init on the menu's critical path (Continue visibility reads only the `LastPlayMode` pref); the play action awaits the gate (brief "Preparing…" only if migration is somehow still running).
+- **Scope:** game-data.bytes adoption stays synchronous on purpose — it's cheap on normal boots (a version check; the heavy file copy only happens on first install / content upgrade) and keeping it synchronous avoids racing the content-registry read of game-data.
+- A dead `.Result` sync-over-async in `GameAccountRepository.TryGet` was left as-is — it's unused legacy (the Discord `GameAccountManager` path), to be deleted with that subsystem rather than patched.
+
+## 2026-06-21
+
+### Offline gameplay audit — fixes
+
+A multi-system audit of the recently-built features surfaced several offline correctness bugs, now fixed.
+
+- **Quest & achievement funnel wired into the core loop.** `QuestManager.OnBattleWon` / `OnCreatureDefeated` / `OnCreatureCaptured` / `OnItemCollected` previously had no callers, so most quests and achievements could not progress. Now: `BattleCoordinator.EndBattle` fires `OnBattleWon` on victory; the opponent-faint branch fires `OnCreatureDefeated(baseContentKey)`; `BattleBagPanelHandler` fires `OnCreatureCaptured(baseContentKey)` on capture success; `PickupBehaviour` fires `OnItemCollected` for item rewards. (Damage/heal/level-up hooks, battle-loot item-collected, and merchant-purchase-as-collected are deferred — the first two need new client consumption of `ActionOutcome.LootAwards`.)
+- **Item rewards land in the backpack.** `RewardGrantService` granted items via `TrainerInventoryDomainService.AddItemAsync`, which selected `FirstOrDefault()` of the trainer's two `Item` inventories (no `ORDER BY`) — items could land in **Storage** and never show in the bag. Now uses `IItemInventoryService.AddToBackpackAsync` (targets `ItemBackpackInventoryId` and raises the change event). Fixes loot, quest, and achievement item rewards.
+- **Creature rewards are placed.** `RewardGrantService` creature rewards spawned an owned creature but never added it to team/storage (pickups/loot left it unlisted). Now placed into the first open team slot, falling back to storage.
+- **Offline consumables decrement.** `OfflineItemUseService` never removed consumed items (capture crystals/potions were infinite). Successful consumable use now calls `RemoveFromBackpackAsync` (raises the change event so the count updates live).
+- **Capture can't orphan a creature.** Capture now adds to storage **before** claiming ownership; a full storage fails the capture cleanly (and the crystal isn't consumed) instead of reporting success with a lost creature.
+- **Merchant sell raises the backpack event** (symmetry with purchase) so the bag isn't stale after selling.
+- **Legacy `TrainerInventoryDomainService` correctness.** `GetInventoryItemAsync`/`GetItemQuantityAsync` compared an inventory-container id to an item id (always missed) — fixed to sum entries by `ItemId`; `UpdateItemQuantity` no longer deletes legitimate multi-slot stacks (data loss).
+
+### Account mode & startup — menu consolidation
+
+- **Reused the live `MainMenuController`** (`IUIScreen` "MainMenu") for the mode-first menu instead of a separate prototype — fixes dead Play Online/Offline buttons (the menu UXML's `btnStart` had been replaced) and the menu overlaying character select (a registered screen is hidden by `NavigateToScreen`). The `StartMenuController` prototype was removed.
+
+## 2026-06-20
+
+### Battle bag — stale inventory fix
+
+- **Purchased items now appear in the battle bag.** A merchant purchase wrote the item straight through the repository without raising the inventory-changed events `InventorySync` listens for, so cached views (the battle bag) omitted just-bought capture crystals. Root fix: `NpcMerchantService.PurchaseItemFromMerchantAsync` now calls `IItemInventoryService.NotifyBackpackChanged(...)` **after commit** (best-effort, preserves purchase atomicity), which raises `OnBackpackUpdated`; `InventorySync` already subscribes and refreshes, so **every** consumer updates. `BattleBagPanelHandler` also refreshes on open as belt-and-suspenders for any other direct-repo writer.
+
+### Account mode &amp; startup
+
+- **An account always exists at boot.** `GameSessionManager` now calls `AccountBootstrapper.EnsureLocalAccountAsync()` after session init when no account is loaded — a mode-neutral resolve of the device-bound local account (it does not set the online/offline flag). Fixes the long-standing "no account at startup" failure. ([Account Mode &amp; Startup](unity/19-account-mode-startup.md))
+- **Mode-first menu.** The existing live `MainMenuController` (`IUIScreen` "MainMenu") presents Continue · Play Online · Play Offline (its single "Start" button replaced). Continue remembers the last *mode* only and routes to that mode's character selection. Because it's a registered screen, `NavigateToScreen("CharacterSelect")` hides it automatically — no manual hide. Buttons are queried/wired in `Start()` (not the race-prone `OnEnable`). The separate `StartMenuController` prototype was removed in favor of reusing `MainMenuController`.
+- **Connectivity-gated online entry.** New `IConnectivityProbe` / `ConnectivityProbe` (reuses the version-check endpoint for reachability) gates Play Online and Continue-into-online; unreachable → block + explain, never enters online.
+- **No reconciliation.** Offline and online are two non-crossing worlds; characters are mode-locked via `IsOnlineTrainer`. Online keeps its OnlineCache DBs. Login/email-link remains an optional later upgrade. Boot-entry-point consolidation and EditMode tests are follow-ups.
+- **Auth `salt` read fix.** Boot account resolution surfaced a latent mismatch — the auth `salt` column is TEXT but `Account.Salt` is `byte[]`, so a legacy string-valued salt (`''`, from before the column was made nullable) threw `InvalidCastException` during Dapper deserialization. Two-part fix: `ByteArrayTypeHandler` (registered in `DapperBootstrap`) tolerates it as defense, and migration `M0008NormalizeEmptySalt` sets `salt = NULL WHERE salt = ''` so stored data is corrected. No live code writes empty-string salt (anonymous creation passes `null`).
+
+### Achievements
+
+- **New `CR.Achievements` domain.** Achievements unlock on gameplay triggers (battle won, creature captured/defeated, item collected, quest completed, location visited, NPC talked to, creature level reached), record a per-trainer badge, and grant zero or more rewards. `achievement_definition` + child `achievement_reward` are baked content (GameData); `achievement_unlocked` is per-trainer state (PlayerData) with a did-I-win-the-insert upsert so re-triggers never double-grant. ([Achievements](backend/15-achievements.md))
+- **Stats-driven, no parallel counter.** `threshold` (default 1 = binary) is checked against existing lifetime `StatKey` aggregates via one batched read. Referenced achievements are `threshold == 1` in this version.
+- **Rides the quest funnel.** `QuestDomainService` takes an optional `IAchievementDomainService`; after the lifetime-stat write it evaluates and returns unlocks on `QuestProgressResult.NewlyUnlocked` / `QuestClaimResult.NewlyUnlocked`. Online and offline behave identically. `M7300`–`M7303` + `M9993` content bump.
+- **Unity.** `QuestManager` re-broadcasts `OnAchievementUnlocked`; `AchievementToastPresenter` shows the unlock toast; new `LocationTriggerBehaviour` (the first caller of `QuestManager.OnLocationVisited`) drives location achievements. Trophy screen + Content Studio authoring deferred.
+
 ## 2026-06-17
 
 ### Loot tables + world pickups (backend)
