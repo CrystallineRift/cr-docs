@@ -5,7 +5,7 @@
       "cr-api": [],
       "cr-data": []
     },
-    "description": "Top-level overview — no single source file; changes whenever any major subsystem changes"
+    "description": "Top-level overview \u2014 no single source file; changes whenever any major subsystem changes"
   },
   "changelog": {
     "docPath": "docs/changelog.md",
@@ -270,7 +270,7 @@
         "cr-api-unity/Assets/CR/UI/Common/MessageDialog.cs"
       ]
     },
-    "description": "BattleCoordinator sequential turn loop with battle-scoped CancellationToken, BattleHttpDomainAdapter + OnlineOfflineBattleDomainService stack, BattleEvents static events (incl. StagingFailed), Arena system with IBattleStager returning BattleStagingResult (player teleport + creature visual spawn at PlayerCreaturePosition/OpponentCreaturePosition), self-registering BattleArenaRegistry, reactive Cinemachine 3 cinematic camera (BattleCinematicDirector conductor driven by CameraCue*/TurnStarted, editor-authored BattleCameraRig role vCams + BattleCameraProfile feel SO + decoupled BattleCameraShakeResponder via BattleCameraRigContext, BattleFormation slot model for 1v1->NvN, one-click rig builder + beat simulator), per-creature CreatureBattlePresenter (added to creature prefabs; the stager resolves the creature's shared CreatureReactionProfile from its CreatureDefinition by content key, flattens any base→variant inheritance via Resolve(), and hands the result to Bind; subscribes to BattleEvents and plays the creature's own body — animation+cry+feedback — per beat, with a standard Animator state-name convention in CreatureReactionDefaults and HasState-guarded fallbacks), ability VFX/SFX sourced from AbilityConfig keys on the outcome and played positionally by BattleAbilityFxResponder via a single positioned AbilityFxCue + BattleVisualRegistry (id→transform), BattleHUD with Guid-typed creature IDs and HP cache replay, BattleSync SOAP bridge, StartNpcBattle/StartWildBattle, NpcBattleRequest.BattleArenaKey, SpawnerEncounterBehaviour with encounter delay"
+    "description": "BattleCoordinator sequential turn loop with battle-scoped CancellationToken, BattleHttpDomainAdapter + OnlineOfflineBattleDomainService stack, BattleEvents static events (incl. StagingFailed), Arena system with IBattleStager returning BattleStagingResult (player teleport + creature visual spawn at PlayerCreaturePosition/OpponentCreaturePosition), self-registering BattleArenaRegistry, reactive Cinemachine 3 cinematic camera (BattleCinematicDirector conductor driven by CameraCue*/TurnStarted, editor-authored BattleCameraRig role vCams + BattleCameraProfile feel SO + decoupled BattleCameraShakeResponder via BattleCameraRigContext, BattleFormation slot model for 1v1->NvN, one-click rig builder + beat simulator), per-creature CreatureBattlePresenter (added to creature prefabs; the stager resolves the creature's shared CreatureReactionProfile from its CreatureDefinition by content key, flattens any base\u2192variant inheritance via Resolve(), and hands the result to Bind; subscribes to BattleEvents and plays the creature's own body \u2014 animation+cry+feedback \u2014 per beat, with a standard Animator state-name convention in CreatureReactionDefaults and HasState-guarded fallbacks), ability VFX/SFX sourced from AbilityConfig keys on the outcome and played positionally by BattleAbilityFxResponder via a single positioned AbilityFxCue + BattleVisualRegistry (id\u2192transform), BattleHUD with Guid-typed creature IDs and HP cache replay, BattleSync SOAP bridge, StartNpcBattle/StartWildBattle, NpcBattleRequest.BattleArenaKey, SpawnerEncounterBehaviour with encounter delay"
   },
   "unity/16-domain-sync-pattern": {
     "docPath": "docs/unity/16-domain-sync-pattern.md",
@@ -417,7 +417,7 @@
         "cr-api-unity/Assets/CR/Game/World/Editor/ContentCreatorSyncHelper.cs"
       ]
     },
-    "description": "Item spawner mirroring the creature spawner: item_spawner/_pool/_template tables (M6010–M6012), weighted roll (pool by weight×rarity, template by probability, guaranteed at p=1.0), NpcMerchantService.StockFromSpawnerAsync into npc_inventory, sync-config + roll + stock-from-spawner endpoints, ItemSpawnerDefinition authoring + NpcDefinition.itemSpawnerContentKey"
+    "description": "Item spawner mirroring the creature spawner: item_spawner/_pool/_template tables (M6010\u2013M6012), weighted roll (pool by weight\u00d7rarity, template by probability, guaranteed at p=1.0), NpcMerchantService.StockFromSpawnerAsync into npc_inventory, sync-config + roll + stock-from-spawner endpoints, ItemSpawnerDefinition authoring + NpcDefinition.itemSpawnerContentKey"
   },
   "backend/12-trainer-currency": {
     "docPath": "docs/backend/12-trainer-currency.md",
@@ -647,5 +647,83 @@
       ]
     },
     "description": "Player-facing merchant shop UI: NpcInteractionBehaviour merchant branch, MerchantShopScreenHandler (stock list, live prices, wallet, qty stepper, buy via PurchaseItemFromMerchantAsync), isMenuOpen input lock, sell tab stub"
+  },
+  "backend/13-loot-system": {
+    "docPath": "docs/backend/13-loot-system.md",
+    "repos": {
+      "cr-api": [
+        "Loot/**/*.cs",
+        "Game/CR.Game.Model/Rewards/*.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Reward/*.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Battle/BattleDomainService.cs",
+        "Game/CR.Game.Data.Migration/M8016AddSpawnerContentKeyToBattle.cs"
+      ],
+      "cr-data": []
+    },
+    "description": "Battle-victory loot: layered spawner+creature loot tables, independent per-entry drop chance, LootRollService, RewardGrantService, LootAward on the battle outcome, M7100-M7102 + M8016 spawner linkage"
+  },
+  "backend/14-world-pickups": {
+    "docPath": "docs/backend/14-world-pickups.md",
+    "repos": {
+      "cr-api": [
+        "Pickups/**/*.cs"
+      ],
+      "cr-data": []
+    },
+    "description": "World pickups: pickup_definition (rewards JSON) + pickup_collected (per-trainer, revive-on-write upsert), one-time persistent grants, consumer-routed Quest rewards, M7200-M7202"
+  },
+  "backend/15-achievements": {
+    "docPath": "docs/backend/15-achievements.md",
+    "repos": {
+      "cr-api": [
+        "Achievements/**/*.cs",
+        "Quests/CR.Quests.Domain.Services/Interface/QuestProgressResult.cs",
+        "Quests/CR.Quests.Domain.Services/Interface/QuestClaimResult.cs",
+        "Quests/CR.Quests.Domain.Services/Implementation/AchievementTriggerMapper.cs"
+      ],
+      "cr-data": [
+        "Assets/CR/Quests/Manager/QuestManager.cs",
+        "Assets/CR/UI/Achievements/**/*.cs",
+        "Assets/CR/Game/World/Behaviours/LocationTriggerBehaviour.cs"
+      ]
+    },
+    "description": "Achievements: achievement_definition + achievement_reward (child) content + achievement_unlocked (per-trainer, did-I-win-the-insert upsert), Stats-driven threshold eval rides the quest funnel via optional IAchievementDomainService, QuestProgressResult.NewlyUnlocked, M7300-M7303 + M9993 content bump; Unity toast + LocationTriggerBehaviour"
+  },
+  "unity/19-account-mode-startup": {
+    "docPath": "docs/unity/19-account-mode-startup.md",
+    "repos": {
+      "cr-api": [
+        "Auth/CR.Auth.Data.Migration/M0008NormalizeEmptySalt.cs",
+        "Npcs/CR.Npcs.Domain.Services/Implementation/NpcMerchantService.cs",
+        "Game/CR.Game.Domain.Services/Interfaces/Item/IItemInventoryService.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Item/ItemInventoryService.cs"
+      ],
+      "cr-data": [
+        "Assets/CR/Core/Session/IConnectivityProbe.cs",
+        "Assets/CR/Core/Session/ConnectivityProbe.cs",
+        "Assets/CR/Core/Session/AccountBootstrapper.cs",
+        "Assets/CR/Core/Session/GameSessionManager.cs",
+        "Assets/CR/Core/Data/Repository/GameConfigurationKeys.cs",
+        "Assets/CR/Core/Data/ByteArrayTypeHandler.cs",
+        "Assets/CR/Core/Data/DapperBootstrap.cs",
+        "Assets/MainMenuController.cs",
+        "Assets/CR/UI/Resources/MainMenu.uxml",
+        "Assets/main-menu.uss"
+      ]
+    },
+    "description": "Mode-gated account/startup: one device-bound account, boot-time EnsureLocalAccountAsync (mode-neutral) so an account always exists, mode-first menu (Continue/Play Online/Play Offline) via the existing MainMenuController (IUIScreen 'MainMenu'), connectivity-gated online entry via IConnectivityProbe (reuses version-check), no reconciliation between offline/online worlds, characters mode-locked via IsOnlineTrainer; supporting fixes: ByteArrayTypeHandler + M0008NormalizeEmptySalt for legacy salt rows, NpcMerchantService NotifyBackpackChanged post-commit so InventorySync refreshes"
+  },
+  "unity/20-ability-workbench": {
+    "docPath": "docs/unity/20-ability-workbench.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [
+        "cr-api-unity/Assets/CR/Core/AbilityWorkbench/**/*.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Editor/AbilityWorkbench/**/*.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Editor/AbilityConfigEditor.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Editor/AddressableContentRegistrar.cs"
+      ]
+    },
+    "description": "Ability Workbench editor tooling: readiness strip, FX library picker, one-click Publish pipeline, edit-mode FX preview, FX templates, Studio chips and Ability FX audit checks."
   }
 }

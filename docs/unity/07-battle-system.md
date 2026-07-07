@@ -421,6 +421,8 @@ The ability's effects flow from `AbilityConfig` (`useVfx`/`travelVfx`/`hitVfx`, 
 
 Positions are captured at cue time, so an effect still lands correctly even if a creature despawns mid-load; any missing piece (no key, no registered visual) is skipped. Status-condition VFX/SFX still use the older position-less `Sfx/VfxRequested` events for now.
 
+> **Authoring gotcha — empty key = silent no-op.** The responder loads each effect by its **string key** (`useVfxKey`/`hitVfxKey`/…), never the `AssetReference` directly. On `AbilityConfig` each effect is a *pair*: the `AssetReference` a designer assigns in the inspector, and the string key that actually syncs to the backend and drives the runtime. If the key is blank, the backend stores `null`, the cue carries `""`, and the responder skips the spawn — so the VFX simply never plays on hit, with no error. The key is now **auto-derived** from the `AssetReference`'s Addressables address: `AbilityConfigEditor` fills a blank key whenever the asset is set, and `AbilityEditorSyncHelper.SyncAbility` derives it at push time as a fallback (`KeyOrDerived`). **Prerequisite:** the VFX/SFX prefab must be marked **Addressable** — derivation reads `FindAssetEntry`, so a non-addressable asset yields no key. If VFX is missing in play, confirm the prefab is addressable, re-open/re-sync the ability, and check the log for `[BattleAbilityFx] load '<key>' failed` (key present but address unbuilt) versus silence (key empty).
+
 ## Offline Battle Stack
 
 The offline battle stack uses the DLL's `BattleDomainService` (same class the backend uses) backed by a local SQLite file (`game.bytes`). Battle tables are created by `DatabaseMigrationRunner.MigrateDomain` on startup.
