@@ -482,6 +482,8 @@
         "Creatures/CR.Creatures.Data.Migration/M1017AddAbilityProgressionSetIdToBaseCreature.cs",
         "Creatures/CR.Creatures.Data.Migration/M1029CreateGeneratedCreatureStatusConditionsTable.cs",
         "Creatures/CR.Creatures.Data.Migration/M9003AddAnimationKeyToAbilities.cs",
+        "Creatures/CR.Creatures.Data.Migration/M9995DedupAbilitiesAndSeedAbilityFx.cs",
+        "Creatures/CR.Creatures.Data.Migration/M9996AddAbilityFxLifecycleColumns.cs",
         "Creatures/CR.Creatures.Data/Interface/IGeneratedCreatureRepository.cs",
         "Creatures/CR.Creatures.Data/GeneratedCreatureStatusCondition.cs",
         "Game/CR.Game.Data/Interface/IBattleRepository.cs",
@@ -721,9 +723,24 @@
         "cr-api-unity/Assets/CR/Core/AbilityWorkbench/**/*.cs",
         "cr-api-unity/Assets/CR/Core/Data/Editor/AbilityWorkbench/**/*.cs",
         "cr-api-unity/Assets/CR/Core/Data/Editor/AbilityConfigEditor.cs",
-        "cr-api-unity/Assets/CR/Core/Data/Editor/AddressableContentRegistrar.cs"
+        "cr-api-unity/Assets/CR/Core/Data/Editor/AddressableContentRegistrar.cs",
+        "cr-api-unity/Assets/CR/Core/Data/Editor/Build/GameDataFloorTools.cs"
       ]
     },
-    "description": "Ability Workbench editor tooling: readiness strip, FX library picker, one-click Publish pipeline, edit-mode FX preview, FX templates, Studio chips and Ability FX audit checks."
+    "description": "Ability Workbench editor tooling: readiness strip, FX library picker, one-click Publish pipeline, edit-mode FX preview, FX templates, Studio chips and Ability FX audit checks, FX seed migration exporter (M9997 authoritative snapshot) + one-click floor rebake / full package rebuild menu items."
+  },
+  "unity/21-standalone-builds": {
+    "docPath": "docs/unity/21-standalone-builds.md",
+    "repos": {
+      "cr-api": [
+        "Convenience/CR.Game.Compat/build-packages.sh"
+      ],
+      "cr-data": [
+        "cr-api-unity/Assets/CR/Core/Data/Editor/Build/BuildProfileSetupTool.cs",
+        "cr-api-unity/Assets/Settings/Build Profiles/**",
+        "cr-api-unity/Assets/AddressableAssetsData/AddressableAssetSettings.asset"
+      ]
+    },
+    "description": "Standalone desktop builds: Unity 6 build profiles (CR_Game_macOS / CR_Game_Windows, BuildProfileSetupTool reflection factory), per-platform e_sqlite3 natives bundled by build-packages.sh, Addressables built with player, game-data.bytes floor, Mono-only Windows cross-build"
   }
 }

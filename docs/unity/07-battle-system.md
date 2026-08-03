@@ -131,7 +131,26 @@ Resolve → Strike → Impact/Miss → Faint → Recall → SendOut → Aftermat
 
 **Recall is an injected effect with a completion event.** `RecallEffect` (default `ScaleDissolveRecallEffect`, bound via DI, single reused instance) plays the creature's exit and raises `Completed`; the sequencer waits on that event — with a hard **timeout** so a misconfigured effect can never freeze the turn loop — then raises `CreatureWithdrawn` (stager despawns) and, for a switch, `CreatureSwitchedIn` (stager spawns the incoming creature with a scale-up pop). The default needs no art or prefab; swap the bound `RecallEffect` to upgrade the visual.
 
-**Threading.** The sequencer runs the beats as a coroutine (all `WaitForSeconds`/effect-waits on the Unity main thread, matching `BattleCinematicDirector`); the async loop awaits a `Task` the coroutine completes via `TaskCompletionSource`. No `Task.Delay`, no background threads — non-blocking, no stutter.
+**Threading.** The sequencer runs the beats as a coroutine (all `WaitForSeconds`/effect-waits on the Unity main thread, matching `BattleCinematicDirector`); the async loop awaits a `Task` the coroutine completes via `TaskCompletionSource` (created with `RunContinuationsAsynchronously` — the battle loop must never resume inline inside a coroutine frame or a UI click's callstack). No `Task.Delay`, no background threads — non-blocking, no stutter.
+
+**Loot display.** The battle-ending outcome's `LootAwards` (rolled + granted server-side on a
+wild win — currency and items) are raised one-per-grant as `BattleEvents.LootAwarded` during the
+aftermath beat. `BattleSummaryScreen` accumulates them and renders the ITEMS RECEIVED section via
+pure `LootSummaryFormat`: one summed Currency row, then items alphabetically with ×quantity and
+humanized content keys. No drops → "No items found." stays.
+
+**Player-configurable pacing (Combat Speed).** The authored beat durations are scaled by the
+persisted `battle_pacing_scale` multiplier (`GameConfigurationKeys.BattlePacingScale`, clamped
+0.5–2.5; 1 = authored, higher = slower). The sequencer re-reads it at every `ResetForNewBattle`,
+so changing it applies from the next battle. Players set it via the pause menu **System ▸ Combat
+Speed** dropdown (Fast 0.75× / Normal 1× / Relaxed 1.4× — the System card's first functional
+setting, `PlayerMenuWindow.WireCombatSpeedSetting`). Automation can set it with the
+`cr_set_combat_speed --scale <x>` pipeline command.
+
+**Battle framing (zoom).** `BattleCameraProfile.fovWidenMultiplier` (default **1.15**) widens
+every rig vcam's FOV while in battle — applied by the director on `EnterBattle`, authored lens
+restored on `ExitBattle` — so the whole exchange reads without re-authoring per-shot framing.
+Set it to 1 for the rig's exact authored lenses.
 
 ## Force-Swap on Faint
 

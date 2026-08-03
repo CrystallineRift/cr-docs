@@ -107,6 +107,22 @@ Append-only log of resolved round outcomes.
 | `actions_json` | TEXT | Resolved actions + outcomes JSON |
 | `created_at` | DATETIME | |
 
+**Reads are bounded.** `GetActionLogAsync(battleId, maxEntries = 200, ct)` returns the *newest*
+`maxEntries` rows re-ordered chronologically — this table grows one row per action for the life of
+a battle, so an unbounded `SELECT` here scales with battle length. `GetBattleStateAsync`
+deliberately does **not** populate `BattleStateDto.ActionLog`: it runs twice per round (before the
+player's turn and before the AI's), and eagerly loading the whole log there made per-turn latency
+climb with turn count while no caller read the field. Ask for the log explicitly if you need it.
+
+### Battle lifecycle hygiene
+
+A battle row is only closed by the normal end-of-battle paths, so force-quitting mid-battle leaves
+`status = 'Active'` forever *and* strands the uncaptured wild creature as a live
+`generated_creature` row. `StartBattleAsync` therefore sweeps first: any still-`Active` battle for
+the starting trainer is marked `Abandoned` and run through `WriteBackHpAsync`, which soft-deletes
+the stranded wild and clears its current-stats row. Without this, a dev save accumulated 12 stale
+battles and 10 leaked wild creatures.
+
 ## Repository Layer
 
 ### `IBattleRepository`
@@ -419,6 +435,8 @@ M1029CreateGeneratedCreatureStatusConditionsTable  ← persistent per-creature c
 M1017AddAbilityProgressionSetIdToBaseCreature  ← adds ability_progression_set_id (UUID NULL) to creature table
 M9003AddAnimationKeyToAbilities      ← adds animation_key (VARCHAR NULL) to abilities table
 M9990SeedGameData                    ← seeds Wild Trainer (guarded: skips if account table absent)
+M9995DedupAbilitiesAndSeedAbilityFx  ← collapses duplicate ability rows onto canonical ids + seeds authored FX keys
+M9996AddAbilityFxLifecycleColumns    ← adds fx_auto_stop (default true) + fx_stop_delay_ms (default 50) to abilities
 ```
 
 Additional migrations add `trainer{1,2}_active_creature_id` to `battle` and create `generated_creature_current_stats` for persistent HP.
@@ -426,6 +444,25 @@ Additional migrations add `trainer{1,2}_active_creature_id` to `battle` and crea
 `ability_progression_set_id` links a `creature` row to an `AbilityProgressionSet`, enabling wild AI to restrict ability selection to the abilities the creature has actually learned at its current level. `null` means no set assigned — the AI falls back to a global ability query.
 
 `animation_key` on the `abilities` table drives client-side animation clip selection. `null` means the creature's `defaultAttackClip` (from `CreatureAnimationProfile`) is used instead.
+
+### Canonical ability ids and FX-key seeding (M9995)
+
+Ability ids accumulated duplicates across seed migrations: `M9990` seeded one set of rows while
+the `M9994` demo seed added second rows for **Ember** and **Scratch** under different ids, and
+progression entries pointed at the demo rows — which carried `NULL` in every `*_sfx_key`/`*_vfx_key`
+column, so battles raised FX cues with empty keys and nothing played. The **canonical id for every
+ability is the id its Unity `AbilityConfig` asset carries** (the id the Ability Workbench publishes
+against). `M9995` remaps all references (`ability_progression_set_entry`, `ability_status_conditions`,
+`generated_creature` slots) onto the canonical rows, soft-deletes the duplicates, and seeds the
+authored FX keys (Ember + Hydro Pump starter set) so the baked floor carries them. Newly authored
+FX must be added to a seed migration to survive a floor rebake — see the Ability Workbench page.
+
+`fx_auto_stop` / `fx_stop_delay_ms` (M9996) control FX playback lifecycle: when on (the default),
+each FX stage — cast, then projectile — is stopped `fx_stop_delay_ms` milliseconds after the next
+stage starts, so looping effects don't play forever. The values ride the battle outcome
+(`ActionOutcome.FxAutoStop`/`FxStopDelayMs`) into the client's `AbilityFxCue`; the responder cuts
+particle emission (existing particles fade) rather than hard-destroying the instance. Authored per
+ability in the Unity AbilityConfig **Advanced** section.
 
 ## Tests
 

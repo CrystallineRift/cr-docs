@@ -280,6 +280,13 @@ Abandoned  (AbandonQuestAsync)
 
 **InProgress** — created by `AcceptQuestAsync`. A matching `quest_objective_progress` row is created for every non-deleted objective template at accept time.
 
+`AcceptQuestAsync` is **idempotent**: a non-repeatable template with any existing instance (any
+status) returns that instance instead of creating another, and a repeatable template only
+re-accepts when no instance is currently in progress. This matters because scene auto-granters
+(`QuestGranterBehaviour`) re-fire every session — before the guard, a non-repeatable quest
+stacked one instance per boot, and a single progress event then completed every copy in one
+serial claim burst (seen live: 38 stacked "Welcome To CR" instances ≈ a 10-second freeze).
+
 **Completed** — `RecordProgressEventAsync` increments matching progress rows, then checks whether every non-optional objective has `is_completed = true`. If so, the instance status transitions to `Completed` automatically.
 
 **Claimed** — `ClaimRewardsAsync` sets `rewards_claimed = true` and increments the `quests_completed` lifetime stat. Double-claim throws.

@@ -1,5 +1,537 @@
 # Changelog
 
+## 2026-08-03 — fixed: loading into combat could leave the screen white
+
+Reported symptom: entering a battle showed a white screen that faded in and never cleared.
+
+The battle paths were not missing the fade-out — both wild and NPC start already do
+`cover → stage → reveal`. The bug was in `ScreenFader` itself:
+
+```csharp
+if (_run != null) StopCoroutine(_run);   // old fade's TaskCompletionSource never completes
+```
+
+`StopCoroutine` does not run the remainder of a coroutine, so a superseded fade's
+`TaskCompletionSource` was **never completed and its awaiter hung forever**. Callers sequence
+`await cover; …stage…; await reveal;` — so once a cover fade was superseded, the awaiting battle
+setup never resumed and the reveal line was never reached. The overlay stayed opaque white.
+
+Three fixes:
+
+1. **A superseded fade now completes its TCS** (`TrySetResult(false)` = "did not finish") instead
+   of stranding the awaiter. This is the actual cause.
+2. **The fade advances on `Time.unscaledDeltaTime`.** On scaled time a paused game (`timeScale 0`)
+   would leave `deltaTime` at 0, so the loop could never advance and the cover would never lift.
+3. **The reveal moved into a `finally`** on both the wild and NPC start paths, so a staging failure
+   between cover and reveal can no longer strand the player behind an opaque overlay. Added
+   `ScreenFader.ClearImmediate()` as a hard safety valve.
+
+Contributing factor worth knowing: `CloseBattle` fires `CloseWithFadeAsync()` **un-awaited**, so a
+new battle starting while the previous close-fade is mid-flight supersedes it — which is precisely
+how a fade got superseded in normal play. That is now harmless rather than fatal.
+
+Verified live by exercising the defect directly: starting a 3s cover and immediately superseding it
+now completes the first task (previously it would never complete), and the overlay settles to
+`alpha=0`. Fader alpha measured at 0 both mid-battle and back in the overworld.
+
+**Test gap, stated plainly:** this is coroutine/`TaskCompletionSource` lifecycle, which EditMode
+cannot exercise — the project has no PlayMode test assembly (both existing test asmdefs are
+pure-logic EditMode). Standing one up is a larger change than the fix; this is currently covered by
+live verification only, and a PlayMode regression test is the right follow-up.
+
+## 2026-08-03 (later) — acting on the measurements
+
+Follow-ups driven by the world-init numbers rather than by guesswork.
+
+### Merchants no longer re-roll their entire stock on every world load
+
+`NpcMerchantBehaviour` calls `StockFromSpawnerAsync` on every world load, and the restock guard
+only applied when the spawner defined a cooldown. The seeded `starting-merchant-items` spawner has
+`restock_cooldown_seconds = 0`, so the guard never fired and every merchant **cleared and re-rolled
+its whole inventory on every load** — a serial write loop per merchant, linear in merchant count.
+It was also a gameplay exploit: reloading rerolled the shop's contents.
+
+A cooldown of 0 now means *"do not auto-restock"*, not *"restock every time"*. First-time stocking
+still happens (empty merchant), an elapsed cooldown still restocks, and `force: true` still
+restocks unconditionally. 5 new tests cover each branch.
+
+Measured on the live save: merchant world-init **~40ms → ~19ms**, world init total **~290ms →
+~275ms**, and the merchant's stock is now byte-identical across loads (previously re-rolled).
+
+### Bag panel no longer does a query per item mid-battle
+
+`BattleBagPanelHandler` fetched an item definition per distinct backpack item every time the bag
+opened — during a battle turn, in front of the player. It now reads the item catalog once and
+indexes it (item definitions are bounded content data). The fetch is capped at 500 rows and
+**logs a warning if the cap is hit** rather than silently rendering items without definitions.
+
+### Item ownership check de-duplicated
+
+`ItemUseDomainService` had the same inventory-walk copy-pasted for item use and held-item equip.
+Both now call one `FindOwnedEntryAsync`. This is a clarity fix, not a speed one — the walk already
+stopped at the first match, so its cost is bounded by inventory count.
+
+### Not changed: `TrainerWorldBehaviour` (~40% of world init)
+
+Investigated because the measurement singled it out. Its cost is `LoadVisualAssetsAsync` — the
+Addressables load of the rigged character model. That is legitimately expensive I/O, not a code
+defect, and it must finish before the player can be shown. Left alone.
+
+Backend 29/29 projects, Unity EditMode 103/103.
+
+## 2026-08-03 — world-init measured: don't parallelize it
+
+The serial `GameInitializer` loop was the last open item from the performance sweep. It is now
+**measured rather than assumed**, and the answer is to leave the loop alone.
+
+`GameInitializer` retains per-initializable timings from the last world load
+(`LastRunTimings` / `LastRunTotalMs`), read back by the new `cr_worldinit_report` pipeline command.
+The instrumentation exists because the loop's own Debug lines scroll out of the 100-line console
+buffer long before a load finishes — which is exactly why this question went unanswered for so long.
+
+Three runs, 8 initializables, steady state ≈ **290ms** total (first run 336ms, cold):
+
+| ms | share | initializable |
+|----|-------|---------------|
+| 106–140 | ~40% | `TrainerWorldBehaviour` |
+| 48–59 | ~17% | `QuestWorldBehaviour` |
+| 39–43 | ~15% | `NpcWorldBehaviour` (Merchant) |
+| 38–48 | ~14% | `SpawnerDefinitionSyncBehaviour` |
+| 19–20 | ~7% | `TeamSync` |
+| 13 | ~5% | `InventorySync` |
+| 4–6 | ~1% | `NpcWorldBehaviour` (Quest Giver) |
+| 3–4 | ~1% | `SpawnerWorldBehaviour` |
+
+**Verdict: not worth the redesign.** Perfect parallelism caps out at ~170ms saved, and respecting
+the real dependencies (trainer before team/inventory sync, spawner definitions before spawner
+state) the realistic floor is ~165ms — about **125ms saved on a one-time load that already sits
+behind a fade**. That does not justify adding a dependency-declaration contract to every
+initializable plus the race risk that comes with it.
+
+Two findings worth more than the parallelism would have been:
+
+- **`TrainerWorldBehaviour` alone is ~40% of world init.** If load time ever needs to come down,
+  optimizing or deferring that single item beats parallelizing all eight.
+- **Per-NPC cost scales with content, and that is the real risk.** The merchant NPC costs ~40ms
+  against the quest giver's ~4ms; the difference is `StockFromSpawnerAsync` restocking on every
+  world load. With two NPCs that is invisible, but it is linear — twenty merchants would add
+  roughly 800ms to every load. This is the same "grows with content" shape as the bugs already
+  fixed this week, and is the thing to watch as the world fills out.
+
+## 2026-08-02 (round 2 — larger blast radius)
+
+Second pass over the performance backlog, taking the items that needed interface changes or
+touched shared code rather than a single call site.
+
+- **Sync-over-async removed from the startup path.** `GameAccountRepository.TryGet(identifier, out
+  Account)` blocked on `GetAsync(...).Result` — an HTTP round-trip resolved by blocking Unity's
+  main thread, which both stalls the frame and risks deadlocking (the awaited continuation wants
+  the thread the caller is holding). It implemented no interface (`IGameRepository` declares the
+  async `TryGetAsync`) and had **zero callers**, so it's deleted rather than rewritten. A comment
+  marks the spot so a blocking wrapper doesn't come back. The other `.Result` hits in the client
+  were checked and are safe — they read handles already known to be complete.
+- **Creature batch fetch replaces an N+1 on the party/box path.** `CreatureInventoryService`
+  looped `GetCreature` once per slot; this backs team and storage rendering *and* runs twice per
+  battle round via `GetTeamAsync`. New `IGeneratedCreatureRepository.GetCreaturesByIdsAsync`
+  resolves the whole page in one query (Dapper `IN`, lowercased ids on SQLite to match the stored
+  GUID casing), and the service re-orders results to slot order since a batch query guarantees
+  none. 6 new SQLite data tests cover soft-deleted exclusion, the current-HP join, mixed-case
+  GUID matching, unknown ids and empty/null input.
+- **Quest requirement evaluation reads each fact once.** `ConditionEvaluator` re-read the same
+  data per requirement — every `HasItem` walked every inventory again, every `QuestCompleted`
+  re-read the whole completed list, and stats were re-fetched per requirement. It now uses a
+  per-pass read-through memo (item totals summed across inventories once, completed list once,
+  each stat key once). Caching is scoped to a single evaluation — requirements are checked against
+  a snapshot with no interleaved writes, so this is behaviour-preserving, and a test asserts the
+  cache does **not** leak between evaluations. 6 new tests.
+
+Backend 29/29 projects green throughout.
+
+**Deliberately not changed: `GameInitializer` serial world-init.** Every `IWorldInitializable` is
+awaited in sequence on world load, and `NpcWorldBehaviour` nests a serial sub-behaviour loop
+inside it. Parallelizing looks tempting but is unsafe as written: `IWorldInitializable` declares
+no ordering, registration order is just `Awake` order, and there are real implicit dependencies
+(trainer load before team/inventory sync, spawner definitions before spawner world state).
+Doing this properly needs an explicit phase/priority contract so each initializable declares what
+it depends on, and then parallelism *within* a phase — a design change, not a tuning change. It
+should also be measured first: the loop already stopwatch-logs each item, so a single instrumented
+world load will show whether this is worth the redesign.
+
+## 2026-08-02 (later)
+
+### Performance sweep: unbounded tables and repeated work on hot paths
+
+Follow-up to the merchant freeze — an audit of what actually accumulates in a save, plus a
+codebase sweep for serial-await/N+1/per-frame offenders. Fixed:
+
+- **Battle action log was read in full, twice per round.** `GetBattleStateAsync` eagerly loaded
+  the entire `battle_action_log` on every call (once before the player's turn, once before the
+  AI's) — and **no caller anywhere read the field**. Turn latency grew with battle length for a
+  payload nobody consumed. The eager load is gone, and `GetActionLogAsync` is now bounded
+  (`maxEntries`, default 200, newest-first then re-ordered chronologically) so it can't become
+  unbounded again.
+- **Stale battles / leaked wild creatures.** Force-quitting mid-battle left the row `Active`
+  forever and stranded its uncaptured wild creature as a live DB row (12 stale battles / 10
+  leaked wilds in the dev save). `StartBattleAsync` now sweeps the trainer's stale Active
+  battles, marking them `Abandoned` and releasing their wilds. Verified live: an injected stale
+  battle came back `Abandoned` with its wild soft-deleted.
+- **`spawner_spawn_history` grew forever** — one row per wild encounter since the save was
+  created, never pruned. Writes now prune past a 30-day retention window, **throttled** to at
+  most one sweep per 10 minutes (the delete is a table scan, so it must not run per spawn).
+- **Merchant shop N+1.** Opening the shop cost 3 serial round-trips per stock row, two of them
+  redundant: `CalculateBuyPriceAsync` re-reads the NPC *and* re-reads the same item the UI had
+  just fetched. The screen now reads the buy multiplier once and does the arithmetic locally
+  (3N → N+1).
+- **Per-frame `GetComponent` in the battle camera.** `BattleCinematicDirector.Update` resolved
+  the establishing camera and its `CinemachineOrbitalFollow` every frame, for the whole duration
+  of every battle, for a reference that never changes mid-battle. Now cached, invalidated on
+  EnterBattle/ExitBattle.
+
+Save-data cleanup applied to the dev save (backed up first): 12 stale battles closed, 67 wild
+creatures released, 52 orphaned `generated_creature_current_stats` rows deleted, spawn history
+older than 30 days pruned, action logs for finished battles dropped, `VACUUM`.
+
+New tests: stale-battle sweep (Game.Domain.Services) and three spawn-history pruning tests
+(Spawner.Data.Sqlite, including one asserting the throttle so the prune can't regress into a
+per-spawn scan). Backend 29/29 projects green.
+
+**Known remaining (documented, not yet fixed)** — ranked, from the same sweep:
+`GameInitializer` initializes every `IWorldInitializable` strictly serially on world load (and
+`NpcWorldBehaviour` nests a serial sub-behaviour loop inside it); quest-requirement evaluation on
+NPC interact is a three-deep serial nest (`QuestDomainService` → `ConditionEvaluator` →
+per-inventory item reads); `CreatureInventoryService.GetCreaturesAsync` is an N+1 per creature on
+every party/box display; `GameAccountRepository:71` blocks on `.Result` over an HTTP call on the
+startup path. These are ordering-sensitive or wider-blast-radius changes and want their own pass.
+
+## 2026-08-02
+
+### Fixed: 10-second freeze when talking to the merchant (quest instance stacking)
+
+The freeze wasn't the shop at all. The stat-event log showed `quest_claim` firing **38 times over
+~9 seconds** the moment the merchant NPC was talked to: the non-repeatable "Welcome To CR" quest
+had **38 stacked instances** — auto-granted once per boot, because `QuestGranterBehaviour`'s
+`grantOnce` only dedupes per session (in-memory) and the backend `AcceptQuestAsync` never checked
+for an existing instance. One NPC talk satisfied all 38 at once and the serial claim pipeline
+(rewards + stats + achievement eval per claim) stalled the main thread for ~10s.
+
+Fixes:
+- `QuestDomainService.AcceptQuestAsync` is now idempotent: a **non-repeatable** template with any
+  existing instance (any status) returns that instance instead of creating another; a
+  **repeatable** template only re-accepts when no instance is currently in progress. 3 new unit
+  tests; Quests 19/19 + Game 386/386 green.
+- Player save dedupe: 57 duplicate/orphaned quest instances soft-deleted (kept the oldest per
+  template — including 13 orphans of a template that no longer exists in the content DB).
+  Verified across three live boots: instance count stable, new templates still accept.
+- Known cosmetic residue: the `quests_completed` lifetime stat was inflated to ~45 by the
+  duplicate claims.
+
+### Over-the-shoulder camera framing + character micro-stutter fix
+
+- **Character micro-stutter (the "head vibration")** — root-caused by measurement, not guesswork:
+  a probe sampling the head bone's per-frame angular delta showed stepped bursts (max 8× the
+  mean). `MAnimal.Awake` force-sets the Animator to **Fixed** update (50Hz physics ticks) with
+  `Rigidbody.interpolation = None`, so at 60+ fps the pose freezes then double-steps every few
+  frames — a ~10Hz aliasing shimmer, most visible on the head. `MalbersMovementController` now
+  sets `Animator.updateMode = Normal` + `Rigidbody.interpolation = Interpolate` after MAnimal's
+  Awake (Malbers fully supports Normal mode). Measured: maxDelta 1.10° → 0.40° at identical mean
+  — stepping eliminated. (The Malbers demo `Aim` component stays disabled too — head IK from a
+  FixedUpdate camera raycast, no CR gameplay uses it. Disabling it alone did NOT fix the
+  stutter; the update-mode aliasing was the cause.)
+- **Framing**: shoulder offset (0.6, 0.5, 0), camera distance 3.8 (tunable via
+  `cr_setup_overworld_camera --distance/--shoulderX/--shoulderY`), and the camera now starts
+  each overworld entry at a level ~8° pitch. Previously it inherited whatever pitch the boot or
+  battle flow left behind — battle exit re-syncs the rig's pitch from the battle camera (which
+  was staring down at the arena), so `OverworldCameraGate` re-frames on `BattleClosed`, one beat
+  after the camera cut, still under the reveal fade.
+- New probes: `cr_jitter_measure`/`cr_jitter_report` (head-bone angular-delta sampler),
+  `cr_toggle_component` (runtime A/B), `cr_trainer_components` (component tree dump), and the
+  pipeline `eval` command turned out to be the fastest way to inspect/mutate live state.
+  Discovered during testing: walking off the world edge puts the trainer in free-fall (a
+  respawn eventually catches it) — invalidated one whole measurement round.
+
+### Look settings, spawn-in gating, and controller support on the startup menu
+
+Batch of overworld input/camera polish:
+- **System ▸ Controls settings**: Look Sensitivity slider (0.1–2.0×, persisted as
+  `look_sensitivity`) plus Invert Look Y / Invert Look X toggles. `CameraLookSettings` on the
+  camera rig applies stored values at startup and live on change; the default is now **0.5×**
+  (the Malbers authored 1.0 was too twitchy).
+- **Nothing moves until you spawn in**: `PlayerInputGate` is now UIContext-aware — the Player
+  action map only enables in the Overworld (was: enabled from scene load, so WASD moved the
+  character behind the main menu). `TrainerMovementController` no longer force-enables the map.
+  New `OverworldCameraGate` (replaces the orphaned `CameraInputGate`, deleted) allows camera
+  rotation only when movement is ready AND context is Overworld.
+- **Player hidden on the menu**: new `TrainerVisibilityGate` disables the trainer's renderers
+  outside the overworld/battle so the character no longer stands in the world behind the main
+  menu. Known cosmetic nit: a Malbers "Dust Track" ground decal can still appear at the feet
+  position pre-spawn.
+- **Controller works on the startup menus**: MainMenu and CharacterSelect now set an initial
+  focused button when shown — gamepad/keyboard navigation needs a focus root to start from,
+  and without one the controller did nothing.
+- `cr_setup_overworld_camera` now also installs the gate + settings components and clears
+  missing-script remnants. Verified headlessly: menu = frozen camera + immobile hidden trainer;
+  overworld = visible trainer, live camera (yaw 90→290 on look), movement follows camera;
+  sensitivity 0.5 applied on the rig. Note: `NavigateTabsLeft/Right` actions exist in
+  `CR_GameInput` but are not yet wired to the player menu's TabView (pre-existing gap).
+
+### Fixed: overworld movement directions + added a real third-person camera
+
+Two long-standing issues in the Malbers movement shim:
+1. **Directions were world-space, not camera-relative.** `MalbersMovementController` called
+   `MAnimal.Move()` — Malbers' AI/direction entry point, which treats the stick vector as a
+   world-space direction ("up" always walked toward world +Z). Player input now goes through
+   `SetInputAxis()` with `UseCameraInput = true`, Malbers' camera-relative path.
+2. **There was no overworld camera controller at all.** The scene had a `CinemachineBrain` and a
+   `CameraInputGate`, but the `ThirdPersonFollowTarget` rig the gate requires was never added, and
+   nothing fed look input. New editor command `cr_setup_overworld_camera` instantiates the Malbers
+   "CM Third Person Main (New Input)" prefab, targets the scene trainer, retargets Look/Zoom to
+   `CR_GameInput` (`Player/Look`, `Player/Zoom`), and sweeps duplicate rigs (idempotent).
+
+Also: `SetSpeed` no longer maps to `MAnimal.TimeMultiplier` (that's a global time scale — it made
+everything slow-motion, not faster movement). Verified headlessly with new probes
+(`cr_move_probe`, `cr_cam_look_direct`, `cr_ui_gamepad_stick`, key hold/release phases on
+`cr_ui_press_key`): camera yaw rotates via the look path, and walking forward with the camera
+rotated 112° moves the trainer exactly along the new camera heading. Physical mouse feel check
+remains the human gate (synthetic mouse deltas can't cross the editor/play input buffer split).
+
+### Battle log moved to the upper-left
+
+The in-battle notification panel (`.battle-log` in BattleHUD) no longer floats front-and-center
+over the action: `.hud-middle` now aligns flex-start with left padding, the log caps at 40%
+width, and its text is left-aligned. New probe: `cr_ui_screenshot` captures the real backbuffer
+(UI Toolkit overlays included) to `Temp/ui_shot.png` — pipeline `screenshot`/`capture_game_view`
+render cameras only and miss UITK.
+
+### Fixed: overworld menu hotkeys were completely dead (I / Escape / Start did nothing)
+
+Three stacked causes, found by probing the live input chain headlessly:
+1. The scene's `PlayerMenuWindow.inputActionsAsset` pointed at **Malbers Inputs** — an asset that
+   has a `UI` action map (so init "succeeded") but no `ToggleMenu` action, leaving the handler
+   silently unsubscribed.
+2. The code fallback loaded `InputSystem_Actions` — a **legacy near-duplicate** of the live
+   `CR_GameInput` asset that the input gate, movement, and NPC interaction actually use.
+3. The earlier "Escape toggles the menu" rebind had been authored into that stale duplicate, so
+   the live asset still carried the old `CloseMenu ← Escape` binding.
+
+Fixes: the scene reference now points at `CR_GameInput` (saved via the editor pipeline);
+`PlayerMenuWindow.ResolveInputActions()` binds from the first asset that actually contains
+`UI/ToggleMenu` (serialized → CR_GameInput → InputSystem_Actions) and logs an error on a bad scene
+reference instead of failing silently; Escape moved to `ToggleMenu` in `CR_GameInput` (`CloseMenu`
+now unbound); freshly bound actions are disabled outside `UIContext.Overworld` so the hotkey is not
+live on the main menu. New headless probes: `cr_ui_input_dump` (context/asset/action/map/device
+state) and `cr_ui_press_key` (synthesizes real keyboard input). Verified live: I opens, Escape
+closes in the overworld; nothing fires on the main menu. EditMode 103/103 green.
+
+## 2026-07-31
+
+### Fixed: wild-battle loot never actually dropped (and combat XP under-counted)
+
+Live verification of the loot display exposed a backend ordering bug: on a wild win,
+battle-end cleanup soft-deletes the uncaptured wild creature **before** the loot roll, and the
+roll's `GetCreature` (filtered `deleted = false`) came back null — loot silently skipped on every
+real wild victory (`[Battle] Skipping loot roll — could not resolve creature content_key`). The
+combat-XP path had the same latent read: `defeated?.Level ?? 1` degraded every battle-ending KO
+to level 1. `BattleDomainService` now loads the defeated creature once before the battle-end
+branches and passes it to both `AwardBattleExperienceAsync` and `RollAndGrantBattleLootAsync`.
+Unit tests missed this because mocks returned the creature regardless of deletion; a new
+regression test uses a stateful mock (GetCreature → null after DeleteCreature). Verified live
+headlessly: `LOOT [Currency] qty=11` and the VICTORY screen's **ITEMS RECEIVED — Currency +11**.
+The smoke harness also gained a 4s summary hold + `ScreenCapture` backbuffer screenshot
+(`Temp/smoke_summary.png`) because pipeline screenshot commands render cameras only and miss
+UI Toolkit overlays, and its turn budget rose to 15 so wins are reachable.
+
+### Battle loot is now visible: ITEMS RECEIVED shows currency + item drops
+
+The backend already rolled and granted loot on wild-battle wins (currency and items — cindris
+drops 10–30 currency, the starter zone adds a 40% heal-potion / 70% currency roll); the summary
+screen just never showed it. Now the sequencer raises a new `BattleEvents.LootAwarded` per grant
+from the battle-ending outcome's `LootAwards` (aftermath beat), and `BattleSummaryScreen` renders
+them: a summed **Currency +N** row first, then items alphabetically with ×quantity, content keys
+humanized ("item_heal_potion_30" → "Heal Potion 30"). Aggregation/formatting is pure
+`LootSummaryFormat` (`CR.Game.Battle.Logic`) with 13 new test cases. The smoke harness now logs
+`LOOT [...]` lines and fights to a win (15-turn budget) so drops are verifiable headlessly.
+Note: loot events ride `BattleEvents` directly (like the creature presenters) rather than a new
+SO event channel — the channel manifest/codegen step is Editor-authored and can be added later.
+
+## 2026-07-30 (later still)
+
+### Player-configurable Combat Speed + wider battle framing
+
+Combat pacing is now a player setting: pause menu **System ▸ Combat Speed** (Fast 0.75× /
+Normal 1× / Relaxed 1.4×) persists `battle_pacing_scale`, which `BattlePresentationSequencer`
+applies to every beat duration at battle start (clamped 0.5–2.5; the System card's first
+functional setting). Verified live via the smoke harness: turn-to-turn gap stretched 2.3s → 3.1s
+at Relaxed. Automation hook: `cr_set_combat_speed --scale <x>`. The battle camera also pulls
+back: `BattleCameraProfile.fovWidenMultiplier` (default 1.15) widens all rig vcams on battle
+enter and restores the authored lenses on exit.
+
+## 2026-07-30 (later)
+
+### Battle FX verified end-to-end for both sides — by a self-driving smoke test
+
+New pipeline-CLI harness (`cr_battle_fx_smoke_start`/`_status` + `cr_world_dump`,
+`BattleFxSmokeRunner`) plays the game like a human: clicks through the startup menu (Continue →
+character select), starts a real wild encounter through the spawner's own path, auto-plays two
+ability turns, flees/acknowledges the summary, and reports per-side FX verdicts. Final run:
+**player Scratch impact spawns at the opponent; wild Fire Blast plays the full staged chain**
+(cast SFX+VFX at caster → travel VFX across the arena → impact SFX+VFX at the target on arrival),
+zero load warnings. En route it exposed and fixed three real bugs: `BattleCoordinator` raised
+`PlayerTurnStarted` before creating the action-wait source (programmatic submits hung the turn);
+battle-path `TaskCompletionSource`s lacked `RunContinuationsAsynchronously` (coroutine completions
+resumed the round loop inline); and **persistent HP had the whole roster at 0** from prior
+playtests, making every battle an instant Loss (save healed; keep a heal flow in mind for real
+players). Also surfaced: in online mode content sync mirrors the server, so ability FX must be
+**published** to appear online — offline seeds alone aren't enough (Fire Blast got placeholder
+fire FX published + seeded). Follow-up to investigate: the player creature dropped out of the
+visual registry on turn 2 (`caster=NOT IN REGISTRY`) — FX fell back to captured position, worth a
+look alongside faint/recall handling.
+
+## 2026-07-30
+
+### Content loop is now fully headless (Unity Pipeline CLI)
+
+`com.unity.pipeline` (0.4.0-exp.1) + Unity CLI beta.3 drive the open Editor from the shell:
+compile (`recompile`), tests (`run_tests` — 91/91 EditMode green headlessly), console reads, and
+now CR's own tooling via `[CliCommand]`s in `CrPipelineCommands`: `cr_fx_seed_status`,
+`cr_export_fx_seeds`, `cr_rebake_floor`. The rebake exposed two real bugs, both fixed: the temp
+output directory was never created (SQLite "unable to open database file" — also latent in the
+menu variant), and spawning `dotnet` from the Editor inherits Unity's `DYLD_*`/`DOTNET_*`/
+`MSBuild*` environment, which must be stripped. Verified end-to-end: status → export → rebake →
+floor at schema 9997 with authored FX intact.
+
+## 2026-07-21
+
+### Enemy FX weren't playing: stale floor seed (+ Publish now warns about it)
+
+Authored Scratch FX (`fx/clawslash-circus`) existed on the AbilityConfig but never reached the
+offline floor — the seed migration hadn't been re-exported after the authoring session, so enemy
+Scratch raised cues with empty keys. Regenerated `M9997SyncAuthoredAbilityFx` from the current
+assets (Ember, Hydro Pump, **Scratch** now carry FX) and rebaked the floor. To stop this drift
+from recurring silently, **Publish now includes an "Offline floor seed" step**: it compares the
+generator's output against the exported migration and warns (non-blocking) when an export +
+rebake is needed.
+
+### FX picker: Piloto Studio pack + adopt-on-use into the content folder
+
+The Piloto Studio pack (19 prefabs incl. the Claw Slashes set) was invisible to the Workbench FX
+picker — scan roots are a hardcoded list and didn't include `Assets/Piloto Studio`. Added. Beyond
+that, effects are now **adopted on use**: picking (or drag-and-dropping — Publish catches those)
+an asset from any pack copies it into `Assets/CR/Content/Effects` (audio under `Effects/Audio`),
+stamps the copy with its source GUID for idempotent reuse, claims byte-identical pre-existing
+hand-copies instead of duplicating, and assigns + registers the addressable against the CR-owned
+copy. Content no longer references third-party folders directly. Rules live in pure
+`FxAdoptionRule` with 10 new EditMode tests.
+
+## 2026-07-19
+
+### In-Editor floor rebake + FX seed migration export
+
+Two new menu items close the content-authoring loop without a terminal.
+**CR → Content → Export Ability FX Seed Migration** snapshots every AbilityConfig's presentation
+values (animation/camera/FX keys — auto-derived from AssetReferences when blank — plus FX
+lifecycle) into cr-api's `M9997SyncAuthoredAbilityFx`, regenerated in place with stable ordering
+by the pure, unit-tested `AbilityFxSeedMigrationGenerator` (7 new tests). The export is
+authoritative and the dialog offers a chained floor rebake.
+**CR → Content → Rebake Offline Floor** runs the cr-api Migrations.Tool in the background
+(cancelable progress bar, no main-thread stalls), copies the fresh `game-data.bytes` into
+StreamingAssets, and reports the schema version; **Full Package Rebuild** shells the whole
+`build-packages.sh` for when cr-api C# changed. The initial `M9997` (all 16 abilities) ships with
+this change — floor is at schema **9997** — and it compiles warning-free and passes the full
+migration test suite on both engines.
+
+### Ability FX stages now sequence and auto-stop
+
+Previously all three ability effects (cast, projectile, impact) spawned **simultaneously** and were
+hard-destroyed after a flat 4 seconds — impact appeared while the projectile was still flying, and
+looping effects lingered. The responder now plays stages in order (impact waits for projectile
+arrival, impact SFX at the moment of arrival) and, per new ability-level config, **stops each stage
+shortly after the next one starts**: `fx_auto_stop` + `fx_stop_delay_ms` columns (M9996, defaults
+on/50ms) flow ability → battle outcome → `AbilityFxCue`; stopping cuts particle emission so live
+particles fade instead of popping, with the 4s lifetime kept as a safety net. Authored in the
+AbilityConfig **Advanced ▸ FX lifecycle** section and carried through publish (workbench + runtime
+sync clients) and the offline cache sync. Stage sequencing rules extracted into pure
+`AbilityFxStagePlan` (`CR.Game.Battle.Logic`) with 6 new EditMode tests. Along the way the runtime
+ability sync DTO was found to be dropping **all** FX keys on publish (would have nulled server FX
+columns) — fixed.
+
+### Pre-existing Postgres test breakage fixed (suite fully green)
+
+Four Postgres test projects had been failing for unrelated, pre-existing reasons; all fixed and
+`run-all-tests.sh` is green across all 29 projects. Root causes: test SQL still inserting the
+`asset_id` column dropped by M1021 (2 Spawner projects); a real product bug — unguarded
+`LOWER(id)` in `BaseGrowthProfileRepository.Get` crashing on Postgres `uuid` (engine-branched like
+its siblings); `GeneratedCreatureRepositoryTests` inserting `Guid.Empty` progression-set FKs
+(SQLite doesn't enforce FKs, Postgres does); and `BaseItemRepository.BuildParams` missing
+`captureModifier` — Postgres parsed the unbound `@captureModifier` as an operator + bogus column
+(the item upsert was also missing the value entirely, which would have crashed item content sync).
+Also fixed a ~5%-flaky capture test (`Times.Never` verify was counting invocations from earlier
+roll attempts).
+
+## 2026-07-18
+
+### Battle FX now reach the database (dedup + seeded FX keys)
+
+Ability sounds/visuals never played because the FX-key columns on `abilities` were `NULL`
+everywhere the battle actually reads: the `M9994` demo seed wrote explicit `NULL`s, the `M9990`
+authored seed carried no FX columns at all, and creatures' progression entries pointed at
+duplicate demo rows (a second Ember/Scratch under different ids). New migration
+`M9995DedupAbilitiesAndSeedAbilityFx`: canonical ability id = the Unity `AbilityConfig` asset id;
+all references (`ability_progression_set_entry`, `ability_status_conditions`,
+`generated_creature` slots) remapped onto canonical rows; duplicates soft-deleted; Ember's
+`fire_ember` animation key carried over; the bogus `creatures/crabby` hit-VFX on Scratch cleared;
+and the authored FX keys (Ember + Hydro Pump, the Ability Workbench starter set) seeded so the
+baked floor carries them. Floor rebaked to schema **9995** (clients re-adopt automatically).
+Covered by a new `AbilityDedupAndFxSeedTests` fixture running the full migration chain
+(`CR.Data.Migrations.Test`, SQLite + Postgres, 33 green). Docs: canonical-id section on
+[Battle Persistence](?page=backend/09-battle-persistence); the Ability Workbench
+"Remember the floor" section now states the real rule — published FX keys must be copied into a
+seed migration to survive a rebake. Remaining 14 abilities still need FX authored in the
+Workbench.
+
+## 2026-07-08
+
+### Standalone build readiness (macOS + Windows)
+
+Desktop builds unblocked. `build-packages.sh` now always bundles **both** SQLite natives
+(`libe_sqlite3.dylib` osx-arm64 + `e_sqlite3.dll` win-x64) into the Unity package — previously it
+shipped only the primary architecture, which would have crashed a Windows build on first DB open.
+New **CR → Build → Create Standalone Build Profiles** menu (`BuildProfileSetupTool.cs`) creates
+`CR_Game_macOS` / `CR_Game_Windows` profiles via the internal Unity 6 factory (reflection);
+Addressables switched to build content with the player. New [Standalone Builds](?page=unity/21-standalone-builds)
+page covers profiles, natives, the offline data floor, and known limits (Mono-only Windows
+cross-build, arm64-only mac native). Follow-up: the package no longer ships `Newtonsoft.Json.dll` —
+the vanilla copy shadowed Unity's AOT-patched `com.unity.nuget.newtonsoft-json` on build-target
+switch, breaking `com.unity.services.core` editor compilation (`AotHelper` CS0103); CR DLLs bind
+to Unity's copy. Also added a Linux x64 profile (`CR_Game_Linux_SteamDeck`) and `libe_sqlite3.so`
+to the bundled natives for Steam Deck.
+
+### Addressables now bake into builds (shipped builds had none)
+
+The profile's `Local.BuildPath`/`Local.LoadPath` had been repurposed for the MinIO dev workflow
+(build to `ServerData/`, load from `http://localhost:9000/…StandaloneOSX`), so distributed builds
+contained zero addressable content and streamed everything from the tester's own localhost.
+Restored true local paths (all groups bake into the player), pointed `Default Local Group` at
+them too, and fixed `Remote.LoadPath` to use `[BuildTarget]`. Live-update path (baked floor +
+streamed deltas via remote catalog + content-update builds) documented on the
+[Standalone Builds](?page=unity/21-standalone-builds) page.
+
+### Captured creatures join the team when there's room
+
+Capture placement was hard-wired to storage — a comment claimed `AddToStorageAsync` handled
+team-if-space internally, but it never touched the team. New
+`ICreatureInventoryService.AddToTeamOrStorageAsync` places the catch on the team when a slot is
+free (next free slot, capacity 6) and falls back to storage; `InventoryAddResult.AddedToTeam`
+reports the destination. Both capture paths (online `CaptureCreatureHandler`, offline
+`OfflineItemUseService`) now use it, so behavior is identical either way. Covered by 3 new
+placement tests + updated handler tests (385 green in `CR.Game.Domain.Services.Test`).
+
+### Battle FX pipeline debug logging
+
+`BattleAbilityFxResponder` logs the resolved cue (keys + registry hits) and every spawn/load
+result; `BattleEventDebugLogger` subscribes to `AbilityFx`; `BattleStager` logs the registry id
+each visual registers under. One battle run in the console now pinpoints which link of the
+ability-FX chain (cue → keys → registry → Addressables load) is broken.
+
 ## 2026-07-07
 
 ### Test infrastructure repaired + suite fully green (979 tests, 29.2% line coverage)

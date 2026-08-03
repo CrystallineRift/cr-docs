@@ -86,13 +86,27 @@ Clears `container`, fetches `GetTeamAsync(trainerId)`, and renders up to 6 creat
 
 | Action | Effect |
 |--------|--------|
-| `ToggleMenu` | Opens/closes the menu |
-| `CloseMenu` | Closes when visible |
+| `ToggleMenu` | Opens/closes the menu — bound to `I`, `Escape`, and Gamepad `Start` |
+| `CloseMenu` | Closes when visible (currently unbound; Escape toggles instead) |
 | `NavigateTabsLeft` | Previous tab (wraps) |
 | `NavigateTabsRight` | Next tab (wraps) |
 | `Confirm` | Reserved for future use |
 
-Input is enabled/disabled by `UICoordinator` via `IContextAwareScreen.OnContextChanged`. The menu only becomes interactive in `UIContext.Overworld`.
+**The live input asset is `Resources/CR_GameInput.inputactions`** — the same asset `PlayerInputGate`,
+`TrainerMovementController`, and `NpcInteractionBehaviour` use. `Resources/InputSystem_Actions.inputactions`
+is a legacy near-duplicate; do not author new bindings there. `PlayerMenuWindow.ResolveInputActions()`
+does not trust the serialized scene reference blindly: it binds from the first asset that actually
+contains a `UI/ToggleMenu` action (serialized → `CR_GameInput` → `InputSystem_Actions`) and logs an
+error if the scene points at the wrong asset. (A scene mis-wire to `Malbers Inputs` — which has a
+`UI` map but no `ToggleMenu` — previously left the menu silently dead in the overworld.)
+
+Input is enabled/disabled by `UICoordinator` via `IContextAwareScreen.OnContextChanged`. The menu only
+becomes interactive in `UIContext.Overworld`; `ResolveInputActions` also disables the freshly bound
+actions when the current context is not Overworld, so the hotkey is never live on the main menu.
+
+Headless diagnostics (play mode, Unity CLI): `cr_ui_input_dump` reports the coordinator context, the
+resolved asset, action/map enabled state, bindings, devices, and EventSystem module; `cr_ui_press_key
+--key I` synthesizes a real keyboard press through the Input System to exercise the whole chain.
 
 ## Notes
 

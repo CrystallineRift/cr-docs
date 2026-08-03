@@ -4,7 +4,7 @@ This page documents the capture crystal system for wild creatures in battles.
 
 ## Overview
 
-Capture crystals are special items used during wild battles to catch wild creatures. When used, the crystal has a chance to permanently add the wild creature to the trainer's storage.
+Capture crystals are special items used during wild battles to catch wild creatures. When used, the crystal has a chance to permanently catch the wild creature — it joins the trainer's team when a slot is free, otherwise it goes to storage.
 
 ### Capture Levels
 
@@ -80,7 +80,11 @@ Items with `effect_type = 11` (CaptureCreature) use this modifier.
    - Loads wild creature's current HP from battle state
    - Calculates capture chance using the formula above
    - Rolls against the chance
-   - On success: reassigns creature ownership, adds to trainer storage
+   - On success: reassigns creature ownership, then places it via
+     `ICreatureInventoryService.AddToTeamOrStorageAsync` — team if a slot is free
+     (next free slot, max 6), storage otherwise. `InventoryAddResult.AddedToTeam`
+     reports where it went. The offline mirror (`OfflineItemUseService`) uses the
+     same method, so online and offline placement behave identically.
 
 ### REST Endpoint
 

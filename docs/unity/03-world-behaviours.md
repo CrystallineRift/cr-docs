@@ -60,6 +60,31 @@ The composable pattern separates these concerns into independent `INpcSubInitial
 
 If initialization time becomes a concern (many NPCs in a large scene), the loop can be changed to run behaviours in priority buckets — but sequential is the safe default.
 
+### Measured cost (2026-08-03)
+
+This was measured rather than left to intuition. `GameInitializer` retains the last run's
+per-item timings (`LastRunTimings` / `LastRunTotalMs`), read back with the `cr_worldinit_report`
+pipeline command — its own Debug lines scroll out of the 100-line console buffer before a load
+finishes, so they can't be read after the fact.
+
+Three runs, 8 initializables, steady state **≈290ms** total (≈336ms on a cold first run):
+`TrainerWorldBehaviour` ≈40% (106–140ms), `QuestWorldBehaviour` ≈17%, `NpcWorldBehaviour`
+(merchant) ≈15%, `SpawnerDefinitionSyncBehaviour` ≈14%, `TeamSync` 20ms, `InventorySync` 13ms,
+`NpcWorldBehaviour` (quest giver) ≈4ms, `SpawnerWorldBehaviour` ≈3ms.
+
+Perfect parallelism would save at most ~170ms; respecting the real dependencies it is ~125ms, on a
+one-time load already covered by a fade. **That does not justify the priority-bucket redesign** —
+keep the loop sequential.
+
+Two things the numbers do argue for, if load time ever matters:
+
+- `TrainerWorldBehaviour` is ~40% of world init by itself. Optimizing or deferring that one item
+  beats parallelizing the other seven.
+- **Per-NPC cost is linear in NPC count.** The merchant costs ~40ms against the quest giver's
+  ~4ms; the gap is `NpcMerchantBehaviour` calling `StockFromSpawnerAsync` on every world load.
+  Invisible with two NPCs, but twenty merchants would add roughly 800ms to every load — restocking
+  wants to become lazy (on first shop open) or interval-gated before the world fills out.
+
 ## Component Overview
 
 | Type | Role |

@@ -48,9 +48,18 @@ Inactive/deleted pools and templates, and zero-weight pools, are excluded.
 
 `NpcMerchantService.StockFromSpawnerAsync(accountId, trainerId, npcId, spawnerContentKey, force)`:
 
-1. Honors the spawner cooldown — if `force` is false and `restock_cooldown_seconds` has not
-   elapsed since the inventory was last updated, the call is a no-op.
-2. Rolls the spawner, **clears** the merchant's `npc_inventory`, and inserts the rolled items.
+1. Stocks unconditionally when the merchant is **empty** (first time its zone loads).
+2. Otherwise honors the spawner cooldown. **`restock_cooldown_seconds = 0` means "never
+   auto-restock"**, not "restock every time" — a merchant that already has stock is left alone
+   unless its cooldown is both defined and elapsed. `force: true` always re-rolls.
+3. When a restock is due: rolls the spawner, **clears** the merchant's `npc_inventory`, and
+   inserts the rolled items.
+
+> The zero-cooldown rule matters because step 3 runs from `NpcMerchantBehaviour` on **every**
+> world load. Before this rule, the seeded `starting-merchant-items` spawner (cooldown 0) made
+> every merchant clear and re-roll its full inventory on every load — a serial write loop per
+> merchant, linear in merchant count, and a reload-to-reroll exploit on shop contents. Fixing it
+> halved merchant world-init cost (~40ms → ~19ms).
 
 A merchant is linked to a spawner via the Unity `NpcDefinition.itemSpawnerContentKey`
 (authored on Merchant-type NPCs); the link is passed to the stock call rather than persisted
@@ -59,6 +68,8 @@ on the NPC row.
 At runtime, `NpcMerchantBehaviour` (a composable `INpcSubInitializable`) calls
 `StockFromSpawnerAsync` on world-init using its serialized `itemSpawnerContentKey`, so a
 merchant fills its stock the first time its zone loads (and re-rolls once the cooldown elapses).
+Because this is per-merchant per-load work, it scales linearly with merchant count — keep an eye
+on it as the world fills out.
 
 ## REST
 

@@ -208,5 +208,10 @@
     "section": "Unity",
     "title": "Ability Workbench",
     "path": "unity/20-ability-workbench"
+  },
+  {
+    "section": "Unity",
+    "title": "Standalone Builds (macOS + Windows)",
+    "path": "unity/21-standalone-builds"
   }
 ]

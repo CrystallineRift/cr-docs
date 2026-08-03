@@ -17,7 +17,11 @@ Battle-victory loot lets a defeated creature yield items, currency, and trainer 
 
 `BattleDomainService` resolves loot on knockout/victory:
 
-1. Resolve the defeated creature's `content_key`; load its creature loot table.
+1. Load the defeated creature **before** battle-end cleanup runs — cleanup soft-deletes an
+   uncaptured wild creature, after which `GetCreature` (which filters `deleted = false`) can no
+   longer see it. The pre-loaded creature feeds both the loot roll's `content_key` resolution and
+   the combat-XP level lookup (previously both read after the delete: loot silently skipped and
+   XP degraded to level 1 on every wild win).
 2. Use the battle's `spawner_content_key` (added by `M8016`, threaded through `StartBattleAsync(..., string? spawnerContentKey, ...)`) to load the spawner loot table.
 3. Roll the unioned entries, grant each via `IRewardGrantService`, and attach the resolved drops as `LootAward[]` on the `BattleOutcome`.
 
