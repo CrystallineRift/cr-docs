@@ -1,5 +1,258 @@
 # Changelog
 
+## 2026-08-05 — fixed: main menu ignored the gamepad; interact moved to X
+
+**The main menu.** Not an input-wiring fault, despite appearances. Measured live: `bindingMask=null`,
+`UI/Submit` resolving to `[/Keyboard/enter, /XboxGamepadMacOSWireless/buttonSouth]`, `UI/Navigate`
+carrying both sticks and the d-pad, the input module enabled, and focus correctly set on `continue`
+at boot. Everything the input layer owns was already right.
+
+**The actual cause was one attribute in `MainMenu.uxml`:** the layout container carried
+`focusable="true"`, which put a plain `VisualElement` in the navigation ring alongside the five
+buttons:
+
+```
+VisualElement:"VisualElement" tabIdx=0   ← focusable, but not a control
+Button:"btnQuit" | Button:"btnOptions" | Button:"play-offline" | Button:"play-online" | Button:"continue"
+```
+
+Pressing down moved focus onto that wrapper. It has no `:focus` style, no visible content, and
+Submit does nothing on it — so the menu highlighted correctly on open, went blank on the first
+d-pad press, and worked fine if you pressed A *before* moving. That matches the reported behaviour
+exactly.
+
+Fixed to `focusable="false"`, plus a guard in `MainMenuController` that clears `focusable` from any
+non-`Button` in the tree, so re-adding it in the UI Builder cannot break controller navigation
+again. Verified: `continue → play-online → play-offline`, and the focusable set is now only the five
+buttons.
+
+The rest of this entry describes two real but *separate* defects found while chasing the above.
+Neither was the reported symptom — recorded because both were reproduced and fixed.
+
+**A hidden screen could hold focus.** Every CR `UIDocument` shares one
+`PanelSettings` and therefore one focus controller, and hiding a screen (`display: none`) does not
+release the focus it holds. Traced live from the focused element up:
+
+```
+Button("") ← VisualElement ← ScrollView("character-select-list")
+   ← VisualElement("character-select-root")
+   ← UIDocumentRootElement("Character Select-container") ← PanelRootElement("Panel Settings")
+```
+
+Focus was inside **Character Select** while the **Main Menu** was the visible screen. The stick
+dutifully navigated buttons nobody could see, and Submit fired a hidden screen's handler. Focus was
+never null, so a null-check would have called this healthy.
+
+Focus is also set only once, in `Show()`, and UI Toolkit never restores it — proven separately:
+blurring gave `before=continue afterBlur=NULL` with nothing putting it back, so a click on the menu
+background strands it too.
+
+The obvious fix does not work, and this is worth recording. Catching `NavigationMoveEvent` to
+re-anchor fails because the focus controller handles navigation internally, below the event
+callbacks, and reclaims focus regardless of `StopPropagation` — measured as focus landing on the
+panel's own root element instead of the button. It is the same shape as `Button`'s default action,
+which `StopPropagation` also cannot suppress (see the entry below).
+
+So `UiFocusRecovery` reacts to focus *changes* instead, and asks the right question: not "is anything
+focused" but "is the focused thing something the player can actually see". It walks the focused
+element's ancestors for `display: none`, and re-focuses the visible screen's first button a frame
+later. Verified end-to-end: focus stolen by hidden Character Select → next frame →
+`RECOVERED -> MainMenu:continue (Button)`.
+
+The policy is pure and tested (`FocusRecoveryPolicy`): never steal focus from a *visible* element,
+and never restore from a hidden screen.
+
+**The menu also had no `:focus` style at all** — only `:hover` and `:active` — so even correct focus
+was invisible, which reads as a dead menu on a controller. `BattleHUD.uss` has had `:focus` styling
+throughout, which is why the battle menu always felt navigable by comparison. Added to
+`main-menu.uss`.
+
+**Interact moved to X.** `Player/Interact` was on `<Gamepad>/buttonNorth` (Y on an Xbox pad); it is
+now `<Gamepad>/buttonWest` (X). Keyboard stays `E`. Verified live:
+`Interact controls=[/Keyboard/e /XboxGamepadMacOSWireless/buttonWest]`.
+
+The NPC badge hardcoded `"E"`, which is wrong the moment a controller is in hand, so it now follows
+whichever device the player last touched — `X` on a gamepad, `E` on the keyboard — via the tested
+`InteractionGlyphPolicy`.
+
+Note: `buttonWest` is also bound to `Player/Attack`. Nothing in CR reads that action (the `Attack`
+hits in the codebase are `BattleHUD.Mode.Attack` and creature stat labels), so it is left alone — but
+if Malbers ever consumes it, the two will collide on the same button.
+
+## 2026-08-05 — added: game audio layer over Master Audio
+
+CR had no audio system at all — no music, no ambience, no menu sound, and no mixer. The battle FX
+slots (`AbilityConfig.useSfx`/`hitSfx`/`missSfx`, `StatusConditionConfig`, `CreatureReaction.sounds`)
+existed but had nothing behind them.
+
+Added `IGameAudio` as the single audio surface, with **Master Audio** (Dark Tonic) behind it. The
+vendor's API is entirely static, so calling it directly from the battle presenters would have welded
+a third-party package into code that needs to stay constructible in headless tests. `NullGameAudio`
+takes over when the package is absent and warns once — a silently-swallowing audio service is
+indistinguishable from working audio playing nothing.
+
+Wired two things end-to-end:
+
+- **Per-area music and ambience** via `AreaAudio`, the audio counterpart to `AreaEnvironment`.
+  `MusicTransitionResolver` decides keep / change / stop. The rule that matters is *same track keeps
+  playing* — two areas are alive at once during a door transition, so without it, crossing between
+  two areas that share a theme restarts the track every time.
+- **Battle menu sound**, through a new `BattleHUD.OnPressed(button, sound, action)` helper that wires
+  the action and its sound together, still using `clicked` for the reason below.
+
+Pure logic lives in `CR.Core.Audio.Logic` (no engine references) and is covered by 16 unit tests.
+
+Imported Master Audio 2022, Endless Cave Ambience and Fantasy Interface Sounds. Master Audio needed
+one patch to compile under Unity 6: `PlaySoundResult.cs` shipped `[SerializeField]` on a class
+declaration, which is now `error CS0592`. **Re-apply after any reimport.**
+
+Content authoring is now scripted too, via `cr_setup_audio` and `cr_wire_area_audio` (both also on
+the **CR → Audio** menu, both idempotent). They create the MasterAudio prefab, the four buses, and
+starter Sound Groups — `ui_confirm`, `ui_back`, `amb_cave`, `amb_meadow` — then attach `AreaAudio` to
+Meadow and Cave. Scripted rather than clicked because this configuration lives in scenes, and scenes
+get regenerated.
+
+`musicKey` is empty on both areas, which means *inherit*: the imported packs are ambience and
+interface sound, so there is no music to point at yet.
+
+A second vendor package needed the same Unity 6 patch as Master Audio — Dynamic Village Ambience's
+`AmbienceMixer.cs` had `[SerializeField]` on an abstract property. Both patches are listed in
+[Game Audio](unity/23-game-audio.md) and must be re-applied after a reimport.
+
+## 2026-08-05 — fixed: gamepad A did not activate the battle menu
+
+The binding was never at fault. `UI/Submit` is bound to `*/{Submit}` in every control-scheme group,
+and a gamepad's south button carries the Submit usage — so an earlier fix that blamed the
+InputSystem binding mask was treating the wrong layer.
+
+The battle menu's buttons were wired like this:
+
+```csharp
+_attackBtn?.RegisterCallback<ClickEvent>(_ => EnterAttack());
+```
+
+A UI Toolkit `Button` handles `NavigationSubmitEvent` by invoking **`clicked`**. It never
+synthesises a `ClickEvent`. So a `ClickEvent` handler fires for the mouse and is silently skipped
+for gamepad A and keyboard Submit — no error, no warning. That is exactly the reported symptom: the
+stick moved focus around the menu, and nothing ever activated.
+
+The tell was already in the same codebase. The bag rows and party slots register **both**
+`ClickEvent` and `NavigationSubmitEvent`, and `BattleSummaryScreen`'s OK button uses `clicked +=` —
+those always worked. Only `BattleHUD`'s attack / bag / swap / run and back buttons had the gap.
+
+Attack / bag / swap / run and the three back buttons now use `clicked`, which covers mouse,
+keyboard and gamepad in one path.
+
+The audit turned up the inverse bug next door. `BattleHUD.Activate(Button, Action)` registered
+`clicked` **and** an explicit `NavigationSubmitEvent` handler, so gamepad A on an ability row ran
+the action **twice** — `StopPropagation` halts propagation but does not suppress a Button's default
+action, which had already invoked `clicked`. The explicit handler is gone.
+
+Rule of thumb: on a `Button`, use `clicked` alone. On a plain `VisualElement` used as a button, set
+`focusable = true` and register both events (see `PlayerTeamView.MakeActivatable`).
+
+## 2026-08-04 — fixed: the trainer was not staged behind its creature in battle
+
+The arena wiring was never at fault. The anchors are all assigned and laid out along one axis —
+opponent trainer −9, opponent creature −4.5, camera 0, player creature +4.5, player trainer +9 — so
+the trainer's mark is correctly behind its creature.
+
+`BattleStager` moved the trainer there by writing the transform directly:
+
+```csharp
+_playerTrainerTransform.SetPositionAndRotation(arena.PlayerTrainerPosition.position, ...);
+```
+
+Malbers derives movement each frame from the delta between the current position and its own
+`LastPosition`. An unannounced jump reads as one enormous frame of travel, and its grounding and
+platform correction immediately undoes it. Measured live, sampling the trainer's position every
+100ms through a battle:
+
+```
+06:31:23.198  trainer=(9.00, 0.00, -100.00)   ← teleport applied
+06:31:23.299  trainer=(1.33, 0.00,   -1.27)   ← dragged back ~100ms later
+```
+
+Malbers ships `Teleport`/`TeleportRot` for exactly this: they re-seat `LastPosition`, reset any
+platform the animal was standing on, and raise a `JustTeleported` flag that suppresses the
+corrections for a moment.
+
+The fix routes staging through the movement abstraction rather than poking the transform:
+
+- **`IMovementController.Teleport(position, rotation)`** — new, and documented as the required path
+  for any repositioning (battle staging, spawn placement, fast travel).
+- **`MalbersMovementController`** implements it via `animal.Rotation` + `animal.Teleport`, then
+  syncs the Rigidbody pose and zeroes velocity. That last part matters because the trainer's body is
+  interpolated (from the head-jitter fix), and an interpolated body renders from its *previous*
+  pose — so without the sync a teleport visibly slides in from the old location.
+- **`BattleStager`** uses it for both the teleport and the restore-after-battle, keeping a plain
+  transform write as fallback when no controller exists yet, and now **warns** if the trainer does
+  not land within 0.5m of the anchor. This failed silently before.
+
+Verified by A/B on the same battle: with the legacy path the trainer snaps back within ~100ms; with
+the fix it holds at (9, ~0, −100) for the battle and restores to the overworld on exit.
+
+**Rule worth keeping:** never reposition a character driven by a movement system by writing its
+transform. The system tracks the previous pose to derive velocity and ground state, and will
+correct against the jump.
+
+## 2026-08-03 — fixed: gamepad A did nothing in battle, and the battle team showed only one creature
+
+Two separate reports from the same battle, with two unrelated causes.
+
+### The team went missing because one item row would not deserialize
+
+The swap list and party slots read `BattleBagPanelHandler.Party`. Measured live mid-battle:
+`TeamSync` held all 6 creatures while the bag handler's party held 0 — and its item list was
+empty too, which is the signature of its `try` block failing.
+
+The failure came from the item catalog read:
+
+```
+InvalidCastException → DataException: Error parsing column 16 (CaptureModifier=1 - Int64)
+ItemDomainService: Error retrieving base items with offset: 0, limit: 500
+```
+
+SQLite assigns a storage class **per value**, not per column, and `capture_modifier` is declared
+`NUMERIC` (what FluentMigrator's `AsFloat()` emits). So a modifier authored as `1` is stored as
+INTEGER while `1.5` is stored as REAL. Dapper's deserializer for the C# `float` property cannot
+unbox an `Int64`, and the whole read throws. Reading the catalog now casts:
+`CAST(capture_modifier AS REAL) as CaptureModifier`, which is valid on SQLite and Postgres alike
+and fixes every item read path at once.
+
+This surfaced only recently because the bag previously looked up **just the items in the player's
+backpack**; switching to a single catalog fetch (a performance fix) meant it now read *every* item,
+including the integer-stored ones.
+
+Second, independent defect: the party assignment sat as the **last line of the item try block**, so
+an item failure silently emptied the team as collateral damage. The party is now loaded before that
+block — it comes from `TeamSync` and needs no I/O — and the catch handles items only.
+
+### Gamepad A selected nothing because the gamepad was masked out of the UI
+
+`Submit` is bound to the `*/{Submit}` usage, and the controller does carry it
+(`buttonSouth: PrimaryAction, Submit`). But at runtime the action resolved to exactly one control:
+
+```
+assetBindingMask=[Keyboard&Mouse]   assetDevices=Keyboard/Mouse
+SUBMIT controls: count=1 -> /Keyboard/enter
+```
+
+A `PlayerInput` component inherited from the Malbers demo player prefab activates a single control
+scheme, which sets `bindingMask`/`devices` on the **whole shared asset** — every map, including UI.
+The gamepad was filtered out of `Submit` everywhere. It looked half-broken rather than fully broken
+because `Navigate` also has keyboard bindings, so the menus still appeared to respond.
+
+CR never reads `PlayerInput` — movement goes through `TrainerMovementController` →
+`MalbersMovementController` and the UI through `InputSystemUIInputModule`, both reading the actions
+directly. `PlayerInputGate` now disables any `PlayerInput` bound to the CR asset and clears the
+mask, so keyboard and gamepad drive the game simultaneously. Verified live: `Submit` then resolves
+both `/Keyboard/enter` and `/…/buttonSouth`.
+
+**Rule worth keeping:** a `PlayerInput` control scheme masks the entire `InputActionAsset`, not just
+the map it cares about. In a single-player game whose UI must accept every device at once, don't let
+one ride along on the shared asset.
+
 ## 2026-08-03 — fixed: loading into combat could leave the screen white
 
 Reported symptom: entering a battle showed a white screen that faded in and never cleared.

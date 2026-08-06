@@ -710,7 +710,9 @@
         "Assets/CR/Core/Data/DapperBootstrap.cs",
         "Assets/MainMenuController.cs",
         "Assets/CR/UI/Resources/MainMenu.uxml",
-        "Assets/main-menu.uss"
+        "Assets/main-menu.uss",
+        "Assets/CR/UI/Common/UiFocusRecovery.cs",
+        "Assets/CR/UI/Logic/**"
       ]
     },
     "description": "Mode-gated account/startup: one device-bound account, boot-time EnsureLocalAccountAsync (mode-neutral) so an account always exists, mode-first menu (Continue/Play Online/Play Offline) via the existing MainMenuController (IUIScreen 'MainMenu'), connectivity-gated online entry via IConnectivityProbe (reuses version-check), no reconciliation between offline/online worlds, characters mode-locked via IsOnlineTrainer; supporting fixes: ByteArrayTypeHandler + M0008NormalizeEmptySalt for legacy salt rows, NpcMerchantService NotifyBackpackChanged post-commit so InventorySync refreshes"
@@ -742,5 +744,28 @@
       ]
     },
     "description": "Standalone desktop builds: Unity 6 build profiles (CR_Game_macOS / CR_Game_Windows, BuildProfileSetupTool reflection factory), per-platform e_sqlite3 natives bundled by build-packages.sh, Addressables built with player, game-data.bytes floor, Mono-only Windows cross-build"
+  },
+  "22-area-scenes": {
+    "docPath": "docs/unity/22-area-scenes.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [
+        "Assets/CR/Game/Areas/**",
+        "Assets/CR/Scenes/**"
+      ]
+    },
+    "description": "Core + additive area scenes, the area template, content prefabs, doors and async transitions"
+  },
+  "23-game-audio": {
+    "docPath": "docs/unity/23-game-audio.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [
+        "Assets/CR/Core/Audio/**",
+        "Assets/CR/Game/Areas/AreaAudio.cs",
+        "Assets/CR/UI/Battle/BattleHUD.cs"
+      ]
+    },
+    "description": "IGameAudio seam over Master Audio, mixer buses, per-area music/ambience with transition rules, menu sound keys, and the Unity 6 vendor patch"
   }
 }

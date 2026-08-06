@@ -211,7 +211,17 @@
   },
   {
     "section": "Unity",
-    "title": "Standalone Builds (macOS + Windows)",
+    "title": "Standalone Builds (macOS + Windows + Linux/Steam Deck)",
     "path": "unity/21-standalone-builds"
+  },
+  {
+    "section": "Unity",
+    "title": "Area Scenes, Templates and Transitions",
+    "path": "unity/22-area-scenes"
+  },
+  {
+    "section": "Unity",
+    "title": "Game Audio",
+    "path": "unity/23-game-audio"
   }
 ]

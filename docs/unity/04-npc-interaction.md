@@ -339,6 +339,28 @@ finally { _isInteracting = false; }
 - **SphereCollider radius too small.** The player must physically enter the sphere for `OnTriggerEnter` to fire. If the trigger radius is smaller than the player's collider, the player may walk through without triggering. Set `_interactionRadius` to at least 1.5f for standard NPC interactions.
 - **Missing `INpcSubInitializable` injection binding.** If `NpcDialogueBehaviour` (or any custom sub-behaviour) injects a service that is not bound in `LocalDevGameInstaller`, Zenject will throw at scene load. Always add the binding before adding the component to a scene object.
 
+## The interact button
+
+`Player/Interact` in `CR_GameInput.inputactions`:
+
+| Device | Binding |
+|---|---|
+| Keyboard | `E` |
+| Gamepad | `<Gamepad>/buttonWest` — **X** on an Xbox layout, Square on PlayStation |
+
+The badge `NpcInteractionIndicator` floats above an interactable NPC is **device-aware**: it shows
+`X` when a gamepad was the last device touched and `E` otherwise, so it always names a button that
+actually works. The choice lives in `InteractionGlyphPolicy` (pure, unit-tested); a connected
+gamepad wins ties, including at startup before any input has arrived.
+
+To change the binding, edit the action asset — do **not** hardcode a new letter in the indicator.
+
+:::caution
+`buttonWest` is also bound to `Player/Attack`. Nothing in CR reads that action today, so the two do
+not currently conflict, but anything that starts consuming `Attack` will collide with interaction on
+the same physical button.
+:::
+
 ## Related Pages
 
 - [World Behaviours](?page=unity/03-world-behaviours) — `INpcSubInitializable`, `NpcWorldBehaviour` identity pattern, composable component setup
