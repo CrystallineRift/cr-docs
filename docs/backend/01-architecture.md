@@ -21,6 +21,31 @@ Dapper was chosen because the game's data access patterns are highly specific (p
 
 FluentMigrator supports multiple database targets in a single migration class. CR's schemas use only ANSI SQL types (`TEXT`, `INTEGER`, `BOOLEAN`, `REAL`) so the same migration runs identically against both PostgreSQL and SQLite without engine-specific branches. This is the foundation that makes the dual-database approach viable.
 
+### Migrations are scoped to one domain
+
+Each `*.Data.Migration` project is its own **migration domain** with its own `VersionInfo`, and each
+can be run alone — `CreatureDatabaseMigratorPostgres().Migrate(...)` runs the Creatures domain and
+nothing else, which is exactly what the per-domain repository tests do.
+
+A seed migration that writes into **another domain's table** therefore has to tolerate that table not
+existing yet. Three Creatures-domain migrations (`M9999`, `M10001`, `M10002`) seed the world into
+`spawner`, `spawner_pool`, `creature_spawner_template`, `ability_progression_set` and
+`ability_progression_set_entry` — all owned by the Spawner domain — and crashed a Creatures-only run
+outright with `relation "ability_progression_set" does not exist`. They now guard the cross-domain
+block:
+
+```csharp
+if (!Schema.Table("ability_progression_set").Exists()) return;
+```
+
+That skip is deliberately silent, which is its own hazard: a silent skip in the *full* pipeline would
+empty the game world without failing anything. `WorldContentSeedSqliteTests` asserts after a full
+migration that all five area spawners exist, that no spawner has an empty pool, and that no
+progression set is without entries.
+
+Prefer keeping a seed in the domain that owns the table. Where content genuinely spans domains, guard
+it and pin the result with a test.
+
 Note: where the migration truly diverges (e.g., Postgres `gen_random_uuid()` defaults, or Postgres partial indexes), the migration uses a `bool isSqlite = ConnectionString.ToLower().Contains("data source")` guard and calls `Execute.Sql(...)` for engine-specific DDL. This keeps the FluentMigrator fluent API for schema structure and raw SQL only for truly divergent behaviour.
 
 ## Layer Diagram
@@ -176,7 +201,7 @@ All endpoint groups registered in `Program.cs` via `app.Map*Endpoints()`:
 | Endpoint class | Route prefix | Description |
 |----------------|-------------|-------------|
 | `NpcEndpoints` | `/api/v1/npcs` | NPC CRUD and team management |
-| `SpawnerEndpoints` | `/api/v1/spawners` | Spawner configuration and spawn trigger |
+| Inline in `Program.cs` | `/api/v1/spawners` | **Not** `MapSpawnerEndpoints` — AIO declares a hand-picked subset of spawner routes inline (see the caution below) |
 | `CreatureEndpoints` | `/api/v1/creatures` | Base creature and generated creature management |
 | `TrainerEndpoints` | `/api/v1/trainers` | Trainer profiles and inventory |
 | `AuthEndpoints` | `/api/v1/auth` | Account creation, login, token refresh |
@@ -193,6 +218,17 @@ All endpoint groups registered in `Program.cs` via `app.Map*Endpoints()`:
 | Inline in `Program.cs` | `/api/v1/stat-changes` | `GET` paginated list of non-deleted stat changes (`limit`, `offset`) |
 | `GrowthProfileEndpoints` | `/api/v1/growth-profiles` | `GET /` paginated list; `PUT /{id}` upsert |
 | Inline in `Program.cs` | `/api/v1/ability-progression/sets` | `GET` paginated list of progression sets with entries (for Unity bidirectional sync) |
+
+:::caution Inline routes drift from their endpoint class
+`SpawnerEndpoints.cs` defines a full route group, but AIO never calls `MapSpawnerEndpoints` — it
+declares its own subset inline. A route can therefore exist in the endpoint class and still 404
+against the local dev host. `GET /api/v1/spawners/content-registry` was missing exactly this way,
+which silently broke Content Studio's **Spawners → Pull**: spawners seeded by migrations existed as
+rows but could never become `SpawnerDefinition` assets in Unity.
+
+When you add a route to a hand-mapped group, add it in both places and check a running host
+(`curl localhost:8080/swagger/v1/swagger.json`) rather than the source.
+:::
 
 ## Key Repositories
 

@@ -29,7 +29,10 @@ const STALE_REPORT_FILE = path.join(SCRIPT_DIR, 'stale-report.json');
 
 const REPO_PATHS = {
   'cr-api': path.join(REPO_ROOT, 'cr-api'),
-  'cr-data': path.join(REPO_ROOT, 'cr-data'),
+  // The Unity clone is cr-api-unity; 'cr-data' is the historical key kept in doc-sources.json.
+  // Pointing this at a directory that does not exist made every cr-data glob match nothing, so
+  // staleness detection silently ignored the entire Unity project.
+  'cr-data': path.join(REPO_ROOT, 'cr-api-unity'),
 };
 
 // ---------------------------------------------------------------------------

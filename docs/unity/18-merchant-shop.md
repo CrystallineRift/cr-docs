@@ -69,13 +69,82 @@ The merchant's stock itself comes from its item spawner
      Hold interaction, or a tap of E never fires `performed`.
    - A trigger `SphereCollider` (added/configured automatically).
 
-## Offline stock source
+## Where stock lives: server online, local offline
 
-Offline play reads `item_spawner` config from the local game-data database.
-`M6014SeedStartingMerchantSpawner` seeds the `starting-merchant-items` spawner
-(spawner + pool + five templates, mirroring the `StartingMerchantItems` SO) the
-same way `M5009` seeds the starter creature spawner — without it, merchants
-stock nothing offline. An empty shop logs the two usual causes (missing
-`_itemSpawnerContentKey` on the NPC, or missing local spawner config).
+`INpcMerchantService` is bound to `NpcMerchantOnlineOfflineService`
+(`Assets/CR/Npcs/Runtime/Merchant/Logic/`), a router in front of the same `NpcMerchantService`
+the server runs. It samples `is_playing_online` **on every call** and routes:
 
-See also: [Trainer Currency](../backend/12-trainer-currency.md).
+| Mode    | Stock, prices, buy, sell, stock-from-spawner | Authoring ops (add/remove/set multiplier) |
+|---------|-----------------------------------------------|-------------------------------------------|
+| Online  | `NpcMerchantClientUnityHttp` → `/api/v1/merchants/*` on the **game** server address | `NotSupportedException` — the server owns stock; use Content Studio |
+| Offline | local `NpcMerchantService` over `playerData.bytes` | local |
+
+Online is **server-authoritative**: there is no local mirror of merchant stock and no fallback
+when the server fails. A shop that silently shows yesterday's local stock when the server is down
+is worse than one that says it is unavailable, so a failed server read closes the shop with a
+`WorldToast` ("The shop is unavailable right now.") rather than opening an empty one.
+
+Two details of the HTTP half:
+
+- The client uses `GameServerHttpAddress`, not `NpcServerHttpAddress` — that one carries a `/npc`
+  prefix and 404s every `/api/v1/merchants` route.
+- A refused purchase or sale comes back as **409 with a `PurchaseResult` body**. `SimpleWebClient`
+  used to collapse every non-2xx into a generic exception with only the status text; it now throws
+  `ConflictException` carrying the body, and the merchant client turns that back into a
+  `PurchaseResult { Success = false, ErrorMessage }` — which is what the shop shows the player.
+
+One new endpoint backs this: `GET /api/v1/merchants/{npcId}/multipliers` returns buy and sell
+multipliers in one call, so pricing the list is one round trip rather than one per row.
+
+## Stock refreshes on every world load
+
+`NpcMerchantBehaviour` passes `force: true` (`_refreshStockOnWorldLoad`, on by default): each time
+the world loads, the merchant's inventory is **cleared and re-rolled** from its spawner. The
+spawner's own `restock_cooldown_seconds` only governs mid-session restocks now.
+
+This is a deliberate trade. The earlier rule (cooldown 0 = never re-roll) closed a
+reload-to-reroll exploit but meant the shop was the first roll forever, draining to empty as the
+player bought — which is what "the merchant isn't being used" looked like in practice.
+
+## One merchant per area
+
+Each area's merchant is its own NPC with its own stock source. The prefab ships with **empty**
+content keys; `cr_polish_areas` stamps them from the area number via `AreaNpcKeys`:
+
+| Area   | NPC key                | Stock spawner                |
+|--------|------------------------|------------------------------|
+| Meadow | `demo-merchant-area-1` | `demo-merchant-area-1-items` |
+| Cave   | `demo-merchant-area-2` | `demo-merchant-area-2-items` |
+| Shore  | `demo-merchant-area-3` | `demo-merchant-area-3-items` |
+| Crags  | `demo-merchant-area-4` | `demo-merchant-area-4-items` |
+| Dunes  | `demo-merchant-area-5` | `demo-merchant-area-5-items` |
+
+Before this, every area instantiated the same prefab with `demo-merchant` baked in, so five bodies
+resolved to one `npcs` row and one `npc_inventory`: buy a potion on the Shore and the Dunes
+merchant was short one too. The `demo-` / numbered naming is on purpose — this database carries
+forward into the real game, and biome names will not survive that.
+
+The stock spawners are seeded by `M6015SeedAreaMerchantSpawners` and authored as
+`ItemSpawnerDefinition` SOs under `Assets/CR/Content/Defs/ItemSpawners/`; the two must agree by
+content key, which `AreaMerchantSpawnerSqliteTests` reads back through the real roll service.
+Edit a merchant's stock by editing its SO and pushing from Content Studio — the seed is the floor,
+the SO is the authored truth.
+
+## Drift the audit catches
+
+`ContentAuditTool` → `AuditAreaNpcs` reads the five area scenes as text (prefab-instance
+overrides, no scene load) and reports, per `AreaNpcAudit`:
+
+- `npc_shared_key` — one content key used by more than one area (the original bug)
+- `npc_empty_key` — an NPC the polish pass has not stamped
+- `npc_undefined_key` / `npc_undefined_spawner` — scene points at a key no SO defines
+- `npc_wrong_type` — a scene merchant whose `NpcDefinition.npcType` is not `Merchant` (the SO is
+  what syncs, so the server would get the wrong type; `demo-merchant.asset` shipped this way)
+- `npc_missing_for_area` — a numbered area with no merchant / quest giver / stock SO
+
+An empty shop still logs the two usual causes (missing `_itemSpawnerContentKey` on the NPC, or
+missing local spawner config).
+
+See also: [Item Spawner](../backend/11-item-spawner.md),
+[Trainer Currency](../backend/12-trainer-currency.md).
