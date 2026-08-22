@@ -29,6 +29,30 @@ Loot `Experience` grants **trainer** XP (`StatKey.TrainerExperiencePoints`) via 
 
 If the battle has no spawner (trainer battles, or a wild battle that did not pass a spawner content_key) only the creature table rolls. A failure to resolve the trainer or roll the table skips loot gracefully without failing the battle action.
 
+## Victory currency and level scaling
+
+Loot tables are level-blind: an entry says "10–30 currency" whatever the opponent's level. Two
+changes make a win scale with the creature that lost it, both driven by
+`BattleRewardScaling` (`CR.Game.Domain.Services/Implementation/Battle/`).
+
+**Guaranteed victory currency.** Every wild win grants currency computed from the defeated
+creature's level, before and independently of the loot roll. It needs only the level, which is
+already in hand — not a resolved `content_key` and not an authored loot table. Both of those were
+missing for the entire playable roster (see the note under *Schema*), so most wins paid nothing at
+all. Currency is now a property of winning rather than of whether somebody authored a table.
+
+**Scaled loot quantities.** A rolled grant of `Currency` or `Experience` is multiplied by a growth
+factor for the level. `Item` and `Creature` grants are **not** scaled: those quantities are counts,
+not amounts, and multiplying them hands out inventories. At level 1 the multiplier is exactly 1.0,
+so authored content behaves as written until a level says otherwise.
+
+Both curves are quadratic in the level, and deliberately so. A creature's next level costs
+`0.8 x (level - 1)^3` experience, so the cost of advancing grows like `level^2`. The previous flat
+`5 x level` award fell further behind at every level — roughly 3 wins per level at 10, 10 at 20,
+and 48 at the level cap. Matching the curve's shape holds it near 2.5–4.5 wins per level
+throughout. Levels are clamped to `[1, 100]` for scaling purposes so a corrupt level field cannot
+mint an unbounded amount into the economy.
+
 ## Reward granting
 
 All grant logic is shared: `IRewardGrantService.GrantAsync(accountId, trainerId, RewardGrant, ct)` (in `CR.Game.Domain.Services`) handles `Experience`, `Currency`, `Item`, and `Creature`. `Quest` rewards are not granted here (they are consumer-routed — see [World Pickups](14-world-pickups.md)); loot tables never author `Quest` entries. `QuestDomainService` reward granting delegates to the same service.
@@ -41,6 +65,19 @@ All grant logic is shared: `IRewardGrantService.GrantAsync(accountId, trainerId,
 
 Migrations `M7100`–`M7102` (dual-engine, soft-delete, idempotent seeds). Seeded demo tables exist so loot is functional off seeds before any Content Studio authoring.
 
+`M7103` seeds a loot table for each of the five area spawners (`meadow-`, `cave-`, `shore-`,
+`crags-`, `dunes-wild-zone`). Until it existed, the only two tables in the database belonged to the
+creature `cindris` and the spawner `starter-wild-zone`, neither of which any playable area uses —
+so every wild battle in the game rolled against an empty entry set and dropped nothing. The five
+tables are identical on purpose: all five areas draw from the same level band (2–10), so tiering
+the drops by area would encode a difficulty difference the spawner data does not have. They carry
+items only; currency comes from the victory award above and a table row would pay a second,
+level-blind amount for the same win.
+
+`M10007` is a no-op version bump. New content below the current maximum migration number is
+invisible to Unity's `GameDataAdopter`, which only replaces an adopted `game-data` copy when the
+bundled `MAX(Version)` is strictly greater.
+
 ## REST
 
 - `GET /api/v1/loot-tables/{ownerType}/{ownerContentKey}` — table + entries.
@@ -52,5 +89,4 @@ The offline battle path runs the same `BattleDomainService` against local SQLite
 
 ## Follow-ups
 
-- Thread the spawner `content_key` from the wild-battle encounter so spawner (zone) loot fires (creature-table loot already works in both modes).
 - Content Studio authoring (`LootTableDefinition` SO + tab + sync write service).

@@ -114,6 +114,45 @@ deliberately does **not** populate `BattleStateDto.ActionLog`: it runs twice per
 player's turn and before the AI's), and eagerly loading the whole log there made per-turn latency
 climb with turn count while no caller read the field. Ask for the log explicitly if you need it.
 
+### `battle_mission_template`
+
+Read-only **content** for in-battle missions ("apply Burn to the same target three times → unlock
+Mega Burn for the rest of this battle"). Created and seeded by `M10004CreateBattleMissionTemplateTable`.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | UUID PK | Postgres defaults to `NewGuid`; SQLite requires the caller to supply it |
+| `content_key` | VARCHAR(255) | Designer-facing key, e.g. `mission_pyromaniac`; indexed |
+| `name` | VARCHAR(255) | What the client HUD shows |
+| `description` | TEXT NULL | |
+| `mission_type` | VARCHAR(50) | What the client tracker counts. Only `StatusApplication` exists today |
+| `condition_key` | VARCHAR(100) NULL | For `StatusApplication`, the condition name (`Burn`) |
+| `threshold` | INT | Qualifying events needed to complete |
+| `same_target` | BOOLEAN | `true` = the count is per target creature; `false` = any qualifying event pools |
+| `reward_type` | VARCHAR(50) | Only `AbilityUnlock` exists today |
+| `reward_ability_id` | UUID NULL | Points at an `abilities` row (no FK constraint) |
+| `is_active` | BOOLEAN | Only active rows are served; indexed |
+| `created_at` / `updated_at` / `deleted` | DATETIME / BOOLEAN | Standard soft-delete columns |
+
+Seeded row: `mission_pyromaniac` — `StatusApplication` / `Burn` / threshold 3 / `same_target` true,
+rewarding the `Mega Burn` ability seeded separately by `M10003SeedMegaBurnAbility` in the **Creatures**
+domain (id `b1660000-0000-4000-8000-000000000001`, Fire, power 120, `animation_key = fire_ember`).
+
+:::caution
+**There is no `battle_mission_instance` table, and that is the design.** Mission progress is
+evaluated entirely client-side by a per-battle, in-memory tracker and dies with the battle, so there
+is nothing to persist, migrate or reconcile. The only durable trace of a completion is a
+`battle_missions_completed` stat increment through the Stats domain. The corollary is that the
+server currently trusts the client about unlocks — `SubmitActionAsync` resolves any ability id
+present in the `abilities` table and never checks that the creature learned it. See
+[Battle Extensions](?page=unity/24-battle-extensions).
+:::
+
+`Game/CR.Game.Model/Missions/*` plus `BattleMissionService` / `BattleMissionEndpoints`
+(`api/missions`) are an **unwired alternative design** — an in-memory `List<>` store with no
+migrations, no DI registration and no route mapping. The live path is
+`IBattleMissionTemplateRepository` + `MapBattleMissionTemplateEndpoints` described here.
+
 ### Battle lifecycle hygiene
 
 A battle row is only closed by the normal end-of-battle paths, so force-quitting mid-battle leaves
@@ -302,6 +341,37 @@ On an ability hit, `BattleResolver` iterates the `resolvedConditions` list passe
 
 Miss → no conditions applied regardless of probability.
 
+#### Conditions are content, and the content has to exist (M10005)
+
+The engine above is only as real as the rows behind it. `M9990SeedGameData` seeded four status
+conditions (Slow, Burn, Confusion, Grounded) but nothing populated `ability_status_conditions` or
+`status_condition_stat_changes`, so in every database — Postgres and the baked SQLite floor alike —
+**no ability inflicted anything and no condition had an effect**. Two consequences, neither obvious
+from the code:
+
+* Growl is the only Status-category ability in the game. Power 0 by design, no condition linked, so
+  using it did nothing at all — and since the wild AI picks a status move 20 % of the time, roughly
+  one enemy turn in five silently passed. It read as the opponent being unable to attack.
+* The Pyromaniac battle mission ("apply Burn to the same target three times") could never complete,
+  because nothing could apply Burn.
+
+`M10005SeedAbilityStatusConditions` fills that gap: 22 ability→condition links (Fire→Burn,
+Ice/Lightning→Slow, Poison→Poisoned, Ground→Grounded, Radiant→Confusion, Growl→Weakened), a stat
+change per condition, and a `duration_turns` on every condition — a NULL duration reads as "lasts the
+whole battle".
+
+Two traps worth knowing before authoring more:
+
+* **`damage_per_turn` and `healing_per_turn` on `status_conditions` are inert.** The resolver reads
+  damage over time from a stat change with `impacted_stat = HealthPoints`, applied at the start of
+  the afflicted creature's turn.
+* **`BuildSnapshotAsync` honours only `Add` and `Subtract`.** A `Multiply` stat change silently does
+  nothing, so amounts are flat and must be sized against real stat lines (at levels 1-10: attack
+  9-14, defense 3-7, speed 23-35).
+
+`probability` is read from the **condition**, not from the `ability_status_conditions` row, so a
+condition's chance is the same for every ability that inflicts it.
+
 ### `SingleActionResult.AttackerRemainingConditions`
 
 After resolving an action, `SingleActionResult` exposes `AttackerRemainingConditions` — the updated condition list for the attacker after start-of-turn DOT processing and turn-decrement. This list has:
@@ -388,10 +458,23 @@ A system "Wild" trainer with well-known GUID `00000000-0000-0000-0000-0000000000
 `POST /api/v1/battle/{battleId}/wild-turn` is called by the Unity client when `ActionOutcome.NextActiveTrainerId == WildTrainerId` in online mode. It calls `IWildBattleAIDomainService.DecideActionAsync()` and submits the result via `SubmitActionAsync`, returning the `ActionOutcome`.
 
 `WildBattleAIDomainService` heuristics (in priority order):
-1. 20% random chance → use a Status-category ability if one is available
+1. 20% random chance → use a Status-category ability, **but only one that actually inflicts a
+   condition**
 2. Default → pick the highest-power non-Status ability
 
-The AI loads abilities from the wild creature's own progression set when available. It looks up the `GeneratedCreature` by `CreatureId`, reads `AbilityProgressionSetId`, and calls `IAbilityRepository.GetAbilitiesForProgressionSetAtLevelAsync(setId, level)` to get only abilities the creature has actually learned at its current level. If the generated creature has no progression set, or if the progression-set lookup fails, it falls back to `GetAbilitiesPaginated(0, 50)`.
+The status filter matters more than it looks. A Status ability deals no damage by design, so the
+condition it applies is its entire contribution; picking one that inflicts nothing spends the turn on
+nothing and shows the player no message explaining why. The roll is only made when such an ability
+exists, so a creature whose only status move is inert never wastes a turn on it.
+
+The AI loads abilities from the wild creature's own progression set when available. It looks up the
+`GeneratedCreature` by `CreatureId`, reads `AbilityProgressionSetId`, and calls
+`IAbilityRepository.GetAbilitiesForProgressionSetAtLevelAsync(setId, level)` to get only abilities the
+creature has actually learned. The level comes from the battle state, falling back to the stored
+`GeneratedCreature.Level` — it was once hardcoded to `1`, which pinned every wild creature to its
+starting moves no matter how high its level. If the generated creature has no progression set, or if
+the progression-set lookup fails, it falls back to `GetAbilitiesPaginated(0, 50)` — note that this
+fallback lets a creature attack with moves it never learned, so it is a safety net, not a design.
 
 The Unity client uses the same DLL `WildBattleAIDomainService` for offline battles, bound via `IWildBattleAIDomainService`.
 
@@ -411,6 +494,16 @@ Defined in `Game/CR.Game.Service.BFF/Endpoints/BattleEndpoints.cs` and `WildBatt
 
 All endpoints require bearer authentication.
 
+In-battle mission content is served separately, from
+`Game/CR.Game.Service.BFF/Endpoints/BattleMissionTemplateEndpoints.cs`:
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| `GET` | `/api/v1/battle-missions` | All active, non-deleted `battle_mission_template` rows, ordered by name |
+
+Read-only by design: missions are content, evaluated client-side. A repository throw returns
+`Results.Problem` rather than a 500 stack, and the cancellation token is propagated to Dapper.
+
 ## DI Wiring
 
 ```csharp
@@ -420,10 +513,14 @@ builder.Services.AddSingleton<IBattleRepository>(new BattleRepository(logger, co
 builder.Services.AddScoped<IBattleDomainService, BattleDomainService>();
 builder.Services.AddSingleton<IWildBattleAIDomainService, WildBattleAIDomainService>();
 
+builder.Services.AddScoped<IBattleMissionTemplateRepository>(sp =>
+    new BattleMissionTemplateRepository(battleLogger, configuration));
+
 new GameDatabaseMigrator().Migrate(configuration);
 
 app.MapBattleEndpoints();
 app.MapWildBattleEndpoints();
+app.MapBattleMissionTemplateEndpoints();
 ```
 
 ## Migrations
@@ -437,6 +534,8 @@ M9003AddAnimationKeyToAbilities      ← adds animation_key (VARCHAR NULL) to ab
 M9990SeedGameData                    ← seeds Wild Trainer (guarded: skips if account table absent)
 M9995DedupAbilitiesAndSeedAbilityFx  ← collapses duplicate ability rows onto canonical ids + seeds authored FX keys
 M9996AddAbilityFxLifecycleColumns    ← adds fx_auto_stop (default true) + fx_stop_delay_ms (default 50) to abilities
+M10003SeedMegaBurnAbility            ← (Creatures) seeds the Mega Burn reward ability
+M10004CreateBattleMissionTemplateTable ← creates battle_mission_template + seeds mission_pyromaniac
 ```
 
 Additional migrations add `trainer{1,2}_active_creature_id` to `battle` and create `generated_creature_current_stats` for persistent HP.
@@ -490,6 +589,13 @@ ability in the Unity AbilityConfig **Advanced** section.
 
 Pure logic tests — `BattleResolver.Resolve()` called directly with `ResolvedConditionDefinition` lists. Covers probability proc/miss, `applyToUser` routing to `AttackerConditionsApplied`, zero/null probability, amount range rolling, miss suppression, `DurationTurns` mapping to `TurnsRemaining`, and `null` resolved-conditions guard.
 
+### Battle mission template tests
+
+| Suite | Verifies |
+|-------|---------|
+| `Game/CR.Game.Data.Test/BattleMissionTemplateRepositorySqliteTests.cs` | The seeded Pyromaniac row round-trips out of SQLite; inactive and soft-deleted rows are excluded |
+| `Game/CR.Game.Domain.Services.Test/Endpoints/BattleMissionTemplateEndpointsTests.cs` | 200 with templates, 200 with an empty list, `Problem` when the repository throws, cancellation-token propagation |
+
 ## Gotchas
 
 **`BattleDomainService` must be `AddScoped`, not `AddSingleton`.** It depends on `IDbConnectionFactory` which opens scoped DB connections.
@@ -505,6 +611,7 @@ Pure logic tests — `BattleResolver.Resolve()` called directly with `ResolvedCo
 ## Related Pages
 
 - [Battle System](?page=unity/07-battle-system) — Unity client: `BattleCoordinator`, `IBattleClient`, session events
+- [Battle Extensions](?page=unity/24-battle-extensions) — how `battle_mission_template` is consumed, and why mission progress never reaches the database
 - [Backend Architecture](?page=backend/01-architecture) — DDD layering, repository pattern
 - [NPC System](?page=backend/02-npc-system) — NPC trainer team seeding feeds creature states at battle start
 - [Content Registry](?page=unity/08-content-registry) — content keys identify creature species in battle state

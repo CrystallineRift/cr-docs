@@ -91,6 +91,92 @@ Scale is set against **measured prefab bounds**, not guesses. Packs are wildly i
 tall. Treating them as interchangeable "rocks and trees" put the camera inside a rock and made the
 player look ant-sized.
 
+So the command measures rather than asks you to trust it: each run reports the footprint of the
+first instance of every prefab it places, e.g. `AN_Broadleaf_3_Green 13.4x16.0x13.5m`. A number that
+looks wrong is visible in the console before anyone opens the scene.
+
+### The five areas
+
+| Area | Kind | Ground | Light and weather | Wild pool |
+|---|---|---|---|---|
+| Meadow | `meadow` | `M_Terrain_01` | bright sky, distance haze, falling leaves | `meadow-wild-zone` |
+| Cave | `cave` | `Ground` | no skybox, close exponential fog | `cave-wild-zone` |
+| Shore | `shore` | `M_SmallRocks_Sand` | flat bright light, pale sea haze, god rays | `shore-wild-zone` |
+| Crags | `crags` | `M_Terrain_02` | cold thin light, close weather, snowfall | `crags-wild-zone` |
+| Dunes | `dunes` | `M_SmallRocks_Sand` | hard amber glare, far heat haze, god rays | `dunes-wild-zone` |
+
+Meadow is the hub: every habitat doors back to it, so any area is two transitions from any other and
+no route dead-ends.
+
+Sun colour separates these places at a glance more than the props do — the same rocks under a white
+noon sun and under a low amber one read as two different deserts. Fog distance is the cheapest way to
+sell scale: the dunes push it out so the ground appears to run on, the crags pull it in so the rim
+feels closed by weather.
+
+Each area also gets one **ambient weather effect** parked above the playable space (`AN_SnowFall`,
+`AN_GodRays`, `AN_LeafFall_Green`), scaled wide. Lighting and props establish where somewhere is;
+moving particles are what stop it reading as a diorama. At prefab scale these cover about a metre and
+look like a dropped item, hence the scale multiplier.
+
+:::caution
+`cr_build_playtest_areas` rebuilds an area from the template, **discarding whatever is in the
+scene** — including a dressing pass. Always pass `--keys` to limit it. Same for `cr_dress_areas`,
+which takes `--keys` to dress a subset.
+:::
+
+Gateway art follows the area, not the default: anything dressed from AZURE gets cliff pillars, and
+the moss-topped `_Cov` cliff variants are used only where something would actually grow on the stone
+— a meadow or a waterline, never a dune field or bare cold rock.
+
+### Encounter zones are ground cover, not spheres
+
+A wild battle starts when the player walks into a `CR_EncounterZone` trigger. The prefab used to
+draw a plain green sphere there, which told the player nothing: you either memorised where the
+spheres were or you got jumped. Its `MeshRenderer` is now disabled — collider and trigger untouched
+— and dressing fills the trigger with ground cover instead, so the rule is visible. Long grass is
+where creatures are.
+
+This is the one place dressing deliberately scatters **inside** a gameplay object rather than
+keeping clear of it, because the trigger is the thing being illustrated. The radius comes from the
+zone's own `SphereCollider`, so resizing a zone gets matching cover on the next run, and the fill is
+seeded separately (`seed + 977`) so adding it does not reshuffle the trees.
+
+Cover is per style, and the cave gets its own set — rock debris and mushrooms rather than grass,
+since a lawn underground reads as a bug.
+
+Roaming creatures are gone with it. `CR_CreatureSpawner` instantiates a creature prefab at `Start`
+and leaves it standing in the world, which reads as a wild creature the player can walk up to but
+never fight. It is no longer placed in the areas; the prefab stays in the project as a dev tool for
+looking at a creature in a scene.
+
+### Meadow art sets
+
+The `style` option picks which set dresses the Meadow; the Cave set is fixed. Switching style
+rebuilds the same `[Dressing]` root, so styles replace each other rather than stacking.
+
+| `style` | Pack | Character |
+|---|---|---|
+| `polyart` (default) | Polyart | Stylised, low-poly |
+| `fantastic` | Tidal Flask Ancient Forest | Chunkier and stylised; one art family with the Village/Seaside/City kits |
+| `azure` | Raygeas AZURE Nature | Realistic, authored at real-world scale |
+
+AZURE's scales sit near `1.0` where the stylised sets are shrunk to `0.55`–`0.8`: its prefabs are
+already in metres, so a multiplier that reads as "slightly smaller" on a stylised tree turns an
+AZURE broadleaf into a shrub. Its default `AN_Broadleaf_*` prefabs are autumn orange — the plan uses
+the `_Green` variants, since the Meadow is a summer scene.
+
+When the Editor has to be closed, dress in batch mode instead of through the CLI command:
+
+```bash
+"/Applications/Unity/Hub/Editor/<version>/Unity.app/Contents/MacOS/Unity" \
+  -batchmode -nographics -quit -projectPath . \
+  -executeMethod CR.Game.Areas.EditorTools.CrAreaDressingCommand.DressFromBatch \
+  -style azure -logFile dress.log
+```
+
+`cr_dress_areas` talks to a running Editor, so it is unavailable exactly when batch work happens;
+`DressFromBatch` reads the same `-style` and `-seed` options off the process command line.
+
 Supporting commands, all headless:
 
 | Command | Purpose |
@@ -182,6 +268,243 @@ the overworld camera, so battles in areas look flat while the sandbox looks corr
 names none. An arena that *does* carry its own rig still wins, so a bespoke per-arena rig remains
 possible. Area arenas sit at the same world position the sandbox arena used, so the rig's authored
 placement frames them unchanged.
+
+## Polish pass: bounds, zone fog, NPC models
+
+`cr_polish_areas` handles three things the scatter pass does not, because they are repair of
+gameplay-facing objects rather than decoration — re-scattering the trees to fix a wall would be a bad
+trade. It is idempotent; running it twice leaves the same scene.
+
+### You cannot walk off the edge
+
+Four invisible `BoxCollider` slabs at the ground's edge, sized from the ground renderer's own bounds
+so a resized area is still enclosed. 20 m tall and sunk 2 m: short walls get vaulted, and flush ones
+let a character clip under on a slope. Rebuilt from scratch each run rather than adjusted in place,
+which is how four colliders across five scenes drift out of step with a resized ground.
+
+Verified by raycast at ankle, hip, head and above-head height at every area's edge — 4/4 in all five.
+
+### The encounter zone has the biome's colour in it
+
+A low, wide, faint disc of the area's `Signature` colour inside the trigger. The bush gives the zone
+a silhouette; this gives it a colour matching the element the area is lit in, so "fights happen here"
+and "this place is Fire" become the same visual idea. Kept faint and flat deliberately — it marks
+ground, and a player should never lose the bush inside its own marker.
+
+### The NPCs are people
+
+The quest giver and merchant were primitive cylinders. Replacing them needed a character, and the
+project did not have one: the Malbers Steve rig's only body texture is named `SteveNaked`, and its
+five material variants are skin tones in underwear.
+
+So the character is **assembled** from the BoZo modular pack — a base body plus `Top`, `Bottom`,
+`Feet` and hair pieces. The rebinding is the part that matters: a modular outfit prefab carries its
+own copy of the skeleton, so parenting it is not enough. Each piece's `bones` array is remapped by
+name onto the base's bones and its `rootBone` repointed, which is what makes the parts move as one
+character instead of standing rigid while the body walks away.
+
+Two rules the swap follows:
+
+- **The NPC GameObject is never replaced.** It carries the interaction trigger and the CR behaviours
+  that make it a quest giver rather than a shape. Only the visual child changes.
+- **The old visual is matched by what it is, not what it is called.** `InstantiatePrefab` keeps the
+  prefab's name, so a name-based check finds nothing on the next run and quietly stacks a second
+  character inside the first.
+
+### Every area has both
+
+The quest giver used to live only in Meadow and the merchant only in Cave. That split was
+deliberate once: Meadow is open at boot and Cave only ever arrives through a transition, so having
+content in each proved `AreaWorldInitializer` initializes a scene loaded after `GameInitializer`
+has already run. That case is still covered by Cave. What the split also produced was three areas
+with nobody in them and no way to shop without walking back.
+
+Both NPCs are now placed in all five areas, from two directions:
+
+- `CrPlaytestAreasBuilder.Plans` carries both in every area plan, so a rebuilt area has them.
+- `EnsureAreaNpcs`, part of `cr_polish_areas`, adds whichever is missing to an area that already
+  exists. Rebuilding an area re-creates it from the template and **discards its dressing**, so the
+  repair path is the only way to give a finished area an NPC without throwing the art away.
+
+Two details the repair pass depends on:
+
+- **Position comes from the ground's own bounds**, not from the world origin. Areas are laid out
+  around wherever the player was standing when they were built, so a fixed coordinate would drop an
+  NPC into the void in four areas out of five.
+- **Presence is matched by name**, which is what the model swap above also keys off. An NPC placed
+  under any other name would never be given a character and would stand there as a cylinder.
+  `InstantiatePrefab` keeping the prefab's name is what makes the check work across runs.
+
+### Each area's NPCs are their own
+
+The prefabs ship with **empty** content keys. `cr_polish_areas` stamps them per area
+(`StampAreaNpcKeys`, re-run every time so an area built before this still gets fixed):
+
+| Area | Merchant | Quest giver | Merchant stock |
+|---|---|---|---|
+| Meadow (1) | `demo-merchant-area-1` | `demo-questgiver-area-1` | `demo-merchant-area-1-items` |
+| … | … | … | … |
+| Dunes (5) | `demo-merchant-area-5` | `demo-questgiver-area-5` | `demo-merchant-area-5-items` |
+
+The mapping lives in one place, `AreaNpcKeys` (`Assets/CR/Game/Areas/Logic/`), used by the
+builder, the content audit and — by convention — the seed migrations. It used to be the other way
+round: the prefab carried `demo-merchant`, so all five areas resolved to **one** NPC row and one
+inventory. The keys are numbered rather than biome-named because this database is carried into
+the real game; `demo-` marks the playtest set.
+
+Each NPC has a matching `NpcDefinition` SO (registered on the `ContentDefinitionProvider`, with a
+display key in `localization/npcs.yaml`) so Content Studio syncs it to the server like any other
+content. Quest accepts are idempotent, so five quest givers still grant a quest once.
+
+## Each biome is lit as an element
+
+Every area now reads as one element at a glance, before any creature appears. The mapping is
+terrain-intuitive rather than derived from the spawn pools — the pools are deliberately mixed (the
+Cave rolls six elements, one creature each), so there is no dominant element to read off them:
+
+| Area | Element | Reads as |
+|---|---|---|
+| Meadow | Flora | Sap-green light and haze, pollen drifting up |
+| Cave | Ground | Ochre and umber, no sky, dust falling |
+| Shore | Water | Cyan-teal haze, cool sun, sea spray |
+| Crags | Ice | Blue-white, fog pulled in close, snowfall |
+| Dunes | Fire | Amber glare, fog run far out, embers rising |
+
+### One palette, not three switch blocks
+
+`ElementalPalette` holds each biome's sun, ambient, fog, motes and signature colour in a single row.
+These values used to live in three separate `switch` blocks — ground material in one, fog and ambient
+in another, sun in a third — so "what does the Cave look like?" could not be answered without reading
+all three, and changing a biome meant editing it in three places and hoping they still agreed.
+
+That drift was real, not hypothetical: portal colours lived in a *fourth* table, and the Cave portal
+was still purple after the Cave itself became Ground ochre — the doorway taught one element and the
+place behind it another. `PortalColour` now reads the destination's `Signature` from the same table.
+
+**A door is coloured by where it leads, not where it stands.** The glow is a label for the
+destination, readable from across the area — which is why the Cave's exit is Flora-green.
+
+### The motes are authored, not sourced
+
+AZURE ships three ambient prefabs — god rays, leaf fall, snow — and everything else on disk is a
+combat impact effect. Pollen, cave dust, sea spray and embers do not exist in any imported pack, so
+`BuildElementalMotes` builds them: a `ParticleSystem` per element, with drift direction carrying the
+meaning (pollen and embers rise, cave dust falls from the ceiling).
+
+Two details that would otherwise go wrong:
+
+- **Particle modules are structs returned by value.** Editing a local copy silently does nothing; the
+  assignment back through the property is what applies it.
+- **The Cave has no weather prefab** — there is no sky to have weather in — so the mote build must not
+  sit behind the weather early-return, or the biome that most needs its element in the air is exactly
+  the one that skips it.
+
+Crags gets no motes: it is Ice and already snowing, and a second particle system there would be
+noise rather than identity.
+
+## The bush is where the battle is
+
+Wild encounters fire from one place and one place only: the `SphereCollider` trigger on
+`CR_EncounterZone` (radius 5 m). Nothing else in the world starts a battle, so the whole design
+problem is making that invisible circle legible — the zone's own `MeshRenderer` is disabled, and a
+trigger you cannot see is a trigger you get ambushed by.
+
+Ground cover alone did not solve it. Grass reads as scenery in a meadow because grass is everywhere,
+and in the cave and the dunes there is no grass to read at all. So `cr_dress_areas` now builds each
+zone in two layers:
+
+1. **Ground cover** across the full trigger disc — dense, biome-appropriate, the existing behaviour.
+2. **A bush core**: one raised clump inside 55% of the radius, with a silhouette you can see from
+   across the area and aim at.
+
+The 55% matters. Placed wider, the player could brush the leaves without crossing into the trigger,
+which teaches the opposite of the rule the clump exists to state.
+
+| Area | Core |
+|---|---|
+| Meadow | `AN_Bush_1/2/3` — flowering shrubs |
+| Cave | `AN_Mushrooms` over `Rokcs_Group01` — a thicket that isn't a lawn indoors |
+| Shore | `AN_Reedmace` + `AN_Reeds` — the one thing on an open beach tall enough to hide in |
+| Crags | `AN_Dead_Bush` over `AN_Stones_1` — cold stone grows scrub |
+| Dunes | `AN_Dead_Bush` + `AN_Branch_2` — drier, sparser scrub |
+
+### Colliders are stripped, deliberately
+
+`MakeWalkThrough` destroys every `Collider` on encounter-zone dressing. This is the difference
+between a bush you run into and a bush you bounce off: several of these prefabs ship with capsule or
+mesh colliders because they are authored as scenery to walk *around*, and leaving them on would
+build a wall standing exactly where the trigger is — the encounter could never fire. Destroyed
+rather than disabled, so a later prefab-override sweep cannot switch them back on.
+
+The dressing group is named `Encounter_<zone>` rather than `Grass_<zone>`; it is a lawn in one of
+the five biomes.
+
+## Per-area battle arenas
+
+Every area instances `CR_BattleArena`, and for a long time every one of them kept the prefab's
+default `arenaKey` of `starter-wild-zone`. That is harmless while one area is loaded and ambiguous
+during a transition, when two scenes are briefly loaded together and `BattleArenaRegistry` has to
+pick between two arenas claiming the same key. Each area now owns its key and its biome:
+
+| Area | `arenaKey` | `BiomeType` | Ground |
+|---|---|---|---|
+| Meadow | `meadow-arena` | Grassland | 70 m, `M_Terrain_01` |
+| Cave | `cave-arena` | Cave | 70 m, dungeon `Ground` |
+| Shore | `shore-arena` | Beach | 70 m, `M_SmallRocks_Sand` |
+| Crags | `crags-arena` | Mountain | 70 m, `M_Terrain_02` |
+| Dunes | `dunes-arena` | Desert | 70 m, `M_SmallRocks_Sand` |
+
+`cr_dress_arenas` (**CR → Areas → Dress Battle Arenas**) sets all of that, dresses the arena to its
+biome, and repoints every battle-starter in the scene — `SpawnerEncounterBehaviour`,
+`SpawnerWorldBehaviour`, `NpcInteractionBehaviour` — at the new key. It is idempotent: the dressing
+is rebuilt from scratch each run, so re-running never stacks a second forest on the first.
+
+### The camera owns the middle
+
+The arena is laid out along X: trainers at ±9, creatures at ±4.5, and the authored establishing vCam
+orbits the centre at **radius 9** with ring heights 0.1–5; the close shots sit about 3 m off a
+creature. Dressing therefore has a no-build zone:
+
+```
+radius < 14      nothing at all — camera orbit, trainers, creatures, and margin
+radius 15–21     low dressing: grass, stones, bushes, reeds
+radius 21–28     occluders: trees, cliffs, cave walls
+radius 31        the backdrop
+```
+
+**Clearance is measured from geometry, not from pivots.** That distinction is the whole game: a
+dungeon boulder whose mesh is fifteen metres across, placed with its pivot at twenty-one, reaches to
+six — and the first cave render was taken from *inside* one while the tool cheerfully reported a
+"closest prop" of 15.0 m. `TryClearFootprint` measures each instance's world bounds, pushes it
+outward until its geometry clears, and drops it entirely if it cannot fit before `MaxPropRadius`.
+The report says `nearest geometry`, and that number is the honest one.
+
+### Ending the view takes two things
+
+Occluders are placed on **staggered rings** rather than scattered: evenly spaced by angle, each ring
+phase-offset so one ring's props sit over the next ring's gaps, jittered a third of a step so the
+result still reads as terrain. Uniform random placement leaves gaps — that is what a uniform
+distribution *does* — and every early render showed daylight between the cliffs.
+
+Rings alone still could not be trusted, so a **backdrop** stands behind them at radius 31: a tube of
+inward-facing quads, 16 m tall, unlit and tinted to that biome's distance. The props supply the
+silhouette; the backdrop supplies the certainty. It sits far outside the camera orbit, so it can
+never come between the camera and the fight.
+
+Two traps if you edit it. The tube is viewed from inside, and back-face culling keys off **triangle
+winding**, not the normals — an inward-facing surface can be authored correctly and still render as
+nothing, which is what happened first. The material sets `_Cull Off` so winding cannot matter. And
+material settings are re-applied on every run rather than only at creation, or an asset from an
+earlier run keeps whatever it was first given and later tweaks silently do nothing.
+
+### Checking it
+
+`cr_render_arenas` renders each arena from the camera's own orbit — radius 9, height 3, three
+bearings, framed on `OrbitCenter` — and writes PNGs. Numbers cannot answer either question that
+matters here (does the dressing end the view, can the camera still see the fight), and every real
+defect in this feature was found in an image rather than in a log. Particle systems do not render in
+edit mode, so ambient FX are absent from the shots, and the AZURE foliage shader renders its leaves
+red in batch mode — neither reflects how the scene looks in the Editor.
 
 ## Two things that would otherwise loop or break
 

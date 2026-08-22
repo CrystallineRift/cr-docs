@@ -119,6 +119,90 @@ The reason is platform constraints: IL2CPP / AOT cannot load code at runtime, an
 | App update with schema changes | Newer artifact bundled + Addressable; adopted at cold start | In-place migrations run on first launch |
 | Fresh install | StreamingAssets artifact is the first-run floor | Created from migrations |
 
+## Authoring a creature headlessly
+
+`cr_create_creature` does the whole species in one call — the six steps that otherwise live in four
+different windows:
+
+```bash
+unity cmd --project-path . cr_create_creature \
+  --name "Snow Bomb" --element Ice \
+  --source "Assets/Monsters Ultimate Pack 02 Cute Series/Snow Bomb Cute Series/Prefabs/Snow Bomb.prefab" \
+  --description "A packed snowball with a short temper and a shorter fuse." \
+  --hp 52 --attack 13 --sp_attack 12 --defense 13 --sp_defense 10 --speed 9
+```
+
+It builds the art prefab from a source model, adds `AudioSource` and `CreatureBattlePresenter` and
+wires both private fields, marks the prefab Addressable as `creatures/<key>`, writes the
+`CreatureDefinition`, and adds it to the `ContentDefinitionProvider`.
+
+That last step matters most. A definition that exists as an asset but is missing from the provider
+is **invisible to the game** — the provider is the only thing that resolves content by key at
+runtime, and nothing errors when it is absent. The other quiet failure is a prefab that was never
+made Addressable: it resolves to null at battle time, and you find out when the creature is sent
+out.
+
+The source prefab is unpacked completely rather than kept as a variant, so a CR creature never
+inherits from a vendor prefab that a pack reimport can change or delete.
+
+Push the result with `cr_sync_creatures` (the same call Content Studio's per-row Push makes), then
+re-bake the offline floor:
+
+```bash
+unity cmd --project-path . cr_sync_creatures --keys "creature_snowbomb"
+unity cmd --project-path . cr_sync_creatures            # every definition
+```
+
+:::caution
+Both need cr-api reachable at the `*_server_http_address` in `game_config.yaml` — port 8080 by
+default. If something else is already listening there the push fails with a bare `404 Not Found`,
+because a different server answered rather than nothing answering at all.
+:::
+
+## Element ids are duplicated in three places
+
+`CR.Game.Model.Elemental.ElementType` in cr-api is authoritative: `Wind` is 6, `Lightning` is 7,
+`Poison` 8, `Radiant` 9. Unity keeps its own copies of that mapping, and two of them were wrong —
+Wind and Lightning transposed, with four invented types (Psychic, Shadow, Dragon, Fairy) sitting
+where Poison and Radiant belong.
+
+The failure is silent in both directions. A creature pushed as Lightning stored as Wind behind a
+`200`, and the runtime content sync then read it back into the client's SQLite as Wind too, so the
+database and the game agreed on the wrong answer.
+
+| Copy | Used by |
+|---|---|
+| `ContentCreatorSyncHelper` | Content Studio push/pull |
+| `AbilityEditorSyncHelper` | Ability authoring |
+| `ServerContentSyncService` | Runtime content sync into SQLite |
+
+All three now match the enum. Anything added to `ElementType` has to be added to all three, and
+after changing one, check the element that actually lands rather than trusting the response code.
+
+## A creature needs more than a definition
+
+Authoring the species is the first of four things. Miss any of the rest and it exists without
+appearing or acting:
+
+| Piece | Where it lives | Symptom when missing |
+|---|---|---|
+| Definition + prefab + Addressable | Unity, via `cr_create_creature` | Never resolves; null at battle time |
+| Abilities of its element | `abilities` | Nothing to attack with |
+| Ability progression set | `ability_progression_set` (+ `_entry`) | Spawns with empty move slots |
+| Spawner template | `creature_spawner_template` | Exists but never appears in the wild |
+
+The link from a creature to its moves is **not on the creature**. `creature` has no
+`ability_progression_set_id` column — the pairing lives on `creature_spawner_template`, alongside
+`growth_profile_id`. A species learns what the template that spawned it says it learns, so adding a
+creature to a pool and giving it moves are the same act.
+
+:::caution
+`variant_type` on `creature_spawner_template` is `NOT NULL DEFAULT 'normal'`. Pass a value, never an
+explicit `NULL` — `INSERT OR IGNORE` swallows the constraint violation, so the migration reports
+success, writes nothing, and the pool silently stays as it was. Always read the affected rows back
+after a seed migration rather than trusting that it ran.
+:::
+
 ## Related Pages
 
 - [Project Setup](?page=unity/01-project-setup) — database path config keys, startup migration flow

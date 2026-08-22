@@ -88,6 +88,9 @@ public interface IBattleCoordinator
 | `PlayerMustSwap` | `(string trainerId)` | Player's active creature fainted but has a backup; HUD must force a swap |
 | `BattleEnded` | `(bool playerWon, string outcomeLabel)` | Show result screen |
 | `RunAttempted` | `(bool success)` | Show escape message |
+| `ActionResolved` | `(ActionOutcome outcome)` | Every resolved action, raised once per turn **after** its presentation has played. The outbound seam for battle extensions — see [Battle Extensions](?page=unity/24-battle-extensions) |
+| `MissionProgressed` | `(string missionName, int current, int threshold)` | An in-battle mission ticked forward (e.g. applying Burn); HUD shows a fading progress toast |
+| `MissionCompleted` | `(string missionName, string unlockedAbilityName)` | An in-battle mission finished and unlocked a move for the rest of the battle; HUD shows a completion banner |
 
 ## Wild Battle Turn Loop
 
@@ -102,11 +105,21 @@ StartBattleAsync
            IWildBattleAIDomainService.DecideActionAsync → submit via IBattleDomainService
            IBattleDomainService.SubmitActionAsync → ActionOutcome
     └─ await IBattlePresentationSequencer.PlayOutcomeAsync(outcome, action, ctx)   ← paced beats
+    └─ RaiseActionResolved(outcome)                                               ← extension seam
     └─ if outcome.BattleEnded → RaiseBattleEnded → break
        else advance activeTrainerId (Guid) + NextRoundKey
 ```
 
 The loop **awaits** the sequencer, so an outcome's beats finish playing before the next turn resolves (see [Presentation Orchestrator](#presentation-orchestrator)).
+
+### Extension seams
+
+The loop exposes exactly two hooks for systems that react to combat without being combat (missions, combo meters, style scoring):
+
+- **Outbound** — `BattleEvents.ActionResolved` is raised right after `PlayAndReconcileAsync`, so a reaction lands after the hit it reacts to.
+- **Inbound** — `_abilityAugmenter?.Augment(activeCreatureId, abilities)` runs between `BuildAbilityListAsync` and `RaisePlayerTurnStarted`, on player turns only. It is injected `[InjectOptional]`, so battles run unchanged when nothing is bound.
+
+Neither seam can alter how an action resolves. See [Battle Extensions](?page=unity/24-battle-extensions) for the pattern and the battle-missions worked example.
 
 `SubmitPlayerAction(string actionJson)` is called by the HUD (or any input handler) to unblock the `TaskCompletionSource` awaited in the loop. The action JSON matches the backend's action format, e.g. `[{"type":0,"abilityId":"...","targetCreatureId":"..."}]`.
 
@@ -481,6 +494,31 @@ The root is hidden (`DisplayStyle.None`) on start and shown when `BattleEvents.B
 
 **HP bars** are custom `VisualElement` fills; width is set via `style.width = Length.Percent(ratio * 100f)` with a USS `transition-duration: 0.3s` for smooth animation.
 
+### Turn narration — every resolved turn must say something
+
+The battle log (`log-text`, four lines, oldest dropped) is the only thing that explains a turn whose
+effect is invisible. It used to be driven entirely by effects — damage, faints, status changes — so a
+turn that produced none of them showed an attack animation and no text at all. Players read that as
+the opponent being unable to act and passing the turn back.
+
+Three lines close that gap:
+
+| Line | Source | Timing |
+|---|---|---|
+| `"The opponent used Cyclone!"` | `AbilityResolving` channel | announced before the attack animation |
+| `"But it missed!"` | `AbilityMissed` channel | at the moment of the miss |
+| `"But nothing happened!"` | `BattleEvents.ActionResolved`, direct subscription | after the presentation, as a trailing remark |
+
+Two things to keep in mind when extending this:
+
+* **Show `AbilityName`, never `AbilityKey`.** The key is an animation key and is deliberately shared
+  between abilities that animate alike — twelve abilities currently share `fire_ember`, so the key
+  would name the wrong move for eleven of them. `ActionOutcome.AbilityName` carries the display name.
+* **The "nothing happened" rule lives in `BattleTurnNarration.IsSilentTurn`** (in the pure
+  `CR.Game.Battle.Logic` asmdef, unit-tested) rather than inline in the HUD: an ability that
+  connected, dealt no damage, and applied, triggered or removed no condition. A miss is excluded —
+  it has its own line.
+
 **Turn flow:**
 1. `PlayerTurnStarted` fires → `ActionMenu` shown; ability list cached in `_currentAbilities`; ability buttons pre-populated
 2. Player presses **Battle** → `ActionMenu` hidden, `AbilityPanel` shown (2×2 grid of up to 4 abilities)
@@ -493,6 +531,15 @@ Ability button labels show `"Name (Power)"` e.g. `"Fire Bolt (50)"`. Buttons wit
 > **Action-payload fix:** the Item action must serialize as `"type":2`. It previously serialized as `"type":3`, which the server interprets as **Switch** — so item actions silently fell through the Switch handler (item effects still applied only because `UseItemAsync` runs separately). Items now correctly use `BattleActionType.Item` (`"type":2`).
 
 `playerAbilities` is populated by `BattleCoordinator.BuildAbilityListAsync` — it queries `IAbilityRepository.GetAbilitiesForProgressionSetAtLevelAsync` for the player's active creature and maps to `WildAbilityDto` for the HUD. `BattleStateDto` (DLL type) does not include ability lists; they are assembled client-side.
+
+### Battle missions in the HUD
+
+A sidecar mission evaluator (e.g. "apply Burn to the same target 3 times → unlock Mega Burn for this battle") raises `BattleEvents.MissionProgressed` / `MissionCompleted`; `BattleHUD` only renders what it's told — it never evaluates mission rules itself. The evaluator, its content source and the seams it uses are documented in [Battle Extensions](?page=unity/24-battle-extensions).
+
+- **`MissionProgressed(missionName, current, threshold)`** — shows a small corner toast (`mission-toast` / `mission-toast-text` in `BattleHUD.uxml`, top-left, e.g. `"Pyromaniac 2/3"`). Re-firing resets its own fade timer (`IVisualElementScheduledItem`, ~2.5s) rather than stacking, since it always reflects the latest progress. Non-blocking: the element is `picking-mode="Ignore"`.
+- **`MissionCompleted(missionName, unlockedAbilityName)`** — shows a prominent top-center banner (`mission-banner` / `mission-banner-text`, ~3s, amber accent) and plays `UiSoundKeys.Confirm`. Completions are queued (`_missionBannerQueue`) so back-to-back unlocks each get their full on-screen time instead of clobbering each other.
+- Both elements fade via USS opacity/translate transitions (`.mission-toast--hidden`, `.mission-banner--hidden` in `BattleHUD.uss`) and are hard-reset (no fade) on `BattleStarted`/`BattleEnded` via `ResetMissionUi()` so nothing bleeds into the next battle.
+- **Unlocked ability styling:** `WildAbilityDto.unlocked` (set by the mission system, ignored by the battle system itself) drives an accent style on the ability row in `PopulateAbilityList` — `.cmd-row--unlocked` (amber border/fill) plus an `"UNLOCKED"` badge (`.cmd-unlocked-badge`). It stays an ordinary `Button` on the same `Activate(row, ...)` / `clicked` path as every other ability — only the visuals differ.
 
 ## `WildBattleRequest`
 
@@ -540,6 +587,127 @@ public record NpcBattleRequest(
 4. If player exits before delay → coroutine cancelled, no battle
 5. Turn loop runs until `outcome.battleEnded == true`, then `BattleEvents.RaiseBattleEnded` fires
 
+## An Encounter That Never Starts Has No Result
+
+`StartWildBattleAsync` wraps its whole body in a `try`/`finally`, and the `finally` used to call
+`EndBattle(_resolvedWinnerId, _resolvedReason ?? "loop_complete")` unconditionally. Every early
+return therefore produced a battle result — and because `EndBattle` derives `playerWon` from a null
+winner, an encounter that could not even find an opponent rendered as a full **DEFEAT** summary
+labelled `loop_complete`, with no experience, no items and no events.
+
+`_encounterStaged` now separates the two cases. It is set immediately before the fade-to-white that
+covers arena staging and the camera cut:
+
+```csharp
+finally
+{
+    if (_encounterStaged)
+        EndBattle(_resolvedWinnerId, _resolvedReason ?? "loop_complete");
+    else
+        AbortUnstagedEncounter();
+}
+```
+
+`AbortUnstagedEncounter` is deliberately quiet — the player never left the overworld, so the correct
+outcome is to leave them there. It cancels any pending action source, sets the ended/closed flags so
+a later `CloseBattle` cannot manufacture a `force_close` result, and raises
+`BattleEvents.EncounterAborted` for anything that wants to react.
+
+**A `DEFEAT` screen reading `loop_complete` is not a battle you lost — it is a battle that never
+happened.** The cause is upstream, usually an empty spawn pool; the Unity console names the spawner
+and the spawn status.
+
+## Pickups
+
+`PickupBehaviour` grants a `pickup_definition`'s rewards once per `(trainer, instance)`, then
+despawns. Three things had it permanently stuck.
+
+**The definition did not exist.** Every placed pickup asked for `item_heal_potion_30`; the seeded
+definitions are `pickup_small_currency` and `pickup_lost_toy` (`pickup_coin_pile` and
+`pickup_bouncy_ball` are *model asset keys* on those two rows, not definitions). The lookup returned
+null every time.
+
+**A failed lookup left the pickup inert but visible.** `_collecting` was set on entry and cleared
+only in the `catch`, so any early return — missing definition, no session yet — left the flag set
+forever. The object stayed in the world and could never be collected again. It is now released in a
+`finally` on every path that does not despawn.
+
+**The player could not trigger it.** The player is a Malbers rig carrying a dozen colliders, and only
+the root is tagged `Player`, so `other.CompareTag` failed for every child. Checking
+`other.transform.root` accepts them all — but that alone would let a 5 m AI detection sphere ("Enemy
+Search Health") collect a pickup from across the clearing, so a flat distance check against the
+trigger radius decides reach. `OnTriggerStay`, not `Enter`: a detection sphere enters first and is
+rejected, and on Enter alone the pickup would never be reconsidered while the player stands on it.
+
+Collection now raises `WorldToast` ("You picked up 50 Coins"), named from the granted reward rather
+than the content key, which is an authoring detail.
+
+### WorldToast
+
+A static bus in `CR.Core.Notifications`: gameplay raises, UI listens, and nothing in it knows what a
+toast looks like. `AchievementToastPresenter` shows both achievements and these. It keeps its
+achievement-specific name because the UI rig references it by class name from a scene — worth
+renaming when someone is in the Editor anyway.
+
+## A Failed Encounter Re-Arms Itself, and Tries to Fix the Spawner
+
+`SpawnerEncounterBehaviour` gates on `_encounterInProgress` and clears it in `OnBattleEnded`. Since
+an aborted encounter deliberately does *not* raise `OnBattleEnded`, the abort alone would leave that
+gate stuck and the zone silent for the rest of the session — the player is already standing inside
+the trigger, so `OnTriggerEnter` never fires again.
+
+`IBattleCoordinator.OnEncounterAborted` closes that loop. It carries an `EncounterAbort`
+(`SpawnerId`, `Reason`, `Message`); zones filter on the spawner id because one coordinator serves all
+of them.
+
+**What happens on failure**
+
+| Step | Behaviour |
+|---|---|
+| Abort arrives | `_encounterInProgress` cleared, failure counter incremented |
+| First failure, `NoCreatureAvailable` | One repair attempt — the spawner is rebuilt from its `SpawnerDefinition` |
+| Retry | Encounter re-armed after a backoff delay (base doubled per failure, capped at 30 s) |
+| After 3 failures | Stops, with an error naming the spawner. Leaving and re-entering the zone resets the counter |
+
+The backoff and give-up rules live in `EncounterRetryPolicy` (pure, unit-tested). Retrying a broken
+zone on the normal 2-5 s encounter delay would turn one content fault into a permanent stream of
+failed spawns; giving up loudly is more useful than a retry loop that hides it.
+
+### Repair, and what it can actually fix
+
+`ISpawnerRecoveryService` re-syncs the authored `SpawnerDefinition` into the spawner tables. This
+works because **the database pool is derived data** — the asset is the source, and the sync writes it
+at world init. A pool that lost its templates (a bad sync, a soft-delete sweep) is rebuilt from the
+asset; soft-deleted rows are invisible to the read path, so the sync writes fresh ones.
+
+It cannot fix a definition that is itself wrong. If the asset holds templates with no creature key,
+the sync resolves nothing, the prune guard declines to delete anything, and `TryRestoreAsync` returns
+false — logged as an error, because the content needs a person and no retry will change that.
+
+`EnsureReadyAsync` runs the same check **when the zone activates**, so the common case is repaired
+before the player ever walks into the grass, and an unfixable zone reports itself at world init
+rather than mid-play.
+
+## The Spawner Sync Never Prunes From a Config It Could Not Read
+
+`LocalSpawnerSyncClient` reconciles the offline database against `SpawnerDefinition` assets: the
+templates in the asset are upserted, and templates the asset no longer mentions are soft-deleted.
+That second half is only meaningful if the asset was read in full. A template whose creature or
+growth profile cannot be resolved is skipped — and a skipped template looks exactly like a deleted
+one from the prune's point of view.
+
+That is how a single dangling creature id on the server erased 23 live templates (see
+[Backend — Spawner System](../backend/03-spawner-system.md)). `SpawnerPrunePolicy` now gates both
+deletions:
+
+- **Templates** — prune only when every template the pool declared resolved. A pool that declares
+  nothing and resolves nothing is a real edit and still prunes.
+- **Pools** — a definition declaring *no* pools is treated as a failed read rather than an emptied
+  spawner. A spawner with no pools cannot roll anything, so designers effectively never author one,
+  whereas a broken pull produces exactly that shape.
+
+Stale rows surviving one extra sync is the recoverable failure. The deletion is not.
+
 ## Gotchas
 
 **`CurrentTrainerId` null check.** `BattleCoordinator` verifies a trainer session is active before calling `IBattleDomainService`. If the session trainer ID is null, the call is dropped and an error is logged.
@@ -563,6 +731,7 @@ public record NpcBattleRequest(
 ## Related Pages
 
 - [Battle Persistence](?page=backend/09-battle-persistence) — DB tables, `IBattleDomainService`, REST endpoints
+- [Battle Extensions](?page=unity/24-battle-extensions) — the sidecar pattern (`ActionResolved` + `IPlayerAbilityAugmenter`) and battle missions
 - [Content Registry](?page=unity/08-content-registry) — content keys and `SpawnerDefinition`
 - [World Behaviours](?page=unity/03-world-behaviours) — `SpawnerWorldBehaviour`, `IWorldInitializable`
 - [NPC Interaction](?page=unity/04-npc-interaction) — `NpcInteractionBehaviour` fires `OnBattleRequested`

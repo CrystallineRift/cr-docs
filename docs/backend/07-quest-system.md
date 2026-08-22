@@ -257,6 +257,55 @@ If the third win occurs, `newStatus` becomes `"Completed"` and `isCompleted` bec
 
 The same `RecordProgressEventAsync` call also writes the `battles_won` lifetime stat regardless of whether any quest matched.
 
+## Reading Quests from Unity (the quest journal)
+
+Game code never touches `IQuestClient` or `IQuestDomainService` directly. Everything goes through
+`QuestManager`, which holds the session (`SetSession(accountId, trainerId)`) and delegates to
+`IQuestRepository` — the online/offline router (`QuestOnlineOfflineRepository`).
+
+Read surface used by the player menu's **Quests** tab (`Assets/CR/UI/Quests/QuestJournalView.cs`):
+
+| `QuestManager` method | Routes to | Notes |
+|---|---|---|
+| `RefreshActiveQuestsAsync(ct)` | `IQuestRepository.GetActiveQuestsAsync` | Re-reads InProgress instances and replaces the in-memory list seeded by `QuestWorldBehaviour`. |
+| `GetCompletedQuestsAsync(ct)` | `IQuestRepository.GetCompletedQuestsAsync` | Completed instances. |
+| `GetTemplateAsync(templateId, ct)` | `IQuestRepository.GetQuestTemplateAsync` | Name, description, objective texts, rewards. |
+| `AbandonQuestAsync` / `ClaimRewardsAsync` | as before | Unchanged lifecycle calls. |
+
+`QuestManager` also exposes `AccountId`, `TrainerId`, and `HasSession` so a UI can decline to load
+before world init has run rather than throwing out of `AssertSession`.
+
+### Why those two reads do not branch on connectivity
+
+`GetActiveQuestsAsync` is the only read that has a server endpoint; the two added reads are answered
+locally in **both** modes, deliberately:
+
+- **Completed instances** — there is no `/completed` REST endpoint. The router already mirrors every
+  server-returned instance into the local `quest_instance` table (active fetch, `/progress` results,
+  claim results), so online play reads its own mirror instead of inventing a round-trip with nothing
+  to call.
+- **Templates** — templates are *content*, not player state. `QuestWorldBehaviour` syncs every
+  `QuestDefinition` SO into the local `quest_template` tables at world init regardless of
+  connectivity, so the local domain service is the correct source in either mode and costs no
+  network hop.
+
+### Instance vs template in the UI
+
+A `QuestInstance` carries only IDs, status and counts. Objective *text* lives on
+`QuestObjectiveTemplate`, so the journal pairs each `QuestObjectiveProgress` row to its template by
+`ObjectiveTemplateId`. An objective with no progress row yet (progress never recorded) still renders,
+at zero — so the player sees the full task list the moment they accept.
+
+Roll-up maths and the "may this quest be claimed" rule are **not** in the view: they live in the
+engine-free `CR.UI.Logic` assembly (`QuestProgressCalculator`, `QuestActionPolicy`) and are unit
+tested. Optional objectives never hold the headline progress bar back, and `CanClaim` requires
+`Completed && !RewardsClaimed` — claiming grants rewards, so a double claim is the failure that
+matters.
+
+> Note: `QuestRewardDispatcher` auto-claims on `OnQuestCompleted`, so most completed quests already
+> have `RewardsClaimed = true` by the time the journal opens and correctly show no Claim button. The
+> button exists for instances whose auto-claim did not land.
+
 ## Quest Lifecycle
 
 ```

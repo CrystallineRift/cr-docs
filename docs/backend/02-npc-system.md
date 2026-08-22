@@ -416,6 +416,7 @@ All NPC endpoints are prefixed `/api/v1/npc`.
 | `POST` | `/api/v1/npc/{npcId}/ensure-creature-team` | `EnsureNpcCreatureTeam` — idempotent multi-slot team seeding |
 | `POST` | `/api/v1/npc/{npcId}/ensure-items` | `EnsureNpcItems` — idempotent item inventory seeding |
 | `GET` | `/api/v1/npc/{npcId}/items` | `GetNpcItems` — fetch NPC's current item inventory |
+| `GET` | `/api/v1/npc/{npcId}/creature-team` | `GetNpcCreatureTeam` — fetch the NPC's creatures. The write side answers with a count, so an online client needs this to read back a team the server just created |
 | `POST` | `/api/v1/npc/{id}/give-creature` | Give NPC's creature to trainer storage |
 | `GET` | `/api/v1/npc/{id}` | Get NPC by ID |
 | `GET` | `/api/v1/npc` | List NPCs for trainer |
@@ -478,6 +479,25 @@ GET /api/v1/npc/ffee9012-.../items?accountId=00000000-...&trainerId=00000000-...
   ]
 }
 ```
+
+### `GET /api/v1/npc/{npcId}/creature-team` — GetNpcCreatureTeam
+
+```
+GET /api/v1/npc/ffee9012-.../creature-team?accountId=00000000-...&trainerId=00000000-...
+
+→ 200 OK
+{
+  "creatures": [
+    { "creatureId": "11112222-...", "slotNumber": 1 },
+    { "creatureId": "33334444-...", "slotNumber": 2 }
+  ]
+}
+```
+
+This exists because `ensure-creature-team` returns a **count**, not the team. Online, the team is
+written server-side and the client's local `npc_creature_team` table never receives it — without a
+read route, every NPC meant to hand over or battle with a creature looked empty to an online player.
+`NpcOnlineOfflineRepository.GetNpcTeamAsync` routes here when online and reads local when offline.
 
 ### `POST /api/v1/npc/{npcId}/ensure-creature-team` — EnsureNpcCreatureTeam
 

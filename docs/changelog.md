@@ -1,5 +1,482 @@
 # Changelog
 
+## 2026-08-22 — a merchant per area, stocked from the server when online
+
+Every area instantiated the same merchant prefab with `demo-merchant` baked in, so five bodies
+were one NPC row and one inventory — and that inventory was the first roll from 19 days ago,
+draining as the player bought, because a restock cooldown of 0 meant "never". Online mode never
+talked to the server for merchants at all: `INpcMerchantService` was bound straight to the local
+implementation.
+
+Now:
+
+- **One merchant and one quest giver per area** — `demo-merchant-area-{n}` /
+  `demo-questgiver-area-{n}`, stamped onto the prefab instances by `cr_polish_areas` from
+  `AreaNpcKeys`. Ten new `NpcDefinition` SOs, registered and localised.
+- **Five stock spawners**, `demo-merchant-area-{n}-items`, seeded by `M6015` and authored as SOs;
+  cheap crystals in area 1, radiant and the charm weighted toward area 5.
+- **Stock refreshes on every world load** (`NpcMerchantBehaviour` forces the re-roll).
+- **Online is server-authoritative**: `NpcMerchantOnlineOfflineService` routes every merchant call
+  to `/api/v1/merchants/*` when online, local SQLite when offline, sampled per call. No fallback.
+  New `GET /merchants/{id}/multipliers`; 409 bodies now survive as `ConflictException` so a refused
+  purchase shows its reason.
+- **Audit**: `AuditAreaNpcs` scrapes the area scenes and reports shared, empty, undefined and
+  wrongly-typed NPC keys — every one of which had shipped silently. `demo-merchant.asset` said
+  `QuestGiver`; fixed.
+- **Bug found by the new read-back test**: `spawn_probability` is NUMERIC-affinity in SQLite, so a
+  pool mixing `1.0` (stored INTEGER) and `0.5` (REAL) threw for the whole query. `CAST AS REAL` on
+  the SQLite read path.
+
+Then a gap audit went looking for what the first pass missed, and found plenty:
+
+- **The authored spawner key was inert.** `NpcDefinition.itemSpawnerContentKey` synced to the server
+  and passed the audit, but the game read the *scene* field, which `cr_polish_areas` overwrote with
+  the numbered convention — so editing the SO changed nothing. The stamper now reads the SO and only
+  falls back to the convention when it is unset, and a new `npc_stock_key_drift` warning fires when
+  the scene and the SO disagree.
+- **Merchant identity came from the GameObject name.** Duplicating a merchant (`CR_NPC_Merchant (1)`)
+  or renaming it silently switched off key stamping *and* every merchant audit check. Identity now
+  comes from the source prefab.
+- **Two merchants in one area sharing a key went unreported** — the audit grouped by distinct area,
+  so the Ctrl-D case, which is the same one-row-two-bodies bug, slipped through.
+- **A pull could wipe an authored link.** The server upsert coalesces so a runtime re-ensure cannot
+  null the key; the pull direction had no such guard, so Pull All on a never-pushed project unlinked
+  every merchant from its stock.
+- **`isActive` was a decoy in item-spawner sync** — a designer could disable a pool or template, push
+  it live anyway, then pull and have it silently re-enabled. The hardcode was in
+  `ItemSpawnerDomainService`, one layer above the endpoint, so it round-trips properly now.
+- **236 dead doc-source globs.** Every `cr-data` pattern carried a `cr-api-unity/` prefix, but the
+  watcher runs `git log` with that repo as its working directory — so the prefixed form matched
+  nothing and 27 doc pages could never be marked stale.
+
+Two weak tests were replaced rather than trusted. `SeedIsIdempotentOnRerun` could not fail:
+FluentMigrator skips an applied migration, so the seed SQL never ran twice and every guard in it
+could have been deleted with the test still green. The replacement deletes the `VersionInfo` row and
+re-runs, and was sabotage-checked by stripping a guard.
+
+Verified: cr-api full suite green; Unity area-logic and merchant-router logic green standalone; the
+Editor compile gate confirmed with a positive control per assembly, because Unity aborts the
+remaining assemblies on the first failure and one injected error only proves one of them is live.
+
+## 2026-08-22 — six missions, and the player picks one
+
+Battle missions were one hard-coded objective that was always on. There are now **six**, and the
+player chooses which to carry into the next fight from the team view's sidebar, beside the run
+summary.
+
+New content: Deep Freeze (Slow), Mind Games (Confusion), Earthbound (Grounded), Venomancer
+(Poisoned), Wildfire (burn four *different* creatures) and Clean Sweep — the first mission that is
+not about status at all, counting the player's own knockouts. Each unlocks an existing high-power
+ability, so every reward is a move the battle system already knows how to resolve and animate.
+
+**No mission uses `Weakened`**, because exactly one ability applies it and a mission nobody can
+finish reads as a bug rather than a challenge. A migration test now enforces that generally: every
+status mission must name a condition some ability can actually inflict, every reward ability must
+exist, and every mission type must be one the tracker implements.
+
+`KnockOut` is a new mission type in the tracker, and an unknown type now scores zero instead of
+being skipped by a type check — content naming a type this build has not implemented should be
+inert, never fatal to a turn.
+
+The selection is **client state by design**: the conductor is a Unity sidecar that evaluates
+missions from the outcome stream both online and offline, so nothing on the server needs the
+choice. It is kept per trainer, so two characters on one device do not share a loadout.
+
+
+## 2026-08-21 (evening) — a player who is wearing clothes
+
+**The player was the Malbers demo rig, in underwear.** Its only body texture is named `SteveNaked`
+and all five material variants are skin tones. The BoZo pack has clothed characters but no
+controller, and the two skeletons share not one bone name — `R_Spine2` versus `spine_04` — so the
+mesh-rebinding trick used for the area NPCs could not work.
+
+Both avatars are Humanoid, though, so Mecanim retargets `AC Human v5` onto BoZo's skeleton. The root
+GameObject is never replaced: `MAnimal`, `Aim`, `IKManager`, the Rigidbody, the movement capsule and
+the `Tags` component all stay put, and only the skeleton and meshes beneath change.
+
+The part that would otherwise have cost an evening: deleting a skeleton nulls every Malbers
+reference into it, including `MAnimal.RootBone` — which gives a character that loads without a
+single error and then does not move. Rather than warn, the command records what each reference
+*meant* as a `HumanBodyBones` value before the delete and re-points it afterwards: 8 of 11
+re-pointed automatically, along with the three bone-mounted hit capsules.
+
+Two more it caught by itself: the hair carried 7 simulation bones with no body equivalent (null bone
+entries smear a mesh to the origin — now anchored to the head), and the new body is 35% taller, so
+the movement capsule was scaled to match or the character walks shin-deep in the floor.
+
+**Follow-up 3 — a NullReferenceException flood from the character pack.** Every BoZo component
+looks for an `OutfitSystem` in its parents, and that object was the prefab root the graft discards.
+`BodyShapeModifier` calls `system.GetBones()` from `LateUpdate`, so eleven orphaned copies threw
+every frame — about 660 exceptions a second. The swap now strips the entire `Bozo.*` namespace from
+the grafted rig (36 components here: `BodyShapeModifier` x11, `BoZo_MagicaClothCollider` x13,
+`Outfit` x8, plus `ApplyTags`, `OutfitHideByTag`, `OutfitHeightChange`), because the pack is used as
+static art — bound once at build time, with nothing to re-fit at play time.
+
+**Follow-up 2 — the clothes went through the body.** `ProxyMesh`, the base rig's one visible mesh,
+is a low-poly *fitting proxy*, not the body. The real body is `Body_BasicBody`, split into fourteen
+region renderers, and that split is the pack's hiding mechanism: a garment's `CoverChest` /
+`CoverUpperArms` tag names a region directly, and you switch it off. Rendering the proxy meant a
+whole naked body sat inside the clothes. Now 14 regions bind and 7 are hidden under the outfit,
+read from each garment's own `ApplyTags` data rather than from its name.
+
+Two follow-ons from that: the head is a separate piece (the proxy had been supplying the face, so
+hiding it produced a headless character), and eyes anchored to the rig root — which sits on the
+floor — stretched from the face to the feet as a thin spike. Head, hair, face and makeup slots now
+anchor to the head bone.
+
+**Follow-up — the camera flew up on start.** Self-inflicted: the re-homed chest and head capsules
+were created on new GameObjects, which are born on layer `Default`. The third-person camera's
+obstacle avoidance filters on exactly `Default` and deliberately excludes the character's own
+`Animal` layer, so the camera began treating the player's own torso as world geometry and shoved
+itself out of it — upward, every spawn, with nothing in the console. Carriers now inherit the bone's
+layer. Fixed alongside it: `MAnimal.RootBone` was set to the topmost bone (`armature`) where Malbers'
+own rule is `Hips.parent` (`root`).
+
+`cr_swap_player_in_scene` does it in place on `Core.unity`, because the scene player carries a dozen
+CR and Dialogue components the Malbers prefab has never seen; **26 components preserved**, camera
+tracking intact, 0 null bones. `cr_build_player_model` produces a standalone prefab — and sets its
+tag to `Player`, since the Malbers prefab ships tagged `Animal` and every door, pickup and NPC
+trigger tests for `Player` by name.
+
+
+## 2026-08-21 (later again) — rewards that scale, and somebody in every area
+
+**Gold did not scale with level because there was no gold.** Loot tables existed for exactly two
+owners — the creature `cindris` and the spawner `starter-wild-zone` — and no playable area uses
+either. Every wild battle in Meadow, Cave, Shore, Crags and Dunes rolled against an empty entry set
+and dropped nothing at all. The loot system was working perfectly on content nobody had authored.
+
+Two fixes, because one alone would leave the other half broken:
+
+- **`BattleRewardScaling`** grants victory currency from the defeated creature's level, before and
+  independently of the loot roll. It needs only the level, not a resolved `content_key` and not an
+  authored table — both of which had been missing in practice. A win that pays nothing reads as a
+  broken battle, not as a gap in the data.
+- **`M7103`** seeds a loot table for each of the five area spawners, so items drop too. The five are
+  identical on purpose: all five areas draw from the same level band (2–10), so tiering the drops
+  would encode a difficulty difference the spawner data does not have.
+
+**Experience is quadratic now, not linear.** Levelling costs `0.8 x (level - 1)^3`, so the price of
+the next level grows like `level^2` while the old `5 x level` award grew like `level`. The gap
+compounded: roughly 3 wins per level at 10, 10 at 20, and **48 at the level cap** — the game got
+slower the longer it was played, which is what a grind is. Matching the curve's shape holds it near
+2.5–4.5 wins per level from start to cap. Currency loot and experience loot rolled from tables are
+scaled by the same growth factor; item and creature quantities are **not**, because those are counts
+rather than amounts and multiplying them hands out inventories. Levels are clamped to `[1, 100]` for
+scaling so a corrupt level field cannot mint an unbounded amount into the economy.
+
+**Every area has a quest giver and a merchant.** They were split one per area — quest giver in
+Meadow, merchant in Cave — to prove content initializes in a scene loaded after the game has booted.
+Cave still covers that. What the split also produced was three areas with nobody in them. Both are
+now in all five, added by `cr_polish_areas` so a finished area gains them without a rebuild that
+would discard its dressing.
+
+
+## 2026-08-21 (later still) — pickups, edges, zone colour and people
+
+**Pickups were dead three ways over.** Every placed pickup asked for `item_heal_potion_30`, which is
+not a `pickup_definition` — the seeded ones are `pickup_small_currency` and `pickup_lost_toy`
+(`pickup_coin_pile` and `pickup_bouncy_ball` are model asset keys on those rows, not definitions).
+The lookup returned null, and because `_collecting` was set on entry and cleared only in the `catch`,
+that early return left the pickup **visible and permanently inert** — which is exactly what "they
+stay on the scene" looked like. And the player could not have triggered it anyway: the Malbers rig
+tags only its root `Player`, so `CompareTag` on the entering collider failed for every child while
+the ones that did fire were 5 m AI detection spheres.
+
+All three are fixed: real content keys with a unique instance id per placement (they had shipped
+sharing one, so collecting any single pickup would have despawned the other four), a `finally` that
+releases the flag on every non-despawn path, and reach decided by distance from the collector's root
+rather than by which collider happened to hit. `OnTriggerStay`, because on Enter a rejected detection
+sphere means the pickup is never reconsidered while the player stands on top of it.
+
+Collection now raises a **`WorldToast`** — "You picked up 50 Coins" — named from the granted reward
+rather than the content key. The bus lives in `CR.Core.Notifications`: gameplay raises, UI listens.
+
+**You can no longer walk off the world.** Four invisible slabs at each ground's edge, sized from the
+ground renderer's own bounds, 20 m tall and sunk 2 m so they cannot be vaulted or clipped under.
+Verified by raycast at four heights in all five areas.
+
+**The encounter zones carry their biome's colour** — a low, faint disc of the area's signature hue
+inside the trigger, so "fights happen here" and "this place is Ice" are one idea.
+
+**The quest giver and merchant are people.** They were primitive cylinders, and nothing in the
+project had a dressed humanoid to replace them with — the Malbers body texture is literally named
+`SteveNaked` and its five variants are skin tones in underwear. So the character is assembled from
+the BoZo modular pack: base body plus tunic, trousers, boots, each piece's bone array remapped by
+name onto the base skeleton. Parenting alone would have left the clothes standing still while the
+body walked off.
+
+Known gaps: the hair piece did not bind and the NPCs are bald, and the outfit materials read muddier
+than the pack's own demo. Both are cosmetic and want an Editor session.
+
+
+## 2026-08-21 (later) — each biome lit as its element
+
+Every area now names an element before a single creature appears: Meadow Flora, Cave Ground, Shore
+Water, Crags Ice, Dunes Fire. The mapping is terrain-intuitive rather than read from the spawn pools,
+because the pools are deliberately mixed — the Cave rolls six elements at one creature each, so there
+is no dominant element in the data to derive from.
+
+**The values live in one table now.** Sun, ambient, fog, ground, motes and signature colour used to
+be spread across three `switch` blocks, so a biome could not be described without reading all three
+and could not be changed without editing all three. `ElementalPalette` collects them into a row per
+place.
+
+That split had already caused drift. Portal colours sat in a *fourth* table, and the Cave portal was
+still purple after the Cave became Ground ochre — the doorway taught one element and the room behind
+it another. `PortalColour` now reads the destination's signature from the same table, so a door is
+coloured by where it leads.
+
+**The motes are authored.** AZURE ships god rays, leaf fall and snow; everything else on disk is a
+combat impact effect. Pollen, cave dust, sea spray and embers do not exist in any imported pack, so
+they are built as particle systems with drift carrying the meaning — pollen and embers rise, cave
+dust falls from a ceiling. Crags gets none: it is Ice and already snowing.
+
+Two traps on the way. Particle modules are structs returned by value, so editing a local copy does
+nothing until it is assigned back. And the Cave has no weather prefab — no sky to have weather in —
+so an early return on "no weather" skipped the mote build for the one biome that most needed its
+element in the air.
+
+**Known, not fixed:** the battle arena sits 99 m from each play area and its 31 m backdrop is always
+active, so it reads as a pale wall on the horizon wherever the fog runs far enough to show it — most
+visibly in the Dunes, whose fog deliberately reaches 220 m. That predates this change and needs a
+decision about hiding the arena until a battle starts.
+
+
+## 2026-08-21 — something to fight, and somewhere to find it
+
+**Walking into a zone sometimes produced nothing, and it was not the content bug.**
+`CreatureSpawnDomainService` chose a spawn pool with a weighted draw and only then asked whether that
+pool held any templates. An active-but-empty pool could win the draw, and the spawn returned
+`NoTemplatesAvailable` while a sibling pool sat full of creatures — a coin flip weighted by the
+pools' own `spawn_weight`. The global-template fallback had the same shape, firing only when the
+spawner had *no* pools at all, so one emptied pool skipped it and starved.
+
+`SelectProductivePoolAsync` collects every reachable pool (the spawner's own and the global
+template's, every time), drops the ones holding no templates, and draws over what is left. If
+anything under a spawner can produce a creature, it now does. All-zero weights and all-zero
+probabilities are handled explicitly rather than falling through: both are states a designer can
+author, and neither should cost an encounter already committed to.
+
+The regression test repeats 25 times with the empty pool carrying 1000× the weight of the full one.
+The bug was probabilistic; one green pass would have proved nothing. Reverting the service makes
+exactly those two tests fail.
+
+**The bushes are the encounter now.** Wild battles only ever fire from the `CR_EncounterZone`
+trigger, whose own renderer is disabled — so the design problem was making an invisible 5 m circle
+legible. Ground cover alone did not do it: grass reads as scenery in a meadow because grass is
+everywhere, and the cave and the dunes have none to read. Each zone now also gets a raised clump
+inside 55% of the trigger radius — near enough that reaching the bush and entering the trigger are
+the same act. Flowering shrubs in the Meadow, a mushroom thicket over slate in the Cave, cattails on
+the Shore, dead scrub over stones in the Crags and Dunes.
+
+`MakeWalkThrough` strips the colliders off every piece of that dressing. It is the difference
+between a bush you run into and a bush you bounce off: these prefabs are authored as scenery to walk
+*around*, and leaving their colliders on would build a wall exactly where the trigger is. Verified by
+rendering all five zones and by a `Physics.OverlapSphere` at each trigger — zero solid colliders
+inside any of them.
+
+
+## 2026-08-20 — the DEFEAT screen for a battle that never happened
+
+Walking into the grass produced a **DEFEAT** summary reading `loop_complete`: no experience, no
+items, no events. Nothing about the battle system was broken. The meadow had no creatures to spawn,
+and every layer between that fact and the player converted it into something less true than the
+layer before.
+
+The chain, cause first:
+
+1. The eight newest species were authored through the Content Studio, so Postgres assigned their ids.
+   `M10000SeedRosterCreatures` seeded the same content keys with different hard-coded ids, lost to
+   the UNIQUE index on `creature.content_key`, and `ON CONFLICT DO NOTHING` dropped the rows in
+   silence.
+2. `M10001`/`M10002` pointed the area templates at the discarded ids. No foreign key exists from
+   `creature_spawner_template.base_creature_id` to `creature.id`, so every insert succeeded.
+3. The spawner config endpoint resolves the creature by id to fill `creatureContentKey`, and
+   returned `""` for each affected template.
+4. A Content Studio pull wrote those blanks into the `SpawnerDefinition` assets.
+5. The offline spawner sync read the assets, resolved no creature for a single template, and applied
+   its normal rule for templates missing from a config: it soft-deleted all 23 of them. Meadow, Cave
+   and Crags lost their entire spawn list.
+6. `BattleCoordinator` found no opponent and returned early — into a `finally` that called
+   `EndBattle(null, "loop_complete")` regardless, which derives `playerWon` from a null winner.
+
+Each step was individually defensible. Together they turned one mismatched GUID into a lost battle
+the player never fought.
+
+**Four fixes, one per layer that could have stopped it.**
+
+`M10006RepairTemplateCreatureIds` repoints dangling templates using the denormalized
+`creature_content_key` on the template row — the one link between the two id sets that stayed
+correct. It touches only rows whose id resolves to nothing, so a healthy database is untouched and
+re-running is a no-op.
+
+The config endpoint falls back to that same column and logs a warning instead of emitting an empty
+key as though it were data.
+
+`SpawnerPrunePolicy` stops the sync deleting from a config it did not read cleanly: templates are
+pruned only when every one the pool declared resolved, and a definition declaring no pools at all is
+treated as a failed read rather than an emptied spawner. Stale rows surviving one sync is
+recoverable; the deletion was not.
+
+`BattleCoordinator` tracks `_encounterStaged` and, when an encounter dies before the arena is staged,
+unwinds quietly instead of inventing a result. The player never left the overworld, so that is where
+they stay.
+
+**The zone now recovers on its own.** Fixing the DEFEAT screen exposed the other half of the
+problem: `SpawnerEncounterBehaviour` clears its `_encounterInProgress` gate in `OnBattleEnded`, and
+an aborted encounter deliberately never raises it — so a quiet abort would have left the zone dead
+for the rest of the session, with the player standing inside a trigger that cannot fire again.
+
+`OnEncounterAborted` closes the loop. The zone clears its gate, and on the first
+`NoCreatureAvailable` failure asks `ISpawnerRecoveryService` to rebuild the spawner from its
+`SpawnerDefinition` — which works because the database pool is derived data and the asset is the
+source. Then it re-arms on a capped exponential backoff, and after three failures stops with an error
+naming the spawner, because a zone whose pool is genuinely empty fails every time and a retry loop
+would only bury that. `EnsureReadyAsync` runs the same check at activation, so the usual case is
+repaired before the player reaches the grass.
+
+**The test that was missing.** `EveryTemplatePointsAtACreatureThatExists` asserts the invariant
+against a full migration run. It is the check nobody wrote, and its absence is why a schema-level
+inconsistency surfaced as a gameplay bug in a playtest rather than as a red build.
+
+
+## 2026-08-19 — a battle arena per area, and the clearance check that was lying
+
+Every area instanced `CR_BattleArena` with the prefab's default `arenaKey` of `starter-wild-zone`, so
+all five arenas claimed the same key — harmless with one area loaded, ambiguous during a portal
+transition when two scenes are briefly loaded together. And the arena itself was a bare 20 m plane,
+so a battle showed the world beyond rather than a place. Each area now owns its key
+(`meadow-arena`, `cave-arena`, `shore-arena`, `crags-arena`, `dunes-arena`), its `BiomeType`, a 70 m
+ground in its own material, and dressing built from its own biome's props.
+
+`cr_dress_arenas` does the work and repoints every battle-starter in the scene at the new key. The
+constraint that shaped it: the authored establishing vCam orbits the arena centre at **radius 9**
+(ring heights 0.1–5), close shots sit ~3 m off a creature, trainers stand at x ±9 and creatures at
+±4.5. So radius < 14 is a no-build zone, dressing lives at 15–28, and the backdrop at 31.
+
+**The check that lied.** The first version measured each prop's distance from the arena centre by its
+**pivot** and reported a reassuring "closest prop 15.0 m". The cave render was taken from *inside* a
+boulder: `RockCave`'s mesh is wide enough that a pivot at 21 m reaches to 6 m. `TryClearFootprint`
+now measures world bounds, pushes each instance out until its geometry clears, and drops it if it
+cannot fit at all — which retired every `RockCave` in the cave plan, so the chamber is built from
+rocks that fit. The report says `nearest geometry`, and that number is honest.
+
+**Ending the view took two mechanisms, not one.** Occluders are placed on staggered rings — evenly
+spaced by angle, each ring phase-offset so one ring's props cover the next ring's gaps — because
+uniform random placement leaves holes, and every early render showed daylight between the cliffs.
+Rings still could not be *guaranteed*, so a backdrop tube stands behind them at radius 31: 16 m tall,
+unlit, tinted to each biome's distance. Props give the silhouette; the backdrop gives the certainty.
+
+Two traps met on the way. The backdrop is viewed from inside and back-face culling keys off triangle
+**winding**, not normals — so a correctly authored inward surface rendered as nothing until the
+material set `_Cull Off`. And the material was only configured at creation, so an asset from an
+earlier run kept its first settings and later tweaks silently did nothing; settings are now
+re-applied every run.
+
+**`cr_render_arenas`** renders each arena from the camera's own orbit, three bearings, and writes
+PNGs. Every real defect in this feature — the wrong prefab packs, the ring gaps, the boulder around
+the camera — was found in an image, never in a log.
+
+→ [Area Scenes — per-area battle arenas](?page=unity/22-area-scenes)
+
+## 2026-08-19 — the opponent could not attack: status conditions were never wired up
+
+A playtest report — *"the opponent looked unable to attack and kept passing the turn to me"* — turned
+out not to be a battle-loop bug at all. The opponent was taking its turn; the turn just did nothing,
+and nothing on screen said so.
+
+Three faults stacked. The wild AI rolls a **20 % chance to use a Status-category ability**. Growl is
+the only Status ability in the game, deals no damage by design, and its entire contribution is the
+condition it applies. And **no ability in any database inflicted any condition**: `M9990SeedGameData`
+seeded four status conditions but nothing ever populated `ability_status_conditions` or
+`status_condition_stat_changes`, so both tables were empty in Postgres and in the baked SQLite floor
+alike. Growl was a guaranteed no-op. Add a 15 % miss rate on the alternative and **≈32 % of wild
+turns produced no visible effect** — a third of them, with no message to explain it.
+
+The same empty table also made `mission_pyromaniac` ("apply Burn three times") permanently
+unreachable. The tracker and conductor were both correct; the content could not produce the event
+they counted.
+
+**Content** — `M10005SeedAbilityStatusConditions` seeds 22 ability→condition links (Fire→Burn,
+Ice/Lightning→Slow, Poison→Poisoned, Ground→Grounded, Radiant→Confusion, Growl→Weakened), a stat
+change per condition, and a duration on every condition — a NULL duration read as "lasts the whole
+battle". Two traps found on the way: `damage_per_turn` / `healing_per_turn` on `status_conditions`
+are **inert** (the resolver reads damage over time from a `HealthPoints` stat change), and
+`BuildSnapshotAsync` honours only `Add` and `Subtract`, so a `Multiply` amount silently does nothing.
+Verified by querying the migrated database rather than trusting the migration to report success —
+the same class of bug bit an earlier seed that "succeeded" while writing zero rows.
+
+**The fix the content needed** — seeding the links would still have changed nothing.
+`BaseAbility.ConditionsInflictedIds` is not a column: it has to be joined in from
+`ability_status_conditions`, and **no ability read path did that join**. `GetAbility`,
+`GetAbilitiesPaginated` and `GetAbilitiesForProgressionSetAtLevelAsync` all returned abilities
+claiming they inflicted nothing, so `BattleDomainService` skipped condition resolution entirely —
+status effects had been dead project-wide with no failing test to show it. `HydrateConditionsInflictedAsync`
+now fills the property on all three paths in one batched query, and `AbilityConditionHydrationSqliteTests`
+reads it back through the real repository against a migrated database.
+
+**Migration domains** — running the Docker suite surfaced 13 failures in
+`CR.Creatures.Data.Postgres.Test` that `--skip-docker` had been hiding. Three Creatures-domain
+migrations seed the world into Spawner-domain tables, which do not exist in a domain-scoped run;
+they now guard on `Schema.Table(...).Exists()`. That skip is silent, and a silent skip in the full
+pipeline would empty the game world without failing anything, so `WorldContentSeedSqliteTests`
+asserts all five area spawners exist, no spawner has an empty pool, and no progression set is
+without entries.
+
+**Wild AI** — a status ability is now only chosen if it actually inflicts something, and the 20 % roll
+is only made when such an ability exists. Separately, `LoadAbilitiesAsync` was passing a hardcoded
+level `1` to `GetAbilitiesForProgressionSetAtLevelAsync`, pinning every wild creature to its starting
+moves forever; it now uses the creature's real level.
+
+**HUD** — every resolved turn now says something: *"The opponent used Cyclone!"* before the animation,
+*"But it missed!"* on a miss, and *"But nothing happened!"* as a trailing remark when an ability
+connected and still changed nothing. The last rule lives in `BattleTurnNarration.IsSilentTurn` in the
+pure `CR.Game.Battle.Logic` asmdef (10 EditMode tests). The log shows `ActionOutcome.AbilityName`,
+a new field: `AbilityKey` is an animation key and twelve abilities share `fire_ember`, so it would
+name the wrong move for eleven of them.
+
+Also fixed while in there: `BattlePresentationSequencer` reported `ConditionsTriggered` and
+`ConditionsRemoved` against the **target**, but `BattleResolver` collects both from the **attacker's**
+condition list — so a burn ticking on your own creature was announced as the opponent's.
+
+**Spawners** — `CR.REST.AIO/Program.cs` declares spawner routes inline instead of calling
+`MapSpawnerEndpoints`, and `GET /api/v1/spawners/content-registry` was missing. Content Studio's
+Spawners **Pull** therefore 404'd against the dev host no matter what the database held, which is why
+the five area spawners seeded by `M10001`/`M10002` (meadow, cave, shore, crags, dunes) existed as
+rows but never as `SpawnerDefinition` assets. Route added; Pull now creates the missing assets.
+
+→ [Battle Persistence](?page=backend/09-battle-persistence#condition-application) ·
+[Battle System — turn narration](?page=unity/07-battle-system) ·
+[Spawner System](?page=backend/03-spawner-system) ·
+[Backend Architecture — migration domains](?page=backend/01-architecture)
+
+## 2026-08-19 — battle extensions: in-battle missions without touching the battle system
+
+In-battle missions shipped — *"set the same target burning three times → unlock Mega Burn for the
+rest of this battle"* — and the battle system was not modified to support them. The interesting part
+is the shape, not the feature.
+
+An extension gets **two seams and nothing else**: `BattleEvents.ActionResolved` coming out (raised
+after `PlayAndReconcileAsync`, so a reaction lands after the hit it reacts to) and
+`IPlayerAbilityAugmenter.Augment` going back in (between `BuildAbilityListAsync` and
+`RaisePlayerTurnStarted`, player turns only, injected `[InjectOptional]` so battles run with nothing
+bound). Neither seam can change how an action resolves.
+
+An unlocked move needs no special handling downstream because `BattleDomainService` looks abilities
+up by id with **no ownership check** — so an injected entry flows through the ordinary pipeline:
+same damage math, same FX keys, same presentation beats. The honest caveat is that online play
+therefore trusts the client about unlocks; acceptable for now, recorded as a follow-up.
+
+`BattleMissionTracker` is pure and per-battle (`CR.Game.Battle.Logic`, 11 EditMode tests), so mission
+progress has no persistence, no migrations and no online/offline routing — it dies with the fight.
+Only the templates are content: `battle_mission_template` (M10004, seeding `mission_pyromaniac`) plus
+the Mega Burn ability (M10003), served by `GET /api/v1/battle-missions` and read through the shared
+`SyncRouter`, exactly like every other domain.
+
+New page: [Battle Extensions](?page=unity/24-battle-extensions), written as the pattern for the next
+combo meter or style scorer rather than as a mission feature tour.
+
 ## 2026-08-05 — fixed: main menu ignored the gamepad; interact moved to X
 
 **The main menu.** Not an input-wiring fault, despite appearances. Measured live: `bindingMask=null`,
