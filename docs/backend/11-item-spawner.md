@@ -55,9 +55,16 @@ A template is now removed from the candidate list once it wins, so a slot yields
 and its quantity is a single draw from the authored `[min, max]`. `max_slots` is a **cap**, not a
 quota.
 
-> Raising `max_slots` past the template count no longer inflates quantities — it just means every
-> template can appear. A spawner with as many slots as templates therefore stocks all of them, so
-> put rarity in `max_slots` rather than relying on repeated draws to thin the pool.
+`spawn_probability` is then an actual **probability**, not a relative weight: each template that a
+slot considers passes or fails its own trial, so a `0.15` charm reaches the shelf about 15% of the
+time and `max_slots` caps how many items can. A failed trial consumes the template — one trial each
+per roll — but not a slot.
+
+> This pairing matters. An earlier version removed a template once picked but still treated the
+> number as a weight, so any spawner whose `max_slots` reached its template count drew **every**
+> template with certainty: a `p=0.05` radiant crystal appeared in 2000 rolls out of 2000, and the
+> rarity gradient existed only in the column. Rarity lives in `spawn_probability`; `max_slots` is
+> the ceiling on shelf size.
 
 ## Stocking a merchant
 
