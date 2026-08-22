@@ -60,7 +60,15 @@ Seeded by `M7303SeedAchievements` (idempotent, dual-engine):
 - `QuestManager` re-broadcasts `OnAchievementUnlocked` from `QuestProgressResult.NewlyUnlocked` (and the claim result), so unlocks surface from the same event flow as quest completions.
 - `AchievementToastPresenter` shows a transient "Achievement Unlocked" toast on that event (auto-dismiss; no input-map gating).
 - `LocationTriggerBehaviour` is a scene-placed passive trigger (modeled on `PickupBehaviour`) that calls `QuestManager.OnLocationVisited(contentKey)` — the first consumer of that previously-unused helper — driving `LocationVisited` achievements.
-- A full trophy/list screen and Content Studio authoring for achievement definitions are deferred.
+- The player menu's **Journal** tab (`Assets/CR/UI/Journal/JournalView.cs`) is the trophy list. It reads
+  `IAchievementDomainService.GetAllDefinitionsAsync` (content) plus `GetUnlockedForTrainerAsync`
+  (player state) and joins them in app code — never across the two physical databases. Progress per
+  row is the trainer's value of the stat the trigger maps to, resolved through the **same**
+  `AchievementStatKeyMapper` the unlock check uses, so the bar cannot disagree with the evaluation.
+  The unlock *record* is authoritative for the badge: lowering or raising a `threshold` by a content
+  edit never re-locks an already-earned achievement. `Hidden` definitions stay off the list until
+  earned. The same tab's **Records** section lists the trainer's raw lifetime `StatKey` totals.
+- Content Studio authoring for achievement definitions is still deferred.
 
 ## Migration ranges
 

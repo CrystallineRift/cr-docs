@@ -320,6 +320,15 @@ Request body mirrors `SpawnerConfigSyncRequest` (contentKey, displayName, maxCap
 | `PUT` | `/api/v1/spawners/by-content-key/{contentKey}` | Upserts a spawner definition by `content_key`. Creates the global template row if it doesn't exist; updates display fields if it does. Body: `SpawnerDefinitionSyncRequest` (`DisplayName`, `Description`, `MaxCapacity`, `SpawnCooldownSeconds`, `BattleArenaKey`). Returns `{ contentKey }` on success. |
 | `DELETE` | `/api/v1/spawners/by-content-key/{contentKey}` | Soft-deletes the global spawner template row with the given `content_key`. Per-trainer spawner rows are unaffected. Returns 204 on success, 404 if not found. Spawner templates have no per-trainer player-data guard — the delete is always safe. |
 
+:::caution AIO maps these routes by hand
+`CR.REST.AIO/Program.cs` does not call `MapSpawnerEndpoints` — it declares spawner routes inline, so a
+route can exist in `SpawnerEndpoints.cs` and still 404 against the local dev host. `content-registry`
+was missing there, which meant Content Studio's **Spawners → Pull** always failed against AIO
+regardless of what the database held: a spawner seeded by a migration could never become a
+`SpawnerDefinition` asset in Unity. When adding a spawner route, add it in both places, and verify
+against a running AIO (`curl localhost:8080/swagger/v1/swagger.json`), not just against the source.
+:::
+
 ### Spawning
 
 | Method | Path | Description |
@@ -384,6 +393,76 @@ public Guid WildTrainerId { get; private set; }  // always 00000000-0000-0000-00
 `SpawnerEncounterBehaviour` reads these values and passes `WildTrainerId` as the opponent ID in `WildBattleRequest`. After the battle ends, the backend soft-deletes all creatures owned by the Wild Trainer — ensuring wild creature rows do not accumulate indefinitely.
 
 See [Battle System](?page=unity/07-battle-system) for the complete wild encounter flow.
+
+## A Spawner That Can Produce a Creature Always Does
+
+Pool selection used to choose first and check second: `SelectPoolAsync` ran a weighted draw over the
+active pools, then `SelectTemplateAsync` asked the winner for a template. A pool that was active but
+empty could win that draw, and the spawn returned `NoTemplatesAvailable` while a sibling pool sat
+full of creatures. The failure was a coin flip weighted by the pools' own `spawn_weight`, which is
+why it read as "sometimes there is nothing to fight".
+
+The global-template fallback had the same shape. It only fired when the trainer-scoped spawner had
+**no pools at all**, so a spawner holding one emptied pool skipped it and starved.
+
+`SelectProductivePoolAsync` fuses the two steps:
+
+1. Collect every reachable pool — the spawner's own **and** the global content template's, every
+   time, not only as a fallback.
+2. Drop the pools that hold no templates, logging each one.
+3. Weighted draw over what remains.
+
+`NoTemplatesAvailable` now means what it says: nothing anywhere under this spawner can spawn. That
+honest failure still matters — it is what the Unity encounter zone reads to decide whether to repair
+itself or give up.
+
+Two degenerate cases are handled rather than left to chance, because both are states a designer can
+author and neither should cost the player an encounter that has already been committed to:
+
+| State | Behaviour |
+|---|---|
+| All pool weights total zero | First productive pool, with a warning — the weights are doing nothing |
+| All template probabilities total zero | First template |
+
+`SpawnPoolSelectionTests` covers these. The empty-pool test repeats 25 times with the empty pool
+carrying 1000× the weight of the full one: the bug it guards was probabilistic, so a single green
+pass would prove nothing.
+
+## A Template Must Point at a Creature That Exists
+
+Nothing enforces this. There is no foreign key from `creature_spawner_template.base_creature_id` to
+`creature.id`, so a template can name an id no row has ever carried and every insert still succeeds.
+In August 2026 that gap emptied three spawn zones, and the failure travelled a long way from its
+cause before anyone saw it:
+
+1. The eight newest species were authored through the Content Studio, so Postgres generated their
+   ids. `M10000SeedRosterCreatures` then seeded the same content keys with its own hard-coded ids,
+   lost to the UNIQUE index on `creature.content_key`, and `ON CONFLICT DO NOTHING` discarded the
+   rows without a word.
+2. `M10001`/`M10002` wrote area templates pointing at those discarded ids.
+3. `GET /api/v1/spawners/by-content-key/{key}/config` resolves the creature by id to fill
+   `creatureContentKey`, so it returned `""` for every affected template.
+4. A Content Studio pull wrote those blanks into the `SpawnerDefinition` assets.
+5. The offline spawner sync read the assets, resolved no creature for any template, and soft-deleted
+   all 23 it could not match — its normal "this template was removed from the config" behaviour.
+6. Meadow, Cave and Crags ended up with empty pools, so walking into the grass started a battle with
+   no opponent.
+
+Three defences now sit along that path:
+
+| Where | What it does |
+|---|---|
+| `M10006RepairTemplateCreatureIds` | Repoints a dangling `base_creature_id` using the template's own denormalized `creature_content_key`, which stayed correct throughout. Only touches rows whose id resolves to nothing. |
+| The config endpoint | Falls back to `creature_content_key` when the creature join misses, and logs a warning. An empty key is never emitted as if it were fine. |
+| `SpawnerPrunePolicy` (Unity) | The sync refuses to delete templates from a pool it did not read cleanly. See [Unity — Battle System](../unity/07-battle-system.md). |
+
+`TemplateCreatureIdRepairSqliteTests.EveryTemplatePointsAtACreatureThatExists` asserts the invariant
+against a full migration run, so a new seed that reintroduces a dangling reference fails the build
+rather than emptying a zone in a playtest.
+
+**When you seed a creature with a hard-coded id, check the id is the one the Content Studio assets
+use.** A seed that loses to the UNIQUE index is silent, and everything downstream of it inherits the
+mismatch.
 
 ## Common Mistakes / Tips
 
