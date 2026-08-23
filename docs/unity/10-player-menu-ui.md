@@ -2,13 +2,13 @@
 
 ## Overview
 
-The player menu is a 5-tab overlay opened from the overworld via the `ToggleMenu` input action. It is
+The player menu is a 6-tab overlay opened from the overworld via the `ToggleMenu` input action. It is
 the whole out-of-combat UI: the player's squad, their bag, their quest log, their record, and the
 game's settings — all without leaving the world scene.
 
-Tabs: **Team | Bag | Quests | Journal | System**
+Tabs: **Team | Bag | Storage | Quests | Journal | System**
 
-Every tab reads real data from domain services. Nothing on Team, Bag, Quests, or Journal is mocked.
+Every tab reads real data from domain services. Nothing on Team, Bag, Storage, Quests, or Journal is mocked.
 
 ## Files
 
@@ -17,11 +17,12 @@ Every tab reads real data from domain services. Nothing on Team, Bag, Quests, or
 | `Assets/CR/UI/PlayerMenuWindow.cs` | MonoBehaviour — owns the UIDocument, tab switching, input wiring, System settings |
 | `Assets/CR/UI/PlayerTeamView.cs` | Team tab — trainer summary + creature sheet + squad list |
 | `Assets/CR/UI/BagScreenHandler.cs` | Bag tab — backpack, item use, held-item equip (also usable standalone) |
+| `Assets/CR/UI/PlayerStorageView.cs` | Storage tab — box grid, Data File panel, team swap modal. Its rules live in the engine-free `CR.UI.Storage.Logic` asmdef; see [Creature Storage](26-creature-storage.md) |
 | `Assets/CR/UI/Quests/QuestJournalView.cs` | Quests tab — active + completed quests, objectives, rewards |
 | `Assets/CR/UI/Journal/JournalView.cs` | Journal tab — achievements + lifetime stat records |
 | `Assets/CR/UI/Logic/` | Engine-free rules (`CR.UI.Logic` asmdef) shared by the above, unit tested |
-| `Assets/CR/UI/Resources/PlayerMenuWindow.uxml` | Layout — 5 tabs |
-| `Assets/CR/UI/Resources/PlayerMenuWindow.uss` | Stylesheet — window chrome, Team, Quests, Journal |
+| `Assets/CR/UI/Resources/PlayerMenuWindow.uxml` | Layout — 6 tabs |
+| `Assets/CR/UI/Resources/PlayerMenuWindow.uss` | Stylesheet — window chrome, Team, Storage, Quests, Journal |
 | `Assets/CR/UI/Resources/BagScreen.uxml` / `Assets/CR/UI/BagScreen.uss` | Bag layout + stylesheet |
 
 ## PlayerMenuWindow
@@ -31,6 +32,7 @@ Injected dependencies:
 | Injectable | Used by |
 |-----------|---------|
 | `ICreatureInventoryService`, `ICreatureDomainService`, `IGrowthProfileDomainService`, `IAbilityDomainService`, `ITrainerDomainService`, `IStatService` | `PlayerTeamView` |
+| `ICreatureInventoryService`, `ICreatureDomainService`, `IGrowthProfileDomainService` | `PlayerStorageView` |
 | `QuestManager` | `QuestJournalView` |
 | `IAchievementDomainService`, `IStatService` | `JournalView` |
 | `IGameAssetLoader` (optional) | Sprite loading in Team / Bag / Journal |
