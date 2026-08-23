@@ -509,6 +509,15 @@ Three lines close that gap:
 | `"But it missed!"` | `AbilityMissed` channel | at the moment of the miss |
 | `"But nothing happened!"` | `BattleEvents.ActionResolved`, direct subscription | after the presentation, as a trailing remark |
 
+Mission lines share the same reasoning. Progress and the ability unlock now write here as well as to
+their toast and banner — `"Mission: Pyromaniac (0/3)"` at battle start, `"Pyromaniac 2/3"` on a tick,
+`"Pyromaniac complete! Mega Burn unlocked!"` on completion. The toast lasts 2.5 seconds and the
+banner queues behind any other completion, so both could pass entirely unseen; the log is the record
+that survives the turn. See [Battle Extensions](24-battle-extensions.md).
+
+Note the log keeps only **four lines**. It is a running commentary, not a transcript — anything that
+must be readable after a few more turns needs its own surface.
+
 Two things to keep in mind when extending this:
 
 * **Show `AbilityName`, never `AbilityKey`.** The key is an animation key and is deliberately shared
