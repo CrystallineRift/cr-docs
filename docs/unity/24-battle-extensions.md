@@ -451,6 +451,21 @@ the obvious cleanup.
 **Progress is not resumable.** Quitting mid-battle discards mission progress by design. There is no
 row to clean up, but do not build UI that promises otherwise.
 
+### A transient toast is not "shown"
+
+Mission progress reached the player only through a corner toast that fades after 2.5s, and the
+unlock only through a banner that queues behind any other completion and then fades. Both are
+correct code — and the reported bug was *"the mission and Mega Burn never show up in the combat log
+or the output of combat."* The tracker was working the whole time; the player was looking at the
+log, which is where a record belongs.
+
+Progress and completion now `AppendLog` as well, and they do it **before** the early return on a
+missing toast element, so a UXML rename degrades to "no toast" rather than "no evidence missions
+exist". The log is persistent and scrollable; the toast stays as the glanceable version.
+
+The general rule: anything a player is meant to *notice* needs a durable surface, not only a timed
+one. Ask where someone would look for it a minute later.
+
 ### A mission can only count what the content can produce
 
 `mission_pyromaniac` counts `Burn` applications, and for a long time it could never complete: no
