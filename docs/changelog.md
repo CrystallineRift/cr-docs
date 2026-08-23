@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-08-23 — creature storage, and a swap that cannot half-happen
+
+The Storage tab: a paged box grid with element chips and a capacity readout, a Data File panel for
+the selected creature, and a modal for exchanging it with a team member. Built from the Stitch
+designs.
+
+The interesting part is the exchange. Expressed the obvious way — move one out, move the other in —
+it is two transactions, so a failure between them leaves the team a creature short with no way to
+tell which half landed. It also cannot express the common case at all: on a full team the incoming
+creature has nowhere to go until the outgoing one has left. `SwapTeamAndStorageAsync` does both
+removals and both adds inside one transaction, reusing the exact slot the outgoing creature vacated
+so the player's battle order survives.
+
+The screen's rules live in an engine-free asmdef and are tested outside the Editor — 31 cases
+covering box paging, clamping, filters, sorting and swap eligibility, plus 10 on the transaction.
+
+One rule worth stating: **the last creature able to battle cannot be sent to storage.** Allowing it
+strands the player, and the failure surfaces much later as "nothing happens when I walk into grass"
+rather than at the moment of the mistake. A fainted member can always be swapped out, including when
+the whole team has fainted — otherwise a wipe would be unrecoverable.
+
 ## 2026-08-22 — a merchant per area, stocked from the server when online
 
 Every area instantiated the same merchant prefab with `demo-merchant` baked in, so five bodies

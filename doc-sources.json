@@ -854,5 +854,23 @@
       ]
     },
     "description": "Player character: BoZo modular body retargeted onto the Malbers AC Human v5 controller via Humanoid avatars, bone re-homing by HumanBodyBones, cr_build_player_model and cr_swap_player_in_scene"
+  },
+  "unity/26-creature-storage": {
+    "docPath": "docs/unity/26-creature-storage.md",
+    "repos": {
+      "cr-api": [
+        "Game/CR.Game.Domain.Services/Interfaces/Creature/ICreatureInventoryService.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Creature/CreatureInventoryService.cs",
+        "Game/CR.Game.Domain.Services/Models/TeamStorageSwapResult.cs"
+      ],
+      "cr-data": [
+        "Assets/CR/UI/Storage/Logic/**/*.cs",
+        "Assets/CR/UI/PlayerStorageView.cs",
+        "Assets/CR/UI/PlayerMenuWindow.cs",
+        "Assets/CR/UI/Resources/PlayerMenuWindow.uxml",
+        "Assets/CR/UI/Resources/PlayerMenuWindow.uss"
+      ]
+    },
+    "description": "Creature storage tab: engine-free box/filter/swap rules in CR.UI.Storage.Logic, the Data File panel, and the atomic team<->storage exchange"
   }
 }
