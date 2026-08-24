@@ -492,6 +492,8 @@
         "Assets/CR/UI/Quests/**/*.cs",
         "Assets/CR/UI/Journal/**/*.cs",
         "Assets/CR/UI/Logic/**/*.cs",
+        "Assets/CR/UI/PlayerInputGate.cs",
+        "Assets/CR/UI/Input/**/*.cs",
         "Assets/CR/UI/Resources/PlayerMenuWindow.uxml",
         "Assets/CR/UI/Resources/PlayerMenuWindow.uss",
         "Assets/CR/UI/Resources/BagScreen.uxml"
@@ -698,7 +700,8 @@
         "Game/CR.Game.Domain.Services/Implementation/Reward/*.cs",
         "Game/CR.Game.Domain.Services/Implementation/Battle/BattleRewardScaling.cs",
         "Game/CR.Game.Domain.Services/Implementation/Battle/BattleDomainService.cs",
-        "Game/CR.Game.Data.Migration/M8016AddSpawnerContentKeyToBattle.cs"
+        "Game/CR.Game.Data.Migration/M8016AddSpawnerContentKeyToBattle.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/LootEndpoints.cs"
       ],
       "cr-data": []
     },
@@ -708,7 +711,8 @@
     "docPath": "docs/backend/14-world-pickups.md",
     "repos": {
       "cr-api": [
-        "Pickups/**/*.cs"
+        "Pickups/**/*.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/PickupEndpoints.cs"
       ],
       "cr-data": []
     },
@@ -779,11 +783,12 @@
       ],
       "cr-data": [
         "Assets/CR/Core/Data/Editor/Build/BuildProfileSetupTool.cs",
+        "Assets/CR/Core/Data/Editor/Build/PlayerBuild/**",
         "Assets/Settings/Build Profiles/**",
         "Assets/AddressableAssetsData/AddressableAssetSettings.asset"
       ]
     },
-    "description": "Standalone desktop builds: Unity 6 build profiles (CR_Game_macOS / CR_Game_Windows, BuildProfileSetupTool reflection factory), per-platform e_sqlite3 natives bundled by build-packages.sh, Addressables built with player, game-data.bytes floor, Mono-only Windows cross-build"
+    "description": "Standalone desktop builds: Unity 6 build profiles (CR_Game_macOS / CR_Game_Windows / CR_Game_Linux_SteamDeck, BuildProfileSetupTool reflection factory), CR > Build > Build Players… sequential multi-target window (PlayerBuildPlan pure logic + tests), per-platform e_sqlite3 natives bundled by build-packages.sh, Addressables built with player, game-data.bytes floor, Mono-only Windows cross-build"
   },
   "22-area-scenes": {
     "docPath": "docs/unity/22-area-scenes.md",
@@ -854,6 +859,23 @@
       ]
     },
     "description": "Player character: BoZo modular body retargeted onto the Malbers AC Human v5 controller via Humanoid avatars, bone re-homing by HumanBodyBones, cr_build_player_model and cr_swap_player_in_scene"
+  },
+  "unity/27-content-sync": {
+    "docPath": "docs/unity/27-content-sync.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [
+        "Assets/CR/Core/Data/Registry/ServerContentSyncService.cs",
+        "Assets/CR/Core/Data/Registry/IServerContentSyncService.cs",
+        "Assets/CR/Core/Data/Registry/ContentSyncWriter.cs",
+        "Assets/CR/Core/Data/Registry/ContentSyncIds.cs",
+        "Assets/CR/Core/Data/Registry/Sync/**",
+        "Assets/CR/Core/Data/Registry/ContentRegistryInitializer.cs",
+        "Assets/CR/Core/Sync/Logic/Content*.cs",
+        "Tests/ContentSync/**"
+      ]
+    },
+    "description": "Runtime content pull-through cache: ServerContentSyncService fetch+paging, ContentSyncWriter SQL rules (no id rewrites, lowercase GUIDs, named-column upserts, derived junction ids, per-domain transactions), ContentSyncReport version-recording rule, deletion safety, and the dotnet round-trip tests."
   },
   "unity/26-creature-storage": {
     "docPath": "docs/unity/26-creature-storage.md",

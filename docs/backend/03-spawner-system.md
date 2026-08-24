@@ -309,6 +309,7 @@ POST /spawner/{spawnerId}/spawn
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/api/v1/spawners/sync-config` | Upsert a full spawner (pools + templates) from a `SpawnerDefinition` SO |
+| `GET` | `/api/v1/spawners/by-content-key/{contentKey}/config` | Full config (header + pools + creature templates) for one spawner, by `content_key`. Used by Content Studio pull. |
 
 Request body mirrors `SpawnerConfigSyncRequest` (contentKey, displayName, maxCapacity, spawnCooldownSeconds, pools[]).
 
@@ -316,7 +317,8 @@ Request body mirrors `SpawnerConfigSyncRequest` (contentKey, displayName, maxCap
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/v1/spawners/content-registry` | Returns all global spawner rows as a bare JSON array for the editor **Pull** action. Each item: `id`, `contentKey`, `name`, `description`, `battleArenaKey`, `maxCapacity`, `spawnCooldownSeconds`, `updatedAt`. |
+| `GET` | `/api/v1/spawners/content-registry` | Returns all global spawner **headers only** (no pools/templates) as a bare JSON array for the editor **Pull** action. Each item: `id`, `contentKey`, `name`, `description`, `battleArenaKey`, `maxCapacity`, `spawnCooldownSeconds`, `updatedAt`. |
+| `GET` | `/api/v1/spawners/content-registry/full` | Bulk variant: every non-deleted spawner with its pools and creature templates nested inline, so a client does not need one `by-content-key/{contentKey}/config` request per spawner. Paginated — `offset`/`limit` query params, default and max `limit` 500. Response envelope: `{ data: [...], offset, limit, total }`, where `total` is the full matching row count (not just the page size), so a client can detect truncation. |
 | `PUT` | `/api/v1/spawners/by-content-key/{contentKey}` | Upserts a spawner definition by `content_key`. Creates the global template row if it doesn't exist; updates display fields if it does. Body: `SpawnerDefinitionSyncRequest` (`DisplayName`, `Description`, `MaxCapacity`, `SpawnCooldownSeconds`, `BattleArenaKey`). Returns `{ contentKey }` on success. |
 | `DELETE` | `/api/v1/spawners/by-content-key/{contentKey}` | Soft-deletes the global spawner template row with the given `content_key`. Per-trainer spawner rows are unaffected. Returns 204 on success, 404 if not found. Spawner templates have no per-trainer player-data guard — the delete is always safe. |
 
@@ -327,6 +329,12 @@ was missing there, which meant Content Studio's **Spawners → Pull** always fai
 regardless of what the database held: a spawner seeded by a migration could never become a
 `SpawnerDefinition` asset in Unity. When adding a spawner route, add it in both places, and verify
 against a running AIO (`curl localhost:8080/swagger/v1/swagger.json`), not just against the source.
+
+`sync-config` and `by-content-key/{contentKey}/config` used to exist **only** in AIO's inline routes,
+not in `SpawnerEndpoints.cs` — a host that switched from AIO to the modular `CR.Spawner.Service.REST`
+project would silently lose spawner config sync. Both are now mirrored into `SpawnerEndpoints.cs` (and
+`ISpawnerConfigSyncService` is registered in `CR.Spawner.Service.REST/Program.cs`) so the modular host
+carries the same spawner sync surface as AIO.
 :::
 
 ### Spawning

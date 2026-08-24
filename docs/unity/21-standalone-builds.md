@@ -26,6 +26,23 @@ the tool calls the internal `BuildProfile.CreateInstance` factory via reflection
 upgrade breaks the reflection, the tool logs it and the fallback is the Build Profiles window's
 **Add Build Profile** button.
 
+## Scene list
+
+Players boot into **scene 0 of the global scene list** (`ProjectSettings/EditorBuildSettings.asset`),
+which every `CR_Game_*` profile inherits. That list is now:
+
+```
+0  Assets/CR/Scenes/Core.unity            ← the game (menu, player, UI, Zenject CoreContext)
+1–5 Areas/Meadow, Cave, Shore, Crags, Dunes   ← loaded additively at runtime
+```
+
+`Assets/CR/UI/Test UI.unity` (the pre-Core scene, still holding two placeholder cylinders) and
+`Areas/_AreaTemplate.unity` (an authoring template) are **not in the list**. Until 2026-08-23 Test
+UI sat at slot 0, so every player build opened the old scene while the Editor — where you press
+Play on Core directly — looked fine. If a build ever shows the cylinders again, check slot 0.
+Test UI also must not be open alongside Core in the Editor: both carry a full UI stack and an
+EventSystem, and two of each means the menu stops taking input.
+
 ## SQLite natives (per platform)
 
 `Microsoft.Data.Sqlite` needs a platform-native `e_sqlite3` next to the managed DLLs.
@@ -36,9 +53,17 @@ upgrade breaks the reflection, the tool logs it and the fallback is the Build Pr
 - `e_sqlite3.dll` — Windows x64
 - `libe_sqlite3.so` — Linux x64 (Steam Deck)
 
-The file names differ per OS so they coexist in `Runtime/`; Unity's plugin importer assigns each
-to its platform. After the first import, verify in the inspector that `e_sqlite3.dll` is
-restricted to **Standalone Windows x86_64** and the dylib to **macOS**.
+The file names differ per OS so they coexist in `Runtime/`. **`build-packages.sh` now writes the
+PluginImporter `.meta` for each** (`write_native_plugin_meta`): `.so` → Linux64/x86_64,
+`.dylib` → macOS, `.dll` → Win64, GUIDs preserved across rebuilds. Before 2026-08-23 Unity
+auto-generated a bare stub for the `.so`, which reads as "Any Platform" yet is assigned to
+nothing — the Linux player shipped with no SQLite native and the first Steam Deck build fell
+over on its very first migration (NullReferenceExceptions under a `CoreContext` error). Because
+`bin/` is gitignored, any inspector fix to these flags dies on the next `--clean`; the script is
+the only durable place for them.
+
+`Assets/link.xml` preserves every `CR.*.Data.Migration` assembly (FluentMigrator finds
+migrations by reflection); add a line there whenever a domain gains a migration project.
 
 A missing native fails at **runtime, not build time** — first DB open throws
 `unable to load e_sqlite3`. If a Windows build does this, the dll didn't make it into the
@@ -61,9 +86,12 @@ tester's own localhost. Restored to Unity's true local paths
 **Live updates for shipped builds** (the canonical Addressables content-update flow — baked
 floor, streamed deltas):
 
-1. Ship with all groups **local** and *Cannot Change Post Release* (static); **Build Remote
-   Catalog** stays on, pointed at a **publicly reachable** host (not localhost). Keep the
-   release's `addressables_content_state.bin`.
+1. **Build Remote Catalog is currently OFF** (2026-08-23): Remote.LoadPath still pointed at the
+   dev MinIO on localhost, so every build's startup catalog check spammed
+   `Cannot connect to destination host` on any machine that isn't the dev Mac (first seen on the
+   Steam Deck). Turn it back on **only** when a publicly reachable CDN exists, then: ship with
+   all groups **local** and *Cannot Change Post Release* (static), remote catalog pointed at that
+   host, and keep the release's `addressables_content_state.bin`.
 2. To push an update: **Check for Content Update Restrictions** (moves changed static assets
    into a generated remote group) → **Update a Previous Build** → upload the new bundles +
    catalog to the CDN.
@@ -79,12 +107,39 @@ building players, or offline play in the build won't see the new content.
 
 ## Build checklist
 
-1. `build-packages.sh` fresh (DLLs + both natives + baked floor current).
-2. Server address config: builds read `Assets/CR/Resources/configuration/game_config.yaml` —
+1. `build-packages.sh` fresh (DLLs + both natives + baked floor current) — or **CR > Content >
+   Rebake Offline Floor** / `unity cmd cr_rebake_floor` when only content changed.
+2. Addressables group is whole: the Ability Workbench **Publish** re-registers every ability's
+   FX/SFX (`AbilityPublishPipeline`), which is how `CRContent` is rebuilt if entries go missing;
+   an Addressables build (`BuildPlayerContent`) with `error=''` confirms no dangling assets.
+3. Server address config: builds read `Assets/CR/Resources/configuration/game_config.yaml` —
    `localhost:8080` only works on a machine running the AIO backend; offline mode works anywhere.
-3. Open **File > Build Profiles**, pick `CR_Game_macOS` or `CR_Game_Windows` → **Build**.
-4. Windows build output must keep `<name>_Data/` next to the exe; macOS output is a single
+4. **CR > Build > Build Players…** — tick Windows / macOS / Linux, hit **Build** (see below). The
+   manual route still works: **File > Build Profiles**, pick a `CR_Game_*` profile → **Build**.
+5. Windows build output must keep `<name>_Data/` next to the exe; macOS output is a single
    `.app`.
+
+## Build Players window
+
+`CR/Build/Build Players…` (`Assets/CR/Core/Data/Editor/Build/PlayerBuild/BuildPlayersWindow.cs`)
+builds any combination of the three standalone targets from one click. Tick the targets, choose
+whether it is a Development build (default on, matching the profiles), press **Build**.
+
+- **Sequential, not parallel.** One Editor process cannot build two players at once —
+  `BuildPipeline.BuildPlayer` blocks and switches the active platform — so the queue runs
+  Windows → macOS → Linux in that fixed order, one `EditorApplication.delayCall` apart so the
+  window repaints its status between targets. The Editor is busy during each build; it comes back
+  between them.
+- **Each target is its own row**: queued → building… → `✓ 1.2 GB in 94s` with a **Reveal** button,
+  or `✗ N error(s) — see Console`. A failure does not stop the queue; the rest still build and the
+  console gets one summary line (`Build Players: 2/3 succeeded — …`) at the end.
+- **Profiles come from `Assets/Settings/Build Profiles/CR_Game_*.asset`.** A missing one is created
+  on the spot through `BuildProfileSetupTool` before the build runs.
+- **Output:** `Builds/<Target>/CrystallineRift.exe|.app|.x86_64`. `Builds/` is git-ignored.
+
+The pure rules — target → profile asset, target → output path, queue order, summary text — live in
+`PlayerBuild/Logic/PlayerBuildPlan.cs` (asmdef `CR.Core.PlayerBuild.Logic`, no engine references)
+with NUnit tests beside it, so the queue and naming are checked without an Editor.
 
 ## Distributing the macOS build
 

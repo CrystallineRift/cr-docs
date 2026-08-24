@@ -80,6 +80,7 @@ bundled `MAX(Version)` is strictly greater.
 
 ## REST
 
+- `GET /api/v1/loot-tables` — paginated list of every non-deleted loot table (with entries), for bulk client sync. `offset`/`limit` query params (default and max `limit` 500). Response: `{ data: [...], offset, limit, total }`, `total` is the full matching row count so a client can detect truncation.
 - `GET /api/v1/loot-tables/{ownerType}/{ownerContentKey}` — table + entries.
 - `GET|POST /api/v1/loot-tables/sync-config` — Content Studio pull/push (write path registers a sync service; returns 501 until wired).
 

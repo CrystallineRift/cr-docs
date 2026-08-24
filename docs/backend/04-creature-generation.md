@@ -337,6 +337,7 @@ Response shape per ability:
 ```json
 {
   "id": "...",
+  "contentKey": "flame-pounce",
   "name": "Flame Pounce",
   "elementType": 1,
   "conditions": [
@@ -354,6 +355,10 @@ Response shape per ability:
 ```
 
 `durationTurns` on each `statChange` is `-1` when `duration_kind != 'Turns'` or `duration = -1`.
+
+:::info abilities.content_key (M10011)
+Unlike every other content table, `abilities` historically had no `content_key` — only `id` (server-generated) and `name` (not unique). A client syncing abilities was forced to key on `id`, so any server-side id drift (e.g. a dedup pass, or a reseed) inserted a duplicate row instead of updating the existing one in place. `M10011AddContentKeyToAbilities` adds a nullable `content_key` column, backfills it deterministically from each ability's name (kebab-case, e.g. `"Fire Blast"` → `"fire-blast"`, de-duplicating collisions with a numeric suffix), and adds a partial unique index (`WHERE content_key IS NOT NULL`) on both engines. `contentKey` is now on `BaseAbility` and included in the `GET /api/v1/abilities` response above — clients should reconcile synced abilities on `content_key`, not `id`.
+:::
 
 ### `POST /api/v1/abilities/{id}/sync-conditions`
 

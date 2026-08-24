@@ -238,5 +238,10 @@
     "section": "Unity",
     "title": "Creature Storage & Team Exchange",
     "path": "unity/26-creature-storage"
+  },
+  {
+    "section": "Unity",
+    "title": "Runtime Content Sync",
+    "path": "unity/27-content-sync"
   }
 ]

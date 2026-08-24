@@ -66,10 +66,39 @@ Slots and swap cards are `Button`s, not clickable `VisualElement`s. `Button` is 
 leave the whole grid dead to a controller. The modal focuses its first *enabled* card on open — an
 unfocused modal swallows d-pad input entirely. Every interactive class has a `:focus` rule.
 
-## After a swap
+## Grid shape
+
+A box is `BoxColumns` x `BoxRows` = **4 x 6 = 24** slots, and `.storage-grid` is pinned to a width of
+exactly four slots (`4 x (108 + 8) = 464px`).
+
+Pinning matters. Left to wrap on whatever width was available, the grid fitted a fifth column only
+partly — which reads as a clipped card, not a column. The width and `BoxColumns` have to move
+together, and a test asserts `BoxSize` stays a whole number of rows so no box ever ends on a ragged
+part-row.
+
+## After a swap: follow the creature
 
 The view reloads both lists rather than patching them by hand. The swap moved rows in two
 inventories, and a hand-patched view is exactly how a UI starts disagreeing with the database.
+
+Reloading is not enough on its own. The outgoing creature lands in whichever storage slot the
+incoming one vacated, which is an arbitrary hole in the middle of a box of cards that mostly
+look alike. Left there with the selection cleared, a correct swap reads to the player as losing the
+creature — reported once as *"the level 7 from my team seems to have disappeared"* when the row was
+in fact sitting in storage exactly where it belonged.
+
+So the view follows it:
+
+1. Select the outgoing creature, so the Data File names it.
+2. Page to its box via `StorageBrowser.BoxIndexOf(entries, id, filter, sort)`, which answers under
+   the *current* filter and sort rather than assuming storage order.
+3. If `BoxIndexOf` returns `-1` the active element chip hides the creature — clear the chip and ask
+   again, rather than paging to a box it is not on. This is the one path that can make a stored
+   creature genuinely invisible.
+4. Confirm in words: *"Cindris moved to storage — Box 01."*
+
+`BoxIndexOf` returning `-1` for hidden and `-1` for absent is deliberate: both mean "the grid will
+not draw it", which is the only thing the caller acts on.
 
 ## Gotcha: the service ships in a DLL
 

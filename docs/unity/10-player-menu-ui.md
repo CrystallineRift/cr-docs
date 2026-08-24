@@ -178,6 +178,33 @@ The rules that are easy to get wrong are kept out of the MonoBehaviours, in the 
 These types deliberately do **not** reference the cr-api enums (`ItemType`, `QuestStatus`, …). The
 assembly has no engine and no cr-api references; the view translates at the boundary.
 
+## Menu open means the world stops (`PlayerInputGate`)
+
+While the menu is open the camera must not rotate and the trainer must not move: input belongs to
+the UI alone. `PlayerInputGate` (on `InputManagement` in `Core.unity`) does this by disabling the
+**Player** action map of `CR_GameInput`. The UI map is never touched, so menu navigation always
+survives.
+
+Disabling that one map covers everything, including the camera:
+
+- **Movement** — `TrainerMovementController` → `IMovementController` → `MalbersMovementController`
+  reads `Player/Move`, `Sprint`, `Jump`.
+- **Camera look and zoom** — the Cinemachine rig's `MInputLinkLook` is bound to `Player/Look` and
+  `Player/Zoom` (wired by `cr_setup_overworld_camera`). The link subscribes to `canceled` as well
+  as `performed`, so a stick still held when the menu opens delivers a zero and the camera stops
+  dead instead of drifting on its last value.
+
+The decision itself is `GameplayInputRule.GameplayEnabled(inOverworld, menuOpen, inBattle)` in the
+engine-free `CR.UI.Input.Logic` asmdef — gameplay input is live only in the overworld with no menu
+and no battle. It is tested there rather than in the scene.
+
+**The signal is a shared `BoolVariable` asset**, `Assets/CR/Content/Defs/Variables/IsMenuOpen.asset`.
+`PlayerMenuWindow` and `MerchantShopScreenHandler` set it true while open; the gate subscribes to
+`OnValueChanged`. All three must point at the *same* asset — this is a silent failure mode: when
+the asset went missing, the scene kept its reference GUID but every field resolved to null, the
+menu signalled nothing, and the camera kept rotating behind the panel. The gate logs
+`No isMenuOpen BoolVariable assigned` in that case; treat that warning as a broken menu.
+
 ## Input actions (UI action map)
 
 | Action | Effect |
