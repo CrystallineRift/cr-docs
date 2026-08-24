@@ -39,6 +39,7 @@ Migrations `M7200`–`M7202` (dual-engine, soft-delete, idempotent seeds). `rewa
 
 ## REST
 
+- `GET /api/v1/pickups` — paginated list of every non-deleted pickup definition, for bulk client sync. `offset`/`limit` query params (default and max `limit` 500). Response: `{ data: [...], offset, limit, total }`, `total` is the full matching row count so a client can detect truncation.
 - `GET /api/v1/pickups/{contentKey}` — definition (with deserialized rewards).
 - `GET /api/v1/pickups/{trainerId}/collected/{instanceId}` — `{ collected: bool }`.
 - `POST /api/v1/pickups/{trainerId}/collected` `{ instanceId }` — record collection (idempotent).

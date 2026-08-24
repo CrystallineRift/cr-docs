@@ -1,5 +1,192 @@
 # Changelog
 
+## 2026-08-24 — the client becomes a cache
+
+Server content now reaches a running game, and the client no longer overwrites the server on its
+way in. Five parallel workstreams, one compile gate.
+
+**Content reads hit one database.** Four bindings — abilities, base creatures, growth profiles,
+items — resolved a per-mode router that sent online reads to a stale cache the boot sync never
+wrote. They now resolve the one game-data-backed instance in both modes, which deleted 1,218 lines
+of routing repositories and two live `NotImplementedException` paths with them. `LocalDataSources.Creature`
+turned out to be entirely dead — migrated on every boot, referenced by nothing — and four retired
+content caches left the migration pass with it. Player data keeps its per-mode split untouched;
+that separation is what keeps offline-issued creatures out of PvP and the market.
+
+**Spawn pools pull instead of push.** World init used to upload every baked ScriptableObject to the
+server, so a designer's pool edit was overwritten rather than merely ignored. `ISpawnerSyncClient`
+now has one runtime binding and no path can POST — with a regression test that fails if anyone
+re-adds one. The sync pulls header, pools and templates in a single request through a new bulk
+endpoint, and `SpawnerRecoveryService` re-pulls from the server instead of syncing upward and
+counting local rows, which online could never satisfy.
+
+**Deletion propagates.** Rows the server no longer lists are soft-deleted — but only against a
+complete page set and a plausible row count, because a deleted row and a truncated response look
+identical from the client. Unknown elements, target types, categories, stats and calculations are
+now rejected rather than coerced; an unknown element used to become "Normal" silently.
+
+**Abilities got a `content_key`** (M10011, deterministic kebab backfill, partial unique index), so
+every content domain finally has a stable identifier across the client/server boundary.
+
+**The floor can be baked from the server.** `CR/Build/Bake Floor From Server` rebakes into scratch,
+syncs live content into it, and publishes only if no domain failed. Previously the shipped floor
+was built purely from migration seeds and had never seen the backend.
+
+**WAL** is on, so a writer no longer blocks every reader — and `GameDataAdopter` now deletes the
+`-wal`/`-shm` sidecars when it swaps a floor, so a fresh database can never inherit the previous
+one's write-ahead log.
+
+Two things the compile gate caught that no agent could have: a hardening change written against a
+modern Microsoft.Data.Sqlite when Unity compiles against 3.1.32, where `DefaultTimeout` and
+`Pooling` do not exist on the connection-string builder; and a constructor collision where one
+workstream added a required dependency another was already constructing without. The spawner client
+is now optional precisely because a caller baking into a scratch file cannot supply one that writes
+to the right place.
+
+
+## 2026-08-24 — repairing the sync before trusting it
+
+The plan was to point every content repository at the database the server sync writes. Review
+stopped that: the sync itself was not safe to make authoritative, and flipping the reads first
+would have made six latent defects newly visible to the whole game.
+
+The worst of them destroyed player data. The growth-profile upsert ended
+`ON CONFLICT(name) DO UPDATE SET id = excluded.id` — and `generated_creature.growth_profile_id`
+points at that key. The first sync where the server's id differed from the baked one would orphan
+every creature a player had captured, from a *content* sync. Alongside it: half the GUID writes
+skipped normalisation against a case-sensitive join, so one uppercase id meant a creature that
+learned nothing; `INSERT OR REPLACE` quietly reset a seeded `stat_changes.duration` of 3 to 0 on
+every boot; junction rows minted a fresh id each run against a table with no composite unique
+index, so they appended rather than replaced; there were no transactions, no paging past 500 rows,
+and no way for `SyncAllAsync` — which caught everything and returned void — to report a failure.
+
+All fixed, and the SQL moved into `ContentSyncWriter` so it could be tested against a real SQLite
+database built from the shipped floor's own schema. Eleven round-trip tests, each sabotage-checked:
+restoring the original growth-profile statement fails the test that describes it, by name.
+
+That test suite also caught a review finding that was itself wrong. A pass had asked for
+`growth_profile_id` and `ability_progression_set_id` to sync onto `creature`; the columns do not
+exist there, because M1023 deleted them on purpose — the spawner template makes that assignment
+and the generated creature records it. Implementing the suggestion failed against the real schema
+in seconds. A schema test now pins it.
+
+`ContentRegistryInitializer` also stopped firing the sync and forgetting it: world init writes and
+reads the same database, so an unawaited sync raced it.
+
+## 2026-08-23 — the camera kept looking around behind the menu
+
+Opening the player menu left the camera and the trainer live underneath it: the stick rotated the
+world while you were trying to navigate tabs. `PlayerInputGate` was built for exactly this and was
+doing nothing, because the `BoolVariable` asset carrying the "menu is open" signal no longer
+existed. The scenes still held its GUID, so nothing looked broken in the YAML — the fields simply
+resolved to null, the menu set a flag on nobody, and the gate never fired.
+
+Recreated as `Assets/CR/Content/Defs/Variables/IsMenuOpen.asset` and pointed the gate, the player
+menu and the merchant shop at that one instance. Disabling the Player map stops the camera too:
+the rig's `MInputLinkLook` reads `Player/Look` and `Player/Zoom`, and it handles `canceled`, so a
+held stick zeroes out rather than leaving the camera drifting.
+
+The rule moved out of the MonoBehaviour into engine-free `GameplayInputRule` (6 tests): gameplay
+input is live only in the overworld, with no menu and no battle open.
+
+## 2026-08-23 — the quest that lived in the wrong scene
+
+Talking to a quest giver granted nothing — no quest logged, no starter creature. The Quest
+Granter (grants `quest-welcome-to-cr` on the `OnTrainerSelected` event; its reward chain is the
+player's first creature) existed only in legacy `Test UI.unity`. Every Editor session had that
+scene co-loaded, so the flow worked by accident; Core-only builds — every player build — had no
+granter at all. The granter now lives in `Core.unity` with the identical entry, next to the rest
+of the system-level wiring (`QuestWorldBehaviour` sync and the DI-bound `QuestDialogueBridge`
+were already there). The quest-accept idempotency guard means players who already selected a
+trainer just get the quest on their next launch, once.
+
+## 2026-08-23 — a name the Deck can actually type
+
+Name entry now works without a physical keyboard. Gamepad A on the Create Character name field
+asks Steam for its keyboard first (`SteamTextEntry`, Steamworks.NET behind `#if STEAMWORKS_NET`
+— it lights up only when the game runs under Steam), and falls back to a built-in on-screen
+keyboard (`VirtualKeyboardOverlay`): a code-built UI Toolkit modal, every key a focusable button
+so the d-pad walks it, B cancels, Done commits. The editing rules — leading capital, shift
+consumed by one press, capital after a space, no double spaces, length cap —
+live in engine-free `VirtualKeyboardModel` with 9 tests. Desktop typing is unchanged.
+
+## 2026-08-23 — the Deck reaches the meadow
+
+Two more Steam Deck findings once the build booted. The world behind the startup screens was an
+empty skybox: only the Editor ever had an area scene open, and nothing in a player build loads
+one until a door is used. `AreaLoader` now loads its configured starting area (Meadow) on first
+overworld entry when no area is present — `InitialAreaRule`, engine-free, 5 tests.
+
+And the Create Character name field never took input: nothing focuses it, a gamepad-only device
+has no pointer to click it with, and an unfocused UI Toolkit field shows no caret and receives no
+keys — the Steam keyboard was typing into the void. The field now takes focus a frame after the
+screen shows (a frame, because Focus() on an element the panel has not laid out yet is a no-op).
+
+Follow-ups from the second Deck run: the baked catalog still carried a **remote catalog** pointed
+at the dev MinIO on localhost, so startup flooded the console with connection errors on any
+machine that is not the dev Mac — remote catalog build is off until a real CDN exists. And the
+starting area now loads at boot (PreGame) rather than on overworld entry, so the main menu sits
+over the world as it does in the Editor; the NPC/spawner init that needs a trainer runs deferred
+when the overworld is actually entered.
+
+
+## 2026-08-23 — the build that opened the wrong door
+
+The first Linux player booted into two grey cylinders. Nothing platform-specific: the global
+scene list still had `Test UI.unity` — the pre-Core scene — at slot 0, and a player always
+starts at slot 0. The Editor never showed it because you press Play on Core. Test UI and the
+`_AreaTemplate` are out of the list; Core is scene 0, the five areas follow.
+
+Same scene had been sitting open beside Core in the hierarchy, which is why the menu stopped
+taking input earlier in the day: two full UI stacks, two EventSystems, one of them winning.
+
+While checking the build inputs, the `CRContent` Addressables group had lost 21 entries on disk
+(14 of them for assets still present). Rebuilt from the abilities themselves through the
+workbench's publish step — 102 entries, zero dangling references — then an Addressables build
+and a floor rebake so the next player build ships current content.
+
+Then the Steam Deck booted into Meadow with "Scene 'Core' couldn't be loaded": the active Linux
+build profile had grown its own scene-list override (areas only). Cleared on all three game
+profiles so they inherit the global list. Underneath that, the Linux player had **no SQLite
+native** — `libe_sqlite3.so` shipped with a stub `.meta` assigned to no platform — so the
+initial migration could never open a database. `build-packages.sh` now writes the per-platform
+PluginImporter `.meta` for all three natives, and `link.xml` covers the five newer migration
+assemblies (Achievements, Loot, Pickups, Quests, Stats).
+
+## 2026-08-23 — one click, three players
+
+Shipping a round of builds meant opening Build Profiles three times and babysitting each one.
+**CR > Build > Build Players…** now takes the three checkboxes — Windows, macOS, Linux — and runs
+them as a queue in the open Editor, one row per target, with size and time on success and an
+error count pointing at the Console on failure. A failed target does not stop the others.
+
+The builds are sequential on purpose. Unity cannot build two players inside one Editor process,
+and the alternative — a mirrored project copy and a headless Unity per target — costs ~20 GB of
+disk per platform for a machine that would be pegged anyway. Sequential was the call; the window
+says so in its help box rather than pretending otherwise.
+
+Target → profile, target → output path, queue order and the summary line are engine-free
+(`PlayerBuildPlan`, 10 NUnit tests). `Builds/` is now git-ignored so an `.exe` or `_Data/` folder
+can never be staged by accident.
+
+## 2026-08-23 — a correct swap that looked like a loss
+
+Storage swaps were writing the right rows and still reading as a bug: swap out a level 7, and it is
+gone from the team, not in the Data File, and somewhere in a box of near-identical cards. The
+database was right the whole time. The screen simply never said where the creature went.
+
+The view now follows the outgoing creature — selects it, pages to its box, and says so in words. New
+`StorageBrowser.BoxIndexOf` answers "which box is this on" under the *current* filter and sort, and
+returns `-1` when the active element chip would hide the creature; the view clears the chip rather
+than paging to a box the creature is not on. That filter case is the one path that can make a stored
+creature genuinely invisible.
+
+Five tests, sabotage-verified.
+
+The box also went from 5 columns to **4** (`BoxColumns` x `BoxRows` = 4 x 6 = 24 slots). The grid had
+been wrapping on available width, which fitted a fifth column only partly; it is now pinned to
+exactly four slots wide.
+
 ## 2026-08-23 — creature storage, and a swap that cannot half-happen
 
 The Storage tab: a paged box grid with element chips and a capacity readout, a Data File panel for

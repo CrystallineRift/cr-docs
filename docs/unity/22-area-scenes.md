@@ -541,3 +541,17 @@ target area listed in Build Settings with a non-empty spawn id; and no spawn poi
 
 - [World Behaviours](03-world-behaviours.md) — `IWorldInitializable` and the boot sequence.
 - [Battle System](07-battle-system.md) — the arena and `ScreenFader` the transition reuses.
+
+## First area in a player build
+
+The Editor almost always has an area scene open in the hierarchy, and `AreaLoader.Awake()` adopts
+it as `CurrentAreaKey`. A player build has no such luxury: only Core (scene 0) loads, and until
+2026-08-23 nothing loaded an area until the player walked through a door they could not reach —
+the trainer spawned into an empty skybox.
+
+`AreaLoader` now registers with `IUICoordinator` and, on the first `Overworld` context, asks
+`InitialAreaRule.Decide(currentAreaKey, isTransitioning, initialAreaKey)` whether to load the
+configured starting area (default `Meadow`, serialized on the component). The rule is engine-free
+and tested: an adopted Editor area or an in-flight transition means "do nothing", so Editor
+behaviour is unchanged. Registration happens in `Start()`, not `OnEnable()` — the component is
+created by `FromNewComponentOnNewGameObject`, and `OnEnable` fires before Zenject injects.
