@@ -623,7 +623,7 @@
         "Assets/CR/Game/Battle/Events/BattleEvents.cs",
         "Assets/CR/Core/Data/Registry/Definitions/ItemDefinition.cs",
         "Assets/CR/Core/Data/Registry/Definitions/ItemEnums.cs",
-        "Assets/CR/Core/Data/Repository/Implementation/GameConfigurationKeys.cs",
+        "Assets/CR/Core/Data/Repository/GameConfigurationKeys.cs",
         "Assets/CR/Game/Battle/Offline/OfflineItemUseService.cs",
         "Assets/CR/UI/Battle/BattleBagPanelHandler.cs",
         "Assets/CR/UI/Battle/BattleHUD.cs"
@@ -788,7 +788,7 @@
         "Assets/AddressableAssetsData/AddressableAssetSettings.asset"
       ]
     },
-    "description": "Standalone desktop builds: Unity 6 build profiles (CR_Game_macOS / CR_Game_Windows / CR_Game_Linux_SteamDeck, BuildProfileSetupTool reflection factory), CR > Build > Build Players… sequential multi-target window (PlayerBuildPlan pure logic + tests), per-platform e_sqlite3 natives bundled by build-packages.sh, Addressables built with player, game-data.bytes floor, Mono-only Windows cross-build"
+    "description": "Standalone desktop builds: Unity 6 build profiles (CR_Game_macOS / CR_Game_Windows / CR_Game_Linux_SteamDeck, BuildProfileSetupTool reflection factory), CR > Build > Build Players\u2026 sequential multi-target window (PlayerBuildPlan pure logic + tests), per-platform e_sqlite3 natives bundled by build-packages.sh, Addressables built with player, game-data.bytes floor, Mono-only Windows cross-build"
   },
   "22-area-scenes": {
     "docPath": "docs/unity/22-area-scenes.md",
@@ -863,7 +863,12 @@
   "unity/27-content-sync": {
     "docPath": "docs/unity/27-content-sync.md",
     "repos": {
-      "cr-api": [],
+      "cr-api": [
+        "Spawner/CR.Spawner.Service.REST/Endpoints/SpawnerEndpoints.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/LootEndpoints.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/PickupEndpoints.cs",
+        "Creatures/CR.Creatures.Service.REST/Endpoints/AbilityEndpoints.cs"
+      ],
       "cr-data": [
         "Assets/CR/Core/Data/Registry/ServerContentSyncService.cs",
         "Assets/CR/Core/Data/Registry/IServerContentSyncService.cs",
