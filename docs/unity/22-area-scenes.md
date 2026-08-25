@@ -128,6 +128,43 @@ Gateway art follows the area, not the default: anything dressed from AZURE gets 
 the moss-topped `_Cov` cliff variants are used only where something would actually grow on the stone
 — a meadow or a waterline, never a dune field or bare cold rock.
 
+### Hearthmere Village, the first settlement
+
+A sixth scene, and the only one that is not a habitat. It has **no wild pool and no encounter
+zones**: a town the player cannot cross without being ambushed is not a refuge, and somewhere to
+stand still is the whole point of it. It doors to and from the Meadow on the one compass bearing the
+four habitat doors left free.
+
+| Area | Kind | Ground | Light | Wild pool |
+|---|---|---|---|---|
+| Village | `settlement` | `M_Terrain_01` | the Meadow's `meadow` palette | *(none)* |
+
+It shares the Meadow's ground material and lighting palette deliberately. Hearthmere is the Meadow's
+town, one door apart, and a settlement standing on different earth under a different sun from the
+region around it reads as a separate world — the opposite of what a hub is for.
+
+**It is laid out, not dressed.** `CrAreaDressingCommand` scatters: seeded random inside an annulus,
+which is right for a meadow and wrong for a town. People do not distribute their houses by Poisson
+disc; they face them onto a square and leave a road. So the Village is absent from that command's
+`Areas` table on purpose, and `cr_layout_village` authors every position instead — eight houses
+turned to face a square, the well at its middle, four market stalls, and a road north to the door.
+
+Authored in code rather than dragged in the GUI, for the same reason every other area is tool-built:
+a layout that lives only in a scene file is unreviewable and unrepeatable, and the diff after
+somebody nudges a house is 400 lines of YAML. Re-running rebuilds `[Village]` from scratch, so it
+cannot drift from the table that claims to describe it.
+
+The road out is **enforced, not hoped for**. `BlocksTheRoad` rejects any piece that would land in the
+lane between the spawn point and the Meadow door, and names it. That is the one placement mistake
+here that would read as a broken area rather than as ugly dressing, and it is invisible in a table of
+coordinates.
+
+:::note
+The Village is in `PolishTargets` but not in `Areas` — so `cr_polish_areas` repairs it (world bounds,
+NPC keys, character models) while `cr_dress_areas` leaves it alone. `PolishTargets` is derived from
+`AreaNpcRoster`, so a settlement cannot be added to the roster and forgotten here.
+:::
+
 ### Encounter zones are ground cover, not spheres
 
 A wild battle starts when the player walks into a `CR_EncounterZone` trigger. The prefab used to
@@ -319,12 +356,16 @@ content in each proved `AreaWorldInitializer` initializes a scene loaded after `
 has already run. That case is still covered by Cave. What the split also produced was three areas
 with nobody in them and no way to shop without walking back.
 
-Both NPCs are now placed in all five areas, from two directions:
+Every area has a merchant and a quest giver, placed from two directions:
 
 - `CrPlaytestAreasBuilder.Plans` carries both in every area plan, so a rebuilt area has them.
 - `EnsureAreaNpcs`, part of `cr_polish_areas`, adds whichever is missing to an area that already
   exists. Rebuilding an area re-creates it from the template and **discards its dressing**, so the
   repair path is the only way to give a finished area an NPC without throwing the art away.
+
+Since Hearthmere exists, "every area has both" is about the **pair**, not the scene. Area 1's
+merchant and quest giver stand in the Village, not out in the Meadow — see
+[Where a pair actually stands](#where-a-pair-actually-stands) below.
 
 Two details the repair pass depends on:
 
@@ -340,11 +381,11 @@ Two details the repair pass depends on:
 The prefabs ship with **empty** content keys. `cr_polish_areas` stamps them per area
 (`StampAreaNpcKeys`, re-run every time so an area built before this still gets fixed):
 
-| Area | Merchant | Quest giver | Merchant stock |
-|---|---|---|---|
-| Meadow (1) | `demo-merchant-area-1` | `demo-questgiver-area-1` | `demo-merchant-area-1-items` |
-| … | … | … | … |
-| Dunes (5) | `demo-merchant-area-5` | `demo-questgiver-area-5` | `demo-merchant-area-5-items` |
+| Area | Merchant | Quest giver | Merchant stock | Standing in |
+|---|---|---|---|---|
+| Meadow (1) | `demo-merchant-area-1` | `demo-questgiver-area-1` | `demo-merchant-area-1-items` | **Village** |
+| … | … | … | … | its own area |
+| Dunes (5) | `demo-merchant-area-5` | `demo-questgiver-area-5` | `demo-merchant-area-5-items` | its own area |
 
 The mapping lives in one place, `AreaNpcKeys` (`Assets/CR/Game/Areas/Logic/`), used by the
 builder, the content audit and — by convention — the seed migrations. It used to be the other way
@@ -355,6 +396,42 @@ the real game; `demo-` marks the playtest set.
 Each NPC has a matching `NpcDefinition` SO (registered on the `ContentDefinitionProvider`, with a
 display key in `localization/npcs.yaml`) so Content Studio syncs it to the server like any other
 content. Quest accepts are idempotent, so five quest givers still grant a quest once.
+
+### Where a pair actually stands
+
+A town makes two facts come apart that used to be the same one: *the Meadow has a merchant* (it does
+— area 1's) and *the merchant stands in `Meadow.unity`* (it no longer does). `AreaNpcRoster`
+(`Assets/CR/Game/Areas/Logic/`) owns the difference.
+
+`HostedAreaNumber(sceneKey)` answers "whose NPCs stand in this scene":
+
+| Scene | Hosts | Why |
+|---|---|---|
+| `Village` | area 1 | the settlement claims the Meadow's pair |
+| `Meadow` | *nobody* | **because** the Village claims area 1 |
+| `Cave` … `Dunes` | their own number | no settlement serves them yet |
+
+It is stated as a delegation rather than left as an absence on purpose. An empty roster for the
+Meadow reads identically whether the pair moved to the Village or somebody deleted them by accident;
+this way the Meadow answers 0 *because* the Village claims 1.
+
+A settlement **hosts an existing area's NPCs rather than minting its own**. Area numbers are seeded
+server-side by migration, so a Village with its own key would be a merchant the world knows about
+and the database does not — which is why standing up a town needed no backend change at all.
+
+Two repairs follow from this, and the pass runs both directions:
+
+- `EnsureAreaNpcs` stops regrowing a pair the roster says belongs elsewhere. Without it the next
+  polish run would put a second merchant back in the Meadow, carrying the same content key as the
+  town merchant — two bodies, one inventory, which is exactly the bug numbered keys were introduced
+  to kill, arriving from the other side.
+- `RemoveDelegatedNpcs` clears out the originals still standing in a field from before the town
+  existed. Deliberately narrow: only the two prefabs the command itself places, only from an area the
+  roster says hosts nobody, and every removal logged. An editor tool that silently deletes authored
+  work is worse than the drift it repairs.
+
+`StampAreaNpcKeys` reads the roster too, not the area key — a settlement is not itself a numbered
+area, but the pair standing in it must carry the area's keys.
 
 ## Each biome is lit as an element
 

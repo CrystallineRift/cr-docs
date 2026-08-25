@@ -1,5 +1,42 @@
 # Changelog
 
+## 2026-08-25 — Hearthmere Village, the first settlement
+
+A sixth area scene, and the first that is not a habitat. Eight houses turned to face a square, the
+well at its middle, four market stalls, and a road north to the Meadow door — 44 pieces, every
+position authored. It is the first use of the FANTASTIC Village Pack, which had sat imported and
+entirely unreferenced.
+
+**The town needed no backend change at all.** A settlement hosts an existing area's NPCs rather than
+minting its own: the Meadow's merchant and quest giver now work out of Hearthmere, carrying area 1's
+content keys and its seeded stock. A sixth area key would have been a merchant the world knows about
+and the database does not.
+
+**Where a pair stands became a fact worth stating.** `AreaNpcRoster` separates *the Meadow has a
+merchant* (it does — area 1's) from *the merchant stands in `Meadow.unity`* (it no longer does), and
+states it as a delegation rather than an absence: the Meadow hosts nobody **because** the Village
+claims area 1. Without that, `cr_polish_areas` would have regrown the pair it just lost, giving the
+town merchant a twin in a field sharing one inventory — the bug numbered keys were introduced to
+kill, arriving from the other side. The repair now runs both directions, and the removal half is
+deliberately narrow: only the two prefabs the command places, only from an area the roster says hosts
+nobody, every removal logged.
+
+**Laid out, not dressed.** `CrAreaDressingCommand` scatters — seeded random inside an annulus, right
+for a meadow and wrong for a town. `cr_layout_village` authors every position instead, in code rather
+than in the GUI, so re-running rebuilds the same village exactly and the layout cannot drift from the
+table describing it. The road out is enforced rather than hoped for: any piece landing in the lane
+between the spawn point and the door is rejected and named.
+
+**One gap the audio wiring found.** `cr_wire_area_audio` skipped the Village with "no AreaEnvironment
+to attach to", which turned out to mean everything the dressing pass does *besides* scattering was
+being missed by the one area that is never dressed — ground material, fog, ambient, sun. That pass is
+now callable on its own, and the village takes the Meadow's palette, because a town lit by a
+different sun than its own region reads as a separate world.
+
+`music_area_village` is Medieval Market LOOP, the only bed here that is not a landscape.
+
+458/458 EditMode tests, content audit clean across ten scene NPCs.
+
 ## 2026-08-24 — the client becomes a cache
 
 Server content now reaches a running game, and the client no longer overwrites the server on its
