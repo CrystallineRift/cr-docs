@@ -1,5 +1,47 @@
 # Changelog
 
+## 2026-08-25 — evolution
+
+A creature that reaches its species' evolution level can become something else — unless the player
+holds a button to stop it, or it is holding a Bindstone.
+
+**Three phases, because the cutscene is seven seconds long.** Across those seconds the client can
+crash, drop its connection or be force-quit, so the species change is not applied when the evolution
+starts. Begin records an offer and touches nothing; commit applies it; cancel records the refusal. A
+run that never comes back leaves a pending row and a creature nobody modified — nothing happened, and
+it is offered again next level-up.
+
+**Commit re-validates from scratch** rather than trusting the offer it was handed. That is the
+difference between server-authoritative and server-observed: between begin and commit the creature
+may have been given a blocking held item or traded away, and an old id must not be replayable into an
+evolution that is no longer legal. The pending row is claimed *before* the creature is touched,
+because the two writes cannot share a transaction and the other order risks evolving a creature whose
+cancel won the race.
+
+**One rule, shared.** `EvolutionEligibility` is pure, because it runs in two places that cannot share
+a database — online the server decides, offline the client resolves the same rule against its baked
+floor. It reports *why* it refused, not just no: a creature that silently declines to evolve reads as
+a broken feature, most of all when the cause is a stone the player put there themselves.
+
+**The Bindstone** is a column on `item`, not a new held-item trigger — every value that enum has names
+an in-battle event, and evolution is not one. It works by being held, so it offers no Use option: a
+stone with one is a stone players try to use, to no effect.
+
+**The cutscene's timing is pure logic**, so every boundary about when a cancel still counts is
+testable without playing seven real seconds. Releasing resets the hold rather than banking it; a hold
+completing on the final frame still cancels; holding after completion does nothing.
+
+**And five species that can actually evolve.** Until now `evolution_level` was null on all 19 — the
+mechanic was fully built and could never fire once. Bud, Sunflower Fairy, Crabby, Snakelet and Dragon
+Spark, at levels chosen against the habitat ladder.
+
+Two things found on the way, both the same shape as the mechanic itself: `LocationTriggerBehaviour`
+was complete, injected and placed in zero scenes, and the achievement toast presenter sits in no
+tracked scene either — so the evolution presenter is created by the installer rather than waiting to
+be dragged into a scene that is not in the repository.
+
+30/30 backend projects, 469/469 Unity EditMode, floor rebaked at schema 10015.
+
 ## 2026-08-25 — the experience curve, and somewhere to spend it
 
 "The exp curve feels off" turned out to be three faults, only one of which was the curve.
