@@ -97,13 +97,24 @@ looks wrong is visible in the console before anyone opens the scene.
 
 ### The five areas
 
-| Area | Kind | Ground | Light and weather | Wild pool |
-|---|---|---|---|---|
-| Meadow | `meadow` | `M_Terrain_01` | bright sky, distance haze, falling leaves | `meadow-wild-zone` |
-| Cave | `cave` | `Ground` | no skybox, close exponential fog | `cave-wild-zone` |
-| Shore | `shore` | `M_SmallRocks_Sand` | flat bright light, pale sea haze, god rays | `shore-wild-zone` |
-| Crags | `crags` | `M_Terrain_02` | cold thin light, close weather, snowfall | `crags-wild-zone` |
-| Dunes | `dunes` | `M_SmallRocks_Sand` | hard amber glare, far heat haze, god rays | `dunes-wild-zone` |
+| Area | Kind | Ground | Light and weather | Wild pool | Levels |
+|---|---|---|---|---|---|
+| Meadow | `meadow` | `M_Terrain_01` | bright sky, distance haze, falling leaves | `meadow-wild-zone` | 2–6 |
+| Shore | `shore` | `M_SmallRocks_Sand` | flat bright light, pale sea haze, god rays | `shore-wild-zone` | 5–10 |
+| Cave | `cave` | `Ground` | no skybox, close exponential fog | `cave-wild-zone` | 9–15 |
+| Crags | `crags` | `M_Terrain_02` | cold thin light, close weather, snowfall | `crags-wild-zone` | 14–21 |
+| Dunes | `dunes` | `M_SmallRocks_Sand` | hard amber glare, far heat haze, god rays | `dunes-wild-zone` | 20–28 |
+
+The level bands are a **ladder, and they overlap at every seam** so there is never a level with
+nowhere to go. They used to be identical — every area spawned 2–10 — which capped battle income near
+95 experience while the next level kept costing more, so a level cost 29 battles at level 20 and 65
+at level 30. See cr-api M10013; the authored `SpawnerDefinition` assets must match it or online and
+offline play at different difficulties.
+
+:::caution
+Meadow is the hub and doors straight into all four habitats, so nothing currently stops a level-3
+player walking into the Dunes at 20–28. Gating that is an open decision.
+:::
 
 Meadow is the hub: every habitat doors back to it, so any area is two transitions from any other and
 no route dead-ends.
@@ -306,11 +317,24 @@ names none. An arena that *does* carry its own rig still wins, so a bespoke per-
 possible. Area arenas sit at the same world position the sandbox arena used, so the rig's authored
 placement frames them unchanged.
 
-## Polish pass: bounds, zone fog, NPC models
+## Polish pass: bounds, zone fog, visit trigger, NPC models
 
 `cr_polish_areas` handles three things the scatter pass does not, because they are repair of
 gameplay-facing objects rather than decoration — re-scattering the trees to fix a wall would be a bad
 trade. It is idempotent; running it twice leaves the same scene.
+
+### The area reports that you have been here
+
+Each area carries a `[VisitTrigger]` — a box trigger spanning the whole playable space, sitting on
+the spawn point, keyed to the area key lowercased. Walking in reports a location visit, which
+advances `VisitLocation` quest objectives and drives location achievements.
+
+`LocationTriggerBehaviour` had existed for some time, complete and injected, and was placed in
+**zero** scenes. Written and never wired reads identically to working, right up until content
+depends on it — which the shipped quest chain now does.
+
+Sized to the area rather than to a landmark on purpose: the objective is "reached this place", not
+"found this spot", so *go to the Shore* should complete on arriving at the Shore.
 
 ### You cannot walk off the edge
 

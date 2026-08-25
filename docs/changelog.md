@@ -1,5 +1,41 @@
 # Changelog
 
+## 2026-08-25 — the experience curve, and somewhere to spend it
+
+"The exp curve feels off" turned out to be three faults, only one of which was the curve.
+
+**The curve opened at nothing.** The requirement was a bare cubic, `0.8 × (level−1)³`. Cubic is the
+right shape, but a bare cubic starts at almost zero — level 2 cost 1 experience and a first win pays
+5. A level cost 0.25 battles at level 1 and 4.84 at level 100: the opening levels were handed over,
+then the pace decelerated for the rest of the game. A quadratic term lifts the early levels and
+leaves the late shape alone; it is now 1.50 → 5.05.
+
+**The world ran out at level 10.** Every area spawned levels 2–10, and a battle pays out on the
+defeated creature's level, so income capped near 95 experience while the next level kept costing
+`2.4 × level²`. Fighting the average level-5 wild, a level cost 29 battles at level 20 and 65 at
+level 30. No re-curving could have fixed that: the curve was fine, there was nothing left worth
+fighting. The habitats are now a ladder — Meadow 2–6, Shore 5–10, Cave 9–15, Crags 14–21,
+Dunes 20–28 — overlapping at every seam.
+
+**The experience trait was inverted.** `experience_growth` scaled the level *requirement*, so the
+profile named "Fast Experience" (150) needed half again as much per level and was the slowest in the
+game. It now scales what a creature *gains*, and the curve is identical for everybody. Earned and
+exact experience are separate named methods rather than a flag, because a level-up item computes
+precisely what the next level costs and must not be scaled.
+
+**A fourth, found on the way:** creature generation stamped a new creature's starting experience
+from its own private formula — `0.8 × level³`, cubing the level rather than `level−1`. A freshly
+generated level-25 spawn began 1,439 experience short of what level 25 costs. Generation now reads
+the same table as everything else.
+
+**Eight new quests** follow the ladder, so where to go next is answered by a quest rather than by
+walking into a habitat twenty levels above you. Each gates on the one before; the middle rungs also
+gate on creature level. Making them work also revived `LocationTriggerBehaviour`, which had been
+written, injected and placed in zero scenes — every `VisitLocation` objective was unreachable and
+every location achievement unwinnable. Every area now carries a visit trigger.
+
+30/30 backend projects, 458/458 Unity EditMode.
+
 ## 2026-08-25 — Hearthmere Village, the first settlement
 
 A sixth area scene, and the first that is not a habitat. Eight houses turned to face a square, the

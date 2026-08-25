@@ -88,6 +88,49 @@ erDiagram
 
 For full column descriptions see the table breakdowns in the sections below.
 
+## The shipped quest chain
+
+Eight quests (M7014) follow the habitat level ladder, so "where do I go next" is answered by a quest
+rather than by walking into a habitat twenty levels above you. Each gates on the one before it; the
+middle rungs also gate on creature level.
+
+| Quest | Area | Objectives | Requires | XP / gold |
+|---|---|---|---|---|
+| Thin the Meadow | Meadow | defeat 5 creatures | First Battle | 150 / 60 |
+| A Second Companion | Meadow | capture any creature | First Battle | 150 / 60 |
+| Supplies for Hearthmere | Village | visit Hearthmere, talk to the trader | First Battle | 120 / 100 |
+| The Road to the Shore | → Shore | reach the Shore | Thin the Meadow | 250 / 100 |
+| Tidewrack Trials | Shore | win 8 battles | Road to the Shore, creature ≥ 6 | 600 / 220 |
+| Into the Dark | Cave | enter the Cave, defeat 10 | Tidewrack Trials, creature ≥ 10 | 1,200 / 400 |
+| The Windbitten Climb | Crags | reach the Crags, raise a creature to 18 | Into the Dark | 2,200 / 700 |
+| Sunbleached | Dunes | reach the Dunes, raise a creature to 25 | Windbitten Climb | 4,500 / 1,500 |
+
+Rewards are sized against the re-curved experience table at roughly one to two levels' worth *at the
+level the quest is meant for* — 150 in the meadow where a level costs about 90, 4,500 in the dunes.
+
+Three things this chain depends on, each of which was a trap:
+
+- **`VisitLocation` needs a trigger in the scene.** `LocationTriggerBehaviour` existed, complete and
+  injected, and was placed in exactly zero scenes — so every VisitLocation objective was unreachable
+  and every location achievement unwinnable. `cr_polish_areas` now puts one in each area, sized to
+  the whole playable space and keyed to the area key.
+- **Prerequisites must sync before their dependants.** `LocalQuestTemplateSyncClient` resolves a
+  requirement's `referenceId` from a content key to the template's database id by looking it up — and
+  if it is not there yet it warns and stores **null**, which reads as "no prerequisite". The order of
+  `ContentDefinitionProvider.quests` is therefore load-bearing; the chain is registered in dependency
+  order.
+- **The seed ids are UUIDv5 of the content key**, matching what the authored assets carry. A seed
+  with an id of its own is discarded the moment Content Studio pushes the asset — the unique index is
+  on `content_key`, so the row already exists and every objective and reward hangs off a template
+  nothing points at.
+
+:::caution
+The quest seed is **Postgres only**. M7012 deleted the earlier M7006/M7008 seeds out of SQLite
+because migration rows there go stale against the designer-authored assets, and the client syncs
+every SO in `ContentDefinitionProvider.quests` into local SQLite at world init. Seeding SQLite from a
+migration rebuilds exactly the divergence M7012 exists to remove.
+:::
+
 ## How to Define a New Quest (Step-by-Step)
 
 ### Step 1: Create the migration

@@ -76,21 +76,63 @@ The implementation in `CreatureGenerationService` follows these steps:
 
 ### Experience / Level Formula
 
-```csharp
-private long CalculateExperienceForLevel(int level)
-    => (long)(Math.Pow(level, 3) * 0.8);
+The curve is a **table**, `level_experience_requirement`, not a formula evaluated at runtime.
+`CreatureProgressionService` reads it row by row and walks the level up while the creature's total
+clears the next threshold. Levels are a stored field; nothing re-derives a level from experience.
+
+Seeded by **M10012** as:
+
+```
+base_required_experience = ROUND(0.8 × (level − 1)³  +  5 × (level − 1)²)
 ```
 
-Level 1 → 0 XP, Level 5 → 100 XP, Level 10 → 800 XP, Level 50 → 100,000 XP, Level 100 → 800,000 XP. This is the standard cubic curve used in many creature-collection games.
+| Level | 2 | 5 | 10 | 20 | 50 | 100 |
+|---|---|---|---|---|---|---|
+| Total XP | 6 | 131 | 988 | 7,292 | 106,124 | 825,244 |
 
-The inverse (computing level from XP):
+The **cube** is the shape that matters: it makes the cost of the next level grow like `2.4 × level²`,
+which is the same order as the quadratic battle reward, so the two stay in proportion instead of
+drifting apart.
 
-```csharp
-private int CalculateLevelFromExperience(long experiencePoints)
-    => (int)Math.Floor(Math.Pow(experiencePoints / 0.8, 1.0 / 3.0)) + 1;
-```
+The **square term exists to fix the opening**. Under the bare cubic this used to be, level 2 cost 1
+experience, level 3 cost 6 and level 4 cost 22 — while a single first win pays 5. Measured against
+the real reward curve, counting the fighter's 90% share after the bench cut:
 
-Both formulas must stay in sync. If you change the experience curve, update both the generation service and the spawn history level-back-calculation.
+| Your level | 1 | 5 | 10 | 20 | 50 | 100 |
+|---|---|---|---|---|---|---|
+| Battles per level, before | 0.25 | 1.53 | 2.52 | 3.50 | 4.43 | 4.84 |
+| Battles per level, now | 1.50 | 2.94 | 3.63 | 4.25 | 4.80 | 5.05 |
+
+Early levels still come quicker on purpose — they just are not given away.
+
+:::note
+Changing the curve is safe for existing saves. A creature's level is stored, not recomputed from its
+experience, so raising the requirements demotes nobody; the next level simply costs more.
+:::
+
+### The growth profile is a bonus on what is earned
+
+`growth_profile.experience_growth` is a percentage applied to experience **gained**: 150 pays half
+again as much, 100 pays exactly what was earned.
+
+It used to scale the level *requirement* instead, which inverted it — the profile named "Fast
+Experience" (150) needed 50% more experience per level and was the slowest in the game. The level
+curve is now identical for every creature; only the payout differs.
+
+Two entry points, named rather than separated by a flag, because whether an amount is earned or
+exact is a fact about the caller:
+
+| Method | Growth bonus | Used by |
+|---|---|---|
+| `ApplyEarnedExperienceAsync` | applied | battle rewards, experience items, quest payouts |
+| `ApplyExperienceAsync` | **not** applied | the level-up item, the admin grant endpoint |
+
+That distinction has teeth: the level-up item computes precisely what the next level costs, so
+scaling it would hand a 150% creature one and a half levels.
+
+The bonus rounds **up**, so 1 experience at 150% is 2 — a trait that does nothing at exactly the
+sizes you can verify by hand reads as broken. A profile that cannot be read grants the unmodified
+amount rather than nothing.
 
 ### Stat Calculation
 
