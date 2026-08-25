@@ -124,6 +124,10 @@ The online path did remove it, but as two unguarded writes (`UpdateCreature`, th
 `RemoveFromBackpack`), so a failure between them landed in the same place and two simultaneous
 equips could overwrite each other's slot — destroying whichever lost.
 
+And online held items were **404ing entirely**: the client called `/held/{slot}` with `PUT` while the
+server has always mapped `/held-items/{slot}` with `POST`. That is why the offline bug survived so
+long — offline was the only path anybody could exercise.
+
 Both now run through one transaction with a **guarded slot write**: the slot is only written if it
 still holds what the caller last read. The item leaves one place and arrives in the other, or
 neither happens.
