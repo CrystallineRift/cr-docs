@@ -1,5 +1,36 @@
 # Changelog
 
+## 2026-08-25 — held items stop duplicating, and the pad works
+
+**Equipping a held item offline duplicated it.** The offline path wrote the creature's slot and
+nothing else — the item was never taken out of the bag — so afterwards there was a copy in the bag
+and a copy on the creature. Do it again and the same item was on two creatures and still in the bag.
+Live in shipped code, reachable from the Bag screen.
+
+The online path was not duplicating, but got there by two unguarded writes, so a failure between
+them landed in the same place and two simultaneous equips could overwrite each other's slot.
+
+Both now run through one `HeldItemService`: one transaction, one guarded slot write that only
+succeeds if the slot still holds what the caller last read. Room is checked before anything leaves
+the bag, returning an item stacks onto an existing entry, and a swap returns the occupant inside the
+same transaction *after* the slot write is won. 16 tests, over a real connection rather than a
+mocked transaction — a mocked rollback succeeds without proving anything.
+
+**Held items can now be managed from the Team tab**, not just the Bag: two slot buttons per
+creature, with a picker filtered to what a creature can actually hold.
+
+**The merchant screen was barely navigable on a pad.** It had one `:focus` rule in the entire screen
+while five buttons had only `:hover`, so focus moved and nothing changed. The row was also focusable
+while containing three focusable buttons — a container in the ring that does nothing on Submit. The
+row now follows its children instead of competing with them.
+
+**The bumpers cycle menu tabs.** Those actions existed and were subscribed to by nothing — and were
+bound to keyboard only, so wiring the handler alone would have changed nothing. They were also on
+the arrow keys, which `Navigate` already uses; the moment a handler existed one press would have
+both moved focus and changed tab.
+
+30/30 backend projects, 490/490 Unity EditMode.
+
 ## 2026-08-25 — evolution
 
 A creature that reaches its species' evolution level can become something else — unless the player

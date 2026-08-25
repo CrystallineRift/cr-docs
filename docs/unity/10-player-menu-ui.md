@@ -27,6 +27,20 @@ Every tab reads real data from domain services. Nothing on Team, Bag, Storage, Q
 
 ## PlayerMenuWindow
 
+:::tip[Gamepad]
+**LB / RB cycle the tabs**, wrapping at both ends. `q` / `e` do the same on a keyboard.
+
+The `NavigateTabsLeft` / `NavigateTabsRight` actions had existed in the asset for some time bound to
+nothing — and bound to the **arrow keys**, which `Navigate` already uses for focus movement. Dormant
+while nothing listened; the moment a handler existed, one arrow press would have both moved focus
+and changed tab. They are now on the shoulder buttons, and the arrows do only what they always
+should have.
+
+Tab changes go through the same path a click takes, so per-tab data reloads happen identically for
+mouse and pad. Presses are ignored while the menu is hidden — silently changing an unseen tab
+surfaces later as the menu "opening on the wrong page".
+:::
+
 Injected dependencies:
 
 | Injectable | Used by |
@@ -92,6 +106,49 @@ level); it is never used to recompute the level itself.
 > panel, and the mock Achievements / Evolution Log / Friends sidebar views. Achievements moved to the
 > Journal tab with real unlock data; the other two were dropped rather than shown as meaningless
 > numbers.
+
+## Held items
+
+A creature holds up to two items. They can be given and taken back from **either** the Bag tab (pick
+an item, choose a slot) or the **Team tab** (pick a creature, use its two slot buttons).
+
+Both go through `IHeldItemRepository`, which routes to the server online and to cr-api's
+`IHeldItemService` offline. Neither screen writes a slot or an inventory itself.
+
+:::danger[Fixed: this used to duplicate items]
+The offline path wrote the creature's **slot only** — the item was never removed from the bag. After
+equipping, you had a copy in the bag *and* a copy on the creature; do it again and the same item was
+on two creatures and still in your bag.
+
+The online path did remove it, but as two unguarded writes (`UpdateCreature`, then
+`RemoveFromBackpack`), so a failure between them landed in the same place and two simultaneous
+equips could overwrite each other's slot — destroying whichever lost.
+
+Both now run through one transaction with a **guarded slot write**: the slot is only written if it
+still holds what the caller last read. The item leaves one place and arrives in the other, or
+neither happens.
+:::
+
+Rules the service enforces, in this order:
+
+| Check | Why it is where it is |
+|---|---|
+| Item is flagged `HeldByCreature` | Refused before anything leaves the bag |
+| Creature belongs to this trainer | Owner-gated like evolution |
+| A slot is free (or a swap is allowed) | Checked **before** the bag is touched, so the common refusal costs nothing |
+| The trainer owns the item | |
+| Guarded slot write | Last, so it is the thing that decides the outcome |
+
+Equipping into an **occupied** slot swaps: the occupant returns to the bag *inside the same
+transaction*, after the slot write has been won. Returning it earlier would put it in the bag while
+it was still in the slot — the duplication again. A swap that loses the guard returns nothing.
+
+Returning an item stacks onto an existing bag entry rather than adding a second row for the same
+item.
+
+The Team tab's picker is filtered to items flagged `HeldByCreature`. Offering the rest and letting
+the service refuse would be correct and useless — a menu mostly full of things that do not work is
+not a menu.
 
 ## Bag tab (`BagScreenHandler`)
 

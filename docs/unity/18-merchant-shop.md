@@ -48,6 +48,34 @@ The merchant's stock itself comes from its item spawner
 - **Sell tab**: visible but disabled — sell flow is a follow-up
   (`SellItemToMerchantAsync` + currency credit already exist domain-side).
 
+## Gamepad navigation
+
+The shop is navigated control by control: the Buy/Sell tabs, the close button, and per row a
+quantity minus, a plus and a Buy. Six focusable Buttons and **no focusable containers**.
+
+:::danger[Fixed: this barely worked at all]
+Two faults, both of which read as "the controller does nothing".
+
+The screen had exactly **one `:focus` rule**, on `.shop-item-row`, while five different buttons had
+only `:hover`. Focus moved from the row onto its own Buy button and nothing on screen changed.
+
+The row was also `focusable="true"` **while containing three focusable Buttons** — a container in the
+focus ring that does nothing on Submit, and the reason the highlight vanished the moment you moved
+onto a control.
+:::
+
+The row is now out of the ring and follows its children instead: a `--focus-within` class is toggled
+on `FocusIn` / `FocusOut` of its buttons, since UI Toolkit has no `:focus-within` selector. So there
+is always exactly one row lit *and* one control lit, and pressing A always does something.
+
+Initial focus lands on the first **Buy button**, not the row — focus has to start somewhere Submit
+means something.
+
+:::tip
+When adding a control here, give it a `:focus` rule. A mouse user already knows where their cursor
+is; a pad user has only that. Focus styles are deliberately brighter than hover for the same reason.
+:::
+
 ## Scene wiring (Editor)
 
 1. Add a GameObject with a `UIDocument` (sortingOrder above the HUD) +
