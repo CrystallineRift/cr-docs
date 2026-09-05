@@ -78,6 +78,19 @@ private bool IsUsableInBattle(ItemInventoryEntry entry)
 }
 ```
 
+### Item rows carry an icon
+
+Each row leads with a `.bag-item-icon` element painted by
+`UiIcon.Apply(icon, definition?.IconAssetKey, displayName, _assetLoader)` — matching the shop and the
+overworld bag. The row is otherwise three labels, and a wall of them is hard to pick a healing item
+out of mid-battle. A row with no authored icon shows the two-letter `IconGlyph` placeholder rather
+than an empty square.
+
+`BattleBagPanelHandler.Init` gained an `[InjectOptional] IGameAssetLoader` for this; the definition
+and the display name are resolved **once** at the top of the row builder and reused by the icon, the
+name label and the effect summary. The key is `item.icon_asset_key` (`icons/items/<contentKey>`),
+never `AssetKey`, which addresses the item's prefab — see [UI Icons](29-ui-icons.md).
+
 ### Item Selection Flow
 
 1. **Player clicks an item row** → `OnItemRowClicked()`
@@ -131,6 +144,9 @@ public enum ItemEffectType : short
     CaptureCreature  = 11,
 }
 ```
+
+The full enum, its handlers and the refusal sentence each one produces are in
+[Item Effects and Status Cures](../backend/19-item-effects.md).
 
 ### Effect Parameter Classes (`CR.Game.Model.Items.EffectParameters`)
 
@@ -250,5 +266,8 @@ Key styles for the panel:
 
 ## Related Documentation
 
-- [Battle System](unity/07-battle-system.md)
-- [Capture Mechanic](unity/14-capture-mechanic.md)
+- [Battle System](07-battle-system.md)
+- [Capture Mechanic](14-capture-mechanic.md)
+- [Item Effects and Status Cures](../backend/19-item-effects.md)
+- [UI Icons](29-ui-icons.md)
+- [Player Menu UI](10-player-menu-ui.md) — the overworld bag and its target picker

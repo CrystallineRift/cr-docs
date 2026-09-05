@@ -92,6 +92,21 @@ public interface IBattleCoordinator
 | `MissionProgressed` | `(string missionName, int current, int threshold)` | An in-battle mission ticked forward (e.g. applying Burn); HUD shows a fading progress toast |
 | `MissionCompleted` | `(string missionName, string unlockedAbilityName)` | An in-battle mission finished and unlocked a move for the rest of the battle; HUD shows a completion banner |
 
+#### A subscriber that throws is not the battle's problem (`IsolatedDispatch`)
+
+Every `Raise*` helper goes through `IsolatedDispatch.Invoke` (`CR.Game.Battle.Logic`, engine-free,
+pinned by `IsolatedDispatchTests`) instead of `X?.Invoke(...)`. It walks the event's invocation
+list one handler at a time: a handler that throws is reported to a fault sink — `BattleEvents`
+logs `[BattleEvents] {event} handler {Type}.{Method} threw: …` via `Debug.LogError` — and the
+handlers after it still run. The raiser (usually the `BattleCoordinator` turn loop) never sees the
+exception.
+
+The reason it exists: a plain multicast invoke stops at the first throw and hands the exception
+to whoever raised it. A UI listener once threw out of `RaiseBattleStarted`, the coordinator's
+catch logged only `ex.Message`, and the wild battle ended `loop_complete` before turn 1. The
+log line now names the offending subscriber, and a broken listener costs only its own
+notification.
+
 ## Wild Battle Turn Loop
 
 Wild battles drive a sequential turn loop entirely client-side. The server resolves each half-turn via a dedicated endpoint.
@@ -194,7 +209,15 @@ When the player's **whole team** is knocked out the battle resolves as a loss (a
 Sequence:
 
 1. **`OnBattleEnded`** → `"{name} passed out!"` (trainer name via `ITrainerDomainService`), then `CloseBattle()`.
-2. **`OnBattleClosed`** (arena already restored) → `ICreatureInventoryService.HealTeamAsync(trainerId)` → teleport the player to the merchant → `"Your team was healed."`
+2. **`OnBattleClosed`** (arena already restored) → heal the team → teleport the player to the merchant → `"Your team was healed."`
+
+The heal is **routed by connectivity**: online it POSTs the BFF's
+`POST /api/v1/trainers/{trainerId}/team/heal` via `ITeamClient`/`TeamClientUnityHttp`
+(current HP is server-authoritative in `generated_creature_current_stats` — the earlier in-process
+`ICreatureInventoryService.HealTeamAsync` call only wrote the client's local cache online, so the
+next server read reset the team straight back to 0 HP); offline it still calls the in-process
+domain service, which owns the local store. The endpoint enforces token-account ownership of the
+trainer.
 
 The heal + teleport run on `OnBattleClosed` (not `OnBattleEnded`) because the arena stager restores the player to the pre-battle position synchronously inside `CloseBattle`; running after that restore means the merchant teleport lands last and sticks. Teleport moves `TrainerWorldBehaviour` → `NpcMerchantBehaviour` (both resolved via `WorldRegistry`) — the same transform the stager moves.
 
@@ -224,6 +247,8 @@ XP is awarded **server-side** on a knockout (see *Battle Experience* on the back
 |-------|------|-------|
 | `WinnerTrainerId` | Guid? | Null on draw or forfeit |
 | `Reason` | string | `"AllCreaturesFainted"`, `"Forfeit"`, `"loop_complete"`, etc. |
+
+On a trainer win the banner subtitle reads `Beat Trainer {DisplayName}` (`BattleOutcomeSubtitle.For`, fed by `BattleResult.DefeatedNpcDisplayName`); otherwise it echoes the reason in caps.
 
 ## `IBattleDomainService` (Unity-side)
 
@@ -409,11 +434,26 @@ Event → beat map (all filtered to the bound creature id, except victory which 
 
 Each `CreatureReaction` (see [ScriptableObjects → CreatureDefinition](./12-scriptable-objects.md)) bundles three optional **body** channels: **animation** (cross-fade state or `SetTrigger`), **sound** (random `AudioClip` cry, auto-created positional `AudioSource`), and **feedback** (scale-punch, color flash via `MaterialPropertyBlock`, and a `CreatureVibrationTier` that re-raises the shared `BattleEvents.RaiseVibration*` haptics). Its `vfxPrefab` slot is for body-only effects (a faint puff, a level-up sparkle) — **not** the move's VFX.
 
+#### Authoring a profile — `CreatureReactionProfile` inspector
+
+A profile is **15 beats × ~18 fields ≈ 270 controls**, and a typical profile derives from a shared base and overrides two or three beats — so the useful information is *which* beats are authored and where each one's content comes from. The inspector is built around that:
+
+- **Inherits from** — a dropdown of every profile in the project (readable names), not a bare object field.
+- **Coverage bar** — `12 of 15 beats covered · 4 authored here`. Inherited beats count as covered, because the presenter cannot tell the difference.
+- **Beats grouped by moment** — ENTERING / ATTACKING / TAKING DAMAGE / LEAVING / BATTLE END — each row showing a one-line summary of what will actually play (`Roar · 2 sounds · flash`, taken from the *resolved* chain) and a badge: **here** (local), **inherited**, or **not set**.
+- **Opening a beat** shows a plain-language "this plays when…", its fields grouped into Animation / Its voice / Body VFX / Feedback, plus **Override — start from the inherited version** (deep-copies the base's beat so editing it cannot mutate the shared base) and **Clear — go back to inheriting**.
+
+The beat list itself lives in `CreatureReactionProfileBeats` so the creature inspector reads the same catalogue; the summary and coverage rules are pure logic in `CR.Game.Battle.Logic.ReactionBeatDigest` (unit-tested).
+
+The `CreatureDefinition` inspector picks a profile from the same dropdown and reports its coverage inline, with **New profile…** / **Edit reactions** / **Make a variant…**.
+
+> **Fixed:** `CreatureReactionProfile.Resolve()` did not carry the `recall` beat, so a derived profile could author a recall reaction and have it silently dropped in favour of the base's (usually empty) one. Every beat on `CreatureBattleReactions` must appear in `Overlay`.
+
 **Zero-config fallback:** if a beat is unauthored, the presenter still cross-fades default Animator states for the core combat beats (`Attack`/`Hit`/`Faint`/`Idle`) — a freshly-added prefab animates immediately; cry/feedback are opt-in.
 
 #### Standard Animator state names
 
-There is a documented naming convention so creature Animator controllers stay consistent. The canonical names live in one place — `CreatureReactionDefaults` — and are shared by the presenter (its fallback states), the **`CreatureReactionProfile` → "Set Standard Defaults"** button, and the controller generator (below).
+There is a documented naming convention so creature Animator controllers stay consistent. The canonical names live in one place — `CreatureReactionDefaults` — and are shared by the presenter (its fallback states), the **`CreatureReactionProfile` → "Fill blanks with standard defaults"** button, and the controller generator (below).
 
 | Beat | Standard state | Settle | Notes |
 |---|---|---|---|
@@ -468,6 +508,16 @@ The offline battle stack uses the DLL's `BattleDomainService` (same class the ba
 
 > **Note:** The legacy Unity-side stack (`IBattleClient` / `BattleClientUnityHttp` / `OfflineBattleClient` / `OfflineBattleService` / `IBattleRepository` under `CR.Game.Battle.Offline` / `SqliteOfflineBattleRepository`) was removed in favour of the DLL's `IBattleDomainService`. New code must not reintroduce those types.
 
+**Every constructor dependency `BattleDomainService` declares must be bound in
+`LocalDevGameInstaller`, or resolving `battle_offline` throws at install time and the world never
+bootstraps.** As of 2026-09-03 that list gained `IElementalReactionRepository` (Sqlite, reading the
+content database — the authored synergy rules) and `IBattleSystemVersionRepository` (already bound,
+now also reading the content database, because the active elemental-damage version is content).
+`BattleDomainServiceBindingTests` in `cr-api-unity/Tests/ContentSync` pins the rule: it parses the
+constructor out of the cr-api source and asserts a matching `Container.Bind<…>` for every required
+parameter. It is a text comparison because the installer lives in Assembly-CSharp, which no Unity
+asmdef may reference, so no EditMode test can build the container.
+
 The `game.bytes` file is keyed as `LocalDataSources.GameOfflineRepository` and resolved to `database_path_game` in `game_config.yaml` (defaults to `{persistentDataPath}/databases/gameOffline.bytes`).
 
 ## `BattleHUD`
@@ -494,6 +544,44 @@ The root is hidden (`DisplayStyle.None`) on start and shown when `BattleEvents.B
 
 **HP bars** are custom `VisualElement` fills; width is set via `style.width = Length.Percent(ratio * 100f)` with a USS `transition-duration: 0.3s` for smooth animation.
 
+### Item targeting in battle
+
+Choosing a consumable from the bag now asks which creature to use it on when the item
+heals, revives or cures (`BattleItemTargeting.NeedsChoice` — opponent-targeting items and
+capture crystals skip the step). `BattleBagPanelHandler.GetTargetsAsync` refreshes the team,
+builds `TargetCandidate` cards through the shared `TargetCandidateBuilder` (also used by the
+overworld bag) and judges each with `ItemTargetRule`; the HUD's `target-panel` renders one
+row per creature, disabling rows the item cannot be used on and echoing the rule's reason
+when one is pressed. `UseOnAsync(itemId, creatureId)` submits the use.
+
+Server refusals (HTTP 400) surface their real `message` body via `ServerErrorMessage.From`
+in `SimpleWebClient`, so the HUD log shows "This item cannot be used in battle." rather than
+"Bad Request".
+
+### Icons on the HUD
+
+Everything the HUD draws as an icon goes through `UiIcon.Apply` — see [UI Icons](29-ui-icons.md).
+`BattleHUD.Init` takes `IBattleCoordinator`, `GameSessionManager`, `IUICoordinator`, `TeamSync`,
+`IGameAudio`, `IStatusConditionDomainService` and an `[InjectOptional] IGameAssetLoader` to feed the
+icon lookups; all are already bound in `LocalDevGameInstaller`.
+
+| Slot | Key source |
+|---|---|
+| Ability rows (`.cmd-icon`) | `WildAbilityDto.iconAssetKey`, populated from `BaseAbility.IconAssetKey` by `BattleCoordinator` / `BattleMissionConductor` |
+| Bag rows (`.cmd-item-icon`) | `BattleBagItem.IconAssetKey` |
+| `.status-badge` | A name → icon-key map built **once per session** from `IStatusConditionDomainService.GetStatusConditionsAsync(0, 200)` |
+
+**The status badge is an icon slot now.** It used to be a `Label` holding a four-letter truncation of
+the condition name, which made "Confused" and "Confounded" the same badge. It is the authored sprite
+when the condition has one and the two-letter `IconGlyph` otherwise, and `.status-badge` became a
+fixed 20×20 box — an absolutely-positioned glyph contributes nothing to layout, so a padding-sized
+badge would have collapsed to zero.
+
+The badge lookup is **name-keyed**, because status events carry only the condition's name. Two
+conditions with the same name would collide; the server's unique index on `status_conditions.name`
+makes that impossible today. The map is loaded once and the "loaded" flag is set *first*, so a failed
+read does not retry on every battle.
+
 ### Turn narration — every resolved turn must say something
 
 The battle log (`log-text`, four lines, oldest dropped) is the only thing that explains a turn whose
@@ -508,6 +596,17 @@ Three lines close that gap:
 | `"The opponent used Cyclone!"` | `AbilityResolving` channel | announced before the attack animation |
 | `"But it missed!"` | `AbilityMissed` channel | at the moment of the miss |
 | `"But nothing happened!"` | `BattleEvents.ActionResolved`, direct subscription | after the presentation, as a trailing remark |
+| `"The water conducts the charge! Conduction!"` | `ActionOutcome.ReactionLogLine` | after the presentation, before the bonus-damage line |
+
+**The reaction line comes off the outcome, not from a table in the client.** `ActionOutcome` carries
+`ReactionLogLine` (populated by `BattleResolver` from the reaction it fired), and the HUD prints it
+verbatim, falling back to `"{ReactionName}!"` when the resolver had no line to give. It used to look
+the name up in the static `CR.Game.Compat.Battle.ElementalReactionTable` — which was correct only
+while reactions were hard-coded. Now that they are authored rows in `elemental_reaction`, that lookup
+would have shown the *shipped* line for a rule a designer had since retuned, and nothing at all for
+one they added. No runtime Unity code references the static table any more. See
+[Battle Extensions → Elemental reactions are content](24-battle-extensions.md) and
+[Runtime Content Sync](27-content-sync.md).
 
 Mission lines share the same reasoning. Progress and the ability unlock now write here as well as to
 their toast and banner — `"Mission: Pyromaniac (0/3)"` at battle start, `"Pyromaniac 2/3"` on a tick,
@@ -550,6 +649,66 @@ A sidecar mission evaluator (e.g. "apply Burn to the same target 3 times → unl
 - Both elements fade via USS opacity/translate transitions (`.mission-toast--hidden`, `.mission-banner--hidden` in `BattleHUD.uss`) and are hard-reset (no fade) on `BattleStarted`/`BattleEnded` via `ResetMissionUi()` so nothing bleeds into the next battle.
 - **Unlocked ability styling:** `WildAbilityDto.unlocked` (set by the mission system, ignored by the battle system itself) drives an accent style on the ability row in `PopulateAbilityList` — `.cmd-row--unlocked` (amber border/fill) plus an `"UNLOCKED"` badge (`.cmd-unlocked-badge`). It stays an ordinary `Button` on the same `Activate(row, ...)` / `clicked` path as every other ability — only the visuals differ.
 
+## Debug stats overlay
+
+`BattleDebugStatsOverlay` (`Assets/CR/UI/Battle/DebugOverlay/BattleDebugStatsOverlay.cs`) is a
+dev-only overlay, compiled only in the Editor or a `DEVELOPMENT_BUILD` (`#if UNITY_EDITOR ||
+DEVELOPMENT_BUILD` wraps the whole file, including its Zenject binding in
+`LocalDevGameInstaller`). While a battle is active, pressing **F3** toggles two panels — one
+beside each combat card — dumping everything the client actually knows about that creature:
+level, current/max HP, the raw stat block (ATK/DEF/SPA/SPD/SPE), status conditions, held item,
+its ability list (name/category/power), and a running log of raw stat modifiers applied by
+in-battle conditions.
+
+**Namespace note:** the folder is `.../Battle/DebugOverlay/` but the C# namespace is
+`CR.UI.Battle.DebugOverlay`, deliberately avoiding a literal `Debug` segment — a nested namespace
+named `Debug` under `CR.UI.Battle` shadows `UnityEngine.Debug` for every *other* file in that
+namespace tree (it broke `BattleHUD.cs`'s and `BattleSummaryScreen.cs`'s bare `Debug.LogWarning`/
+`Debug.LogError` calls the first time this was tried). `CR.Game.Battle.Debugging` (the
+`BattleFxSmokeRunner` namespace) sidesteps the same trap for the same reason.
+
+**Data sources — same as `BattleHUD`, not a new pipeline.** The overlay subscribes directly to
+the static `BattleEvents` bus (`BattleStarted`, `CreaturesIdentified`, `PlayerTurnStarted`,
+`CreatureSwitchedIn`, `HpChanged`, `StatusApplied`/`StatusRemoved`, `ActionResolved`,
+`BattleEnded`) — the same events `BattleHUD` reads — plus `TeamSync.Team` for the player's synced
+`GeneratedCreature` (level, HP, the five battle stats, held-item ids). It renders into **the same
+`UIDocument`** as `BattleHUD` (found at runtime via `FindFirstObjectByType<BattleHUD>()`, never a
+second `UIDocument`), inserting a panel into `top-area` before `opponent-card` and another into
+`bottom-area` right after `player-card` — so both track the HUD's own layout. Styling is
+`Resources/BattleDebugStatsOverlay.uss` (`.debug-stats-panel`, `.debug-stats-text`), added to the
+shared root's `styleSheets` once.
+
+**Opponent stats are genuinely unavailable — not a bug.** The server never sends the opponent's
+raw stat block to the client (hidden-info by design — `BattleCreatureSnapshot`, the only
+opponent-side DTO that reaches Unity, carries just `CurrentHp`/`Level`/`IsActive`). The opponent
+panel reflects that honestly: `HasFullStats = false` renders `"Stats: unavailable (not sent to
+client)"` instead of fabricated zeros, held item shows `"Unknown (not sent to client)"`, and the
+ability list is empty (abilities are only known for whichever side is mid-turn-selection, i.e. the
+player).
+
+**Raw stat modifiers** are read straight from `ActionOutcome` — the same object
+`BattlePresentationSequencer.PlayAftermath` consumes — rather than re-derived: `ConditionsApplied`
+(each `ActiveBattleCondition.StatChanges`) is attributed to `TargetCreatureId`,
+`AttackerConditionsApplied` to `ActingCreatureId` (the same attribution the sequencer uses).
+`ConditionsRemoved` carries no per-item target, so removal is applied by condition name to both
+tracked creatures — a best-effort call for a debug tool, mirroring the sequencer's own imprecision
+there. The log is capped at 12 entries per creature (oldest dropped first) to avoid unbounded
+growth over a long battle.
+
+**Input.** A new `Debug/ToggleBattleStats` action (F3, keyboard only) was added to
+`CR_GameInput.inputactions` — no pre-existing debug action map existed to reuse. Resolved the same
+way `PlayerMenuWindow` resolves `UI/ToggleMenu` (`Resources.Load<InputActionAsset>("CR_GameInput")`
+→ `FindActionMap("Debug")` → `FindAction("ToggleBattleStats")`), event-driven via
+`InputAction.performed` — never polled from `Update`. The action stays disabled outside the
+`Battle` UI context (`IContextAwareScreen.OnContextChanged`), so F3 is inert everywhere else.
+
+**Formatting is pure and unit-tested.** `BattleDebugStatsFormatter`
+(`Assets/CR/UI/Battle/DebugOverlay/Logic/`, `CR.UI.Battle.DebugOverlay.Logic` asmdef,
+`noEngineReferences: true`) takes a plain `BattleDebugCreatureSnapshot` POCO (no Unity/engine and
+no cr-api-model types, so it compiles and runs outside Unity) and returns deterministic `\n`-joined
+text — pinned by `BattleDebugStatsFormatterTests` (`CR.UI.Battle.DebugOverlay.Logic.Tests`
+asmdef, `UNITY_INCLUDE_TESTS`-gated).
+
 ## `WildBattleRequest`
 
 ```csharp
@@ -587,6 +746,96 @@ public record NpcBattleRequest(
 4. `BattleCoordinator` calls `IBattleDomainService.StartBattleAsync` → `GetBattleStartResultAsync` → `GetBattleStateAsync` to identify active creatures
 5. If `BattleArenaKey` resolves, calls `_stager.EnterArenaAsync(...)` → `_cameraController.EnterBattle(arena.CameraLookTarget)` — player teleport + both creature visuals + camera lerp
 6. Fires `OnBattleStarted`
+
+## Authoring a Trainer Battle
+
+**CR → Trainer Battle Author** is the one place a trainer battle is made. A trainer
+spans five systems (definition asset, spawner-backed team, dialogue conversation, scene object,
+cr-api migration seed) and the window's job is to make the `TrainerBattleDefinition` asset the
+single source of truth and derive everything else — the spawner/pool/template plumbing stays
+exactly what the runtime expects, but the author never sees it.
+
+The window is a **guided checklist**, not a pile of buttons. Each repaint it probes the real
+state of the world and renders five rows, in pipeline order, each with an icon *and* a word
+(state is never carried by colour alone) and a one-click action that is enabled only when it
+can actually run:
+
+### It is a UI Toolkit window, not an inspector dump
+
+This is the project's first **UXML/USS editor window** (`Game/World/Editor/UI/TrainerBattleAuthor.uxml`
++ `.uss`; every other editor tool here is IMGUI). Layout lives in the UXML, all styling in the USS
+by named class — the house "no inline styles" rule applies to editor UI too, the single exception
+being `display: none` on panels the window toggles.
+
+The layout follows the shape RPG Builder popularised: a **roster rail** on the left listing every
+trainer in the project (searchable, each row showing a status pip and an `n/4` readiness count),
+and a **dossier** on the right for the selected one — hero header with the trainer's name, chips
+for ID / arena / rematch, a readiness meter that turns green at 4/4 "READY TO FIGHT", the
+checklist, team cards, a bag-and-rewards summary, and the raw inspector behind *Advanced*
+(an `IMGUIContainer`, so nothing is hidden from anyone who wants it).
+
+Palette cools the house grays slightly toward blue (`#1b1e24` ground, `#22262e` cards) so the tool
+reads as its own thing rather than a default inspector, keeping the CR accent `#4b9cd3`. Only USS
+properties Unity actually supports are used — no box-shadow, no gradients; depth comes from
+layered surfaces and 1px borders. Team creatures are shown the way a person would say them
+("Wolfpup · Normal", not `creature_wolfpup`), with the raw content key on the tooltip.
+
+The copy is written for anyone, not just the team — steps are named in player terms
+("Trainer basics", "Battle team wiring", "Challenge dialogue", "Place in the world",
+"Server hand-off"), the internal jargon (content keys, spawner templates, barks, migrations)
+stays behind tooltips and the Advanced foldout.
+
+| Step | Done means | Action |
+|------|-----------|--------|
+| Trainer basics | name, ID, arena and ≥1 team creature, zero validation problems | Show in Project |
+| Battle team wiring | every slot's `spawnerTemplateId` equals its deterministic md5 id — **drift is detected live** | Wire team |
+| Challenge dialogue | the titled conversation exists in `CR Dialog.asset` (optional — no title means a silent challenge) | Use standard name / Write dialogue |
+| Place in the world | `CR_NPC_Trainer_<key>` is in an open scene | Place in scene (position field + "Where I'm looking") |
+| Server hand-off | never verifiable from Unity — a hand-off to cr-api | Copy for server |
+
+**Author Everything** runs every actionable step in order. **New Trainer…** creates a
+definition from just a display name: the content key is derived (`Scout Maren` →
+`npc-trainer-scout-maren`), the bark title defaults to `<key>-bark`, and the arena key is
+pre-filled from the open scene's `BattleArena`. The raw inspector still exists, behind an
+*Advanced* foldout, for anything the summary card and checklist do not cover.
+
+The rules behind the rows are pure — `TrainerAuthorChecklist` in `CR.Game.World.Logic`
+(states: Done / To do / Blocked / Manual, plus the content-key derivation), pinned by
+`TrainerAuthorChecklistTests` — so the window renders exactly what the tested rule returns.
+Deterministic ids are md5(`"cr-trainer:" + name`) formatted straight from the digest's hex
+(never through `new Guid(bytes)`, whose endianness would break parity with the migration).
+`cr_author_demo_trainer` / `CrTrainerBattleCommand.Author()` drives the same engine headlessly
+and produced the Meadow's Scout Maren.
+
+### Each team slot says how its creature grows
+
+A slot authors the creature, its level, its move list (`progressionSetName`) and — new with the
+server push — **`growthProfileName`** (default `"Balanced Growth"`, which is 100% of base stats).
+Both name fields are `ContentPicker` dropdowns in the definition inspector and the author window's
+team UI, sourced from the growth and progression assets in the project rather than typed, because
+the server resolves them **by name**: a name nothing matches refuses the whole team with a `409`.
+The window catches it first — the team card shows `⚠ <name>` on an unresolved profile, and
+*Validate* names the slot ("no growth profile is called 'X' — it was renamed or deleted, so the
+server would refuse this team"). The field is additive, so trainers authored before it deserialize
+to the default and nothing had to be re-authored.
+
+### Push, not a hand-written migration
+
+Changing an existing trainer's team used to mean writing a migration by hand — M10020's pattern —
+which is why the checklist's last row is a *Manual* hand-off. For edits it no longer is:
+**Content Studio → Trainer Battles → ⬆ Push** sends the definition to cr-api (the hidden team
+spawner's metadata, one template per slot under its deterministic id, a sweep of every account's
+cached copy of that team, and the trainer's `npcType` / rematch flag) and mirrors the same team into
+the local SQLite game-data, so an offline playtest sees the edit without a floor re-bake.
+
+The push **recomputes** each slot id from the content key at push time rather than trusting the
+stored string, and refuses when the two disagree — a renamed content key would otherwise write the
+team under new ids and orphan the rows the definition still points at — then restamps the asset on
+success. Leg-by-leg detail lives in
+[Content Registry — a trainer battle push is four writes](?page=unity/08-content-registry).
+
+M10020 remains the **fresh-database seed**: a trainer still has to exist in a database nobody has
+pushed to, which is what "Server hand-off" and *Copy for server* are still for.
 
 ## Wild Creature Battle Flow
 
@@ -734,6 +983,8 @@ Stale rows surviving one extra sync is the recoverable failure. The deletion is 
 **`BattleStager` missing creature `AssetKey`.** If `BaseCreature.AssetKey` is empty or the addressable cannot be loaded, the stager logs and returns null for that visual. `BattleCoordinator` then reads the returned `BattleStagingResult`, logs an Error, and raises `BattleEvents.StagingFailed("opponent visual" | "player visual")`. The battle still runs — only the on-arena prefab is missing.
 
 **`BattleStager` no `TrainerWorldBehaviour` in `WorldRegistry`.** Means no player trainer GO is in the scene yet. Stager logs a warning and skips the teleport; creature visuals still spawn. Usually indicates a scene without `TrainerWorldBehaviour` registered (e.g. main menu testing).
+
+**A trainer's team must not also exist as a `SpawnerDefinition`.** `npc-trainer-meadow-scout-team.asset` did, and `SpawnerDefinitionSyncBehaviour` re-synced it into the local database on every world load — silently reverting whatever had just been pushed. The asset is deleted and Content Studio now excludes `<trainerKey>-team` spawners from the Spawners tab entirely (see [Content Registry](?page=unity/08-content-registry)).
 
 **`BattleHUD` IDs are now `Guid`, not `string`.** Comparisons inside the HUD use `Guid` equality; HpChanged events arriving before `CreaturesIdentified` are cached in `_hpCache` and replayed when the IDs land. Out-of-order or dropped events no longer leave the opponent panel blank.
 

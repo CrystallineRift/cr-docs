@@ -43,6 +43,20 @@ type:
 Master Audio has no bus by that name — returning `"Master"` would send the call to a bus that does
 not exist and silently change nothing.
 
+`AudioBusSpatiality.IsPositional()` is the second rule on the enum: only `Sfx` falls off with
+distance. `Music`, `Ui` and `Ambience` buses are pinned 2D (`GroupBus.forceTo2D`) by `cr_setup_audio`.
+
+:::danger The 2D pin lives on the bus, not on the AudioSource
+The shipped MasterAudio prefab has its mixer-wide spatial setting at **ForceAllTo3D**, and Master
+Audio rewrites every Sound Group variation's `spatialBlend` from that setting at Awake
+(`SoundGroupVariation.SetSpatialBlend()`). The `spatialBlend = 0f` the setup command writes on each
+variation is therefore only what the inspector shows at edit time; at runtime a menu click was a 3D
+source parked on the `MasterAudio` object at the origin — logarithmic rolloff, min distance 1 — so
+from the battle arena a hundred units out it played at about 1% and read as silence. A bus flagged
+`forceTo2D` is honoured *after* that rewrite, which is why the pin is there. Re-running
+`cr_setup_audio` repairs a scene built before the flag existed (`buses pinned to 2D [...]`).
+:::
+
 ## Per-area music and ambience
 
 `AreaAudio` is the audio counterpart to `AreaEnvironment`, and sits on the same area root:
@@ -93,8 +107,8 @@ unity cmd --project-path . cr_wire_area_audio        # AreaAudio on every area, 
 unity cmd --project-path . cr_create_music_playlists # one Playlist per music key
 ```
 
-Also on the menu as **CR → Audio → Set Up Master Audio**, **CR → Audio → Wire Area Audio** and
-**CR → Audio → Create Music Playlists**.
+Also on the menu as **`unity run --command cr_setup_audio`**, **`unity run --command cr_wire_area_audio`** and
+**`unity run --command cr_create_music_playlists`**.
 
 :::caution
 `cr_wire_area_audio` attaches `AreaAudio` to the scene's `AreaEnvironment`, and **skips the area
@@ -124,6 +138,25 @@ erroring.
 With no MasterAudio prefab in the scene, Master Audio logs its own warning and drops the call. That
 is deliberately not swallowed — a silent drop is indistinguishable from working audio playing
 nothing.
+
+:::danger Playlists are data; a PlaylistController is what plays them
+Master Audio splits music across **two** objects. `MasterAudio` holds the playlists, and a separate
+`PlaylistController` prefab is the thing that actually plays one. `cr_setup_audio` built the first
+and not the second, so the Core scene shipped with ten playlists and **zero controllers** — which
+looks complete in the inspector and fails only at runtime, with
+`You have no Playlist Controllers in the Scene. You cannot 'StartPlaylist'` the moment an area asks
+for its bed. Every `PlayMusic` call in the game was dropped: all area music and all battle music,
+not just the area that happened to be open.
+
+`cr_setup_audio` now creates it. Two details matter:
+
+- It goes at the **scene root**, not under `MasterAudio` — matching the vendor's own scenes.
+  MasterAudio rescans its children as Sound Groups, so a controller parented there is picked up as
+  one.
+- `startPlaylistOnAwake` is set to **false**. The game decides what plays (`AreaAudio` on entry, the
+  battle presenter on encounter); left on, the game opens on whichever playlist happens to be first
+  in the list.
+:::
 
 ### Music
 
@@ -188,6 +221,22 @@ error CS0592: Attribute 'SerializeField' is not valid on this declaration type.
 Neither attribute did anything — a plain class is not a serialized field, and an abstract property
 cannot be serialized — so both were removed, with a comment marking the patch. **Re-apply after
 reimporting either package**, or the project will not compile.
+
+## "Audio isn't working" — check the Editor first
+
+The Game view's **Mute Audio** speaker toggle (`EditorUtility.audioMasterMute`, stored in Editor
+preferences as `AudioMasterMute`) persists across sessions, restarts and projects, and silences
+everything — Master Audio and raw `AudioSource.PlayClipAtPoint` alike — *after* every CR log line
+has reported the sound as played. The console stays clean: no `[CR.Audio]` warning, no Master Audio
+error, `[BattleAbilityFx] play sfx ...` lines present. It looks exactly like a broken pipeline.
+
+`EditorAudioMuteGuard` (`Assets/CR/Core/Audio/Editor/`) now logs a `[CR.Audio]` warning on
+`EnteredPlayMode` whenever the toggle is on. If you see it, click the speaker in the Game view
+toolbar. It has no effect on builds. To check from a shell:
+
+```bash
+defaults read com.unity3d.UnityEditor5.x AudioMasterMute   # 1 = muted
+```
 
 ## Not wired yet
 

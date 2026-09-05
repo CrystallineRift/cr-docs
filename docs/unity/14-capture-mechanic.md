@@ -51,7 +51,7 @@ Where:
 ### Key Rules
 
 1. **Cannot capture fainted creatures** - If `currentHp <= 0`, the capture attempt fails immediately
-2. **Cannot capture enemy creatures** - Only wild creatures can be captured
+2. **Cannot capture enemy creatures** - Only wild creatures can be captured. In a trainer battle the crystal is refused *before* anything is spent — see [Refused in trainer battles](#refused-in-trainer-battles).
 3. **Maximum 95% chance** - Even at low HP with high modifiers, the chance caps at 95%
 4. **Minimum 5% chance** - Even at full health with high modifiers, there's always a small chance
 5. **Crystals are consumed on use** - Both successful and failed captures use the crystal
@@ -126,6 +126,39 @@ Content-Type: application/json
 }
 ```
 
+## Refused in trainer battles
+
+A trainer's creature can never be captured, so throwing a crystal at one would cost the crystal
+*and* the turn for nothing. Both ends refuse the throw before anything is consumed.
+
+**Server.** `ItemUseDomainService.UseItemAsync` calls `IsCaptureCrystal(item)` — true when
+`EffectType == CaptureCreature` **or** the `CaptureCrystal` usage flag is set (seeded crystals carry
+`UsableInBattle | TargetsOpponent` = 9 and *not* the flag, so the effect type is the reliable tell).
+When the battle's other trainer is not `BattleDomainService.WildTrainerId` the use fails with
+`"Capture Crystals cannot be used in a trainer battle."` regardless of how the client flagged the
+target, and `ItemEndpoints` returns it as **400** `{ "message": ... }`. Nothing is removed from the
+bag and the round is not consumed. Pinned by the "Capture crystals" tests in
+`ItemUseDomainServiceTests`.
+
+**Client.** `CR.Game.Battle.Logic.CaptureCrystalRule` (engine-free, `Game/Battle/Logic`) owns the
+same decision:
+
+| Member | Role |
+|---|---|
+| `IsCaptureCrystal(effectIsCapture, hasCaptureFlag)` | mirrors the server tell |
+| `IsTrainerBattle(kindIsNpcTrainer, battleType, trainerBattleType)` | `BattleSession.Kind == NpcTrainer` first, then a case-insensitive `BattleTypes.Trainer` match; the legacy `"ONEvONE"` type string is *not* a trainer tell |
+| `Refusal(isCaptureCrystal, isTrainerBattle)` | `null` when allowed, else `TrainerBattleRefusal` = "Capture Crystals can't be used in a trainer battle!" |
+
+`BattleBagPanelHandler` tracks `IsTrainerBattle` from `IBattleCoordinator.OnBattleStarted` /
+`OnBattleEnded`, stamps `BattleBagItem.BlockedReason` on every crystal row while it is true, and in
+`ExecuteUseAsync` raises `BattleEvents.ItemUseRefused(reason)` and returns before the capture VFX or
+the server call. Should a refusal still come back from the server (a 400 `BadRequestException`, or
+`ItemUseResult.Success == false`), the same event carries the server's message. `BattleHUD` greys a
+blocked row with `cmd-item-row--disabled` — still focusable, so choosing it logs the reason instead
+of spending the item — and `OnItemUseRefused` appends the message to the battle log. Wild battles
+are untouched; a battle whose kind is unknown is left to the server so a stale flag never blocks a
+legitimate throw. Tests: `Game/Battle/Logic/Tests/CaptureCrystalRuleTests`.
+
 ## Unity Client Integration
 
 ### Battle Bag Panel
@@ -135,6 +168,7 @@ The `BattleBagPanelHandler` displays capture crystals with visual indicators:
 - **Blue left border** indicates a capture crystal item
 - **Effect preview** shows tier name (Standard/Fine/Radiant)
 - **Opponent target** is automatically shown when a capture crystal is selected
+- **Greyed row + log line** in a trainer battle (`BlockedReason`, see above)
 
 ### Item Definition
 

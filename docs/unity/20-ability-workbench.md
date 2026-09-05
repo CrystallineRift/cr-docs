@@ -88,6 +88,23 @@ open Editor — automation (or an agent) can run the whole export→rebake loop 
 menus. Note for anything that spawns `dotnet` from the Editor: strip Unity's inherited
 `DYLD_*`/`DOTNET_*`/`MSBuild*` env vars first (see `GameDataFloorTools.ExtendPath`).
 
+EditMode tests follow the same start-then-poll shape (`EditModeTestRunCommands`). The stock
+`unity cmd run_tests` blocks the Editor main thread for the whole run and wedges this project, so
+`unity cmd cr_edit_tests_start --args CR.Game.Battle.Logic.Tests` (comma-separated, omitted =
+every EditMode assembly) kicks the run off through `TestRunnerApi` and returns at once;
+`unity cmd cr_edit_tests_status` answers `running` until the run finishes, then returns a JSON
+summary (`passed`/`failed`/`skipped`/`total`, per-test `failures`) written to
+`Temp/cr_edit_tests.json`; `cr_edit_tests_reset` clears the running flag after a run that never
+finished. The callbacks are registered from an `[InitializeOnLoad]` static constructor and the
+running flag lives in `SessionState`, because the test run reloads the domain and drops anything
+registered ad hoc. Two traps: the `unity` CLI delivers everything after `--args` as one string
+under the key `args` (a bare positional value sends nothing), so that is the only `[CliArg]` name
+that binds; and a dirty scene makes the run pop a native "Save modified scenes?" alert that
+blocks the main thread until someone clicks it — so `cr_edit_tests_start` refuses while any open
+scene is dirty (`refused: unsaved scene(s) Core — …`). Save first (an `eval` of
+`EditorSceneManager.SaveOpenScenes()` works), and do it *after* the last recompile: a domain
+reload re-dirties the `Core` scene.
+
 Two menu items close the loop after an authoring session (no terminal needed):
 
 1. **CR → Content → Export Ability FX Seed Migration** (`AbilityFxSeedMigrationExporter`) —

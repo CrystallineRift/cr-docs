@@ -26,7 +26,7 @@ public interface IDomainSync
 `Assets/CR/Game/World/Behaviours/TeamSync.cs` — world-scoped, implements both `IWorldInitializable` and `IDomainSync`.
 
 - **`Awake`**: `WorldRegistry.Register(this)` (order -10 so it registers before `GameInitializer` at order 50)
-- **`InitializeAsync`**: stores `TrainerId`, subscribes to team events, calls `RefreshAsync`
+- **`InitializeAsync`**: stores `TrainerId`, subscribes to team events (`OnTeamUpdated`, `OnCreatureAdded`, `OnCreatureRemoved`, `OnSlotsSwapped` — the last so a Team-tab reorder reaches the battle swap list), calls `RefreshAsync`
 - **`RefreshAsync`**: calls `ICreatureInventoryService.GetTeamAsync` and stores result in `Team`
 - **`Clear`**: resets `Team` to empty array
 
@@ -117,6 +117,42 @@ A stubbed client is worse than no client. Stats shipped with an `IStatClient` th
 from `game_config.yaml`. It was bound in DI and had no callers, so nothing ever failed and nothing
 ever worked. When adding a client, verify the route answers and the config key resolves.
 :::
+
+### Cache first: the server answers a miss, not every call
+
+"Reads prefer the server" is the rule for live player state. It is the wrong rule for the two other
+kinds of data a router serves, and treating everything as live state is how Play Online ended up
+fetching the pickup table, the achievement list and the quest journal on every interaction. Each
+router now classifies what it holds:
+
+| Kind | Examples | Online read policy |
+|---|---|---|
+| **Content** | pickup definitions, achievement definitions, quest templates | Local first. On a `content_key` miss, ask the server once, write the result into local, return the local row. Remember server misses for the session so an unknown key does not re-query. |
+| **Terminal player state** | collected pickups, achievement unlocks, completed quests, trainer defeats | Local first. Reconcile with the server **once per trainer (or account) per session**, mirroring anything the server knows that local lacks. Later reads are local only; writes still go local-then-server. |
+| **In-progress player state** | active / available quests, quest instances, objective progress, stats | Server when online (the server is authoritative while the state is still moving), fall back to local on failure, cache the response locally. |
+
+The routers that implement this: `PickupDefinitionOnlineOfflineRepository`,
+`AchievementDefinitionOnlineOfflineRepository` (content, with a whole-list back-fill when local is
+empty); `PickupCollectedRegistry`, `AchievementUnlockedOnlineOfflineRepository`,
+`QuestOnlineOfflineRepository.GetCompletedQuestsAsync`, `TrainerDefeatCache` (terminal state,
+session-once reconcile); `QuestTemplateOnlineOfflineRepository` (content, via
+`GET /api/v1/quests/templates/by-content-key/{key}`).
+
+Two things make the mirror safe. Every local write the reconcile performs is idempotent — `INSERT OR
+IGNORE`, `ON CONFLICT DO UPDATE`, or an upsert keyed on `content_key` — so replaying a server list is
+a no-op the second time. And a failed reconcile removes the trainer from the "done" set, so the next
+read retries instead of trusting a half-mirrored session.
+
+Trainer defeats are the model for the write side: `BattleResult.DefeatedNpcContentKey` carries the
+beaten NPC out of `BattleCoordinator`, and `TrainerDefeatCache` records it locally on
+`BattleEvents.BattleClosed` — the battle service (server or local) already persisted the defeat, so
+no battle close triggers a network read.
+
+The local halves are bound by id in `LocalDevGameInstaller`: `LocalDataSources.Pickup.DefinitionOffline`
+and `LocalDataSources.Quest.TemplateOffline` point at GameData (content), while
+`ITrainerDefeatRepository` points at PlayerData. PlayerData gets the `trainer_defeat` table because
+`DatabaseMigrationRunner.MigrateDomain` runs every domain migration against every
+`MigratableSources` entry.
 
 ### The routing decision is one tested class
 

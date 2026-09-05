@@ -86,6 +86,8 @@ cr-api/
   Game/          ← high-level orchestration (sessions, battles, items)
   Quests/        ← quest templates, instances, progress tracking
   Stats/         ← string-keyed lifetime stat store + audit log
+  Market/        ← player-to-player creature marketplace (listings, escrow transfer)
+  Moderation/    ← live ops: shadow bans, admin audit log, player dossiers
   Common/        ← shared data contracts, base repositories
   Convenience/   ← CR.REST.AIO: single host wiring all modules
 ```
@@ -208,6 +210,8 @@ All endpoint groups registered in `Program.cs` via `app.Map*Endpoints()`:
 | `QuestEndpoints` | `/api/v1/quests` | Quest templates, instances, progress |
 | `StatEndpoints` | `/api/v1/stats` | Lifetime stat reads and increments |
 | `BattleEndpoints` | `/api/v1/battles` | Battle lifecycle (start, submit input, resolve) |
+| `MarketEndpoints` | `/api/v1/market` | Player marketplace: browse/list/buy/cancel creature listings (`RequirePlayer`) |
+| `AdminEndpoints` | `/api/v1/admin` | Live ops: player search/dossier, shadow bans, currency and item adjustments, market moderation, audit log. **Every** route is `RequireAdmin` — see [Moderation](18-moderation.md) |
 | `GameAssetEndpoints` | `/api/v1/game-assets` | Asset manifest reads — `GET /api/v1/game-assets`, `GET /api/v1/game-assets/{key}` |
 | `VersionCheckEndpoints` | `/api/v1/version-check` | Client/content version compatibility check |
 | `ContentPublishEndpoints` | `/api/v1/content/publish` | Pipeline-only content publish (`X-Pipeline-Key` auth) |
@@ -242,6 +246,10 @@ When you add a route to a hand-mapped group, add it in both places and check a r
 | `IBattleRepository` | `BattleRepository` (PG + SQLite) | Game/Battle |
 | `IGameAssetRepository` | `GameAssetRepository` (PG + SQLite) | Game/Assets |
 | `IAppConfigRepository` | `AppConfigRepository` (PG + SQLite) | Game/Config |
+| `IMarketRepository` | `PostgresMarketRepository` / `SqliteMarketRepository` | Market |
+| `IAccountModerationRepository` | `PostgresAccountModerationRepository` (+ SQLite) | Moderation |
+| `IAdminActionRepository` | `PostgresAdminActionRepository` (+ SQLite) | Moderation |
+| `IPlayerSearchRepository` | `PostgresPlayerSearchRepository` (+ SQLite) | Moderation |
 
 ## Key Domain Services
 
@@ -253,6 +261,8 @@ When you add a route to a hand-mapped group, add it in both places and check a r
 | `IStatService` | Scoped | Append-only stat store |
 | `IBattleDomainService` | Singleton | Battle lifecycle orchestration |
 | `IAssetDomainService` | Singleton | `GetOrCreateAsync` for asset records; used by content publish pipeline |
+| `IMarketService` | Scoped | Sole entry point for trade-driven creature ownership moves; needs `IDbConnectionFactory` |
+| `IModerationService` | Scoped | Live-ops mutations + audit; needs `IMarketService` and the **same** `IDbConnectionFactory` the Trainer/Market domains use |
 
 ### 6. Wire in Program.cs
 

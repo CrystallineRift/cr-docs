@@ -74,6 +74,14 @@ The implementation in `CreatureGenerationService` follows these steps:
 7. **Set held items** — assigns up to 2 held item IDs to `FirstHeldItemId` / `SecondHeldItemId`
 8. **Persist** — `IGeneratedCreatureRepository.CreateCreatureForCapture(creature, "generated")`
 
+> **Id ownership differs by engine.** The SQLite INSERT includes the `id` column, so the creature keeps
+> the id assigned in step 4. The Postgres INSERT omits it and lets the column default mint one,
+> returning it via `RETURNING id` — so `CreateCreatureForCapture` writes that value back onto
+> `creature.Id` before returning. `CreateAsync` hands the same object back to its caller, and callers
+> use `creature.Id` as a foreign key (NPC team seeding writes it into `npc_creature_team_storage` and
+> `trainer_creature_inventory_items`). Without the write-back those rows referenced an id that existed
+> nowhere on Postgres: the team read back empty and the team reset sweep soft-deleted nothing.
+
 ### Experience / Level Formula
 
 The curve is a **table**, `level_experience_requirement`, not a formula evaluated at runtime.
@@ -193,6 +201,12 @@ When the cr-api backend Postgres database is rebuilt (e.g., during development o
 The fallback keys (`creature_content_key`, `growth_profile_name`) are written to `creature_spawner_template` by `LocalSpawnerSyncClient` when syncing zone configs and `SpawnerDefinition` SOs (migration M5014).
 
 > **Prevention:** `ServerContentSyncService.SyncCreaturesAsync` and `SyncGrowthProfilesAsync` now use `ON CONFLICT(content_key/name) DO UPDATE SET … (without id)` instead of `INSERT OR REPLACE`. This preserves existing UUIDs across re-syncs, eliminating the problem for healthy databases going forward.
+
+### One id per species: `M10022AlignCreatureIdsToAuthored`
+
+The template fallback above only covers `creature_spawner_template`. `generated_creature.base_creature_id` has no content-key fallback, and since `ICreatureRepository` became local-only in Unity, an online capture's server-minted `base_creature_id` is resolved against the local `creature` table alone. The seed migrations M9998/M10000 inserted twelve species under ids of their own; on Postgres those seeds lost to `uix_creature_content_key` (`ON CONFLICT DO NOTHING`) and the server kept the ids the Content Studio push had minted, while every SQLite database (baked floor, player save, online caches) kept the seed ids. Result: those twelve species resolved to nothing in online play — no model in battle, blank portrait — while Cindris/Crabby/Mudcalf (authored before any seed) kept working.
+
+`M10022AlignCreatureIdsToAuthored` (Creatures domain) closes the split on every engine. The canonical id of a species is **the `id` on its `CreatureDefinition` asset** (which equals the dev server's id). For each species it first repoints every column that holds a base-creature id — `generated_creature.base_creature_id`, `creature.evolution_creature_id`, `creature_evolution.from/to_base_creature_id`, `creature_spawner_template.base_creature_id` — wherever it names either the row's current (different) id or the retired seed id, then moves `creature.id` onto the authored id. Rows already pointing at a retired seed id are repointed even when the local `creature` row never carried it (the server's case: captures pushed from offline saves under seed ids). Idempotent, `Schema.Table(...).Exists()`-guarded, `LOWER(CAST(... AS TEXT))` on SQLite and plain `=` on Postgres uuid. Covered by `CR.Data.Migrations.Test/CreatureIdAlignmentSqliteTests` (invariant: every species carries its authored id; no retired seed id survives; drifted row + all references converge; re-run is a no-op). The seed ids in M9998/M10000 are therefore transient — a fully migrated database never carries them, and new seeds should use the asset id directly.
 
 ## `BaseCreature` Model
 
@@ -361,6 +375,80 @@ If `abilitySetId` is set but no `ability_progress` rows exist for that set at th
 
 **Edge case:** If `GetAvailableAbilityProgressionSetsAsync` is called for a base creature, it returns set IDs extracted from `ability_progress.set_name` where the set_name parses as a GUID. If designers use non-GUID set names (e.g. `"starter_set"`), they will not appear in this list. Use UUID-formatted set names stored in the progression entries.
 
+## Quest-gated abilities
+
+`ability_progression_set_entry.unlock_quest_content_key` (added by **M5019**, Spawner domain) turns an
+entry into a quest reward. `NULL` — the default, and what every pre-existing row has — means the old
+behaviour: learn it on reaching `level`. A non-null value means reaching the level is necessary but
+not sufficient; the creature's owning trainer must also have **completed** the quest with that
+`content_key`.
+
+A `content_key` rather than a `quest_template.id` because progression sets are Spawner-domain content
+and quest templates are Quests-domain content, authored independently in Unity. A designer-facing
+string keeps the two domains from needing a foreign key across the seam, and survives a quest
+template being re-pushed under a fresh id.
+
+### The gate
+
+`CreatureProgressionService` (Game domain — it is the only layer that already references both Quests
+and Spawner) makes the decision through one pure helper:
+
+```csharp
+// CR.Game.Domain.Services/Implementation/Creature/AbilityUnlockGate.cs
+public static bool IsUnlocked(string? unlockQuestContentKey, ISet<string> completedQuestKeys)
+```
+
+- A null/blank gate is always unlocked.
+- Otherwise the key must appear in the completed set.
+- A null or empty set reads as "nothing completed" — the gate **fails closed**. A trainer row that
+  cannot be read, or a quest lookup that throws, leaves the ability locked rather than granting it.
+
+Completed keys come from `IQuestInstanceRepository.GetCompletedInstancesAsync` (account id resolved
+via `ITrainerRepository.GetTrainerById`), mapped to content keys through
+`IQuestTemplateRepository.GetTemplateAsync`. Repositories, not `IQuestDomainService`: the quest
+service depends on `IRewardGrantService`, which now depends on `ICreatureProgressionService`, so
+injecting the service here would close a DI cycle.
+
+Three call sites use the same rule:
+
+| Call site | Behaviour |
+|---|---|
+| `ApplyAbilityChangesForLevelAsync` | A gated entry at the new level is skipped (logged at Debug) while its quest is unfinished. Completed keys are read **once per level**, and not at all when nothing at that level is gated. |
+| `CanLearnAbilityAsync` | An ability reachable only through gated entries returns `false` until one of those quests is completed. An ungated route to the same ability short-circuits with no quest lookup. |
+| `ApplyQuestUnlocksAsync` | The retroactive pass — see below. |
+
+### Retroactive unlock on quest claim
+
+```csharp
+Task<IReadOnlyList<Guid>> ApplyQuestUnlocksAsync(
+    Guid accountId, Guid trainerId, string questContentKey, string? onlyAbilityContentKey,
+    CancellationToken ct = default);
+```
+
+Without this, a creature that passed the entry's level long before finishing the quest would wait for
+its next level-up to receive the reward — or never, at level 100. `RewardGrantService` calls it when
+it handles a `RewardType.Ability` grant (see
+[Quest System → Ability rewards](07-quest-system.md#ability-rewards-quest-gated-ability-unlocks)).
+
+For every creature the trainer owns (team and storage; paged 200 at a time, capped at 25 pages), it
+teaches each active entry gated on `questContentKey` where `entry.Level <= creature.Level` and the
+ability is not already known. `onlyAbilityContentKey`, when supplied, restricts the grant to entries
+whose ability has that content key. Slot assignment and replacement use exactly the same path as
+level-up (`ApplyAbilityToCreatureAsync`), and each creature is written **once** regardless of how
+many abilities it learned. Returns the ids of the creatures that changed.
+
+Entries are read once per distinct progression set, not once per creature — a full team commonly
+shares one set.
+
+### Authoring
+
+The field round-trips through the Content Studio surfaces:
+
+- `POST /api/v1/ability-progression/sets/{id}/entries` — `unlockQuestContentKey` on the request and response
+- `POST /api/v1/ability-progression/sets/sync` — `unlockQuestContentKey` per entry; a changed gate on an
+  existing (level, slot) pair updates the row in place
+- `GET /api/v1/ability-progression/sets` — `unlockQuestContentKey` per entry
+
 ## Ability Status Condition Endpoints
 
 Three endpoints manage inline status conditions on abilities. All use inline Dapper SQL against the `CreatureDatabase` connection string (not the keyed `IAbilityRepository`).
@@ -490,6 +578,55 @@ Container.Bind<CR.Game.Model.Creatures.ICreatureGenerationService>()
     .To<CR.Game.Domain.Services.Implementation.Creature.CreatureGenerationService>()
     .AsSingle();
 ```
+
+## Ability FX keys must match the catalogue exactly
+
+Combat was silent and effect-less, and neither showed up as a fault. Two causes:
+
+- **33 of 36 abilities had no sound keys at all.** `PlaySfxAsync` returns immediately on an empty
+  key — an early return, not an error — so nothing played and nothing was logged.
+- **The keys that did exist named addressables that do not.** The data said
+  `sfx/sfx-fireball-cast` while the catalogue carries `sfx/sfx-fireball-cast-audio`; the visual keys
+  had the same shape of mistake against a `-effects` suffix, and three named nothing at all. An
+  off-by-a-suffix key is indistinguishable from silence.
+
+`M10017SeedAbilitySoundKeys` fills every ability by element and category, and repoints the wrong
+keys. Two tests pin it: every ability has a cast and an impact sound, and **every key names one of
+the addressables the project actually ships**. That second test is the important one — the catalogue
+is not readable from the backend, so the known set is listed explicitly and has to be updated
+deliberately when audio is added.
+
+These are placeholders and the migration says so: the project owns seven combat sounds, so elements
+share them. Replacing one key with a purpose-made clip is the intended next step, and keys are
+per-ability precisely so it can be done one at a time.
+
+## One curve, not two
+
+`GrowthProfileDomainService.GetExperienceRequiredForLevelAsync` reads
+**`level_experience_requirement`** — the same table `CreatureProgressionService` levels a creature
+on. It has to, because it used to compute a curve of its own:
+
+```
+100 * level^3 * (experience_growth / 100)
+```
+
+Nothing else in the game used that formula, but the team and storage screens did, so the player was
+told level 2 costs **700** experience and level 3 another **1900**, while the thresholds a creature
+actually levels on — recurved by M10012 to `ROUND(0.8(L-1)³ + 5(L-1)²)` — are **6** and **26**.
+Battles pay out around 5. The progression was fine; only the number on screen was wrong, and it made
+the game look unplayable.
+
+Two things follow, and both are easy to undo by accident:
+
+- **The growth profile is not applied to the requirement.** `experience_growth` scales what a
+  creature EARNS (`CreatureProgressionService.ApplyGrowthBonusAsync`). Scaling the requirement too
+  charges the bonus twice, so a 150% profile would level no faster than a 100% one.
+- **A displayed number and a gameplay number must come from one source.** Any second copy of a curve
+  is a curve that will drift, and it drifts silently — nothing fails, the screen just lies.
+
+There are still private `CalculateLevelFromExperience` helpers in `CreatureProgressionService`,
+`CreatureInspectionService` and one Unity view. `creature.Level` is the source of truth and those
+should not be used to derive it — see the level-source-of-truth note.
 
 ## Common Mistakes / Tips
 

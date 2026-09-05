@@ -85,6 +85,21 @@
     "path": "backend/16-evolution"
   },
   {
+    "section": "Backend",
+    "title": "Creature Market",
+    "path": "backend/17-creature-market"
+  },
+  {
+    "section": "Backend",
+    "title": "Moderation (Live Ops)",
+    "path": "backend/18-moderation"
+  },
+  {
+    "section": "Backend",
+    "title": "Item Effects and Status Cures",
+    "path": "backend/19-item-effects"
+  },
+  {
     "section": "Introduction",
     "title": "Changelog",
     "path": "changelog"
@@ -248,5 +263,15 @@
     "section": "Unity",
     "title": "Runtime Content Sync",
     "path": "unity/27-content-sync"
+  },
+  {
+    "section": "Unity",
+    "title": "Creature Market Window",
+    "path": "unity/28-creature-market"
+  },
+  {
+    "section": "Unity",
+    "title": "UI Icons",
+    "path": "unity/29-ui-icons"
   }
 ]

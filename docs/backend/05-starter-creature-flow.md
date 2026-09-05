@@ -140,6 +140,18 @@ If both conditions are true, `ShowPrompt(true)` is called. When the player press
 - `CurrentTrainerId` on the `generated_creature` row is updated to `trainerId` after the transfer. `FirstCaughtByTrainerId` is not changed — it always reflects the original owner.
 - `HasCreatureToGive` is set to `false` on the Unity side immediately after the call succeeds (without re-fetching from the backend). If the client crashes before this assignment, the next `ensure-starter` call will correctly return `hasCreatureToGive: false` because the NPC's team is already empty on the server.
 
+## Trainer Creation Owns the Inventories
+
+`POST /trainer` resolves `ITrainerDomainService` and calls `CreateTrainerAsync`, which creates the
+trainer **plus its five inventories** (6-slot team, 100-slot creature storage, 20-slot backpack,
+100-slot item storage) in a single transaction and stamps their ids onto the trainer row. It must
+never call the bare `ITrainerRepository.CreateTrainer` — that inserts only the trainer row, leaves
+every inventory id column NULL, and the first creature grant (e.g. the welcome quest's reward)
+throws `InvalidOperationException("Trainer ... has no team inventory configured")` inside
+`CreatureInventoryService.GetTeamInventoryIdAsync`. Pinned by
+`CR.Api.IntegrationTests.TrainerCreationHttpTests` (real HTTP: account → token → create → assert
+all inventory ids non-null).
+
 ## How to Test the Starter Flow Locally End-to-End
 
 Run `cd Convenience/CR.REST.AIO && dotnet run` to start the server, then:

@@ -405,6 +405,8 @@ Internally:
 
 All list methods accept `offset` and `limit` for pagination. The default limit is 100. Negative `offset` or zero/negative `limit` throws `ArgumentException` before any DB call.
 
+`SwapCreatureSlotsAsync` → `NpcCreatureTeamRepository.SwapCreatureSlots` runs a three-step script (slot A → `-1`, B → A, `-1` → B) inside a transaction on **both** engines. The obvious single `UPDATE … CASE` fails on PostgreSQL when both slots are occupied: the partial `UNIQUE INDEX` on `(inventory_id, slot_number)` from `M2002` is checked per row mid-statement, so the first row to take the other's slot raises `23505` (a 409 Conflict at the REST layer). `NpcCreatureTeamRepositoryTests` (Postgres container) pins the occupied-slot swap; the trainer creature inventory has the same fix — see [Player Menu UI → Reordering the team](?page=unity/10-player-menu-ui).
+
 ## REST Endpoints
 
 All NPC endpoints are prefixed `/api/v1/npc`.
@@ -424,6 +426,45 @@ All NPC endpoints are prefixed `/api/v1/npc`.
 | `PUT` | `/api/v1/npc/{id}` | Update NPC |
 | `DELETE` | `/api/v1/npc/{id}` | Soft-delete NPC |
 | `GET` | `/api/v1/npc/content-registry` | Returns the global NPC content definitions — `(contentKey, npcType)` pairs from the `ContentWorldId` rows — for editor sync tooling |
+| `PUT` | `/api/v1/npc/content-registry` | `UpsertContentRegistryNpc` — creates or updates a global NPC template. Body: `{ contentKey, npcType, itemSpawnerContentKey?, isRematchable? }` |
+| `DELETE` | `/api/v1/npc/content-registry/{contentKey}` | Soft-deletes a global NPC template |
+| `GET` | `/api/v1/npc/trainer-defeats` | Every `npc_content_key` the account has defeated (`offset` / `limit` bounded). Unity's `TrainerDefeatCache` reads the local PlayerData `trainer_defeat` table first and calls this once per account per session to mirror any server-only defeats into it; a trainer-battle win reaches the cache through `BattleResult.DefeatedNpcContentKey`, not a re-fetch |
+| `POST` | `/api/v1/npc/reset-teams` | `ResetNpcTeams` — discards the cached creature teams of every NPC with the given `contentKey`, across all accounts. Body: `{ contentKey }`. Returns `{ contentKey, npcsReset }` |
+
+### `POST /api/v1/npc/reset-teams` — ResetNpcTeams
+
+An NPC's creature team is a **regenerable cache**, seeded from the trainer's spawner templates by
+`EnsureNpcCreatureTeamAsync` on the first encounter and then reused. Re-pushing a trainer from the
+editor changes the templates but not the caches, so every account that already fought the trainer
+keeps meeting the old team — including the designer's own test account, which is what breaks the
+edit → push → battle loop.
+
+`ResetNpcTeamsByContentKeyAsync` sweeps, per NPC row carrying that `content_key` **across all
+accounts** (paged 200 at a time via `INpcRepository.GetNpcsByContentKeyAsync`, the one deliberately
+non-account-scoped read on that repository):
+
+1. the `npc_creature_team_storage` rows,
+2. the matching `trainer_creature_inventory_items` links in the NPC's battle-trainer team inventory,
+3. the `generated_creature` rows those slots referenced.
+
+All three are **soft deletes**. Nothing is lost: the next `ensure-creature-team` sees an empty
+occupied-slot set and regenerates from the current templates, and battles heal the team at start.
+The same sweep doubles as the inactivity prune that bounds per-account team cardinality.
+
+```json
+POST /api/v1/npc/reset-teams
+{ "contentKey": "npc-trainer-meadow-scout" }
+
+→ 200 { "contentKey": "npc-trainer-meadow-scout", "npcsReset": 3 }
+```
+
+:::caution `isRematchable` is nullable on the content-registry upsert
+`UpsertNpcContentRegistryRequest.IsRematchable` is `bool?`, and `null` means *"this push does not
+author the flag"* — the stored value is preserved. It was a non-nullable `bool` defaulting to
+`false`, so every push from a caller that does not know about rematch (the NPC tab, for one)
+silently turned rematch **off** for the trainers it touched. Only send `true`/`false` when you mean
+to set it.
+:::
 
 ### `POST /api/v1/npc/ensure` — EnsureNpc
 

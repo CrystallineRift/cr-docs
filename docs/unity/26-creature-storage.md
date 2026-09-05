@@ -14,8 +14,10 @@ owns every decision the screen makes:
 | `StorageBox` | one page: its slots (padded with nulls), occupancy, capacity, whether paging is possible |
 | `StorageEntry` / `TeamMemberSummary` | the flattened shape the grid and the swap modal draw |
 | `SwapEligibility` | allowed, or refused with a player-facing reason |
+| `AbilityRosterBuilder` | which of a creature's progression entries read as learned, level-locked or quest-locked — and what the player is allowed to see of each |
+| `AbilityRosterEntry` / `AbilityRosterSource` / `AbilityRosterState` | the roster row the Data File draws, and the flattened progression entry it came from |
 
-`PlayerStorageView` does layout and nothing else. That split is why 31 tests for this screen run
+`PlayerStorageView` does layout and nothing else. That split is why 50 tests for this screen run
 outside the Editor in a few milliseconds, rather than needing play mode.
 
 ## Decisions the tests pin down
@@ -68,13 +70,20 @@ unfocused modal swallows d-pad input entirely. Every interactive class has a `:f
 
 ## Grid shape
 
-A box is `BoxColumns` x `BoxRows` = **4 x 6 = 24** slots, and `.storage-grid` is pinned to a width of
-exactly four slots (`4 x (108 + 8) = 464px`).
+A box is `BoxColumns` x `BoxRows` = **6 x 4 = 24** slots, and `.storage-grid` is pinned to six slots
+wide plus a little slack (`6 x (108 + 8) = 696px`, set to `704px`).
 
-Pinning matters. Left to wrap on whatever width was available, the grid fitted a fifth column only
-partly — which reads as a clipped card, not a column. The width and `BoxColumns` have to move
+Pinning matters. Left to wrap on whatever width was available, the grid fitted a trailing column
+only partly — which reads as a clipped card, not a column. The width and `BoxColumns` have to move
 together, and a test asserts `BoxSize` stays a whole number of rows so no box ever ends on a ragged
 part-row.
+
+The slack matters too. The grid was first pinned to the *exact* sum (`4 x 116 = 464px`), and under
+a fractional UI scale the rounded slot widths overran it by a pixel, so the last column wrapped: a
+4-wide box rendered as 3 columns and 8 rows, with the bottom rows cut off below the panel. A few
+pixels of slack absorb the rounding and are far too small to admit an extra slot. The reshape to
+six wide also uses the empty right half of the browser and keeps all four rows of a box above the
+fold.
 
 ## After a swap: follow the creature
 
@@ -100,6 +109,118 @@ So the view follows it:
 `BoxIndexOf` returning `-1` for hidden and `-1` for absent is deliberate: both mean "the grid will
 not draw it", which is the only thing the caller acts on.
 
+## The Data File's ability roster
+
+The Data File lists the selected creature's **whole progression roster**, not just the four moves in
+its slots. A player deciding whether to train a creature is really asking what it becomes, and the
+four-slot view answers only what it is.
+
+Each row is one entry of the creature's `ability_progression_set`, in one of three states:
+
+| State | Shown as | When |
+|---|---|---|
+| `Learned` | ability name + `Lv N` (the entry's level) | the ability's id sits in one of the four slot columns |
+| `LevelLocked` | ability name + `Lv N` | not known, and no gate is hiding it — the level is still ahead, or the move was replaced |
+| `QuestLocked` | `???` + `Complete: <quest name>` | not known, and gated on a quest this trainer has not completed |
+
+The masking is `AbilityRosterBuilder`'s decision, not the view's. A rule about what the player is
+allowed to know that only exists inside a layout method is a rule nothing can test — so the builder
+returns the string to print, and `PlayerStorageView` picks a USS class and nothing else.
+
+### The rules mirror the backend exactly
+
+The client roster and the server's grant must agree, or the player is told to finish a quest that
+grants nothing, or shown a name for something they can never use. So `AbilityRosterBuilder` follows
+[`AbilityUnlockGate.IsUnlocked`](../backend/04-creature-generation.md#quest-gated-abilities) to the
+letter:
+
+- **A null or blank gate is not a gate.** Empty is the pre-M5019 behaviour every ordinary entry keeps.
+- **An unreadable completion set fails closed.** `completedQuestKeys: null` reads as "nothing
+  completed" — every gate stays shut. `PlayerStorageView` returns empty on a failed quest read for
+  the same reason: a missing reward is visible to the player, a phantom one is a broken promise.
+- **Keys compare case-insensitively and trimmed.** Content keys travel through YAML, SQLite and JSON;
+  a gate must not fail over capitalisation.
+- **An already-known ability is `Learned` regardless of its gate** — a creature caught holding a
+  gated move is never told to go earn what it has.
+- **One row per ability, best state first.** The same ability legitimately appears twice in a set (a
+  gated early route and an ungated later one). An ungated route defeats its gated duplicate, exactly
+  as `CanLearnAbilityAsync` short-circuits the quest check.
+
+Rows sort by level, then slot — across states, so the roster reads as a timeline rather than three
+groups.
+
+### Where the data comes from
+
+| Piece | Source |
+|---|---|
+| entries | `IAbilityProgressionSetEntryRepository.GetActiveAbilityProgressionSetEntriesAsync(creature.AbilityProgressionSetId)` |
+| known ability ids | `GeneratedCreature.First/Second/Third/FourthAbilityId` |
+| ability names | `IAbilityDomainService.GetAbilityAsync` |
+| completed quest keys | `QuestManager.GetCompletedQuestContentKeysAsync` |
+| gate quest names | `IQuestTemplateRepository.GetByContentKeyAsync`, falling back to the content key |
+
+All four are `[Inject(Optional = true)]` on `PlayerMenuWindow`: without them the Abilities block is
+simply absent, rather than the whole Storage tab failing to build over one section of one panel.
+
+**Nothing queries from a layout pass.** `Redraw()` runs on every selection, chip and page change.
+The roster is cached per creature and computed once per `RenderAsync` — including when it comes back
+empty *or throws*, so a creature whose roster cannot be read shows an empty block once instead of
+re-querying forever. Completed quest keys are read once per load and cleared on reload, because a
+claim between two openings can have taught a stored creature something.
+
+USS lives in `PlayerMenuWindow.uss`: `.storage-datafile-ability` plus `--learned`, `--locked` and
+`--quest` modifiers. No inline styles.
+
+## Authoring a gate, and keeping it through sync
+
+The gate is authored on `AbilityProgressionSetConfig` → entry → **Unlock Quest**, which maps to
+`ability_progression_set_entry.unlock_quest_content_key` (migration **M5019**) and to
+`AbilityProgressionSetEntry.UnlockQuestContentKey` in `CR.Game.Model`. Empty here is `NULL` there.
+
+The inspector field is a **dropdown of authored `QuestDefinition` content keys**
+(`ContentPicker.Quests()`), never a text box: the value is a content key the server matches exactly,
+and a typo produces an entry that reads as authored and can never unlock.
+
+Three-way parity — SO ↔ SQLite ↔ server — needs the column in **every** writer, and two local ones
+were dropping it:
+
+| Writer | Path |
+|---|---|
+| `LocalAbilityLibrarySyncClient.SyncProgressionSetAsync` | offline "push" — SO straight into local SQLite |
+| `ContentSyncWriter.WriteProgressionSetsAsync` | online content sync — server rows into the local cache |
+
+Both reconcile by `(level, ability_slot)` and write **only what they can see differs**. Selecting
+the row without its gate made a changed gate compare equal, so the writer reported "same ability at
+same slot/level — no-op" and the gate never landed: the ability then unlocked offline at its level
+with no quest completed. Both now `SELECT`, `INSERT` and `UPDATE` the column, and treat a changed
+gate as a change.
+
+Two details these writers get right and a new one must too:
+
+- **An unset gate is `NULL`, never `""`.** Readers test for null to mean "not gated"; an empty
+  string is a gate naming a quest that cannot exist, and the entry would never unlock.
+- **The gate rides every push payload.** `/api/v1/ability-progression/sets/sync` reconciles by
+  `(level, slot)` and rewrites the row from the payload, so an *omitted* gate is an *erased* gate,
+  not an unchanged one. `AbilityEditorSyncHelper.SyncProgressionSet` (Content Studio) and
+  `AbilityLibrarySyncHttpClient` both send it.
+
+> Content Studio's progression **pull** still applies top-level set fields only — entries are a
+> manual update. `ServerProgressionEntryDto` now carries `unlockQuestContentKey`, so an entry-level
+> pull has the field the day someone writes one.
+
+## Telling the player it happened
+
+Claiming a quest whose reward is an `Ability` grants the move server-side —
+`ICreatureProgressionService.ApplyQuestUnlocksAsync`, reported back on
+`QuestClaimResult.AbilityUnlockedCreatureIds`. Nothing in the world otherwise announces it: the move
+just appears in a menu the player may not open for an hour.
+
+So `QuestManager.ClaimRewardsAsync` re-broadcasts it as `OnAbilitiesUnlocked(IReadOnlyList<Guid>)`,
+and `AchievementToastPresenter` (which hosts every toast source, despite the name) shows
+**"New ability learned!"**. One toast per claim, not per creature — a quest that unlocks a move for a
+whole team would otherwise queue six identical toasts. *Which* creature learned *what* is the Data
+File's job.
+
 ## Gotcha: the service ships in a DLL
 
 `SwapTeamAndStorageAsync` lives in `CR.Game.Domain.Services.dll`. Unity cannot see a new domain
@@ -107,7 +228,19 @@ method until `cr-api/Convenience/CR.Game.Compat/build-packages.sh` has run — t
 `CS1061: 'ICreatureInventoryService' does not contain a definition for ...` against source that is
 plainly correct.
 
+## Reordering within the team
+
+Swapping two *team* slots is `SwapTeamSlotsAsync(trainerId, slot1, slot2)` — one transaction, and
+the target may be an empty slot (SQLite does it in three UPDATEs through a −1 holding slot;
+Postgres in one `UPDATE … FROM`). Because slots have gaps, callers read the real numbers with
+`GetTeamSlotsAsync` (`TeamSlotEntry { SlotNumber, CreatureId }`, same order as `GetTeamAsync`)
+rather than assuming `index + 1`. The Team tab's Move / Make lead controls are the consumer — see
+[Player Menu UI](10-player-menu-ui.md#reordering-the-team).
+
 ## Related
 
 - [Battle Extensions](24-battle-extensions.md) — the same pure-logic-in-an-asmdef pattern
 - [Merchant Shop UI](18-merchant-shop.md)
+- [Creature Generation → Quest-gated abilities](../backend/04-creature-generation.md#quest-gated-abilities) — the gate the roster mirrors
+- [Quest System → Ability rewards](../backend/07-quest-system.md) — where the retroactive unlock is triggered
+- [Content Sync](27-content-sync.md) — `ContentSyncWriter` and the rest of the online content path

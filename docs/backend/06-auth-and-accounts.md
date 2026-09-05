@@ -37,6 +37,40 @@ Discord is the primary community platform for Crystalline Rift. Players are alre
 
 An account can have multiple trainers (`accounts` → `trainers` one-to-many). Trainers are the in-game character identities; accounts are the authentication identity.
 
+## Anonymous Device Flow (primary online path)
+
+The shipped client is **anonymous-first**: online play never asks for credentials. A device
+registers itself, gets a session-backed JWT, and richer providers (Steam ticket verification,
+OAuth) *link onto the same account id later* via `third_party_account_links`. No passwords are
+stored for this flow.
+
+```bash
+# 1. Register the device (idempotent — an already-linked device gets its existing account id back)
+curl -s -X POST http://localhost:8080/account \
+  -H "Content-Type: application/json" \
+  -d '{"type":0,"gameInstallationId":"<device-id>"}'
+# → {"accountId":"..."}
+
+# 2. Exchange the device id for tokens
+curl -s -X POST http://localhost:8080/auth/game \
+  -H "Content-Type: application/json" \
+  -d '{"gameInstallationId":"<device-id>"}'
+# → {"accessToken":"...","refreshToken":"...","expiresAtUtc":...}
+# Unknown device → 401 (the client treats 401 as "register this device first").
+```
+
+`/auth/game` persists an `auth_session` row for the token's `jti`, exactly like `/auth/basic`
+and `/auth/oauth` — the `OnTokenValidated` revocable-session check accepts its tokens, so this
+is a first-class online login, not a guest mode. `/auth/oauth` returns 401 (never 404) for
+unknown or stale provider tokens for the same reason: the client's 401 handler is the recovery
+path.
+
+On the Unity side, `GameAuthRepository.TryGetAccessToken` walks the **token ladder**
+(`AuthTokenLadder`, pure logic + tests): use the live access token, else spend the refresh
+token, else run the two calls above from nothing. `SimpleWebClient` retries any 401 once after
+forcing that ladder, so a server that wiped its auth database heals on the next request instead
+of stranding the player with a dead cached token.
+
 ## Auth Flow — Full Login Walkthrough
 
 ### Step 1: Register
@@ -116,6 +150,37 @@ Access tokens are short-lived (default **1 hour**). Refresh tokens are long-live
 The Unity `TokenManager` proactively refreshes before expiry. `IGameSessionRepository` persists the current session (accountId, trainerId, isOnline) to SQLite so it survives app restarts. When Unity starts, `GameSessionManager` reads from this repository to restore the previous session without requiring the player to log in again. If the stored access token is still valid, the player is dropped back into the game immediately.
 
 **Token refresh flow:** Access token expires → Unity `SimpleWebClient` receives 401 → calls `TokenManager.RefreshAccessTokenAsync()` → presents refresh token to `/api/v1/auth/refresh` → stores new access + refresh tokens → retries original request. This is transparent to other Unity systems.
+
+## Service Tokens (Content Studio and Live Ops)
+
+Tooling that is not a player — the Unity editor's Content Studio, operator/live-ops screens — does not log in as an account. It exchanges a **pre-shared service key** for a short-lived JWT at `POST /auth/service-token` (`ServiceTokenEndpoints.cs`). The issued token's session row uses `Guid.Empty` as its `account_id`: a service token is deliberately tied to no player account, so it carries no `player` scope and cannot touch player-owned data.
+
+There are **two** keys, each read from configuration and each granting a different scope:
+
+| Config key | Dev default | Scope granted | What it unlocks |
+|---|---|---|---|
+| `AdminServiceKey` | `local-dev-admin-service-key` | `admin` | Operator-only routes (`AuthorizationPolicies.RequireAdmin`) — plus everything the other two policies cover |
+| `EditorServiceKey` | `local-dev-editor-service-key` | `content:write` | Content authoring push/pull (`AuthorizationPolicies.RequireContentWrite`) |
+
+The admin key is checked **first**, then the editor key. Both comparisons are constant-time (SHA-256 of each key, then `CryptographicOperations.FixedTimeEquals`) so response timing never leaks key contents. A key whose configuration value is **missing or blank disables that exchange entirely** — it never matches, so an unconfigured admin key cannot be unlocked by presenting an empty `serviceKey`. Any key matching neither returns 401.
+
+**`admin` implies `content:write` and `player`.** `AuthorizationPolicies.HasScope` (`AuthorizationPolicies.cs`) passes when the principal's scopes contain either the requested scope *or* `admin`, so a single admin token satisfies `RequireAdmin`, `RequireContentWrite`, and `RequirePlayer`. The reverse is not true: a `content:write` token is forbidden (403) from admin and player routes.
+
+The scope rides in the JWT's `scope` claim (`AuthClaims.Scope`). `JwtAuthentication.CreateToken` writes it as a **single string claim** holding one scope value; readers (`ClaimsPrincipalExtensions.GetScopes`) also accept repeated `scope` claims and a space-delimited value, so multi-scope tokens would still be read correctly.
+
+```bash
+# Admin token
+curl -s -X POST http://localhost:8080/auth/service-token \
+  -H "Content-Type: application/json" \
+  -d '{"serviceKey":"local-dev-admin-service-key"}' | jq -r .accessToken
+
+# Content Studio token
+curl -s -X POST http://localhost:8080/auth/service-token \
+  -H "Content-Type: application/json" \
+  -d '{"serviceKey":"local-dev-editor-service-key"}' | jq -r .accessToken
+```
+
+The dev default for `AdminServiceKey` lives in `CR.REST.AIO/appsettings.Development.json` only — the standalone `CR.Auth.Service.REST/config.yml` and `CR.Game.Service.BFF/config.yml` carry `EditorServiceKey` but deliberately no admin key, so those hosts have no admin exchange until one is supplied per environment. **These literals are development-only** — production hosts must supply real secrets via environment/secret configuration, and a production host that leaves `AdminServiceKey` unset simply has no admin exchange, which is the safe default. `AdminActorName` (default `editor`) sits alongside them and is the human label stamped onto audited operator actions.
 
 ## How to Test Auth with curl
 
@@ -234,6 +299,7 @@ All auth-related clients use `GameConfigurationKeys.AuthServerHttpAddress` as th
 | `POST` | `/api/v1/auth/logout` | Invalidate refresh token (server-side revocation) |
 | `GET`  | `/api/v1/auth/oauth/discord` | Redirect to Discord OAuth consent screen |
 | `GET`  | `/api/v1/auth/oauth/discord/callback` | Discord OAuth callback — issues CR tokens |
+| `POST` | `/auth/service-token` | Exchange a pre-shared service key for a scoped, account-less token (`admin` or `content:write`) |
 
 Auth is wired into the ASP.NET pipeline via `builder.AddCrAuth()` (extension method in `CrAuthExtensions.cs`). All non-auth endpoints require a valid bearer token.
 

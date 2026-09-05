@@ -97,7 +97,20 @@ Each `SpawnerTemplateConfig`:
 | `spawnProbability` | Probability 1–100 within the pool. |
 | `abilityProgressionSet` | Optional `AbilityProgressionSetConfig` SO reference. Leave empty for default abilities. |
 
-**How the sync works:** `SpawnerDefinitionSyncBehaviour` syncs every `SpawnerDefinition` in the content registry to the backend at world init, calling `POST /api/v1/spawners/sync-config`. The backend upserts the global template spawner by `contentKey`, soft-deletes existing pools/templates, and recreates them from the request. `SpawnerWorldBehaviour` no longer syncs anything — it just resolves the spawner by its `_spawnerContentKey` and activates the encounter. The global template is the sole source of truth; the spawn path reads pools directly by `contentKey`.
+Two further **optional** fields exist on the sync payload (`SpawnerTemplateSyncDto` / `SpawnerTemplateSyncData`) rather than on the SO, because only the trainer-battle push sends them:
+
+| Field | Description |
+|-------|-------------|
+| `id` | Caller-chosen template UUID. Trainer teams push a **deterministic** id per slot because the battle handshake resolves an opponent by `creature_spawner_template.id`; wild spawners omit it and keep getting a fresh random id. A value that is not a valid non-empty UUID is refused with the same `409` as an unresolvable content key — falling back to a random id would answer `200` and still break the lookup. |
+| `progressionSetName` | Name of the `AbilityProgressionSet` row, resolved server-side via `IAbilityProgressionSetRepository.GetByNameAsync`. Wins over `abilityProgressionSetId` when both are sent. An unresolvable name refuses the whole sync. |
+
+**How the sync works:** `SpawnerDefinitionSyncBehaviour` writes every `SpawnerDefinition` in the content registry to the **local SQLite** spawner tables at world init, through `ISpawnerSyncClient` — which the runtime container binds to `LocalSpawnerSyncClient`, and only that. The game cannot push spawner content to the server: `SpawnerSyncHttpClient` (`POST /api/v1/spawners/sync-config`) exists for editor tooling and is not resolved through the Zenject graph at all, so a play session can never overwrite a server edit. The server-side push is Content Studio's, via `ContentCreatorSyncHelper.SyncSpawnerFull`, which makes its own direct HTTP call. That endpoint **resolves every creature content key, growth-profile name, progression-set name and explicit template id in the request first**, then upserts the global template spawner by `contentKey`, soft-deletes existing pools/templates, and recreates them from the request.
+
+> **Templates carrying an explicit `id` are written with an upsert-revive** (`INSERT … ON CONFLICT (id) DO UPDATE …, deleted = false`) rather than a plain insert. They have to be: the recreate step runs *after* every existing template for the spawner was soft-deleted, so re-pushing the same deterministic id lands on the row the sync itself just deleted and a plain insert collides on the primary key. Templates with no `id` keep the plain-insert path unchanged. Every recreated template — both paths — is written with `is_active = true` and populates `creature_content_key` / `growth_profile_name` so the stale-UUID repair path has something to repair from.
+
+> **Postgres used to discard pushed ids.** `BaseCreatureSpawnerTemplateRepository`'s Postgres INSERT omitted the `id` column and let the server default mint one, and the SQLite branch overwrote `template.Id` with `Guid.NewGuid()` unconditionally. Both now honour a caller-supplied id and mint only when it is `Guid.Empty`. Without that, a trainer's team could never be looked up at the id the client asked for.
+
+> **Resolution happens before anything is deleted, and a payload the server cannot fully resolve is refused with `409`** — the response names each missing creature or growth profile, and the database is untouched (not even a spawner row is created for a new content key). This was previously the other way round: unresolved templates were skipped mid-rebuild with a log warning while the call answered `200 success`, so a spawner pushed before its creatures or growth profiles existed came out the far side with empty pools and no error anywhere. Content Studio's push order was also part of that — it sent spawners before growth profiles — and now runs in dependency order. Covered by `SpawnerConfigSyncServiceTests` (8 tests), which assert that a refused sync deletes nothing and creates nothing. `SpawnerWorldBehaviour` no longer syncs anything — it just resolves the spawner by its `_spawnerContentKey` and activates the encounter. The global template is the sole source of truth; the spawn path reads pools directly by `contentKey`.
 
 Key columns on `creature_spawner_template`:
 - `base_creature_id` — which creature species to generate
@@ -308,7 +321,7 @@ POST /spawner/{spawnerId}/spawn
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/api/v1/spawners/sync-config` | Upsert a full spawner (pools + templates) from a `SpawnerDefinition` SO |
+| `POST` | `/api/v1/spawners/sync-config` | Upsert a full spawner (pools + templates) from a `SpawnerDefinition` SO, or a trainer's team from a `TrainerBattleDefinition`. Templates may carry an optional `id` (deterministic, preserved verbatim) and `progressionSetName`. |
 | `GET` | `/api/v1/spawners/by-content-key/{contentKey}/config` | Full config (header + pools + creature templates) for one spawner, by `content_key`. Used by Content Studio pull. |
 
 Request body mirrors `SpawnerConfigSyncRequest` (contentKey, displayName, maxCapacity, spawnCooldownSeconds, pools[]).
@@ -471,6 +484,40 @@ rather than emptying a zone in a playtest.
 **When you seed a creature with a hard-coded id, check the id is the one the Content Studio assets
 use.** A seed that loses to the UNIQUE index is silent, and everything downstream of it inherits the
 mismatch.
+
+## Several zones per habitat, narrow at the start
+
+Each habitat used to be one encounter zone rolling its whole band at once. At the bottom of the
+game that is not a difficulty setting, it is a coin flip: a trainer opens with a single level-1
+creature, and a zone spanning levels 1-4 decides the first fight of the game before the player
+does anything.
+
+`M10016SubdivideAreaLevelBands` splits every habitat into several zones and narrows the band where
+the player is weakest:
+
+| Habitat | Zones | Spans |
+|---|---|---|
+| Meadow | 1-2, 3-4, 5-6 | 2 |
+| Shore | 5-7, 8-10 | 3 |
+| Cave | 9-12, 13-16 | 4 |
+| Crags | 15-19, 20-24 | 5 |
+| Dunes | 22-27, 28-34 | 6, 7 |
+
+A habitat's band is now the **union of its zones**, so anything reasoning about area difficulty has
+to group by area rather than by spawner content key — `meadow-wild-zone` alone stops at 2 and
+`meadow-wild-zone-3` carries the top of the meadow.
+
+The new spawners are built with `INSERT..SELECT` from the existing rows rather than from hardcoded
+ids, so every creature, growth-profile and ability-progression id is copied from a row that already
+works. Hand-writing those ids is how a seed ends up pointing at nothing — see
+[Seed ids lose to authored ids](#) in the migration notes.
+
+In the world, the harder zone of a pair is placed **further from the door the player arrives
+through**, so the level you meet depends on how far you have walked rather than on a roll you
+cannot influence. The client half — the `SpawnerDefinition` assets, their registration with the
+`ContentDefinitionProvider`, and the scene placement — is applied by `cr_split_encounter_zones`
+(**CR > Areas > Split Encounter Zones**) in the Unity project, and its band table must stay
+identical to the migration's or online and offline play at different difficulties.
 
 ## Common Mistakes / Tips
 

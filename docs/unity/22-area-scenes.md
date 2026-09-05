@@ -54,7 +54,7 @@ content registry (the seeded one is `starter-wild-zone`), and `_battleArenaKey` 
 5. Run **CR → Areas → Validate Open Area Scene**.
 
 Rebuilding the whole structure from the sandbox is scripted, not manual:
-**CR → Areas → Build Core Scene + Area Template**, or headlessly via
+**`unity run --command cr_build_area_template`**, or headlessly via
 `unity run --command cr_build_area_template`. `cr_area_report` prints what the built scenes contain.
 
 ## Playing an area on its own
@@ -301,6 +301,75 @@ Details that are load-bearing rather than incidental:
   failed load can never strand the player behind an opaque overlay. A failed transition also unloads
   the half-loaded destination and restores the previous active scene.
 
+## Footstep tracks outlive the ground they land on
+
+`MalbersAnimations.StepsManager` lives in **Core**, which persists across transitions, but each
+footprint it leaves is parented to the surface it landed on — a mesh in the **area** scene. Walking
+through a door unloads the area and destroys the footprint, while the coroutine started in
+`EnterStep` keeps polling `newtrack.isPlaying` on the corpse:
+
+```
+NullReferenceException
+  at UnityEngine.ParticleSystem.get_isPlaying ()
+  at MalbersAnimations.StepsManager+<>c__DisplayClass28_0.<EnterStep>b__0 ()
+  at UnityEngine.WaitWhile.get_keepWaiting ()
+```
+
+One exception per frame, per footprint left in the area you just left. A single Steam Deck session
+logged 27 of them, and it never showed up in the Editor because the Editor rarely walks door to
+door for minutes at a time.
+
+Patched in the vendor file with a `//CustomPatch:` marker, guarded as
+`() => newtrack != null && newtrack.isPlaying`. `!= null` is the only form that works: Unity's
+overloaded operator is what sees a destroyed object, and `?.` / `??` bypass it entirely — see
+[the fake-null note](#). **Reimporting Malbers wipes this patch**, alongside the `Fall.cs` one.
+
+## The arrival banner
+
+On arrival `AreaLoader` raises `AreaBannerEvents.Arrived` with a line like
+`Sunlit Meadow  (Lv. 2-6)`, built by `AreaBannerText` from the area's display name and the level
+range read off the authored `SpawnerDefinition` in the scene. A settlement, which has no spawner,
+gets its name alone. It never throws — a caption failing to draw must not fail a transition the
+player has already walked through.
+
+### It must not fire at boot
+
+`AreaLoader` receives the `PreGame` context at boot and loads the starting area immediately, as a
+**backdrop** behind the main menu. That load is not an arrival: no trainer has been chosen, and
+announcing it greeted the player with the name of a place they had not been to yet, over the menu,
+before they picked a character.
+
+`AreaArrivalRule.ShouldAnnounce` gates it on a trainer session existing — the thing that becomes
+true exactly when the player enters the world. The backdrop area is announced later, by the
+deferred initialization path, when they actually walk into it.
+
+### Sizing is computed, not authored
+
+The banner sits in a band **20% down the screen**, **15% of screen height** tall, and every
+measurement inside it — font size, padding, the rule's width and thickness — is derived from that
+band by `AreaBannerLayout`. Both fractions live there and are applied from the presenter, so the
+stylesheet carries no numbers to drift out of step.
+
+This is not stylistic. The USS is scaled by the panel, which is configured to match screen **width**
+against a 1200px reference, so px authored in the stylesheet get multiplied by 2× or more on a wide
+monitor and stop bearing any relation to the screen they sit on — the banner grew into a slab across
+the top. Driving it from height gives the same slice of the view on every display.
+
+`VisualTreeAsset.Instantiate()` returns a **TemplateContainer wrapping** the UXML's root element,
+so the element carrying `.area-banner-root` is a child of what `Instantiate()` hands back. Styling
+and measuring the wrapper instead is what cut the banner in half against the top of the screen: the
+wrapper's height is `auto`, effectively zero, so the band's percentage height resolved to nothing
+and the card centred on y=0 with half of it above the frame. The presenter now stretches the
+wrapper to the panel and queries `banner-root` for everything else.
+
+Two more traps the tests pin down:
+
+- The card must **fit inside its band** at every screen height, so the ratios are asserted rather
+  than eyeballed.
+- `GeometryChangedEvent` **bubbles**, so the card resizing lands in the band's own handler. Sizing
+  from `evt.newRect` there measures the card and feeds its padding back into itself — a layout
+  loop. The handler ignores any event whose target is not the band.
+
 ## The battle camera across scenes
 
 `BattleArena.cameraRig` is a direct object reference, and Core owns the one `BattleCameraRig`. An
@@ -529,6 +598,96 @@ which teaches the opposite of the rule the clump exists to state.
 | Crags | `AN_Dead_Bush` over `AN_Stones_1` — cold stone grows scrub |
 | Dunes | `AN_Dead_Bush` + `AN_Branch_2` — drier, sparser scrub |
 
+### Only LOD0 collides
+
+`cr_fix_lod_colliders` (**CR > Areas > Fix LOD Colliders**) removes collision from every LOD level
+except the nearest, in all six area scenes.
+
+LOD1 and beyond are *render* stand-ins — cheaper meshes that stop being drawn as the camera pulls
+back — and they are routinely a crude envelope of the silhouette rather than the shape itself.
+Collision is never swapped by distance, so a collider on one is live at all times regardless of
+which level is on screen.
+
+That is how the Meadow became unwalkable in patches. Its birches carry a **0.79m capsule on LOD0**
+(the trunk, correct) and a **mesh collider on each of LOD1/2/3 built from the canopy — 8.4m to
+10.1m across, reaching the ground**. The player was stopped nine metres from a tree by nothing they
+could see. The command removed 21 such colliders, **all of them in the Meadow**; the other five
+areas returned zero, which is why only the Meadow was ever reported.
+
+The rule keys off the object's role in its `LODGroup`, not its name — see `LodColliderPolicy`.
+Names only happen to encode the level in this one art pack, and the next pack will disagree.
+
+Re-running reports zero. It is worth re-running after re-dressing an area or updating an art pack,
+because the colliders come from the packs' own prefabs and come back with them.
+
+### Props, not terrain, are what you snag on
+
+"The character controller gets stuck in the Meadow" reads as a terrain problem. It is not: every
+area's ground is a single flat `MeshCollider`, 100m x 100m, with a height of **exactly zero**.
+There is no terrain to rebuild. The snags are the props standing on it, and there are two kinds —
+see `PropColliderPolicy`, applied by `cr_fix_prop_colliders` (**CR > Areas > Fix Prop Colliders**).
+
+**Concave mesh colliders.** A `MeshCollider` that is not convex is raw triangle soup, and a capsule
+slid along one catches on the seams between triangles. A convex hull of the same rock has no
+interior seams. Only applied to props under 3.5m: hulling a cliff seals whatever gap runs through
+it, which turns a snag into a wall.
+
+**Shin-height obstacles.** The Meadow's fallen logs top out at 0.50m — too tall to walk over, too
+short to read as something to walk around, so the player slides along one never seeing what stopped
+them. Those lose their collider; stepping over a fallen log is what a player expects.
+
+:::danger Two ways this command destroyed floors before the tests existed
+Both are worth knowing because both look like sound logic:
+
+- **A floor is flat, so a height-only rule calls it shin-height.** The first run deleted the battle
+  arena's own 70x70 `Ground` plane out of all six areas. Height cannot separate a thing you step
+  OVER from a thing you stand ON — footprint can, so anything wider than 6m is never removed.
+- **`bounds` on an INACTIVE collider is a zero-size box at the origin**, not its real extents. The
+  arenas sit inactive until a battle starts, so their floors measured as zero-width, zero-height
+  obstacles — which is why only some areas lost theirs and the bug looked random. Inactive and
+  disabled colliders are now skipped outright; they cannot snag anyone anyway.
+
+A third trap sits next to them: a repair that reverted every removed-collider override put back the
+LOD canopy blobs and made all the foliage solid again. **A scene's collider state is the
+intersection of four policies** — this one, `LodColliderPolicy`, `TrunkColliderPolicy` and
+`WalkThroughProps` — so a repair that knows about only one of them is a regression in the others.
+Re-run all of them after re-dressing an area.
+:::
+
+### A trunk capsule that stops too high shoves you into the floor
+
+The third Meadow snag is not a collider that should not be there — it is one shaped wrong at the
+one height the player can reach. See `TrunkColliderPolicy`, applied by `cr_fix_trunk_colliders`
+(**CR > Areas > Fix Trunk Colliders**).
+
+A capsule's end cap is only a vertical wall down to its **equator** — the widest ring of the
+hemisphere. Below that the surface curves in toward the pole and its normal tilts to point partly
+*downward*. The Meadow's `Tree_Large_01..04` (~26 instances, and they appear in no other area)
+carry a 2.0m-radius, 7.6m-tall capsule whose bottom equator sat **0.56m above the ground**. The
+player's own capsule bottoms out at 0.495m above their feet — inside that tilted sliver. Running
+into it produced a contact normal with a downward component while the player was already resting on
+the floor, so forward speed turned into a shove into the ground. Measured directly with a raycast
+into the live scene: `normal.y = -0.18` at ankle height, `0.00` from about 0.3m up.
+
+This is why it read as a **Steam Deck** problem and felt fine on a Mac. A bigger per-step
+displacement drives the contact deeper before the solver corrects it, so the same geometry that is
+invisible at a high framerate is unplayable at a low, variable one.
+
+The fix extends the capsule **downward only** — the top and the radius end up exactly where they
+started, so nothing about how wide or tall the trunk reads to the player changes; the curved part
+just ends up buried. Nothing keys off a prefab name: the same geometric check runs over every trunk
+capsule in every area and is a no-op wherever the equator is already deep enough. The Meadow's
+birches prove that discrimination works — their equator measures ~0.18m, they read a flat normal at
+ankle height already, and the command left all of them alone. 26 fixed in the Meadow, **zero in the
+other five areas**. Re-running reports zero.
+
+:::note "Rebuild the terrain" is never the fix here
+Every area's ground is the same stock 100x100 plane, unmodified. Three separate Meadow bugs have now
+presented as "the character controller gets stuck in the terrain" and all three were props: LOD
+canopy colliders, shin-height logs, and now trunk capsules. Measure the colliders before touching
+the ground.
+:::
+
 ### Colliders are stripped, deliberately
 
 `MakeWalkThrough` destroys every `Collider` on encounter-zone dressing. This is the difference
@@ -637,6 +796,56 @@ scene name; spawn points present, with a resolvable default and no case-insensit
 `CoreContext`, **and `CoreContext` actually mapped in a `DefaultSceneContractConfig`**; a
 `BattleArena` present; this area and Core both in Build Settings; every door's
 target area listed in Build Settings with a non-empty spawn id; and no spawn point inside a door.
+
+## Resuming where you stood
+
+An area transition used to be the only thing that decided where the player stands; a fresh
+session always began at the current area's default spawn point. Trainers now carry a **last
+saved location** — `trainers.last_area_key` / `last_pos_x/y/z` / `last_yaw` (cr-api
+`M4013AddLastLocationToTrainer`) — and the world resumes there.
+
+### Saving
+
+Two writers, one repository method (`ITrainerRepository.UpdateLastLocationAsync`, routed
+online/offline like every other trainer call — the online path also mirrors into the cache DB):
+
+- **`TrainerLocationTracker`** (bound `FromNewComponentOnNewGameObject` + `NonLazy`, never
+  scene-placed) watches the player transform and saves on the `TrainerLocationSaveRule`
+  throttle: at most once per 10 s, and only after ≥ 0.5 m of movement — standing still never
+  writes. Forced saves ignore the throttle: the moment a trainer is switched *away from*
+  (the tracker caches the outgoing identity, because by the time `OnTrainerChanged` fires the
+  session already answers with the new trainer), and `OnApplicationPause`/`Quit`.
+- **`AreaLoader`** saves immediately after a successful transition, so a crash right after
+  walking through a door still resumes on the correct side of it.
+
+The write deliberately lives outside the profile-update SQL — a movement-cadence save and an
+appearance edit can never clobber each other.
+
+### Resuming
+
+`TrainerResumeRule.Decide(savedAreaKey, hasSavedPosition, currentAreaKey)` (pure, EditMode-tested
+in `TrainerResumeTests`) picks one of three plans when the overworld initializes:
+
+| Plan | When | What happens |
+|------|------|--------------|
+| `DefaultSpawn` | nothing usable saved | default spawn point, exactly as before |
+| `TeleportInPlace` | saved spot is in the loaded area | `IMovementController.Teleport` to the spot |
+| `TransitionToSavedArea` | saved spot is elsewhere | `GoToAreaAsync` there; a `_pendingArrival` override makes `PlacePlayer` land on the exact saved spot instead of the area's spawn point |
+
+All placement goes through the movement controller — writing the transform directly makes
+Malbers drag the player back within ~100 ms.
+
+### Trainer switches re-initialize the world
+
+Switching trainers mid-session fires `IGameSessionService.OnTrainerChanged`. `GameInitializer`
+already re-runs the persistent scene's `IWorldInitializable`s, but area scenes initialize
+through their own `AreaWorldInitializer`, whose `HasInitialized` latch survived the switch —
+every NPC and spawner in the loaded area kept the *previous* trainer's identity (stale quest
+givers, wrong team ensures, merchants that would not load). `AreaLoader` now subscribes to the
+same event and, when a new trainer arrives, clears its own `_worldInitialized` flag and calls
+`AreaWorldInitializer.ResetForNewSession()` on the loaded area, so entering the overworld
+re-initializes everything for the new session — and then resumes at *that* trainer's saved
+location via the rules above.
 
 ## Related
 

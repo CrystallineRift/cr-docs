@@ -81,7 +81,11 @@ The 12 checks (all assert zero dangling rows among non-deleted records):
 | 11 | `quest_reward_template.quest_template_id` → `quest_template.id` |
 | 12 | `quest_requirement.quest_template_id` → `quest_template.id` |
 
-`build-packages.sh` writes the artifact to `bin/unity-package/StreamingAssets/CR/game-data.bytes` (with its `game-data_schema_version.txt` companion) and aborts the package build if generation fails. It then **auto-copies** the freshly baked `game-data.bytes` + version file into `cr-api-unity/Assets/StreamingAssets/CR/`, so the live Unity project always picks up the latest bake. (The manual **`CR → Bake Game-Data DB`** editor menu still exists but is now optional — only needed for ad-hoc rebakes from inside the Editor.)
+`build-packages.sh` writes the artifact to `bin/unity-package/StreamingAssets/CR/game-data.bytes` (with its `game-data_schema_version.txt` companion) and aborts the package build if generation fails. It then **auto-copies** the freshly baked `game-data.bytes` + version file into `cr-api-unity/Assets/StreamingAssets/CR/`, so the live Unity project always picks up the latest bake. (The manual **`CR → Content → Bake Game-Data DB`** editor menu still exists but is now optional — only needed for ad-hoc rebakes from inside the Editor.)
+
+:::caution
+**Two migration paths, two build graphs.** The bake tool runs the migrations from a `dotnet run` (Debug) build of its own project graph, so the floor always carries the newest migration classes. The `*.Data.Migration.dll`s that ship inside the Unity package (used by the client to migrate its **online-cache** DBs) come from each project's **Release** output, built by the script's per-project `build_if_needed` list. A migration project missing from that list is *copied* but never *rebuilt* — its DLL gets a fresh mtime and stale contents, and the floor and the client disagree about the schema. `Game/CR.Game.Data.Migration` was exactly that case until 2026-09-03 (nothing in the compat csproj graph references it). Verify a shipped migration with `strings bin/unity-package/Runtime/CR.<Domain>.Data.Migration.dll | grep M<number>`, never with `ls -l`.
+:::
 
 ### How it ships and is adopted
 

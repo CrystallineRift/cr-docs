@@ -33,6 +33,20 @@ The single asset that registers all content definitions with the runtime. Assign
 
 These SOs are the source of truth for backend data. Each has a `contentKey` that must match the `content_key` column in the corresponding backend database table.
 
+:::tip[`icon` / `iconKey` — four SOs, one rule]
+`ItemDefinition`, `CreatureDefinition`, `AbilityConfig` and `StatusConditionConfig` each carry an
+`AssetReferenceSprite? icon` plus a `string iconKey`, drawn by the shared `IconSlotField` inspector
+row and synced to the matching `icon_asset_key` column.
+
+`iconKey` is **derived from the sprite**, not typed: assigning through the inspector row registers the
+sprite addressable at `icons/<type>/<key>` and writes the returned address into `iconKey`. Dropping a
+GUID straight into the field leaves a reference that resolves and a key that does not — a silent
+no-op.
+
+`iconKey` is not `assetKey`. `assetKey` addresses the entity's *prefab*, and passing it to a sprite
+loader can only ever return null. See [UI Icons](29-ui-icons.md).
+:::
+
 ### CreatureDefinition
 
 **Menu:** `CR/Content/Creature Definition`  
@@ -46,7 +60,9 @@ Defines a creature species. Base stats here feed directly into the backend's `ba
 | `contentKey` | string | DB key (e.g. `"cindris"`) — must be unique |
 | `displayNameKey` | string | Localization key (e.g. `"creature_cindris_name"`) |
 | `element` | string | Elemental type matching backend enum (e.g. `"Fire"`, `"Radiant"`, `"Flora"`) |
-| `assetKey` | string | Addressables address for this species' prefab/asset |
+| `assetKey` | string | Addressables address for this species' **prefab** |
+| `icon` | `AssetReferenceSprite?` | 2D portrait for team cards, storage slots, market rows and the battle HUD |
+| `iconKey` | string | Address of that sprite — `icons/creatures/<contentKey>`. Syncs to `creature.icon_asset_key`. Written by `cr_bake_portraits`, not by hand |
 | `name` | string | Display name (synced from server, mirrors backend `name` column) |
 | `description` | string | Lore text (synced from server) |
 | `baseHitPoints` | int | Base HP stat |
@@ -88,7 +104,9 @@ Defines an item type including its effect, usage rules, and held-item trigger.
 |-------|------|---------|
 | `contentKey` | string | DB key (e.g. `"item_capture_crystal"`) |
 | `displayNameKey` | string | Localization key |
-| `assetKey` | string | Addressables address for item icon/prefab |
+| `assetKey` | string | Addressables address for the item's **prefab** |
+| `icon` | `AssetReferenceSprite?` | 2D icon shown in the bag, shop, market and battle bag |
+| `iconKey` | string | Address of that sprite — `icons/items/<contentKey>`. Syncs to `item.icon_asset_key` |
 | `EffectType` | `ItemEffectType` | What this item does when used |
 | `EffectParametersJson` | string | JSON matching the EffectType schema (e.g. `{"amount":50}` for RestoreHp) |
 | `UsageFlags` | `ItemUsageFlags` | Bitmask — where/how the item can be used (in-battle, overworld, etc.) |
@@ -145,7 +163,7 @@ Defines a spawner zone: capacity, timing, and weighted pools of creature templat
 
 **Menu:** `CR/Quest Definition`  
 **Instances:** `Assets/CR/Content/Quests/`  
-**Backend sync:** Via inspector "Sync to Backend" / "Sync All Quests" button → `PUT /api/v1/quests/templates/bulk`
+**Backend sync:** Content Studio → Quests → **⬆ Push All** → `PUT /api/v1/quests/templates/bulk`. (The inspector's own "Sync to Backend" / "Sync All Quests" buttons were removed — see [One way to reach the server](08-content-registry.md#one-way-to-reach-the-server).)
 
 Defines a quest template. The backend owns instance/progress data; this SO is the designer's source of truth for quest structure and objectives.
 
@@ -214,6 +232,8 @@ Defines a single battle ability. `id` is a stable GUID auto-generated on first c
 | `targetType` | string | `"Single"`, `"All"`, etc. |
 | `category` | string | `"Physical"`, `"Special"`, or `"Status"` |
 | `animationKey` | string | Key used to look up `BattleAnimationConfig` entry |
+| `icon` | `AssetReferenceSprite?` | 2D icon shown on the battle HUD's ability rows |
+| `iconKey` | string | Address of that sprite — `icons/abilities/<abilityName>` (spaces kept; `AbilityConfig` has no `contentKey`). Syncs to `abilities.icon_asset_key` |
 | `conditions` | `AbilityConditionEntry[]` | Status conditions this ability can inflict |
 
 **Audio / VFX content keys** (Addressables addresses — each optional):
@@ -258,6 +278,8 @@ Standalone ScriptableObject form of a status condition. Used when a condition is
 | `probability` | int (0–100) | Chance the condition is applied |
 | `durationTurns` | int? | Null = permanent |
 | `statChanges` | `ConditionStatChangeEntry[]` | Stat modifications applied while active |
+| `icon` | `AssetReferenceSprite?` | 2D icon shown in the battle HUD status badge and the Bag's target picker |
+| `iconKey` | string | Address of that sprite — `icons/status/<conditionName>`. Syncs to `status_conditions.icon_asset_key` |
 | `onHitVfxKey` | string | VFX on impact when the condition is inflicted |
 | `onTriggerVfxKey` | string | VFX when the condition ticks each turn |
 | `onRemovedVfxKey` | string | VFX when the condition is removed |
@@ -292,6 +314,14 @@ Maps levels to ability unlocks for a creature species (or a spawner template ove
 | `level` | int | Level at which the ability is learned |
 | `ability` | `AbilityConfig?` | Reference to the ability SO |
 | `abilitySlot` | int (1–4) | Which move slot it occupies |
+| `unlockQuestContentKey` | string | Content key of the quest that must be completed first. **Empty = no gate** — the ordinary "learn it at `level`" entry. A value makes the level necessary but not sufficient |
+
+`unlockQuestContentKey` maps to `ability_progression_set_entry.unlock_quest_content_key` (M5019) and
+to `AbilityProgressionSetEntry.UnlockQuestContentKey` in `CR.Game.Model`. Empty here is `NULL`
+there. The inspector draws it as a dropdown of authored `QuestDefinition` content keys
+(`ContentPicker.Quests()`), never free text — the server matches the key exactly, so a typo produces
+an entry that reads as authored and can never unlock. See
+[Creature Storage → Authoring a gate](26-creature-storage.md#authoring-a-gate-and-keeping-it-through-sync).
 
 ---
 
@@ -315,6 +345,99 @@ Controls XP rate and per-stat scaling multipliers for a creature. Referenced by 
 | `specialAttackGrowth` | int | Special Attack scaling |
 | `specialDefenseGrowth` | int | Special Defense scaling |
 | `speedGrowth` | int | Speed scaling |
+
+---
+
+### BattleMissionDefinition
+
+**Menu:** `CR/Content/Battle Mission`  
+**Instances:** `Assets/CR/Content/Defs/BattleMissions/`  
+**Backend sync:** Via Content Studio → Battle Missions → `PUT /api/v1/battle-missions/{id}`
+
+One optional in-battle challenge — "burn the same target three times" — and the ability completing
+it unlocks for the rest of the fight. Mirrors cr-api's `battle_mission_template` row exactly; the
+push body is the server's own `BattleMissionTemplateUpsertRequest` out of `CR.Game.Data.dll`, not a
+Unity mirror of it.
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `id` | string (GUID) | Stable identifier — auto-generated in `OnValidate`; the route id on push, so it decides create vs update vs revive |
+| `contentKey` | string | snake_case key, e.g. `mission_pyromaniac`. Identity on the server — renaming the mission does not rename this |
+| `missionName` | string | What the player is offered in the team view and sees in the HUD |
+| `description` | string | One line telling the player what to do |
+| `missionType` | string | `StatusApplication`, `KnockOut` or `ElementalReaction` — dropdown built from `CR.Game.Data.Constants.BattleMissionTypes.All` |
+| `conditionKey` | string | Condition name (`Burn`) or reaction name (`Conduction`). Hidden for `KnockOut`, which ignores it |
+| `threshold` | int (≥1) | Qualifying events needed |
+| `sameTarget` | bool | Per-target streak vs. any target |
+| `rewardType` | string | `AbilityUnlock` today — from `BattleMissionRewardTypes.All` |
+| `rewardAbility` | `AbilityConfig` | The unlocked move, authored as a reference rather than a pasted GUID |
+| `rewardAbilityId` | string (GUID) | The wire value. Kept in step from `rewardAbility` in `OnValidate`, and kept on its own when the referenced ability has no local asset — otherwise a pull from a richer server would blank the reward on the next push |
+| `isActive` | bool | Inactive missions stay on the server but are never offered |
+
+Offline is the one thing pushing does not cover: the baked floor comes from migration seeds only,
+so authored missions reach offline play through **⬇ Export Seed Migration** — see
+[Battle Extensions](24-battle-extensions.md).
+
+---
+
+### ElementalReactionDefinition
+
+**Menu:** `CR/Content/Elemental Reaction`  
+**Instances:** `Assets/CR/Content/Defs/Reactions/`  
+**Backend sync:** Via Content Studio → Reactions → `PUT /api/v1/elemental-reactions/{id}`
+
+One elemental synergy: a condition already on the target (the *primer*) plus an incoming ability of
+a particular element (the *detonator*) produce an outsized result — "the water conducts the charge".
+Mirrors cr-api's `elemental_reaction` row (M12006); the push body is the server's own
+`ElementalReactionUpsertRequest` out of `CR.Game.Data.dll`, not a Unity mirror of it.
+
+Reactions were a hard-coded array in `CR.Game.Compat.Battle.ElementalReactionTable` until M12006.
+That array survives only as the seed default and the resolver's fallback — edit the rows, not the
+array.
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `id` | string (GUID) | Stable identifier — auto-generated in `OnValidate`; the route id on push, so it decides create vs update vs revive |
+| `contentKey` | string | snake_case key, e.g. `reaction_conduction`. Identity on the server — renaming the reaction does not rename this |
+| `reactionName` | string | Display name (`Conduction`). Also what a `ElementalReaction` battle mission matches on |
+| `primerCondition` | `StatusConditionConfig` | The condition that must already be on the target, authored as a reference rather than a typed name |
+| `primerConditionName` | string | The wire value. Kept in step from the reference in `OnValidate`, and kept on its own when the condition has no local asset |
+| `detonatorElement` | string | An `ElementType` name — dropdown, because a typo is a reaction that can never fire |
+| `damageMultiplier` | double | Applied to the ability's damage. 1 leaves it alone; the server accepts 0–10 |
+| `appliedCondition` | `StatusConditionConfig` | What the reaction leaves behind, or none when it only adds damage |
+| `appliedConditionName` | string | The wire value, same rule as the primer |
+| `logLine` | string | The battle-log line — the only thing telling the player what happened |
+| `priority` | int | Evaluation order, ascending: a target carrying two primers detonates the lowest number |
+| `isActive` | bool | Inactive reactions stay on the server but never fire |
+
+Offline is the one thing pushing does not cover: the baked floor comes from migration seeds only, so
+authored reactions reach offline play through **⬇ Export Seed Migration** — see
+[Battle Extensions](24-battle-extensions.md).
+
+---
+
+### ElementalDamageMatrixConfig
+
+**Menu:** `CR/Content/Elemental Damage Matrix`  
+**Instances:** `Assets/CR/Content/Defs/ElementalDamage/` — one asset per version  
+**Backend sync:** Via Content Studio → Elemental Damage → `PUT /api/v1/elemental-damage/versions/{version}`
+
+One version of the type-matchup matrix: what every element does to every other element. Mirrors the
+`elemental_damage` rows carrying that `version` string.
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `version` | string | The version the rows are keyed on, e.g. `v1.1`. Must match `^v\d+(\.\d+)*$` |
+| `isActive` | bool | Whether battles resolve against this version. Read-only in the inspector — it mirrors `battle_system_version`, and only **Set Active** moves it |
+| `cells` | `ElementalDamageCellEntry[]` | Every ordered (offense, defense) pair — 100 of them. Edit through the grid, not the list |
+
+`cells` is always completed to the full 100 before a push: cr-api refuses a partial matrix, because
+a version missing a square resolves that matchup at 1.0 with nothing in the logs to say so, which is
+indistinguishable from a designer having chosen 1.0. `ElementalDamageMatrixMapping.Complete` fills
+gaps with the neutral 1.0 and fixes the row-major order the grid and the exported seed both use.
+
+Offline follows the same rule as reactions: **⬇ Export Seed Migration** writes the selected version
+(and, when it is the active one, the `battle_system_version` pointer) into cr-api.
 
 ---
 
@@ -431,16 +554,21 @@ This asset is authored in the Pixel Crushers **Dialogue Editor** window (`Tools 
 
 ## Summary: What Syncs to the Backend
 
+Every row below pushes the same way: **Content Studio → the owning tab → ⬆ Push All** (or the global ⬆ Push All Content). Inspectors no longer carry their own sync buttons — see [One way to reach the server](08-content-registry.md#one-way-to-reach-the-server).
+
 | SO | Sync mechanism | Endpoint |
 |----|---------------|----------|
 | `CreatureDefinition` | Content Studio tool | `/api/v1/creatures/base` |
 | `NpcDefinition` | Content Studio tool | `/api/v1/npcs` |
 | `ItemDefinition` | Content Studio tool | `/api/v1/items` |
-| `SpawnerDefinition` | Content Creator tool | `/api/v1/spawners/sync-config` |
-| `QuestDefinition` | Inspector "Sync to Backend" button | `/api/v1/quests/templates/bulk` |
+| `SpawnerDefinition` | Content Studio tool | `/api/v1/spawners/sync-config` |
+| `QuestDefinition` | Content Studio tool | `/api/v1/quests/templates/bulk` |
 | `AbilityConfig` | Content Studio tool | `/api/v1/abilities` |
 | `AbilityProgressionSetConfig` | Content Studio tool | `/api/v1/ability-progression-sets` |
 | `GrowthProfileConfig` | Content Studio tool | `/api/v1/growth-profiles` |
+| `BattleMissionDefinition` | Content Studio tool | `/api/v1/battle-missions/{id}` (offline copy via exported seed migration) |
+| `ElementalReactionDefinition` | Content Studio tool | `/api/v1/elemental-reactions/{id}` (offline copy via exported seed migration) |
+| `ElementalDamageMatrixConfig` | Content Studio tool | `/api/v1/elemental-damage/versions/{version}` (offline copy via exported seed migration) |
 | `ContentDefinitionProvider` | — | Client-only registry |
 | `BattleAnimationConfig` | — | Client-only |
 | `CreatureAnimationProfile` | — | Client-only |

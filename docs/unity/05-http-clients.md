@@ -28,7 +28,9 @@ The alternative (each client implementing HTTP from scratch) would lead to drift
 
 Typed exceptions (`NotFoundException`, `BadRequestException`, etc.) let callers handle only the specific errors they care about and let unexpected errors propagate as unhandled exceptions (which become visible in Unity's Console). A result type pattern would require every caller to check `if (result.IsError)` everywhere, obscuring the happy path.
 
-Callers that need to handle a specific error (e.g., 404 for an optional resource) can catch the specific exception type. Callers that do not expect an error let it propagate to `GameInitializer`'s top-level error handler, which logs it with the component name.
+Every typed exception derives from `ServerRequestException` (`Assets/CR/Core/Data/Logic/`), so a caller has two levels to choose from: catch one subclass to react to one status (`catch (NotFoundException)` → "treat as absent"), or catch the base type to handle "the server said no, whatever the reason" in one place. Callers that do not expect an error let it propagate to `GameInitializer`'s top-level error handler, which logs it with the component name.
+
+The family lives in the engine-free `CR.Core.Data.Logic` assembly rather than beside `SimpleWebClient` so the whole status → exception → player-text path is unit-tested without Best HTTP or Unity in the loop.
 
 ### Why Is There No Retry Strategy?
 
@@ -117,18 +119,38 @@ Note that the current `SimpleWebClient` does not accept `CancellationToken` in i
 
 ### Error Mapping
 
-The actual status codes handled by `CheckForResponseForErrors`:
+`CheckForResponseForErrors` hands the status, reason phrase and body to `ServerResponseClassifier.ForStatus`, which returns the exception to throw (or null for any 2xx). `SendOnceAsync` additionally wraps Best HTTP's `AsyncHTTPException` — refused connection, DNS, TLS, timeout — so a request that never got an answer surfaces through the same family:
 
-| Status | Exception | Notes |
-|--------|-----------|-------|
-| 200, 203, 204 | (none — success) | All treated as success |
-| 400 | `BadRequestException` | Invalid request body, missing fields |
-| 401 | `NotAuthorizedException` | Invalid or expired token |
-| 403 | `ForbiddenException` | Valid token but insufficient permissions |
-| 404 | `NotFoundException` | Resource not found |
-| other | `InternalServerErrorException` | All other codes |
+| Status | Exception | `IsTransient` | Default message (no usable body) |
+|--------|-----------|---------------|----------------------------------|
+| 2xx | (none — success) | | |
+| 400 | `BadRequestException` | no | "Request refused." |
+| 401 | `NotAuthorizedException` | no | "Sign-in required." |
+| 402 | `PaymentRequiredException` | no | "Not enough funds." |
+| 403 | `ForbiddenException` | no | "Not allowed." |
+| 404 | `NotFoundException` | no | "Not found." |
+| 409 | `ConflictException` | no | "Already changed - refresh and try again." |
+| 429 | `ServerRequestException` | yes | "Too many requests - slow down." |
+| other 4xx / 3xx / 1xx | `ServerRequestException` | no | "Request refused." |
+| 5xx | `InternalServerErrorException` | yes | "Server error - try again." |
+| no response | `ServerUnreachableException` (`StatusCode == 0`) | yes | "Can't reach the server." |
 
-Note that 409 (Conflict) and 429 (Rate Limit) are not explicitly handled — they fall through to `InternalServerErrorException`. If you need to handle these specifically, catch `InternalServerErrorException` and inspect the message.
+Every instance carries:
+
+- `StatusCode` — the HTTP status, or `0` when nothing came back.
+- `Message` — **always player-facing text**, chosen by `ServerErrorMessage.ForPlayer`. For a 4xx the body's explanation wins when the server gave a short one (≤ 200 characters); otherwise the status's default wording above. Never the reason phrase ("I'm a teapot", "Found"), and never a 5xx body — that is the server talking to its operators (`Error creating account: <exception>`), so it stays on `Body` and goes to the log. UI may show `Message` verbatim.
+- `Body` — the raw response body (empty string, never null) for callers that deserialise a structured refusal, e.g. the market's result object on a 409.
+- `IsTransient` — true when retrying later could plausibly succeed (no response, 429, or 5xx).
+- `ServerUnreachableException.TransportMessage` — Best HTTP's own wording, for the log.
+
+The body is parsed for **every** status, not only 400, because cr-api is not uniform about where the reason lives. `ServerErrorMessage` tries `message`, `errorMessage` (market result objects), `error`, `detail` then `title` (ASP.NET ProblemDetails — `detail` first because only it says what actually happened), then a short bare-text body; JSON arrays, markup, malformed JSON and non-string fields are never shown. Two entry points read the result differently:
+
+- `ForPlayer(status, reason, body)` — what `ServerRequestException.Message` carries: body (4xx only, capped) → status default. Used by the classifier.
+- `From(status, reason, body)` — what an author or a log wants: body (any status, any length) → status default → reason phrase → "Request refused.". Used by the editor sync helpers' `DescribeFailure`, where a 500's detail and a 409's full list of missing names are exactly the point.
+
+Cancellation is deliberately **not** part of the family: an aborted request still surfaces as `TaskCanceledException` / `OperationCanceledException`, because a cancel is not a server failure and nothing should be shown for it.
+
+The 401 path is the one status the client acts on itself. `AuthRetryPolicy.ShouldReauthenticate(status, hasTokenManager, callerToken)` (engine-free, unit-tested) says when: only a 401 on a request whose token came from the token manager. A caller-supplied token is the caller's to refresh, and a client built without a token manager (`AuthClientUnityHttp`, `VersionCheckClientUnityHttp`) cannot retry — which is what stops a 401 from the refresh endpoint retrying itself. When it applies, `HandleResponse` runs `ITokenManager.RefreshAccessTokenAsync()` and re-sends exactly once before letting the second failure propagate.
 
 ### How the Authentication Token Is Attached
 
@@ -315,7 +337,14 @@ Ensure the backend's `Program.cs` maps the corresponding endpoint group. See [Ba
 
 **During world initialization** (`InitializeAsync`): errors propagate to `GameInitializer` which logs them and continues. The NPC or behaviour that failed will have partial state. No explicit try/catch is needed in most behaviours — let the exception propagate.
 
-**During player-triggered interactions** (button presses, E-key, etc.): catch exceptions and give the player feedback:
+**During player-triggered interactions** (button presses, E-key, etc.): catch and give the player feedback. The rule for *what* to show lives in one pure function, `PlayerErrorText.For(Exception)` (`Assets/CR/Core/Data/Logic/PlayerErrorText.cs`):
+
+| Exception | Returns |
+|-----------|---------|
+| `ServerRequestException` (any subclass) | its `Message` — already player-facing |
+| `OperationCanceledException` / `TaskCanceledException` | `null` — show nothing, the player cancelled |
+| `AggregateException` | unwrapped to its first inner exception, then the rules above |
+| anything else | `PlayerErrorText.Generic` ("Something went wrong.") — a bug's message is for the log, never the screen |
 
 ```csharp
 private async Task OnInteractAsync()
@@ -329,19 +358,17 @@ private async Task OnInteractAsync()
     }
     catch (NotFoundException)
     {
-        // NPC row missing — should not happen after world init, but handle gracefully
+        // A status this screen has its own answer for.
         _logger.Warn("[NpcInteraction] NPC not found during give-creature.");
         ShowErrorUI("This NPC is not available right now.");
     }
-    catch (NotAuthorizedException)
-    {
-        // Token expired and refresh failed — redirect to login
-        _sessionManager.ClearSession();
-    }
     catch (Exception ex)
     {
-        _logger.Error($"[NpcInteraction] Unexpected error: {ex.Message}");
-        ShowErrorUI("Something went wrong. Please try again.");
+        // Everything else: server refusals show their own wording, bugs show the generic line,
+        // a cancel shows nothing.
+        _logger.Error($"[NpcInteraction] Give-creature failed: {ex.Message}");
+        var why = PlayerErrorText.For(ex);
+        if (why != null) ShowErrorUI(why);
     }
     finally
     {
@@ -350,7 +377,15 @@ private async Task OnInteractAsync()
 }
 ```
 
-The typed exception hierarchy makes it easy to distinguish actionable errors (auth failures → redirect to login) from unexpected errors (show generic message).
+Where this is wired today:
+
+- `BattleBagPanelHandler` catches `ServerRequestException` (every status, not only 400) and raises `BattleEvents.RaiseItemUseRefused(ex.Message)` so the battle log explains the refusal. `ServerUnreachableException` is caught first and worded differently — "Couldn't reach the server - the item may still have been used." — because a timed-out request may have been applied server-side; the bag is refreshed so the next open shows the server's quantities.
+- `PlayerTeamView` (give / take back a held item) and `MerchantShopScreenHandler` (purchase) and `CharacterCreateController` route their catch-all through `PlayerErrorText.For`. `PlayerTeamView` keeps a separate `catch (InvalidOperationException)` first because the held-item repository states *its* refusals in player terms.
+- `MarketManager` keeps its own per-operation wording (`MarketErrorText`) for 400/402/403/404/409 and falls back to the exception's now player-facing `Message` for everything else (401, 5xx, unreachable).
+- `VersionCheckClientUnityHttp` still returns `null` for any `ServerRequestException` (the documented "treat as offline" contract) but logs transient and non-transient failures differently.
+- The editor sync helpers (`ContentCreatorSyncHelper`, `AbilityEditorSyncHelper`) use `System.Net.Http` rather than `SimpleWebClient`, so they call `ServerErrorMessage.From` in the shared `AbilityEditorSyncHelper.DescribeFailure` (PUT/POST and DELETE alike) to get the same body parsing. Because the message now carries body text, a helper that needs to branch on *which* failure it was uses `SendWithStatus` and compares the status code — never `message.Contains("404")`, which a 409 body mentioning "404" would satisfy and, for status conditions, would rewrite the asset's authored id.
+
+Never show `ex.Message` of an arbitrary `Exception` to the player — an `Object reference not set…` line is a bug report, not feedback.
 
 ## Offline Mode Considerations
 
@@ -400,6 +435,8 @@ If a response property name does not match (e.g., backend returns `creatureId` b
 - **Path leading slash handling.** `SimpleWebClient` strips a leading `/` from the path: `path = path.StartsWith("/") ? path.Substring(1, ...) : path`. This means `/api/v1/npc/ensure` and `api/v1/npc/ensure` are equivalent. Consistency is preferred — the codebase uses the leading slash convention.
 - **JSON property name mismatch.** The response deserializes to all defaults without throwing. Add debug logging of `response.DataAsText` in the `after` callback if a response object is unexpectedly empty.
 - **Not handling `NotAuthorizedException`.** If `GetAccessTokenAsync` fails to refresh and throws, the caller receives `NotAuthorizedException`. Without a handler, the game will show an unhandled exception. Catch this in top-level handlers and redirect to the login flow.
+- **Catching `AsyncHTTPException` or `InternalServerErrorException` for "server down".** Neither is what you get any more: no response is `ServerUnreachableException`, and a 5xx is `InternalServerErrorException` — both `ServerRequestException` with `IsTransient == true`. Catch the base type and check `IsTransient` if you want to offer a retry.
+- **Reading `ex.Message` expecting a reason phrase.** `Message` is the server's explanation when it sent one, else a player-facing default. The reason phrase and status are on `StatusCode`; the raw body is on `Body`.
 - **Creating a new client implementation for each endpoint.** All endpoints for a domain should be on one client class (e.g., all NPC operations on `NpcClientUnityHttp`). Do not create a separate `NpcEnsureStarterClient` and `NpcGiveCreatureClient`.
 - **`CancellationToken` parameter exists on interface but is not passed to `SimpleWebClient` methods.** The current `SimpleWebClient` does not accept `CancellationToken` in its `Get`/`Post` methods. The `ct` parameter on `INpcClient` methods exists for future compatibility. If Best HTTP adds native cancellation support, the base class will be updated. For now, wrap calls in a `Task.WhenAny` if you need timeout behavior.
 - **Registering the client before `ITokenManager` is bound.** `TokenManager` is bound before HTTP clients in `LocalDevGameInstaller`. If you add a new client binding before the auth section, its constructor will fail to resolve `ITokenManager`. Keep all client bindings in the HTTP clients section (after auth).

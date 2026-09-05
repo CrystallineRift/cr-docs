@@ -17,7 +17,8 @@ StreamingAssets/CR/game-data.bytes  →  persistentDataPath/game-data.bytes
 ```
 
 **Content, not instances.** This cache holds definitions — abilities, base creatures, growth
-profiles, progression sets. It does not hold player data. Trainers, inventories, auth and
+profiles, progression sets, spawners, elemental reactions and the elemental damage matrix. It does
+not hold player data. Trainers, inventories, auth and
 generated creatures keep their own per-mode databases, and that separation is the boundary that
 keeps offline-issued creatures out of PvP and the market. Sharing definitions is what makes that
 boundary checkable: a server cannot validate a creature's stats against numbers the client does
@@ -33,7 +34,26 @@ not share.
 | `ContentSyncReport` / `ContentDomainResult` | Per-domain outcome. `MayRecordVersion` is true only when every domain applied. |
 | `ContentSyncPaging` | Page-walk rules: full page means keep going, short page ends it, hard cap stops a runaway. |
 | `ContentSyncSafety` | Guards the destructive half — deletions reconcile only against a provably complete pull *and* a plausible row count. |
+| `BattleMissionEditorSyncHelper` | Content Studio's battle-mission transport (`GET /all`, `PUT`, `DELETE`). Editor-only, and the one content type whose offline copy comes from an exported seed migration rather than from this pull. |
 | `ISpawnerSyncClient` | The spawner write path, reused by the pull. Optional on the sync service: a caller baking into a scratch file cannot supply one that writes to the right place, so it passes null and the domain is skipped rather than writing into the live database. |
+
+### Domains, in the order they run
+
+| Domain | Endpoint(s) | Paged | Reconciles deletions |
+|---|---|---|---|
+| `Abilities` | `GET /api/v1/abilities` | yes | yes (complete + plausible) |
+| `GrowthProfiles` | `GET /api/v1/growth-profiles` | yes | yes (complete + plausible) |
+| `ProgressionSets` | `GET /api/v1/ability-progression/sets` | yes | entries, by absence |
+| `Creatures` | `GET /api/v1/creatures` | yes | yes (complete + plausible) |
+| `Spawners` | `GET /api/v1/spawners/content-registry/full` | yes (envelope) | via `ISpawnerSyncClient` prune |
+| `ElementalReactions` | `GET /api/v1/elemental-reactions` | no | yes, by absence |
+| `ElementalDamage` | `GET /api/v1/elemental-damage/versions` then `?version=` per version | no | n/a — dense grid, overwritten |
+
+**The sync carries the player's bearer token.** Every content route sits behind the API's fallback
+authorization policy, so an unauthenticated `GET /api/v1/abilities` comes back `401` and the domain
+reports Failed. `ServerContentSyncService` takes an optional `ITokenManager` and the installer
+supplies the same one every other HTTP client uses; the Editor's bake-from-server tool constructs
+the service without one.
 
 `ContentRegistryInitializer` runs the sync at boot and **awaits** it, then signals
 `ContentSyncReady`. It used to fire and forget, which raced world init: a spawn roll could read
@@ -47,6 +67,17 @@ These are not style preferences. Each one is a bug that shipped.
   `ON CONFLICT(name) DO UPDATE SET id = excluded.id`. `generated_creature.growth_profile_id` points
   at that key, so the first sync where the server's id differed orphaned every creature a player
   had captured. Resolve the local row by name and update its payload columns only.
+- **…but say so when the ids differ.** The other side of that rule: because the creature upsert
+  is keyed on `content_key` and never touches `id`, a species the server knows under a different
+  id stays split forever, and every *online* capture of it names a `base_creature_id` the local
+  `creature` table cannot resolve — `BattleStager` stages no model, `PlayerTeamView` draws no
+  portrait. That happened to 12 of 15 species (seed migrations M9998/M10000 minted their own ids;
+  the server had kept its Content-Studio ids). `WriteCreaturesAsync` now runs
+  `ContentIdDivergence.Find` (`CR.Core.Sync.Logic`, tested) over the incoming payload against the
+  local `(content_key, id)` rows and logs one warning naming every mismatch. The fix for the ids
+  themselves is the cr-api migration `M10022AlignCreatureIdsToAuthored`, which moves every
+  species onto the id on its `CreatureDefinition` asset and repoints all references — on every
+  DB the unified migrator touches (floor, player save, online caches, Postgres).
 - **Lowercase every id.** This service opens a plain `SqliteConnection`, so
   `GuidNormalizingSqliteConnection` is not in the path, and the progression-set join compares
   `e.ability_id = a.id` raw. One uppercase id returns zero abilities with no error.
@@ -56,6 +87,15 @@ These are not style preferences. Each one is a bug that shipped.
   `ON CONFLICT … DO UPDATE`.
 - **Derive junction ids.** `ability_status_conditions` has no composite unique index, so a random
   id never replaces anything; it appends. Derive the id from what the row joins.
+- **Select every column you compare on.** `WriteProgressionSetsAsync` reconciles progression
+  entries by `(level, ability_slot)` and writes only what differs — but it read the row without
+  `unlock_quest_content_key`, so an entry whose quest gate had changed compared equal and the write
+  was skipped. A quest-gated ability then sat ungated in the local cache and unlocked offline at its
+  level with no quest completed. A column that is not in the `SELECT` is a column that can never be
+  seen to change. Same bug, same fix, in `LocalAbilityLibrarySyncClient.SyncProgressionSetAsync`.
+- **An unset optional string is `NULL`, not `""`.** Readers test these columns for null to mean
+  "not set". An empty `unlock_quest_content_key` is a gate naming a quest that cannot exist, and the
+  entry would never unlock at all.
 - **One transaction per domain.** A domain lands whole or not at all.
 - **Page until a short page.** A flat `?limit=500` truncated silently and reported success.
 - **Reconcile deletions only against a complete pull.** A deleted row and a truncated page look
@@ -89,6 +129,48 @@ existing upsert and prune logic. Content Studio's editor push is unaffected — 
 `SpawnerRecoveryService` used to sync-then-count-local, which online could never satisfy. It now
 re-pulls the single spawner from the server when reachable, and falls back to the authored floor
 otherwise.
+
+## Elemental reactions and the damage matrix
+
+Both are authored content as of 2026-09-03, and both are read by the **offline**
+`BattleDomainService` — which is the only reason they are in this pull at all. Online, the server
+reads its own tables; offline, whatever these two domains wrote is the fight.
+
+**Reactions** (`elemental_reaction`) come from the player-facing
+`GET /api/v1/elemental-reactions` — active rows in evaluation order — not the content-write
+`/all` route. An inactive reaction is one a designer switched off; caching it would only give the
+client a rule it must then remember not to apply.
+
+`WriteElementalReactionsAsync` upserts by id, adopts the local row that already holds the
+`content_key` when the server's id has drifted (so a re-id is an update, not a duplicate under a
+UNIQUE key), and soft-deletes rows absent from the payload. Three details worth keeping:
+
+- **No plausibility floor.** The other domains skip reconciliation when a pull is far smaller than
+  what is held locally. This table holds a handful of rows, where deleting one of three is ordinary
+  authoring. The safety comes from the caller instead: an empty or failed pull is reported as
+  Empty/Failed and never reaches the writer, which throws if handed an empty list.
+- **A row this client refuses to write is still a row the server lists.** Rejected rows (unknown
+  detonator, blank primer or log line) still count as present, so a client-side disagreement never
+  deletes content.
+- **A `content_key` held by a third row skips that one reaction, with a warning.** Writing it would
+  violate `UNIQUE(content_key)` and abort the transaction, taking the whole pull with it.
+
+**The matrix** (`elemental_damage`) is pulled in two hops: `/versions` says what exists and which is
+active, then one read per version. A version whose read fails fails the whole domain — a half-written
+grid resolves its missing matchups at 1.0, which is a silently wrong fight rather than a visible
+error. Cells upsert on `UNIQUE(offense_element, defending_element, version)` with ids derived from
+that same triple, so a re-sync updates in place. There is no `deleted` column and nothing to retire.
+
+The active pointer is written into `battle_system_version.active_elemental_damage_version`, and
+**only when the named version actually arrived with cells** — pointing at a version this database
+holds no rows for is how every matchup silently becomes 1.0. That row lives in `game-data.bytes`
+with the matrix it names: the offline `IBattleSystemVersionRepository` binding reads the content
+database, not `player-data.bytes`, because a single column naming an authored matrix version is
+content, not player state.
+
+Multipliers on both tables are clamped to `[0, 10]` on write, mirroring the server-side validation.
+A negative multiplier heals the target it was meant to hurt — which is what the Radiant→Radiant
+`-5.0` typo did until `M12007`.
 
 ## Baking a floor from the server
 
@@ -131,10 +213,32 @@ from the **shipped floor's own schema**, read at run time, so they cannot drift 
 Decision rules (`ContentSyncReport`, `ContentSyncPaging`, `ContentSyncSafety`) are unit-tested in
 `CR.Core.Sync.Logic`, which is engine-free.
 
+Three files in that project are worth knowing by name:
+
+- `ElementalContentSyncWriterTests` — the reaction and matrix SQL against the shipped floor's own
+  `elemental_reaction` / `elemental_damage` / `battle_system_version` definitions.
+- `ElementalPayloadDeserializationTests` — the wire contract, pinned against payloads captured
+  verbatim from a running AIO. The API serializes with System.Text.Json defaults, so `detonator`
+  arrives as an **integer** (`7` = Lightning); Newtonsoft handles that, and this is the tripwire for
+  the day someone adds a converter on one side only.
+- `BattleDomainServiceBindingTests` — every required constructor parameter of `BattleDomainService`
+  has a `Container.Bind<…>` in `LocalDevGameInstaller`. Adding a dependency in cr-api without
+  binding it in Unity makes `battle_offline` throw at install time and the world never bootstraps.
+  Both sides are read as source text: the installer is in Assembly-CSharp, which no asmdef may
+  reference, so no EditMode test can build the container.
+
 ## Still to do
 
-- Items, loot tables, pickups, achievements and battle missions read a correct-but-stale floor.
+- Items, loot tables, pickups and achievements read a correct-but-stale floor.
   Their bulk endpoints now exist (`/api/v1/loot-tables`, `/api/v1/pickups`); the client pull does not.
+- Battle missions are a partial exception, and worth knowing about because it is the shape the
+  others will take. The *runtime* read is already routed (`BattleMissionTemplateRoutedSource` —
+  server when online, floor when offline), so an edited mission takes effect online without a bake.
+  What the runtime pull does **not** do is write the floor. Authored missions reach offline play by
+  being exported from Content Studio as a seed migration and rebaked — see
+  [Battle Extensions → Authoring missions in Content Studio](?page=unity/24-battle-extensions).
+  That is the standard, not a gap: the offline floor is reviewable content in the repository, never
+  whatever happened to be in one machine's local database.
 - Quest templates still overwrite from ScriptableObjects at world init.
 - The version gate is not wired. Before it can be, the recorded version must move *into*
   `game-data.bytes` — `GameDataAdopter` replaces that file wholesale while the version sits in

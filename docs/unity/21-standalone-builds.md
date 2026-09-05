@@ -156,6 +156,141 @@ copies are never quarantined, so the machine that built it never sees the error.
 - **Real fix** (before wider distribution): Developer ID cert → `codesign --deep --force
   --options runtime`, `xcrun notarytool submit --wait`, `xcrun stapler staple`.
 
+## Deploying to the Steam Deck
+
+**CR > Build > Deploy to Steam Deck…** builds the Linux player and pushes it straight to the Deck
+over the network. It replaces the manual loop (build → zip → upload to Drive → download on the Deck
+→ unzip → re-add to Steam), which was ten steps, six of which existed only because the transport was
+a zip through cloud storage.
+
+The window asks for the Deck's IP, the user (`deck`) and the destination folder, remembers them in
+`EditorPrefs`, then runs three steps: the Linux build via the existing `PlayerBuildRunner`, an
+`ssh mkdir -p` for the destination, and `rsync` of `Builds/Linux/` into it.
+
+### One-time setup
+
+1. On the Deck, in Desktop Mode → Konsole: `passwd` to set a password, then
+   `sudo systemctl enable --now sshd`.
+2. On the Mac, use the window's **Copy key-setup command(s)** button and paste into Terminal. This
+   has to happen in a real terminal — it needs a password prompt, which the Editor cannot provide.
+
+   :::warning The key goes Mac → Deck, not Deck → Mac
+   The keypair must live on the **Mac**, with only its public half copied to the Deck. Generating a
+   key on the Deck and copying its `.pub` back to the Mac feels like the same act and accomplishes
+   nothing: the private half never leaves the Deck, so the Mac has nothing to authenticate with.
+   ssh then quietly falls back to asking for a password — which looks like the connection working
+   if you type one in, and then fails inside the Editor, where there is nobody to type it.
+
+   The tell is a `~/.ssh/id_ed25519.pub` whose comment reads `deck@steamdeck`, with no matching
+   private key beside it. The window checks for the **private** half for this reason, and offers
+   `ssh-keygen` first when it is missing.
+   :::
+3. Deploy once, then add the printed path as a non-Steam game on the Deck.
+
+Step 3 happens **once, ever**. The destination folder is fixed
+(`/home/deck/Games/CrystallineRift`) precisely so the Steam shortcut keeps pointing at a path that
+never changes; later deploys replace the bytes underneath it.
+
+### Why rsync rather than a copy
+
+rsync transfers only changed blocks, so a code-only rebuild is a small delta rather than a
+whole-game copy — that, not the saved clicks, is what makes redeploying quick. `--partial` means a
+dropped Wi-Fi connection resumes instead of restarting.
+
+`-a` is not optional: it preserves the executable bit. Without it the Deck receives a file it
+cannot launch, which presents as Steam doing nothing at all when you press play.
+
+### When the game opens and immediately closes on the Deck
+
+The window on screen is gone before it can show anything, so the player log is the only account of
+what happened. **Fetch Player.log from the Deck** reads it over the same SSH connection; by hand it
+is at `~/.config/unity3d/CR/Crystalline Rift/Player.log`.
+
+Two things about that path are worth knowing, because both look like the log being "in the wrong
+place":
+
+- It is **not** under the deploy folder. Unity writes to `~/.config/unity3d/<Company>/<Product>/`
+  wherever the game is installed, and the path is built from the *company* and *product* names, not
+  the executable name — here `CR` / `Crystalline Rift`, so it contains a space.
+- Because of that space the path must be quoted in the remote command, and **a tilde inside double
+  quotes is not expanded** — the shell looks for a directory literally named `~` and the read fails
+  every time. The fetch uses `$HOME`, which does expand inside quotes. Typing the `~` form yourself
+  in a terminal is fine; it is only the quoted form that breaks.
+
+The fetch pulls the **tail**, not the whole file: a real session on this Deck produced a 10MB log
+with a 43MB predecessor, and streaming that into an Editor window is a hang.
+
+Check these in order:
+
+1. **Is Steam running it under Proton?** A non-Steam game on the Deck frequently gets a
+   compatibility tool forced onto it, and a native Linux ELF started under Proton exits instantly
+   with no window. Properties → Compatibility → **uncheck** "Force the use of a specific Steam Play
+   compatibility tool". This costs nothing to rule out and looks exactly like a crash.
+2. **Run it from Konsole** in Desktop Mode: `cd ~/Games/CrystallineRift && ./CrystallineRift.x86_64`.
+   Anything that kills the player before Unity initialises — a missing system library, the wrong
+   architecture — prints here and never reaches the log.
+3. **Read the log** for a managed exception. CR runs its SQLite migrations synchronously during
+   Zenject installation at boot, so a data-layer failure takes the whole player down before the
+   first frame.
+
+Before suspecting missing files, confirm the build is actually complete — `Plugins/x86_64/
+libe_sqlite3.so`, `StreamingAssets/CR/game-data.bytes`, and `StreamingAssets/aa/StandaloneLinux64/`
+should all be present, and `file CrystallineRift.x86_64` should report `ELF 64-bit LSB executable,
+x86-64`. `rsync -a` preserves the executable bit, which is the one file attribute whose loss
+presents as "nothing happens at all".
+
+### Frame pacing on the Deck (uneven / "janky" movement)
+
+Nothing in the project used to set a frame cap or vsync: the **PC** quality level shipped
+`vSyncCount: 0` and Unity's default `Application.targetFrameRate` is `-1`, so a desktop build
+rendered as fast as the GPU allowed. The Deck's Player.log says so directly — `Default vsync count 0`
+right under `Desktop is 1280 x 800 @ 60 Hz`. With frames arriving at whatever rate the APU manages
+each instant, Gamescope shows whichever frame happens to be finished at each 60 Hz (or 40 Hz)
+scan-out, and the character's 50 Hz physics + interpolated animation gets sampled unevenly: motion
+looks uneven even when the average frame rate is fine, and the APU runs flat out for nothing.
+
+The rule now lives in one place, `FramePacingPolicy` (`Assets/CR/Core/Display/Logic`, engine-free,
+NUnit-tested) and is applied by `FramePacingBootstrap` before the first scene loads — a static
+`RuntimeInitializeOnLoadMethod`, so it cannot be missing from a build:
+
+| Platform | `vSyncCount` | `targetFrameRate` | Why |
+|---|---|---|---|
+| Windows / macOS / Linux (Deck) | 1 | -1 | vsync is the only pacing locked to real scan-out; a cap that disagrees with the refresh rate fights it |
+| Android / iOS | ignored | panel refresh rate (30–120, fallback 60) | mobile ignores `vSyncCount`; Unity's default cap there is 30 |
+
+`Time.maximumDeltaTime` is never lowered, only raised to a 0.1s floor so one long frame does not
+drop simulated time. The PC quality level's `vSyncCount` was also set to 1 so the Editor Game view
+and the first frame agree with the policy.
+
+**Verify on the Deck** after a build + deploy: `grep FramePacing ~/.config/unity3d/CR/Crystalline\ Rift/Player.log`
+should print `vSyncCount=1 targetFrameRate=-1`. If the Deck is set to 40 Hz in the Quick Access menu
+the game locks to 40 fps; that is expected and smooth. For raw performance (not pacing) also note the
+Linux profile builds **Development + script debugging** (`Starting managed debugger on port …` in the
+log) and the player picks **OpenGL Core**, not Vulkan — both cost frame time and are worth turning
+off / switching when measuring.
+
+### Design notes
+
+- Arguments are built as a **list** and handed to `ProcessStartInfo.ArgumentList`, so no shell ever
+  parses them. `SteamDeckDeployPlan.Validate` additionally rejects a host or path beginning with
+  `-` (rsync would read it as an option, and rsync has options that run commands), a host
+  containing `:` (rsync splits host from path there), and a destination of `/` (`--delete` is
+  pointed at that folder).
+- ssh runs with `BatchMode=yes`. Without it, an unconfigured key makes ssh wait for a password on a
+  terminal that does not exist inside the Editor, and the deploy hangs forever looking like a slow
+  copy. With it, the failure arrives in seconds and the window explains the two usual causes.
+- The external process writes to a `ConcurrentQueue` from its threadpool callbacks and touches no
+  Unity API; the window drains it from `Update()` on the main thread. There is a watchdog on both
+  the short steps and the copy.
+- The rules — validation, rsync arguments, the trailing-slash handling that decides whether rsync
+  copies a folder's *contents* or nests it one level deeper — are in
+  `SteamDeck/Logic/SteamDeckDeployPlan.cs` (asmdef `CR.Core.SteamDeckDeploy.Logic`, no engine
+  references) with NUnit tests beside them.
+
+macOS ships **openrsync** (`rsync 2.6.9 compatible`), not GNU rsync 3.x. The flags used here
+(`-a --partial --human-readable -v --delete -e`) are all accepted by it, and the executable bit
+survives — both verified against openrsync rather than assumed.
+
 ## Troubleshooting
 
 - **`CS0103: The name 'AotHelper' does not exist`** (in `com.unity.services.core` editor code,
@@ -170,11 +305,12 @@ copies are never quarantined, so the machine that built it never sees the error.
 - Windows and Linux builds from macOS are **Mono** scripting backend (IL2CPP cross-compile
   needs the target OS, or for Linux the `com.unity.toolchain.macos-arm64-linux-x86_64` sysroot
   package).
-- **Steam Deck**: build output is a folder (`CR.x86_64` + `CR_Data/`). To run: copy to the Deck
-  (desktop mode), `chmod +x CR.x86_64`, add as a non-Steam game (or push via Steam devkit tools)
-  and it runs in Game Mode. Deck is 1280×800 — the profile uses default fullscreen; UI Toolkit
-  panels scale, but verify HUD readability on-device. Gamepad input needs Input System bindings
-  beyond the current keyboard/mouse maps.
+- **Steam Deck**: build output is a folder (`CrystallineRift.x86_64` + `CrystallineRift_Data/`).
+  Use **CR > Build > Deploy to Steam Deck…** (above) rather than copying by hand. Deck is
+  1280×800 — the profile uses default fullscreen; UI Toolkit panels scale, but verify HUD
+  readability on-device. Gamepad input needs Input System bindings beyond the current
+  keyboard/mouse maps. Launching over SSH instead of through Steam gives **no Steam Input**, so
+  controller testing still has to go through Game Mode.
 - macOS native is arm64-only; the profile's architecture should stay Apple Silicon unless the
   osx-x64/universal dylib is added.
 - `applicationIdentifier` still carries the URP template default

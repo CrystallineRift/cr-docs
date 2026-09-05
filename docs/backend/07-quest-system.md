@@ -131,6 +131,44 @@ every SO in `ContentDefinitionProvider.quests` into local SQLite at world init. 
 migration rebuilds exactly the divergence M7012 exists to remove.
 :::
 
+### The onboarding quest has two ids in history — only one is live
+
+`M7008_SeedWelcomeToCRQuest` seeded an onboarding quest under `content_key = "quest_welcome_to_cr"`
+(underscore), id `F0E1D2C3-…`. That quest is **not** the one anything in Unity grants — it predates
+the `QuestDefinition` ScriptableObject rewrite of onboarding and was superseded by a hand-authored SO
+(`Assets/CR/Content/Defs/Quests/Starter Quest.asset`, `content_key = "quest-welcome-to-cr"`, hyphen,
+id `f1921cfd-26a0-4b70-b45f-0e28a58fb7e1`) that Content Studio pushed to Postgres directly — never
+through a migration. `M7008`'s row has since been manually removed from dev/prod Postgres (Studio
+deletes aren't migration-tracked, so `VersionInfo` still shows `M7008` as applied even though its row
+is gone).
+
+Because nothing ever baked the **live** quest, a fresh Postgres deployment (new environment, CI, a
+teammate's first `docker compose up`) had no server-side row for `quest-welcome-to-cr` at all — the
+identical id/content_key existed only in every player's local SQLite (synced from the SO at every
+world init), so `AcceptQuestAsync` online would 404/fail on the FK the moment anyone actually tried it
+there. `M7015_SeedLiveWelcomeToCRQuest` fixes this: it seeds the SAME id/content_key/objective/reward
+the SO carries, Postgres only (SQLite already gets this from the SO sync — seeding it there too would
+recreate the exact divergence M7012 removed), guarded so a Content Studio push that already fully
+authored the template (parent row **and** its own objective/reward children) is left completely
+alone — the guard checks "does this template have any children yet", not just "does a child with my
+own hardcoded id exist", so it never bolts a duplicate objective/reward onto an already-authored
+template. Covered by `WelcomeQuestSeedPostgresTests` / `WelcomeQuestSeedGuardPostgresTests` in
+`Convenience/CR.Data.Migrations.Test`.
+
+:::note
+Investigating this also surfaced that `quest_objective_template` / `quest_reward_template` carry
+**eight duplicate rows** each for the live `quest-welcome-to-cr` template in dev Postgres — repeated
+Content Studio pushes insert new child rows instead of upserting against existing ones (unlike the
+parent `quest_template` row, which IS matched by `content_key`). This is a separate, still-open bug in
+the Content Studio push path (`PUT /api/v1/quests/templates/bulk` → `UpsertTemplateWithChildrenAsync`,
+step 4/6 in the walkthrough above soft-deletes *all* existing children before re-inserting, which
+should be idempotent — the duplicates predate that soft-delete-then-insert design and were never
+cleaned up). Not fixed here: live `quest_objective_progress`/`quest_instance` rows for existing
+trainers may reference specific one of the eight objective/reward ids, so cleanup needs its own
+FK-safe migration. Flagging for a follow-up rather than touching production data as a side effect of
+this fix.
+:::
+
 ## How to Define a New Quest (Step-by-Step)
 
 ### Step 1: Create the migration
@@ -228,7 +266,7 @@ In the Unity editor, right-click in the Project window and select **Create → C
 | `objectives[0].description` | `"Win 3 battles"` |
 | `objectives[0].targetCount` | 3 |
 
-The SO is the Unity-side source of truth for display data. The `content_key` must match the database row exactly. Use the **Sync to Backend** button in the inspector to push the template to the server via `PUT /api/v1/quests/templates/bulk` rather than writing a separate migration for the template row — the migration is only needed for seed data in environments without the editor.
+The SO is the Unity-side source of truth for display data. The `content_key` must match the database row exactly. Push the template to the server with **Content Studio → Quests → ⬆ Push All** (`PUT /api/v1/quests/templates/bulk`) rather than writing a separate migration for the template row — the migration is only needed for seed data in environments without the editor.
 
 ### Step 3: Add a requirement (optional)
 
@@ -317,6 +355,77 @@ Read surface used by the player menu's **Quests** tab (`Assets/CR/UI/Quests/Ques
 
 `QuestManager` also exposes `AccountId`, `TrainerId`, and `HasSession` so a UI can decline to load
 before world init has run rather than throwing out of `AssertSession`.
+
+For code driven by gameplay events that can fire *before* world init finishes, `QuestManager.WhenReady`
+is a `Task` that completes when `LoadActiveQuests` seeds the manager at the end of
+`QuestWorldBehaviour.InitializeAsync`. `QuestGranterBehaviour` awaits it (120 s timeout) before
+resolving a quest's template: its `OnTrainerSelected` trigger fires at character select, but the local
+`quest_template` tables are only synced during the world bootstrap that follows — an ungated grant
+looked up the template too early, found nothing, and the quest (and its rewards, e.g. the welcome
+quest's starter creature) was silently never accepted.
+
+**`WhenReady` is per-session, not a one-shot flag.** It used to be a bare `TaskCompletionSource` that
+was only ever completed once — which protected exactly the *first* trainer selected in a process, and
+nothing after it. Every trainer selected later in the same run saw `WhenReady` already `IsCompleted`
+(stale, left over from the previous trainer's session) and skipped the wait entirely, racing
+`QuestWorldBehaviour.InitializeAsync` for its own session. Symptom: switching from offline play to a
+second/subsequent online trainer silently dropped the auto-granted "Welcome To CR" quest (and its
+creature reward) — no error, no server request, just `[QuestGranterBehaviour] No template found for
+contentKey='quest-welcome-to-cr'` in the log, timestamped well before that trainer's own
+`QuestWorldBehaviour.InitializeAsync` had even started. Fixed by extracting the gate into
+`QuestSessionReadyGate` (`Assets/CR/Quests/Manager/Logic/QuestSessionReadyGate.cs`, engine-free,
+unit tested) and adding `QuestManager.BeginSession()`, which resets the gate to a fresh, incomplete
+state whenever it's already signalled ready. `CharacterSelectController.SelectAsync` calls
+`BeginSession()` as the very first statement — before `SetTrainerAsync`, before `EnterOverworld`,
+before the `OnTrainerSelected` event that `QuestGranterBehaviour` reacts to — so no later trainer
+selection can observe a stale gate.
+
+### "New quest" toast and dedup
+
+`QuestManager.OnQuestGranted` fires the first time this session becomes aware of a quest instance
+that was not already active for the trainer when the session started — regardless of how it became
+active:
+
+- auto-granted on trainer select (`QuestGranterBehaviour` → `AcceptQuestAsync`)
+- accepted from a dialogue node (`QuestDialogueBridge.HandleQuestAccepted` → `AcceptQuestAsync`)
+- discovered purely server-side on a later sync (`RefreshActiveQuestsAsync`, e.g. opening the
+  Quests tab after the server granted something the client never requested)
+
+Dedup is `QuestToastPolicy` (`Assets/CR/Quests/Manager/Logic/QuestToastPolicy.cs`, engine-free, unit
+tested): `LoadActiveQuests` establishes a baseline of the trainer's already-active instance ids
+*before* completing the ready gate, so a quest re-observed on every subsequent
+`RefreshActiveQuestsAsync` call (the Quests tab reloads every time it's opened — see
+`PlayerMenuWindow.LoadTab`) toasts at most once per instance id, ever, for the life of the process.
+`AchievementToastPresenter` (despite the name — see `docs/backend/15-achievements.md`) subscribes to
+`OnQuestGranted` and shows `"New quest: {name}"` through the same toast queue as achievement unlocks
+and `WorldToast`. The quest journal (`QuestJournalView`) needs no separate live-update wiring for
+this — `PlayerMenuWindow` already reloads every tab's data on every open/tab-switch, so a newly
+granted quest is picked up the next time the Quests tab renders.
+
+### Authored template ids are authoritative
+
+A `QuestDefinition` SO's `id` is the content GUID mirrored by the server's `quest_template` row.
+`LocalQuestTemplateSyncClient` passes it through, and `UpsertTemplateWithChildrenAsync` honors it:
+a fresh insert uses the authored id, and an existing row born under a minted id is **re-keyed** to
+the authored id (children, cross-quest `quest_requirement.reference_id` references, and — where the
+table exists in the same database — `quest_instance` rows all follow; no FK constraints reference
+`quest_template`, so ordering is free and the operation is idempotent). Without this, online accept
+resolved the template from the local DB and sent the server a minted id it had never seen — a
+400 Bad Request and a quest that never started. An empty caller id keeps the old
+keep-existing/mint-new behavior.
+
+### Quest endpoints are token-authoritative for the account
+
+Every trainer-facing quest handler derives the account from the Bearer token
+(`HttpContext.GetAccountId()`), never from the client-supplied accountId (the body/query fields
+remain for wire compatibility but are ignored). A client carrying a stale stored account id —
+seen live after a server reset — used to write quest instances under an account that no longer
+existed, splitting quest state from the trainer ("no quests, no creatures"). The auth responses
+(`/auth/game`, `/auth/basic`, `/auth/oauth`) now return `accountId`, and the Unity client
+overwrites its stored account id from that value on every successful authentication
+(`GameAuthRepository.PersistAccountTokenLocally`). Pinned by
+`CR.Api.IntegrationTests.QuestIdentityHttpTests` (bogus body accountId must not be persisted;
+auth must echo the account id).
 
 ### Why those two reads do not branch on connectivity
 
@@ -528,6 +637,7 @@ All quest endpoints are prefixed `/api/v1/quests`.
 | `POST` | `/api/v1/quests/progress` | Record a progress event against active quests |
 | `POST` | `/api/v1/quests/claim` | Claim rewards for a completed quest |
 | `PUT` | `/api/v1/quests/templates/bulk` | Bulk create-or-update quest templates by `content_key` (Content Studio sync) |
+| `GET` | `/api/v1/quests/templates/by-content-key/{contentKey}` | One template with objectives, rewards and requirements; 404 on unknown key. The Unity `QuestTemplateOnlineOfflineRepository` calls this only when a `content_key` misses the local `quest_template` cache, then upserts the result locally |
 
 ### Query parameters (GET endpoints)
 
@@ -686,12 +796,34 @@ A `400 Bad Request` is returned if the request body is empty or any entry has a 
 | `Currency` (1) | `content_key` of the currency item in the `item` table | Looks up the item by `IItemDomainService.GetItemByContentKeyAsync`, then calls `ITrainerInventoryDomainService.AddItemAsync(trainerId, item.Id, quantity)` |
 | `Item` (2) | `content_key` of the item in the `item` table | Same as Currency — both reward types resolve to inventory items |
 | `Creature` (3) | `content_key` of a global spawner template | Looks up the spawner via `ISpawnerRepository.GetSpawnerTemplateByContentKeyAsync`, then calls `ICreatureSpawnDomainService.SpawnCreaturesAsync(spawner.Id, new SpawnRequest { TrainerId = trainerId, RequestedQuantity = quantity })` |
+| `Ability` (4) | `content_key` of a single ability, or `null` for every ability this quest gates | Unlocks quest-gated ability progression entries on the trainer's creatures — see below |
+
+### Ability rewards (quest-gated ability unlocks)
+
+An `Ability` reward does not hand a specific move to a specific creature. It opens the gate on
+`ability_progression_set_entry` rows whose `unlock_quest_content_key` names the quest being claimed,
+then teaches every ability the trainer's creatures have already become eligible for. See
+[Creature Generation → Quest-gated abilities](04-creature-generation.md#quest-gated-abilities) for
+the schema and the learning rules.
+
+The trigger chain at claim time:
+
+1. `ClaimRewardsAsync` reads the quest template once (before the reward loop) to get its `content_key`.
+2. `GrantRewardAsync` builds `new RewardGrant(RewardType.Ability, quantity, reward.ReferenceId, questContentKey)`.
+   `SourceKey` carries the quest's content key; `ReferenceKey` (from `reward.reference_id`) optionally
+   narrows the grant to a single ability's content key.
+3. `RewardGrantService` dispatches to
+   `ICreatureProgressionService.ApplyQuestUnlocksAsync(accountId, trainerId, questContentKey, abilityContentKey, ct)`.
+4. The returned creature ids are surfaced on `QuestClaimResult.AbilityUnlockedCreatureIds`, separate
+   from `SpawnedCreatureIds`. The client should re-read those creatures to show the new move set.
+
+A reward row whose quest template has no `content_key` is skipped with a warning — there would be
+nothing to match the progression entries against.
 
 ### Deferred reward types
 
 | `RewardType` | Status |
 |---|---|
-| `Ability` (4) | Logs an informational message; no action taken |
 | `Badge` (5) | Logs an informational message; no action taken |
 | `Title` (6) | Logs an informational message; no action taken |
 

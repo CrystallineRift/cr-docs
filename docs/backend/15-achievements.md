@@ -58,7 +58,7 @@ Seeded by `M7303SeedAchievements` (idempotent, dual-engine):
 ## Unity client
 
 - `QuestManager` re-broadcasts `OnAchievementUnlocked` from `QuestProgressResult.NewlyUnlocked` (and the claim result), so unlocks surface from the same event flow as quest completions.
-- `AchievementToastPresenter` shows a transient "Achievement Unlocked" toast on that event (auto-dismiss; no input-map gating).
+- `AchievementToastPresenter` shows a transient "Achievement Unlocked" toast on that event (auto-dismiss; no input-map gating). Despite the name it hosts every toast source in the game today: achievement unlocks, `WorldToast.Requested` (pickups), `QuestManager.OnQuestGranted` (the "New quest" toast — see `docs/backend/07-quest-system.md#new-quest-toast-and-dedup`), and `QuestManager.OnAbilitiesUnlocked` (the "New ability learned!" toast, raised from `QuestClaimResult.AbilityUnlockedCreatureIds` when a claim retro-actively grants a quest-gated ability — one toast per claim, not per creature; see `docs/unity/26-creature-storage.md`). All four share one queue/UIDocument/dismiss timer; the class stays under its original name because it is wired into the scene UI rig by GUID *and* class name and a rename would silently detach it without an Editor session.
 - `LocationTriggerBehaviour` is a scene-placed passive trigger (modeled on `PickupBehaviour`) that calls `QuestManager.OnLocationVisited(contentKey)` — the first consumer of that previously-unused helper — driving `LocationVisited` achievements.
 - The player menu's **Journal** tab (`Assets/CR/UI/Journal/JournalView.cs`) is the trophy list. It reads
   `IAchievementDomainService.GetAllDefinitionsAsync` (content) plus `GetUnlockedForTrainerAsync`

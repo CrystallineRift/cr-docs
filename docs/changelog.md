@@ -1,5 +1,918 @@
 # Changelog
 
+## 2026-09-05 — Every server error has a status, a body and player-facing text
+
+- **One exception family for the HTTP client.** `SimpleWebClient` now classifies every non-2xx
+  through `ServerResponseClassifier.ForStatus` into a `ServerRequestException` subclass
+  (400/401/402/403/404/409 typed, 5xx `InternalServerErrorException`, 429 and other codes the
+  base type) and wraps Best HTTP's transport failures — refused connection, DNS, TLS, timeout —
+  as `ServerUnreachableException` (`StatusCode == 0`). Each carries `StatusCode`, the raw `Body`,
+  `IsTransient`, and a `Message` that is always safe to show a player: the server's explanation
+  when it sent one, otherwise a per-status default ("Not found.", "Sign-in required.",
+  "Server error - try again.", "Can't reach the server."). Cancellation stays a plain
+  `TaskCanceledException`. The types moved from `CR.Core.Data.Client.Implementation` to the
+  engine-free `CR.Core.Data.Logic` assembly so the whole path is unit-tested (69 new tests).
+  `Message` is chosen by `ServerErrorMessage.ForPlayer`: a 5xx body (the server's own exception
+  text) is never shown, nor is the reason phrase, nor a body longer than a toast; 429 counts as
+  transient. The 401 re-auth decision lives in `AuthRetryPolicy` and is pinned by tests.
+- **`ServerErrorMessage` reads every body shape cr-api produces** — `message`, the market's
+  `errorMessage`, `error`, ProblemDetails `detail` before `title`, or a short bare string — for
+  all statuses, not only 400.
+- **`PlayerErrorText.For(Exception)`** is the one rule for what a player sees when an operation
+  fails: a server refusal shows its own wording, a cancel shows nothing, anything else shows
+  "Something went wrong." rather than an `Object reference not set…` line. Wired into the battle
+  bag (any server refusal reaches the battle log, not only a 400), giving / taking back held items
+  on the team screen, merchant purchases and character creation. In battle, a request that got no
+  answer is worded as "the item may still have been used" rather than as a refusal, and the bag is
+  refreshed. The editor sync helpers share one `DescribeFailure` (PUT/POST and DELETE) that
+  delegates to `ServerErrorMessage`, so an author sees the real reason for a 409 or 500; the
+  status-condition push now branches on the status code rather than on `message.Contains("404")`,
+  which the richer message would otherwise have satisfied for a 409 mentioning a 404 and rewritten
+  the asset's id.
+- **Version check** still degrades to offline on any server failure (the documented contract) but
+  logs transient and refused cases separately. No boot-time toast: boot is mode-neutral and an
+  "unreachable" line there would nag deliberately-offline players — the message surfaces at the
+  first online action instead.
+
+## 2026-09-05 — Battle follow-ups and a Review window for unpushed content
+
+- **Battle HUD drops the species portraits.** The creature is standing right there; the two
+  portrait slots, their USS and `RefreshPortraitAsync` are gone, and `BattleHUD.Init` no longer
+  takes the icon-resolving services it only used for them.
+- **"Beat Trainer Kael"** — the battle summary's subtitle names the trainer on a trainer win
+  (`BattleOutcomeSubtitle.For`, 6 tests). `BattleResult` carries `DefeatedNpcDisplayName`; the
+  coordinator stamps it from the request only when the player won.
+- **Items can target a specific creature in battle.** Picking a potion, revive or cure from the
+  bag now opens a target list (one row per team member, fainted ones included) instead of quietly
+  aiming at the active creature. Rows the item cannot be used on stay visible but disabled, and
+  pressing one says why. `TargetCandidateBuilder` is shared with the overworld bag;
+  `BattleItemTargeting.NeedsChoice` decides which items ask (5 tests).
+- **Real server refusals in the battle log.** A 400 now surfaces the server's `message` ("This
+  item cannot be used in battle.") instead of the bare "Bad Request" — `ServerErrorMessage.From`
+  (6 tests) in `SimpleWebClient`.
+- **Content Studio: Review.** A **Review** button beside **Push All** opens a window listing every
+  edit not yet pushed, grouped by content type, with **Diff** (field-by-field against the server's
+  copy), **Push** (one asset) and **Revert** (confirm-gated, takes the server's copy). Push stamps
+  are now kept per asset as well as per tab, so pushing two of five edited creatures leaves the
+  pill saying three remain. Pure logic (`ContentReviewRows`, `FieldDiff`, the 3-arg
+  `ContentPushStatus.Evaluate`) ships with 16 new tests.
+
+## 2026-09-04 — Items you can actually use on a creature, and icons everywhere
+
+- **Why:** the Bag could show items and refuse them, but there was almost nothing worth using. There
+  were no potions, no revives and no cures in the catalogue; two of the status conditions cure items
+  would target did not exist; the targeting UI answered "who?" *before* the player picked an item; and
+  every icon slot in the game was blank because five separate screens were loading a **prefab** key as
+  a `Sprite`.
+- **15 new consumables (`M6020SeedCreatureConsumables`):** Super / Hyper / Max Potion, Revive, Max
+  Revive, Full Heal, and nine single-condition cures (Antidote, Burn Salve, Awakening, Paralyze Heal,
+  Ice Melt, Clarity Tonic, Quickstep, Skyroot, Fortify Tonic). All `item_type = 0` (`Consumable`),
+  `usage_flags = 7`, `is_consumable`, ids exactly the authored `ItemDefinition` GUIDs. Enum values are
+  **cast from `ItemType`/`ItemEffectType`/`ItemUsageFlags`**, not typed — the `M6019` lesson.
+- **Two new statuses + the abilities that inflict them (`M12011SeedStatusHooks`):** `Asleep` (Speed −6,
+  2 turns) and `Paralyzed` (Speed −4, 3 turns), plus four `ability_status_conditions` links —
+  Spark and Thunder Fang → Paralyzed, Miasma and Energy Ball → Asleep. Without an inflictor the cure
+  items could only ever reach `CureStatusHandler`'s refusal. `Frozen` was **not** re-authored: M10018
+  already owns it as the primer half of the Shatter reaction, and a second seed would have been
+  swallowed by the idempotency clause with the authored id never existing. Cure matching is by name,
+  which is why Ice Melt still works.
+- **`icon_asset_key` on four tables (`M6021`, `M12012`):** `item`, `creature`, `abilities`,
+  `status_conditions`. Nullable, no default — a defaulted string would point every un-authored row at
+  an address that does not exist, and the UI could not tell "no icon" from "icon missing". `IconAssetKey`
+  on `BaseItem` / `BaseCreature` / `BaseAbility` / `BaseStatusCondition` and on both content-manifest
+  entry types; copy constructors carry it, or it would be silently dropped on every re-projection.
+- **Backfilled the four columns (`M6022`, `M12013`):** every seeded row landed null, because the seeds
+  ran before the column existed — so the whole game rendered placeholders and nothing reported an
+  error. Both migrations derive the key from what the importer already uses as the address
+  (`'icons/items/' || content_key`, `'icons/creatures/' || content_key`, `'icons/abilities/' || name`,
+  `'icons/status/' || name` — names verbatim, spaces and capitals included, because
+  `icons/abilities/Thunder Fang` is the address the catalog will hold). `WHERE icon_asset_key IS NULL`
+  only, so an authored key survives; `Down()` is a documented no-op on both. Packages rebuilt, floor
+  re-baked to schema version 12013 (23 items on `icons/items/%`, zero nulls left anywhere), live
+  Postgres migrated. **A seed numbered above 6022 / 12013 must set the column itself** — a backfill
+  runs once per database, and nothing guards that with a test.
+- **17 new content assets:** the 15 `ItemDefinition`s (`Assets/CR/Content/Defs/Items/item_*.asset`,
+  ids = the M6020 GUIDs verbatim, `displayNameKey = <contentKey>_display`,
+  `iconKey = icons/items/<contentKey>`) plus `Asleep.asset` and `Paralyzed.asset`
+  (`StatusConditionConfig`, `iconKey = icons/status/<name>`). The fifteen items were also registered on
+  `ContentDefinitionProvider.asset` — an unregistered `ItemDefinition` is an orphan the offline
+  `ScriptableObjectContentRegistry` never sees, so the authored key would have reached nothing offline.
+- **New endpoint:** `GET /api/v1/trainers/{trainerId}/creatures/{creatureId}/status-conditions` →
+  `CreatureStatusConditionView(StatusConditionId, Name, IconAssetKey, TurnsRemaining)`. No policy of
+  its own, which means `AddCrAuth`'s fallback `RequireAuthenticatedUser` applies — **401**, not
+  anonymous. 404 for a missing creature *and* for one that is not this trainer's, pinned separately so
+  a regression to `Ok(empty)` cannot tell the Bag a non-existent creature is healthy. A condition whose
+  definition was soft-deleted comes back as `Name = "Unknown"` rather than a raw GUID.
+- **Bag rework:** the six-slot party strip is gone (`CreatureSelectorStrip.cs` deleted), the item list
+  is a `ScrollView`, and targeting is asked for **after** the press by a modal `CreatureTargetPicker`.
+  Refused cards stay on screen, disabled, with the reason underneath — "why can't I use this here" is
+  the question a hidden card cannot answer. `BagItemPolicy.Decide` lost its `hasCreatureSelected`
+  parameter: `CanUse == ShowUse`, `CanEquip == ShowEquip`. New engine-free rules in `CR.UI.Logic`:
+  `ItemTargetIntent`, `ItemTargetRule`, `ItemUseResultText`, `TargetCandidate`, `TargetVerdict`,
+  `StatusBadge`, `SpeciesInfo` — `CR.UI.Logic.Tests` finished at 113 green, the full EditMode suite at
+  1432. Every use now toasts what actually happened, from the server's own `ItemUseResult`; before, a
+  refusal went to the Unity console and the player saw nothing.
+- **Icons everywhere:** `IconAddress.For(type, key)` = `icons/<type>/<key>` (`items`, `creatures`,
+  `abilities`, `status`), `IconGlyph.From(name)` for the two-letter placeholder, and `UiIcon.Apply` as
+  the **one** caller of `LoadAssetByKeyAsync<Sprite>` in the project. `icon` + `iconKey` on
+  `ItemDefinition` / `CreatureDefinition` / `AbilityConfig` / `StatusConditionConfig`, drawn by a shared
+  `IconSlotField` row that derives the key from the assigned sprite. Wired into the Bag, Team, Storage,
+  Journal, achievement toasts, Merchant Shop, Market, the battle bag and the battle HUD — where the
+  status badge stopped being a four-letter name truncation (which made "Confused" and "Confounded" the
+  same badge) and portraits appeared for the first time.
+- **The target picker's portraits are real.** The bag had been resolving each species purely to read
+  `.Name` and throwing the row away, so every card was built with `null` in the `IconKey` slot even
+  after the column existed — the one call that had the answer had already discarded it. New engine-free
+  `SpeciesInfo(Name, IconKey)` carries both off the one fetch, with `From` normalising a blank name to
+  *no entry* and a blank key to `null`. Picker status chips are now two shapes: a plain text `Label`
+  when the condition has no icon, a 14px sprite chip (tooltip = the name) when it does, decided by
+  `StatusBadge.HasIcon`.
+- **Online cache:** `ContentSyncWriter` writes `icon_asset_key` for `abilities` and `creature`
+  (column list, `VALUES` and `ON CONFLICT … DO UPDATE`, bound through `NullIfBlank` so `""` stores as
+  `NULL`). `item` is not synced by that class at all. `status_conditions` is **parked**: the ability
+  endpoint's nested `conditions` objects carry no id and no `iconAssetKey`, so there is nothing on the
+  wire to store — closing it is a cr-api change first.
+- **Authoring tools:** `cr_import_icons` copies pack sprites named in
+  `Assets/CR/Art/Icons/icon-map.json` into CR's own folders, imports them as 256px sprites, registers
+  them addressable and writes both halves of the slot; `cr_bake_portraits` renders each species'
+  addressable prefab to a 256px transparent portrait. The baker **refuses to write a blank render**
+  (one flat colour) and flags an opaque background under `notes: OPAQUE` — a silently blank PNG that
+  still reports "baked" is the failure worth catching. Three Asset Store packs back the map: 3000+ RPG
+  Item Icons (`217341`), Fantasy Status Icons (`265728`), 500 RPG Spell Icons (`200510`).
+- **Docs:** new `backend/19-item-effects.md` (item schema, the three enums, the handler roster and every
+  refusal sentence, the offline mirror's four real divergences, the seeded catalogue and status tables,
+  the new endpoint) and new `unity/29-ui-icons.md` (the address rule, `UiIcon`, the importer and baker,
+  the map format, the pack downloads, the backfill). `unity/10-player-menu-ui.md` rewritten around the
+  picker; `12-scriptable-objects`, `08-content-registry`, `07-battle-system`, `13-battle-bag-ui`
+  updated.
+- **The art landed:** the three packs were pulled through `cr_asset_download` / `cr_asset_import`
+  (Blink under `Assets/Blink/Art/Icons/`, Hippo's single 1024×768 status sheet sliced into
+  `Assets/FanyasyStatusIcons/Slices/<Name>.png`), `icon-map.json` filled for all 71 keys, and
+  `cr_import_icons` reported `copied 70, skipped 1, missing 0, not found 0, failed 0` — the skip is
+  `toy_bouncy_ball`, whose sprite is registered but has no `ItemDefinition` to write onto.
+  `cr_bake_portraits` wrote all 15 creature portraits with `notes 0`. 85 definitions now carry an
+  `iconKey` (37 abilities, 15 creatures, 22 items, 11 status) and `CRContent` holds 86 `icons/` entries.
+- **Portraits are rendered twice:** the first bake of every creature came back `OPAQUE` — under URP
+  `EndStaticPreview` drops the clear colour's alpha, so `Color.clear` arrived as a solid dark-grey
+  square. Instead of owning a `RenderTexture`, `CreaturePortraitBaker` now snapshots the creature over
+  black and over white and hands both to the new engine-free `PortraitMatte.Resolve`
+  (`Assets/CR/Core/Data/Logic/PortraitMatte.cs`): `alpha = 255 − avg(white − black)`, colour =
+  over-black un-premultiplied by that alpha. `PortraitMatteTests` (6) pin background → transparent,
+  covered → opaque with colour kept, half-covered edge → alpha 128, and buffer validation. The
+  blank/OPAQUE classification still runs on the matted output.
+- **Loose fits worth a second look:** `Weakened` (Arcanist12) and `Soaked` (Enchanter16) come from the
+  Blink spell set because Hippo's sheet has nothing for them, so they sit on square painted backgrounds
+  unlike the other nine status chips; `Grounded` → Bleeding is a stretch; `toy_bouncy_ball` → Toy9 is a
+  plush rabbit because Blink ships no ball.
+- **Parked, deliberately:** the status endpoint checks that the **creature in the path belongs to the
+  trainer in the path**, exactly as `ItemEndpoints`' held-item reads do — it does **not** yet check
+  that the caller's account owns that trainer. Binding caller → trainer is a follow-up in the auth
+  ladder and lands for this route and `POST /trainers/{id}/items/{id}/use` together. Also open:
+  `status_conditions.icon_asset_key` is not carried into the online cache (the ability endpoint's
+  nested `conditions` need an id and an `iconAssetKey` first); offline `BoostStatTemp` reports a boost
+  it never persists; offline `TriggerEvolution` evolves a creature the online handler refuses to
+  evolve; and offline item use writes neither the `items_used_*` stats nor the `UsedItem` quest event.
+- **Final-review fixes:** the heal potion regression is fixed — the target picker now opens whenever
+  the item's effect needs a creature (`ItemTargetIntent.NeedsCreature`: `Heal`, `Revive`, `CureStatus`,
+  `CureAll`), not only when the item declares `TargetsOwnTeam`, so `item_heal_potion_30` (flags 19, no
+  `TargetsOwnTeam`) no longer sends `UseItemAsync` a `Guid.Empty` target. Seven `StatusConditionConfig`
+  assets (`Burn`, `Confusion`, `Grounded`, `Poisoned`, `Slow`, `Soaked`, `Weakened`) had their ids
+  overwritten by a dev box's Postgres state; restored to the seeded ids, and
+  `AbilityEditorSyncHelper.AdoptServerConditionId` now warns loudly (`Debug.LogWarning`, naming both
+  ids) instead of logging quietly when it adopts a server id — the migrations own condition ids, not
+  a server. `BattleHUD` no longer injects `IGeneratedCreatureRepository` / `ICreatureRepository`
+  directly; it now resolves a creature's portrait through `IGeneratedCreatureDomainService` and
+  `ICreatureDomainService`, matching the rest of the feature.
+
+## 2026-09-04 — Bag offered Equip on consumables: seeded `item_type` was Equipment
+
+- **Symptom:** the Bag screen showed **Equip (Slot 1 / 2)** on a Radiant Crystal (and every other
+  capture crystal, the exp-share charm and the heal potion) and no **Use** on any of them.
+- **Root cause (data, not UI):** `ItemType.Consumable = 0`, `Equipment = 1`. The seeds in
+  `M6007SeedCaptureCrystals`, `M6009SeedExpShareItem` and `M6013SeedHealPotion` hard-coded
+  `item_type = 1` while also setting `is_consumable = true`, so every seeded consumable classified
+  as equipment. `BagItemPolicy` then did exactly what it was told. The authored `ItemDefinition` SO
+  has no item-type field and the Studio item push preserves the server's value, so the seed was the
+  only source of the wrong number. `M6017SeedBindstone` (a real held item, `1`) and
+  `M6018SeedBouncyBallToy` (`2`, key item) were already right.
+- **Fix:** the three seeds now write `0`; new **`M6019FixSeededConsumableItemType`** retypes those
+  six `content_key`s from `1` to `0` on already-migrated databases — Postgres via the AIO startup
+  migrator, and every Unity SQLite file (floor, persistent copy, item/inventory online caches) via
+  the domain migrator. ANSI `UPDATE`, idempotent (`AND item_type = 1`), key-scoped `Down()`.
+- **Tests:** `CR.Data.Migrations.Test/SeededItemTypeSqliteTests` (5) and
+  `CR.Items.Data.Postgres.Test/SeededItemTypeTests` (3) read the six keys back through the real
+  `ItemRepository` and assert the typed `ItemType`, plus a re-migrate path that flips rows to `1`,
+  drops the 6019 `VersionInfo` row and re-runs. Backend suite 39/39 green.
+- **Second (latent) bug in `BagItemPolicy.Decide`:** Use was suppressed by the `HeldByCreature`
+  *flag*, so a dual-use item — the heal potion is a consumable that is also holdable so it
+  auto-triggers in battle — would have lost its Use button the moment the data was corrected. Use
+  now follows kind (`!= Equipment`) + `UsableOverworld`; Equip follows kind-or-held-flag as before.
+  Three tests added to `BagItemPolicyTests` (dual-use gets both; capture crystal gets neither;
+  held-flag consumable without overworld use gets Equip only).
+- **Deploy notes:** `build-packages.sh` re-run (DLL verified to contain `M6019…`); AIO restarted and
+  `cr_dev` rows confirmed retyped. `Assets/StreamingAssets/CR/game-data.bytes` (the offline floor)
+  still carries `item_type = 1` until `cr_rebake_floor` runs — the persistent copy self-heals on
+  next boot regardless, because M6019 runs there.
+
+## 2026-09-04 — Live ops: player manager + marketplace moderation
+
+- **Why:** there was no way to answer "what does this player actually own?" or "take this listing
+  down" short of hand-written SQL against `cr_dev`. Live support needs to inspect a player and act
+  on the market from the Content Studio, server-authoritatively, with every action attributable.
+- **New `Moderation` domain (`cr-api/Moderation/`):** the ten-project layout mirroring `Market/`.
+  `M13001CreateAccountModerationTable` (`account_moderation`: one soft-deleted row per account,
+  `shadow_banned`, `shadow_ban_reason`, `shadow_ban_expires_at`, `notes`, `updated_by`) and
+  `M13002CreateAdminActionTable` (`admin_action`: **append-only**, `actor`, `kind`, nullable
+  account/trainer/listing targets, a `NOT NULL` `reason`, JSON `metadata`, indexed on
+  `(target_account_id, occurred_at)`). Online-only — deliberately not in the baked offline floor.
+  `IAccountModerationRepository` / `IAdminActionRepository` / `IPlayerSearchRepository` (Postgres +
+  SQLite). `IModerationService` (`AddScoped`) composes Auth, Trainer, Creature, Item and Market:
+  player search, a whole-account dossier, shadow ban / lift, currency adjust, item grant / remove,
+  and listing removal. A blank reason is refused **before** anything is written, and every
+  successful mutation writes exactly one `admin_action` row **in the same transaction** — an audit
+  row can never describe a change that rolled back, and a refusal never leaves one behind.
+- **Auth:** `POST /auth/service-token` now accepts a second pre-shared key, `AdminServiceKey`
+  (dev default `local-dev-admin-service-key`), issuing the `admin` scope; `EditorServiceKey` still
+  yields `content:write` only. Admin is checked first, both comparisons constant-time, and a
+  missing/blank key value disables that exchange entirely. `admin` implies `content:write` and
+  `player`; the reverse does not. `AdminActorName` (default `editor`) is the label stamped onto
+  audit rows as `{name}:{jti[..8]}`, minted from the validated JWT and never from the request.
+- **Market:** listings from an account under an *active* shadow ban are dropped from
+  `BrowseListingsAsync`, answer `NotFound` from `GetListingViewAsync`/`BuyListingAsync`, and are
+  untouched in `GetMyListingsAsync` — a banned seller keeps a market that looks normal to itself. A
+  lapsed ban needs no sweep to stop applying. New `TransactionKind.AdminRemoval`, plus
+  `AdminBrowseListingsAsync` (includes hidden rows, sets `MarketListingView.SellerShadowBanned`) and
+  `AdminRemoveListingAsync` (creature back to the seller's storage, listing `Cancelled`, market
+  transaction and audit row in one transaction).
+- **REST:** `AdminEndpoints`, group `/api/v1/admin`, every route `RequireAdmin` —
+  `GET /players?q=`, `GET /players/{accountId}`, `PUT|DELETE /players/{accountId}/shadow-ban`,
+  `POST /trainers/{trainerId}/currency`, `POST|DELETE /trainers/{trainerId}/items`,
+  `GET /market/listings`, `DELETE /market/listings/{id}`, `GET /actions`. Mutations answer with the
+  resulting state (moderation row, refreshed `TrainerDossier`, post-removal `MarketListingView`)
+  rather than an acknowledgement; refusals share one body,
+  `{ error: "<sentence>", reason: "<ModerationReason>" }`, with `NotFound` → 404,
+  `InvalidReason`/`InvalidQuantity` → 400 and everything else → 409.
+- **Unity:** Content Studio gains a **LIVE OPS** rail group with **Players** and **Marketplace**
+  tabs — search a player, inspect account, trainers, team, storage, backpack and live listings,
+  shadow-ban / lift, adjust currency, grant or remove items, and pull abusive listings (the creature
+  goes back to its seller). Every action opens a reason dialog and is audited; the tabs read the
+  audit trail back inline. The Auth tab gains an **Admin key** row (masked field, save, reset to
+  default, live Valid/Invalid/Unset chip) backed by `EditorAdminAuth`, and every failure path
+  renders a sentence with a route back to the Auth tab rather than a silent no-op.
+- **Docs:** new `backend/18-moderation.md`; `backend/17-creature-market.md` gains the hidden-seller
+  rule and the `AdminRemoval` kind; `backend/06-auth-and-accounts.md` documents both service keys.
+- **Tests:** Moderation Postgres repository + domain-service suites, Market service coverage of
+  hiding/admin browse/admin removal, `AdminServiceTokenHttpTests`, and `AdminEndpointsHttpTests` —
+  all ten routes table-driven for 401 (anonymous) and 403 (`content:write`), then the full operator
+  flow end-to-end including a ban that genuinely hides a listing from a second player's browse while
+  `/market/mine` still shows it. Unity EditMode suites for the pure live-ops logic
+  (`PlayerSearchQuery`, `ModerationBadge`, the validators, `AdminAuthGate`, `AdminActionText`,
+  `ListingModerationRow`, `JwtScopeReader`).
+- **Review pass (same day):** backend — admin item grants now allocate **1-based** backpack slots
+  like `ItemInventoryService` (the 0-based loop could exceed capacity by one), and grant/remove read
+  the backpack **inside** the transaction that writes it (new `GetItemsInTransactionAsync` /
+  `GetInventoriesInTransactionAsync` on the Trainer inventory repositories; the Unity
+  online/online-offline repositories gained the matching pass-throughs); dossiers read active
+  listings through the admin browse (the seller read clamped at 100 and truncated silently);
+  `GetShadowBannedAccountIdsAsync` is bounded (1000) on the hot browse path; player search escapes
+  LIKE wildcards; a shadow-ban expiry in the past → `InvalidArgument`, lifting an unknown account →
+  `NotFound`; `admin_action.id` lost its Postgres-only default and the ban index became
+  `(shadow_banned, account_id)`; the dev `AdminServiceKey` now lives only in the AIO
+  `appsettings.Development.json` — the Auth and BFF `config.yml` carry none. Unity — every LIVE OPS
+  job resolves the server address and admin key on the main thread (`AdminEndpointContext`) before
+  `Task.Run` (`Resources.Load` off-thread threw on a fresh session); `/actions` sends the required
+  `offset` and a failed audit read says so instead of "nothing removed"; cancelling a job from the
+  job bar releases the tab (`StudioJob.Finished`); the reason dialog answers from `delayCall`, not
+  inside its own layout; buttons capture the account they were pressed for; item storage rows are
+  read-only (the admin item routes are backpack-only). New pure-logic `AdminQueryString` and
+  `ModerationStamp` with tests.
+
+## 2026-09-04 — Elemental reactions + damage matrix are content: backend tables, offline cache sync, Content Studio tabs
+
+- **Why:** the three elemental reactions (Conduction, Flash Freeze, Shatter) lived in a hardcoded
+  `ElementalReactionTable`, and the type-matchup matrix (`elemental_damage`) could only be edited by
+  writing a migration. Designers need both in the Content Studio, pushed to the server, and pulled
+  into the offline cache like every other content domain.
+- **Backend (Creatures / Game):** `M12006CreateAndSeedElementalReaction` (new `elemental_reaction`
+  table, seeded with the shipped rules under their authored ids), `M12007FixRadiantSelfMultiplier`
+  (Radiant vs Radiant `-5.0` → `0.5`; matrix column widened to `DECIMAL(4,2)`),
+  `M12008RepointActiveElementalDamageVersion` (a dangling `active_elemental_damage_version` — `v1.0`
+  from M8002 vs the `v1.1` matrix from M9990 — now moves to `MAX(version)`; a pointer that names a
+  seeded version is left alone). `IElementalReactionRepository` (Postgres + SQLite),
+  `BattleConfigurationDomainService` grows reaction CRUD and matrix version copy / set-active /
+  delete, every multiplier clamped to `[0, 10]`. `BattleDomainService` loads reactions from the
+  repository **at battle start** and falls back to the static table only when the table is empty.
+- **REST:** `GET|PUT|DELETE /api/v1/elemental-reactions[/all|/{id}]`;
+  `GET /api/v1/elemental-damage?version=`, `GET /versions`, `PUT /versions/{version}`,
+  `POST /versions/{version}/copy?from=`, `PUT /active`, `DELETE /versions/{version}`.
+- **Unity runtime:** `ContentDomain.ElementalReactions` / `ElementalDamage` join
+  `ServerContentSyncService` (7 domains); `ContentSyncWriter` writes both into the offline content
+  database in one transaction per domain, and the active pointer only when the named version
+  actually arrived with cells. `IElementalReactionRepository` and the offline
+  `IBattleSystemVersionRepository` now read `game-data.bytes` (content, not player state).
+  `ServerContentSyncService` takes an optional `ITokenManager` so the sync GETs carry the session
+  token. The battle HUD prints the reaction's `LogLine` with a `{ReactionName}!` fallback.
+- **Content Studio:** two new tabs — **Reactions** (tab 16, `ElementalReactionDefinition` assets in
+  `Assets/CR/Content/Defs/Reactions/`, pull / push / delete) and **Elemental Damage** (tab 17,
+  `ElementalDamageMatrixConfig` grid with a version bar: dropdown, Copy as new version, Set Active,
+  Delete). Both export seed migrations (`Creatures/CR.Creatures.Data.Migration/M<next>SeedElementalReactions_<date>.cs`
+  / `…SeedElementalDamage_…`) through the shared `SeedMigrationFileWriter`, which the battle-mission
+  exporter now uses too. The old `BattleConfigurationListView` in the in-game data manager is gone.
+- **Tests:** SQLite + Postgres repository and migration suites (M12006–M12008 seed shape, idempotency,
+  Radiant fix, pointer repair and leave-alone), Unity content-sync writer + payload deserialization +
+  Zenject binding tests (76 edit-mode tests in `CR.Core.Tests`), and Studio mapping / seed-generator /
+  file-writer suites in `CR.Game.Battle.Logic.Tests`. Backend suite green.
+- **Tooling:** `unity cmd cr_edit_tests_start <assemblies>` / `cr_edit_tests_status` — an async
+  EditMode test runner for the Pipeline CLI; the stock `run_tests` wedges the Editor. Documented on
+  the ability-workbench page.
+- **Applied:** M12006–M12010 on dev Postgres (pointer `v1.1`); compat package rebuilt; floor
+  `game-data.bytes` at schema 12010 with the reactions seeded and the pointer at `v1.1`. M12009 /
+  M12010 are the first Studio-exported snapshots of both tables, so the Publish drift check now has
+  something to compare against.
+- **Verified live in the Editor:** Pull on both tabs (3 reaction assets created with their primer
+  SOs re-attached; matrix v1.1 updated, 100 cells, Radiant→Radiant 0.5), cell + reaction edits pushed
+  and read back from Postgres, Copy as new version (`v9.9`, 201) → Set Active → Pull created the
+  second asset flagged active, Delete of the active version refused with a clear message, Delete of
+  the inactive copy 204, version-format validation refused `v9.9-verify`, both seed exporters ran and
+  the exports compile and pass the migration suites. Unity EditMode: 1253/1253; backend: 1895/1895
+  before the exports, 157 migration + 34 Postgres + 659 Game-service tests re-run after.
+
+## 2026-09-03 — M12005 battle mission seed applied; build-packages now rebuilds Game.Data.Migration
+
+- **Why:** a fresh database seeded seven of the ten battle missions (`M10018` in Creatures ran before
+  the Game table existed). The Studio-exported `M12005SeedBattleMissions_20260903` cures that, but
+  shipping it to the client exposed a second bug: the compat package *copied* `CR.Game.Data.Migration.dll`
+  without ever *building* it, so the Unity-side migration DLL had a fresh mtime and Aug-31 contents.
+- **Applied:** `M12005` on dev Postgres (`VersionInfo` 12005, still ten rows — idempotent by authored id)
+  and in the baked floor (`game-data.bytes` schema 12005, ten missions). Fresh-database count is now
+  ten on both engines; the 7/10 caution is retired from the battle-persistence and battle-extensions
+  pages.
+- **Fixed:** `build-packages.sh` gains a `build_if_needed` entry for `Game/CR.Game.Data.Migration`
+  (it was the only `*.Data.Migration` project without one — nothing in the compat csproj graph pulls
+  it in). Verified by `strings` on the Release and package DLLs and by reflection inside the open
+  Editor (`CR.Game.Data.Migration.M12005SeedBattleMissions_20260903` loads from the package path);
+  compile gate clean. Verification rule recorded in the content-pipeline page: check migration DLLs
+  with `strings … | grep M<number>`, not mtimes.
+- **Not done:** Steam Deck / player builds under `cr-api-unity/Builds/` still carry the stale DLL
+  until rebuilt.
+
+## 2026-09-03 — Content Studio: battle mission editor tab (push/pull/delete + seed export)
+
+- **Why:** the ten battle missions were authorable only by writing a FluentMigrator class in cr-api,
+  rebuilding the compat packages and restarting the API. Backend CRUD landed the same day; this is
+  the half a designer touches. Without it the new `PUT` / `DELETE` routes had no caller.
+- **Content Studio → Battle Missions** (COMBAT group, tab 15): list rows with type · condition ·
+  ×threshold · same-target / Active / Invalid chips · reward ability, **+ New**, per-row **Delete**
+  (asset + `DELETE /api/v1/battle-missions/{id}`; the post-confirm half is its own
+  `DeleteBattleMissionConfirmed` so the destructive sequence can be exercised without the modal),
+  **⬆ Push All** (`PUT` per mission, duplicate content keys refused before sending, server 400/409
+  `message` shown on the offending row) and
+  **⬇ Pull** (`GET /all?includeInactive=true`, applied by id — which is how the seeded missions
+  become editable assets, since the project shipped with none).
+- **`BattleMissionDefinition`** SO (`Assets/CR/Content/Defs/BattleMissions/`) with the stable-id
+  `OnValidate` pattern, plus a custom inspector ordered Basics → Objective → Reward → Advanced. The
+  reward is an `AbilityConfig` reference; the raw id survives beside it so pulling from a server
+  whose reward ability has no local asset cannot blank the reward on the next push.
+- **One validation rule, not two.** `BattleMissionTemplateUpsertRequest` and
+  `BattleMissionTemplateValidation` ship to Unity in `CR.Game.Data.dll`, so the inspector strip, the
+  **Invalid** chip and the push pre-check all run *the server's own validator*. Mission-type and
+  reward-type dropdowns render from `BattleMissionTypes.All` / `BattleMissionRewardTypes.All`; the
+  condition dropdown switches between the project's `StatusConditionConfig` names and
+  `ElementalReactionTable.All`, and disappears for `KnockOut`, which ignores `condition_key`.
+- **The offline step, made explicit.** The baked floor comes from migration seeds only and Studio
+  does not write local SQLite, so a pushed mission does not exist for a disconnected player.
+  **⬇ Export Seed Migration** writes the authored set into
+  `cr-api/Game/CR.Game.Data.Migration/M<version>SeedBattleMissions_<yyyyMMdd>.cs` — authored ids,
+  dual-engine (`INSERT OR IGNORE` + `1`/`0` vs `ON CONFLICT DO NOTHING` + `true`/`false`), every
+  insert guarded on `WHERE NOT EXISTS (… content_key)`, and `Down()` matching **both** key and id so
+  a rollback cannot take rows an earlier migration seeded under the same key. The version is the
+  repo-wide maximum plus one, which also serves as the content-schema bump `GameDataAdopter` needs.
+- **Runtime untouched.** `GET /api/v1/battle-missions` (active only) still backs
+  `BattleMissionTemplateHttpSource` → `BattleMissionTemplateRoutedSource`, and neither source nor
+  `PlayerTeamView` caches, so an edited mission appears the next time the team screen is opened — no
+  restart, no `MissionsChanged` event needed. No hardcoded mission names exist anywhere: the tracker
+  matches on `MissionType` / `ConditionKey` from the row.
+- **Verified live in the Editor** against the AIO on `localhost:8080`: Pull created all ten SOs
+  under their seeded `b1550000-…` ids with every reward ability resolved to a local `AbilityConfig`;
+  a threshold edit round-tripped to Postgres and back; a blank name was refused with the server's
+  own `name is required.` (`curl` confirms the endpoint answers 400 with the same string); a second
+  asset claiming `mission_pyromaniac` drew `409: content_key 'mission_pyromaniac' is already used by
+  battle mission 'b1550000-…-0001'` from the server and was refused locally by Push All before any
+  request; delete removed the asset and soft-deleted the row, and reported the 404 rather than
+  claiming success when the row was never on the server; Export regenerated the seed migration
+  byte-identically (`IsSeedStale=false`). The ten seeded rows were left exactly as found.
+- **Tests:** `CR.Game.Battle.Logic` 126 → 164 (+38) — `BattleMissionSeedMigrationGeneratorTests`
+  (17: both engine branches, idempotency guard, id preserved and lowercased, quote/backslash
+  escaping, tightened `Down()`, stable ordering, blank optionals as `null`) and
+  `BattleMissionContentKeyTests` (21: the snake_case rule, and that a derived key always passes it).
+
+## 2026-09-03 — market window: advanced search on growth values
+
+- **Why:** the backend learned to filter listings on the seven growth-profile values the same day
+  (see the entry below); this is the player-facing half — without it the fourteen new query
+  parameters had no caller, and a buyer still could not tell a 150-attack-growth creature from a
+  70-attack-growth one before buying it.
+- **The panel:** a `▸ Advanced` / `▾ Advanced` toggle under the Browse filter bar opens
+  `market-advanced-panel` with seven min/max pairs — Exp growth (`FloatField`), then HP, Attack,
+  Defense, Sp. Atk, Sp. Def, Speed (`IntegerField`, 100 = baseline). `0` means "no bound", matching
+  the existing level/price fields. Bounds are applied by the same **Search** button, not per
+  keystroke, and go to the server (`minExpGrowth`, `minHpGrowth`, `minAtkGrowth`, `minDefGrowth`,
+  `minSpAtkGrowth`, `minSpDefGrowth`, `minSpdGrowth` and their `max` twins) — never as a post-filter
+  over the fetched page, which would silently hide matches on later pages.
+- **A Button, not a Foldout:** a focusable container swallows d-pad navigation, and
+  `Button.clicked` is the only click path a gamepad submit reaches. The panel's initial
+  `style="display: none;"` is the one deliberate inline style in the screen — the collapsed state
+  has to hold before any code runs.
+- **Two small honesty fixes:** `MarketBrowseFilter.Validate()` mirrors the server's `400` on
+  `min > max` and shows e.g. `Sp. Def growth min can't be higher than max.` in the status label
+  **without sending a request**; and a *collapsed* Advanced panel that is still filtering marks its
+  toggle (`market-advanced-toggle--active`), so nobody hunts for listings a bound they cannot see is
+  hiding. Panel open/closed state and typed bounds both survive a Search.
+- **Per-row growth line:** every Browse and My Listings row now carries
+  `Growth (Swift): HP 120 · Atk 150 · Def 80 · SpA 100 · SpD 100 · Spd 110 · Exp 100`
+  (`market-row-growth`, formatted by the pure `MarketGrowthSummary`). A listing that carries no
+  growth data at all formats to an empty string and the label is hidden, rather than drawing a
+  real-looking all-zero creature.
+- **Plumbing:** the fourteen bounds live once, in `MarketGrowthRanges` (engine-free
+  `CR.UI.Market.Logic`), shared by `MarketBrowseFilter` and `MarketBrowseQuery` — `ToQuery()` hands
+  out a snapshot, so editing the panel afterwards cannot mutate a query already in flight.
+  `MarketManager.BrowseAsync` gained a `MarketBrowseQuery` overload; the screen now passes the
+  filter whole instead of eight positional arguments.
+- **Tests:** `Assets/CR/UI/Market/Logic/Tests/` 47 → 71 NUnit cases (bound mapping, `HasAdvanced`,
+  `Validate`, the exact server parameter names, invariant float formatting under a `de-DE` culture,
+  and the summary formatter). All green; Unity compile gate clean.
+- **Docs:** `unity/28-creature-market.md` — new "Advanced search (growth values)" section;
+  `doc-sources.json` now also watches `Assets/CR/UI/Resources/Market*` (the UXML/USS the screen
+  actually loads were outside every glob).
+
+## 2026-09-03 — battle mission templates: CRUD endpoints for the Studio editor
+
+- **Why:** `battle_mission_template` had exactly one route — the game's active-only feed — so the
+  ten seeded missions could only be changed by writing a migration. Missions are content, and
+  content is authored in the Content Studio.
+- **cr-api:** `IBattleMissionTemplateRepository` gains `GetAllAsync(includeInactive)`,
+  `GetByIdAsync`, `GetByContentKeyAsync(contentKey, includeDeleted)`, `UpsertAsync` and
+  `SoftDeleteAsync`. Four new routes sit beside the existing feed, all behind
+  `AuthorizationPolicies.RequireContentWrite` — the same policy the ability, spawner and
+  ability-progression authoring routes use, satisfied by the token the Studio already gets from
+  `POST /auth/service-token`: `GET /api/v1/battle-missions/all?includeInactive=`,
+  `GET|PUT|DELETE /api/v1/battle-missions/{id:guid}`. `GET /api/v1/battle-missions` is untouched,
+  response shape included — Unity's `MissionDefinition` still deserializes it byte for byte.
+- **Shipped to Unity:** `BattleMissionTemplateUpsertRequest`, `BattleMissionTypes`,
+  `BattleMissionRewardTypes` and `BattleMissionTemplateValidation` all live in `CR.Game.Data`, which
+  build-packages.sh copies to Unity as `CR.Game.Data.dll` — so the editor's dropdowns and inline
+  validation are the server's own types, not a hand-rolled mirror that can drift.
+- **Semantics worth knowing:** the route id is authoritative and a body `id` is ignored. The
+  content-key uniqueness check runs *ignoring* `deleted`, so a key belongs to one id permanently:
+  re-creating a deleted mission means `PUT`ting its original id, which revives the row in place
+  rather than forking a second row under the same key. A different id holding the key is `409`.
+- **Documented but not fixed:** `M10018`'s three `ElementalReaction` missions are seeded from the
+  Creatures domain and guarded on `battle_mission_template` existing, but `Program.cs` migrates
+  Creatures before Game — so a genuinely fresh database gets seven missions, not ten. `cr_dev` has
+  all ten only because the table already existed when that migration first ran. Called out in both
+  affected doc pages; nothing counts on ten any more.
+- **Tests:** 12 SQLite repository + 27 validation (`CR.Game.Data.Test`), 7 Postgres repository
+  (`CR.Game.Data.Postgres.Test`), 26 endpoint handler (`CR.Game.Domain.Services.Test`), 10 HTTP
+  round-trip through the real AIO host and a Postgres testcontainer
+  (`CR.Api.IntegrationTests/BattleMissionTemplateHttpTests.cs`, covering anonymous `401`,
+  player-token `403`, and editor-token `PUT → GET /all → DELETE`). All four suites green in full,
+  no filter: 63 / 24 / 553 / 49.
+
+## 2026-09-03 — market advanced search on growth-profile values
+
+- **Why:** two creatures of the same species and level differ only in the growth profile they level
+  with, and the marketplace gave a buyer no way to search on it. Filtering on the *profile* would
+  have been the wrong shape — a buyer wants "attack growth ≥ 150", and every profile clearing that
+  bar is an equally good match — so the search is on the seven **values**, never on profile identity
+  or name.
+- **cr-api:** `MarketListingView` gains `GrowthProfileName` (display only) plus `ExperienceGrowth`
+  (float) and `HitPointsGrowth`/`AttackGrowth`/`DefenseGrowth`/`SpecialAttackGrowth`/
+  `SpecialDefenseGrowth`/`SpeedGrowth` (int). New `MarketGrowthFilter` (`CR.Market.Model.REST`)
+  holds fourteen nullable min/max bounds; `MarketListingFilter` inherits it, so the service hands
+  the filter straight to the repository with no mapping step.
+  `GET /api/v1/market/listings` takes `minExpGrowth`/`maxExpGrowth` (float) and
+  `min|max` × `HpGrowth`, `AtkGrowth`, `DefGrowth`, `SpAtkGrowth`, `SpDefGrowth`, `SpdGrowth` (int).
+  An inverted range now returns `400 { message }` naming both params — that rule also retro-fits
+  `minLevel`/`maxLevel` and `minPrice`/`maxPrice`, which previously just returned an empty list.
+- **Two traps closed:** the growth join is a `LEFT JOIN` so a creature whose `growth_profile_id`
+  resolves to nothing stays browsable (values `COALESCE`d to 0, name null) instead of vanishing from
+  the marketplace — though it correctly drops out of any bounded search, since its growth is unknown
+  rather than zero. And `experience_growth` is `CAST(… AS REAL)` in the SELECT: Dapper plans a whole
+  result set from its first row, so a SQLite NUMERIC column whose first row holds a whole number
+  comes back `long` and breaks every later row.
+- **Tests:** `CR.Market.Data.Postgres.Test` 16 → 18, `CR.Market.Domain.Services.Test` 16 → 19,
+  `MarketHttpTests` 4 → 6. All green.
+- **Docs:** `backend/17-creature-market.md` — new "Advanced search — growth values" section.
+
+## 2026-09-03 — market element search matches ordinal-stored elements
+
+- **Bug:** browsing the market by element returned nothing for real data, and rows showed the
+  element as a number (`8 • Lv 5`). `creature.element_type` is a varchar that stores the enum
+  *name* on hand-written seeds (`'Fire'`) but the enum *ordinal* (`'8'`) on everything saved through
+  the Creatures repository or a Studio push; the market's SQL compared the client's `Poison` against
+  `'8'`.
+- **Fix (cr-api, `CR.Market.Data`):** new `CreatureElementText` resolves a filter to both forms;
+  `GetActiveListingsAsync`/`GetActiveListingViewsAsync` match
+  `UPPER(element_type) = UPPER(@name) OR element_type = @ordinal`; every view read
+  (`GetActiveListingViewsAsync`, `GetListingViewsBySellerAsync`, `GetListingViewAsync`) maps
+  `ElementType` to the display name. `CR.Market.Data` now references `CR.Game.Model` for the enum.
+- **Tests:** `MarketRepositoryTests` +1 (ordinal-stored species found by `poison` and `8`, not by
+  `Fire`; `Plasma` matches nothing; all three view reads return `"Poison"`) — 16/16.
+- No client change; the Unity dropdown already sends the enum name.
+
+## 2026-09-03 — listing cap, market rules endpoint and filter labels
+
+**A trainer could pile up an unbounded number of active listings** — nothing capped how many
+creatures one account could have on the market at once. `MarketService.ListCreatureAsync` now
+counts the acting account's Active listings before allowing a new one and refuses with a new
+`ListingLimitReached` reason (409) when the count is already at the configured limit. The limit is
+config-driven (`MarketMaxActiveListings`, default 5) rather than hard-coded, and the "is this
+already my listing" ownership check that guards List/Cancel is account-level (an account's *any*
+trainer counts against the same cap and can cancel any of the account's own listings), matching how
+the rest of the market already scopes ownership.
+
+A new `GET /api/v1/market/rules` endpoint (`RequirePlayer` auth) returns
+`CR.Market.Model.REST.MarketRules { MaxActiveListings, ListingFeeBase, ListingFeePercent }` so the
+client can read the cap and fee formula instead of hard-coding them — it ships in the
+`CR.Market.Model.REST` compat DLL alongside the other market DTOs.
+
+Client side:
+
+- **Filter bar labels**: `MarketScreen.uxml`'s Browse filters (species/element/min-max
+  level/max price/sort) had no labels — a new player had no way to tell what an empty text field or
+  a `0` searched on. Each control is now wrapped in a `market-filter-group` with a
+  `market-filter-label` above it; control names are unchanged so `MarketScreenHandler`'s lookups
+  still resolve.
+- **Rules fetch**: `IMarketClient.GetRulesAsync` / `MarketClientUnityHttp.GetRulesAsync` (GET
+  `/api/v1/market/rules`) and a `MarketManager.GetRulesAsync` wrapper (same `IsAvailable`-gate,
+  exception-to-`MarketResult` pattern as every other market call). `MarketScreenHandler.Open` fetches
+  it once per open, holds it in `_marketRules`, and falls back to defaults (max 5, fee 10 + 5%) with
+  a logged warning if the fetch fails — the market still opens.
+- **Listings N/M**: the Sell tab now shows a `market-sell-listing-count` label next to "Your
+  Creatures" — the account's current Active-listing count over the cap, reusing the same `/mine`
+  load the My Listings tab already does. `SellEligibility.Evaluate` gained `activeListings` and
+  `maxListings` parameters and refuses with "You've reached your listing limit ({maxListings})."
+  right after the last-team-member check and before the price/afford checks, disabling the List
+  button the same way an untradable or last-team candidate already does.
+- **`MarketFee.Compute`** now takes `feeBase`/`feePercent` explicitly (sourced from the fetched
+  `MarketRules`, `MarketFee.DefaultFeeBase`/`DefaultFeePercent` as the fallback) instead of hard-coded
+  constants, so the fee preview matches the server even if an environment overrides the config.
+- **`MarketErrorText`**'s List/409 copy now mentions the cap: "...it may be untradable, already
+  listed, your last team creature, or you've hit your listing limit."
+- 8 new/changed NUnit cases (listing-cap allowed/refused/ordering-vs-gold for `SellEligibility`,
+  a non-default-rules case for `MarketFee`, the updated 409 copy for `MarketErrorText`) — 47 total
+  in `Assets/CR/UI/Market/Logic/Tests/`, all passing via both the throwaway `dotnet test` project and
+  Unity EditMode.
+
+## 2026-09-03 — sell team creatures on the market
+
+**The Sell tab said "Nothing in storage to sell." even with a full roster.** Every one of the
+player's creatures was on the active team, and the Market window only ever sourced Sell candidates
+from `ICreatureInventoryService.GetStorageAsync` — `SellEligibility` also hard-refused anything
+`isInParty`. A player whose whole roster is on the team had nothing to sell.
+
+Both repos changed together:
+
+- **cr-api**: `MarketService` now moves the inventory row itself on list/buy/cancel, so a team
+  creature can be listed directly (no "swap to storage first" step). Listing 409s when it would
+  leave the trainer with zero team creatures (last-team-member rule); buying 409s when the buyer's
+  storage is full instead of silently dropping the creature.
+- **cr-api-unity**: `MarketScreenHandler.LoadSellCandidatesAsync` now reads `GetTeamAsync` first,
+  then `GetStorageAsync`, into one candidate list — team creatures show a "Team" badge.
+  `SellEligibility.Evaluate` takes `(isOnTeam, teamCount)` instead of `isInParty` and refuses only
+  the trainer's last team member. `MarketErrorText`'s List/Buy 409 copy and the Sell tab's empty
+  state/header text ("Your Creatures" / "No creatures to sell.") were updated to match.
+
+## 2026-09-03 — quest-gated abilities in the storage data file
+
+**A creature's Data File now lists its whole progression roster, not just its four current moves.**
+`AbilityRosterBuilder` (`Assets/CR/UI/Storage/Logic/`, engine-free, 19 new tests) sorts every entry
+of the creature's `ability_progression_set` into learned (`name` + the level it came from),
+level-locked (`name` + `Lv N`) and quest-locked (`???` + `Complete: <quest name>`). The masking is
+the builder's call, not the view's — `PlayerStorageView` picks a USS class and prints two strings.
+
+The rules follow the backend's `AbilityUnlockGate` exactly, because a roster that disagreed with the
+server would either promise a move the player cannot reach or hide one they have already earned: a
+blank gate is not a gate, an unreadable completion set fails closed, keys compare trimmed and
+case-insensitively, an already-known ability beats its own gate, and an ungated route to an ability
+defeats its gated duplicate. Rows are cached per creature and computed once per open — `Redraw()`
+runs on every chip and page change, so a repository call reached from the layout path would be a
+query per repaint. A roster that *throws* is cached too, so a failure shows an empty block once
+rather than retrying forever.
+
+**Two local SQLite writers were silently dropping the gate.**
+`LocalAbilityLibrarySyncClient.SyncProgressionSetAsync` (offline push) and
+`ContentSyncWriter.WriteProgressionSetsAsync` (online content sync) both reconcile progression
+entries by `(level, ability_slot)` and write only what they can see differs — and neither selected
+`unlock_quest_content_key`. A changed gate therefore compared equal, the writer reported "same
+ability at same slot/level — no-op", and the ability unlocked offline at its level with no quest
+completed. Both now SELECT/INSERT/UPDATE the column and treat a changed gate as a change. An unset
+gate is written as `NULL`, never `""`: readers test for null to mean "not gated", and an empty
+string is a gate naming a quest that cannot exist.
+
+Authoring: `AbilityProgressionSetConfig` entries gained `unlockQuestContentKey`, drawn as a
+**dropdown of authored `QuestDefinition` content keys** (`ContentPicker.Quests()`) rather than a text
+box — the server matches the key exactly, and a typo produces an entry that reads as authored and
+can never unlock. The key rides both push payloads (`AbilityEditorSyncHelper.SyncProgressionSet`,
+`AbilityLibrarySyncHttpClient`), because `/ability-progression/sets/sync` rewrites the row from the
+payload: an omitted gate is an *erased* gate, not an unchanged one.
+
+Finally, `QuestManager.ClaimRewardsAsync` re-broadcasts
+`QuestClaimResult.AbilityUnlockedCreatureIds` as `OnAbilitiesUnlocked`, and
+`AchievementToastPresenter` shows **"New ability learned!"** — one toast per claim, not per creature.
+Without it a retroactive unlock is completely silent: the move just appears in a menu the player may
+not open for an hour.
+
+See [Creature Storage & Team Exchange](unity/26-creature-storage.md) and
+[Creature Generation → Quest-gated abilities](backend/04-creature-generation.md#quest-gated-abilities).
+
+## 2026-09-03 — creature market window
+
+**The marketplace is now a screen, not just an API.** `MarketScreenHandler`
+(`Assets/CR/UI/Market/`) opens on interacting with a market broker NPC (`NpcMarketBehaviour`,
+checked before the merchant branch in `NpcInteractionBehaviour`) and gives Browse/Sell/My Listings
+over `MarketListingView` — Browse and My Listings need no per-row creature lookup, since the view
+already joins species/level/seller.
+
+Two client-side gaps this closed, both invisible until buying/listing was actually wired up:
+
+- `MarketClientUnityHttp` used to deserialize the List/Buy response body straight into
+  `MarketListing`. The server actually answers those with `MarketOperationResult`
+  (`{ success, reason, listing, transaction }`) — a domain-services-internal type deliberately not
+  shipped to Unity — so every field silently came back empty. A new internal wire DTO,
+  `MarketOperationResponse`, unwraps `Listing` without recreating the domain result type.
+- `SimpleWebClient.CheckForResponseForErrors` had no `case 402`, so the market's
+  `InsufficientFunds` refusal (the only 402 anywhere in the client) fell into `default` and came
+  back as an indistinguishable `InternalServerErrorException`. It now throws a new
+  `PaymentRequiredException`, alongside 409's `ConflictException`.
+
+Business-rule refusals are read from the HTTP status code (402/403/409/404), not a re-parsed
+reason enum — `CR.UI.Market.Logic.MarketErrorText` maps `(operation, statusCode)` to player text,
+since the same status means a different thing depending which call produced it (a 403 on Buy is
+"that's your own listing"; a 403 on List is "you don't own that creature").
+
+A new engine-free asmdef, `CR.UI.Market.Logic`, holds the testable rules: `MarketFee` (mirrors the
+server's `feeBase + round(price * feePercent, AwayFromZero)` fee formula exactly, including the
+rounding mode), `MarketBrowseFilter` (server-side element/level/price via `ToQuery()`, client-side
+species-text `Matches()` — the server's `species` filter is an exact base-creature-id match, not a
+name search), `MarketListingSorter`, and `SellEligibility` (tradable → in-party → afford, the same
+order the server checks). 36 NUnit tests cover fee rounding at exact `.5` boundaries, filtering,
+sorting, eligibility, and the error-text matrix.
+
+The market has no offline counterpart anywhere in the stack (a cached listing is one that could be
+sold twice): `NpcInteractionBehaviour`'s market branch checks `MarketManager.IsAvailable` first and
+shows a `WorldToast` ("The market is closed while offline.") instead of opening the screen at all.
+
+A market broker NPC (`npc_market_broker`, `CR_NPC_Merchant` prefab with `NpcMerchantBehaviour`
+swapped for `NpcMarketBehaviour`) is placed in `Village.unity`, 4m from the area's existing
+merchant. No backend seed migration was needed — `NpcWorldBehaviour.InitializeAsync` upserts the
+`npcs` row by content key the first time it's seen, the same mechanism every scene-placed NPC uses.
+
+See [Creature Market Window](unity/28-creature-market.md).
+
+## 2026-09-03 — Content Studio background jobs, and NPC placements across every scene
+
+**"Where is this NPC placed?" is now a question about the project, not about what happens to be
+open.** Content Studio and `NpcDefinitionEditor` answered it with `FindObjectsByType`, which sees
+only loaded scenes — so an NPC placed in `Village` read as *unplaced* while the author had `Meadow`
+open, and the readiness checklist said so. `NpcSceneScanJob` now reads every `.unity` under
+`Assets/` (build-settings scenes first) plus every `.prefab` on a worker thread. No scene is opened
+and nothing is dirtied: scene files are text, and the placement, its key and its object name are all
+in there.
+
+Prefabs are scanned first, because the area scenes place NPCs as prefab *instances* and the scene
+alone does not identify them. `NpcPrefabClosure` runs to a fixed point over `m_SourcePrefab`, so a
+variant of an NPC prefab — or a set-dressing prefab with an NPC child — counts too and inherits the
+base's key unless it names its own. `NpcScenePlacementParser` recognises three shapes and the UI says
+which, because they are worth different amounts of trust: a component written straight into the
+scene, a prefab instance (key from the scene's override or the prefab's), and a referenced prefab
+with no overrides at all, which is inferred.
+
+Speed comes from not reading what cannot matter. `NpcScanFileReader` makes one pass through a reused
+character buffer and never materialises a line — the 91 MB scene in this project would otherwise
+cost a million short-lived strings to answer a question that is almost always "no" — and only files
+that mention an NPC are then parsed. Results are cached per file in `Library/CRStudioNpcScenes.json`
+and reused while a file's timestamp *and* length are unchanged. Two fingerprints guard the cache: one
+over every prefab file's state, which skips the whole prefab pass while nothing changed; one over the
+*resolved* prefab answer, because an NPC prefab whose key was edited changes what every unmodified
+instance of it means without any scene file being touched. Measured here (207 scenes, 6164 prefabs,
+~575 MB of YAML): ~15 s cold in the background, under 3 s incremental.
+
+**Underneath it is a job system, and the rest of the window now uses it too.** `StudioJobRunner`
+(`[InitializeOnLoad]`) pumps one job at a time on `EditorApplication.update` within an 8 ms budget.
+A job is an iterator whose slices always resume on the main thread, so a slice may use the
+AssetDatabase freely; `yield return someTask` parks it until that `Task` completes, which is how work
+needing no Unity API leaves the main thread entirely. One at a time and FIFO is deliberate:
+`_allContentTabs` is a dependency order, so overlapping pushes would corrupt content rather than
+merely confuse. Progress, status and cancellation live in the engine-free `StudioJobTracker` and
+`StudioJobQueue` (22 tests); a `cr-jobbar` strip above the status bar shows the bar, the status line,
+the queue depth and **Stop**; every status transition is also a `[Studio]` console line, because the
+bar is only true while somebody is watching it.
+
+Three things moved onto it. **Push** built its plan with no network at all — so the total is known
+before the first request — then sends one definition per tick; stopping is a real outcome, and the
+tab is deliberately *not* stamped as pushed. It used to be one blocking HTTP request per definition
+inside the button click: a few hundred definitions meant the better part of a minute frozen, silent
+and unstoppable. **Pull** stays a single step but names the type before the wait. And the **registry
+sweep + push comparison** — around 200 ms, previously paid inside whichever draw found the cache
+expired — is now stepped one content type per slice, publishing into a pending slot that the draw
+code adopts *only on a Layout pass*, the same discipline (and for the same reason) as
+`EditorMemoPolicy`. `NpcDefinitionEditor` also memoises its checklist facts: `BuildSnapshot` is four
+project-wide asset sweeps plus a scene search, and that inspector is drawn *inline* inside Content
+Studio's list, so it was re-scanning the project several times a second.
+
+In the NPCs section: a scan strip with freshness and **Scan all scenes** / **Rescan**, `in Village
+(2), Meadow` on each row (a dictionary lookup, not a search), and an expanded NPC listing its
+placements grouped by scene with **Open scene** — Unity's own save prompt, then select and frame —
+or **Select** when that scene is already open.
+
+## 2026-09-03 — quest-gated ability unlocks
+
+**A quest can now teach a move.** `QuestRewardType.Ability` had been logging "not yet implemented"
+since the reward table was written; it is now the fifth working reward type. The gate lives on the
+progression entry rather than on the reward: `M5019` adds
+`ability_progression_set_entry.unlock_quest_content_key` (nullable, Spawner domain), and a non-null
+value means reaching the entry's level is necessary but not sufficient — the owning trainer must also
+have completed that quest. Every existing row is `NULL`, so nothing already seeded changes how it is
+learned.
+
+One rule decides it everywhere: `AbilityUnlockGate.IsUnlocked(gate, completedQuestKeys)`, pure and
+static, used by level-up (`ApplyAbilityChangesForLevelAsync`), by the manual slot editor
+(`CanLearnAbilityAsync`), and by the retroactive pass. It **fails closed** — an unreadable trainer or
+a throwing quest lookup leaves the ability locked, because a lookup that could not be performed must
+never be mistaken for a quest that was finished. Completed keys are read from the quest
+*repositories*, not `IQuestDomainService`: the quest service depends on `IRewardGrantService`, which
+now depends on `ICreatureProgressionService`, so injecting the service would have closed a DI cycle.
+
+The retroactive pass is the part that makes it feel like a reward rather than an IOU. A creature that
+passed the entry's level long before finishing the quest would otherwise wait for its next level-up —
+or never, at level 100. `ICreatureProgressionService.ApplyQuestUnlocksAsync(accountId, trainerId,
+questContentKey, onlyAbilityContentKey, ct)` walks the trainer's team and storage, teaches every
+newly-eligible gated entry using the same slot/replacement path as level-up, writes each creature
+once, and returns the ids that changed. Those surface on
+`QuestClaimResult.AbilityUnlockedCreatureIds`, kept separate from `SpawnedCreatureIds` so the client
+knows to re-read move sets rather than to add party members. `RewardGrant` gained a `SourceKey` to
+carry the unlocking quest's content key — it is a property of the source, not of the reward, and
+folding it into `ReferenceKey` would have cost the per-ability filter.
+
+The field round-trips through Content Studio push/pull (`/sets/sync`, `GET /sets`, the entry
+create endpoint and both REST DTOs). 42 new tests: `AbilityUnlockGate` (10),
+`CreatureProgressionService` gate + retroactive pass (18), `RewardGrantService` ability dispatch (3),
+`QuestDomainService` claim routing (2), SQLite + Postgres column round-trip (8), and a migration-chain
+test pinning the column and that no seeded entry is gated (3, one shared with the round-trips).
+
+No demo seed: quest templates are seeded Postgres-only by design (M7012/M7015 — SQLite gets them from
+ScriptableObjects), and Unity's `LocalAbilityLibrarySyncClient` soft-deletes progression entries the
+SO does not declare, so a migration-authored gate would not survive offline. The first gated ability
+should be authored in Content Studio and pushed. See [Creature Generation — Quest-gated
+abilities](?page=backend/04-creature-generation#quest-gated-abilities) and [Quest System — Ability
+rewards](?page=backend/07-quest-system#ability-rewards-quest-gated-ability-unlocks).
+
+## 2026-09-03 — second-trainer quest auto-grant race, "New quest" toast, live seed for the welcome quest
+
+**Switching from offline play to a second/subsequent online trainer in the same session silently
+dropped the auto-granted "Welcome To CR" quest** (and its starter-creature reward) — no error, no
+server request. Root cause: `QuestManager.WhenReady` was a one-shot `TaskCompletionSource` that
+stayed completed forever after the *first* trainer's world init — every later trainer selection saw
+a stale "ready" signal and skipped waiting for its own session's template sync, so
+`QuestGranterBehaviour` looked up the quest template before it existed locally and gave up. Fixed by
+extracting the gate into `QuestSessionReadyGate` (engine-free, 9 NUnit tests) and adding
+`QuestManager.BeginSession()`, called as the first statement of
+`CharacterSelectController.SelectAsync` — before the `OnTrainerSelected` event any granter reacts to.
+Also found and fixed: the live onboarding quest (`content_key = "quest-welcome-to-cr"`) had no
+migration seed at all — it only existed in Postgres because someone had pushed it once via Content
+Studio — so a fresh deployment's online accept would have failed on the missing FK. Added
+`M7015_SeedLiveWelcomeToCRQuest` (Postgres only, guarded against an existing Studio-authored row; 5
+NUnit tests). See [Quest System — WhenReady is per-session, not a one-shot
+flag](?page=backend/07-quest-system#reading-quests-from-unity-the-quest-journal).
+
+**Feature:** any quest grant — auto-grant, dialogue accept, or a quest discovered purely server-side
+on a later sync — now shows a `"New quest: <name>"` toast exactly once per instance, via a new
+`QuestManager.OnQuestGranted` event and `QuestToastPolicy` (engine-free, 6 NUnit tests) for dedup.
+`AchievementToastPresenter` (already hosting achievement + `WorldToast` toasts) subscribes to the new
+event. The quest journal (`QuestJournalView`) needed no additional wiring — `PlayerMenuWindow`
+already reloads every tab's data on every open/switch. See [Achievements — Unity
+client](?page=backend/15-achievements#unity-client).
+
+## 2026-09-03 — dev-only battle debug stats overlay (F3)
+
+**No way to see a creature's raw stats mid-battle without a debugger attached.** Added
+`BattleDebugStatsOverlay` (Editor / `DEVELOPMENT_BUILD` only): pressing **F3** during a battle
+toggles two panels, beside the opponent/player combat cards, showing level, current/max HP, the
+raw stat block, status conditions, held item, ability list (name/category/power), and a raw
+stat-modifier log — sourced from the same `BattleEvents` bus and `TeamSync` data `BattleHUD`
+already reads, rendered into the same `UIDocument`. The opponent's raw stats are honestly shown as
+unavailable rather than fabricated — the server never sends them to the client. Formatting lives
+in a pure, engine-free `CR.UI.Battle.DebugOverlay.Logic` asmdef pinned by 18 NUnit tests. A new
+`Debug/ToggleBattleStats` (F3, keyboard) action was added to `CR_GameInput.inputactions` — no
+prior debug action map existed to reuse. See [Battle System — Debug stats
+overlay](?page=unity/07-battle-system#debug-stats-overlay).
+
+## 2026-09-03 — market listings carry the creature
+
+**Browsing the marketplace meant one follow-up creature lookup per listing** — `GET
+/api/v1/market/listings` and `/mine` returned bare `MarketListing` rows carrying only a
+`generatedCreatureId`, so rendering a browse row (species, level, seller name) required a
+round-trip per row. Both endpoints, plus a new `GET /api/v1/market/listings/{id}`, now return
+`MarketListingView`: every `MarketListing` field plus `speciesContentKey`/`speciesName`/
+`elementType`/`level` (joined from `creature` via `generated_creature`), `nickname`
+(`generated_creature.given_name`), and `sellerTrainerName` (joined from `trainers`). The
+single-listing endpoint deliberately isn't gated to `Active` listings — a seller can look up one
+that already sold. Element-type filtering on the browse feed is now case-insensitive
+(`UPPER()` both sides).
+
+`IMarketRepository` gained view-returning siblings of its existing read methods
+(`GetActiveListingViewsAsync`, `GetListingViewsBySellerAsync`, `GetListingViewAsync`); the plain
+`MarketListing`-returning methods are unchanged and still back the list/buy/cancel transfer core,
+which only ever needs the listing itself.
+
+Pages: *Backend → Creature Market* (new).
+
+## 2026-09-03 — capture crystals refused in trainer battles
+
+**A crystal thrown at a trainer's creature was silently swallowed: the bag closed, the crystal and
+the turn were gone, and the log said nothing.** `ItemUseDomainService.UseItemAsync` now detects a
+capture crystal by effect type *or* flag (seeded crystals have no `CaptureCrystal` flag) and refuses
+it in any non-wild battle before the handler runs — `400 "Capture Crystals cannot be used in a
+trainer battle."`, nothing consumed. On the client the engine-free `CaptureCrystalRule` makes the
+same call from the coordinator's `BattleSession`; `BattleBagPanelHandler` greys the row
+(`BlockedReason`) and refuses in `ExecuteUseAsync` before the VFX or the server call, and the new
+`BattleEvents.ItemUseRefused` event puts the reason — or any server 400 / failed `ItemUseResult` —
+into the battle log. Wild battles unchanged.
+
+Pages: *Unity → Capture Mechanic* (Refused in trainer battles), *Backend → Battle Persistence*
+(Trainer Battles → No capture crystals).
+
+## 2026-09-02 — storage box is six wide and fits on screen
+
+**The Storage tab showed three columns of creatures with the right half of the panel empty, and
+the bottom rows ran off the screen.** `.storage-grid` was pinned to exactly four slots wide
+(`464px`); under a fractional UI scale the rounded slot widths overran that by a pixel, so the
+fourth column wrapped and a 4 x 6 box rendered as 3 x 8. A box is now `6 x 4` (still 24 slots, so
+box count and paging are unchanged) and the grid is pinned to `704px` — six slots plus 8px of
+slack that absorbs the rounding but cannot fit a seventh.
+
+Pages: *Unity → Creature Storage* (Grid shape).
+
+## 2026-09-02 — online team swap no longer answers 409 Conflict
+
+**Reordering two occupied team slots while online failed with `Failed to swap creature slots:
+Conflict`; moving into an empty slot worked.** The server swapped with one `UPDATE … CASE` that
+exchanged the two `slot_number`s. PostgreSQL checks the partial `UNIQUE INDEX
+(inventory_id, slot_number)` per row as the statement runs, so the first row to take the other's
+slot raised `23505` — mapped to 409 — even though the finished state would have been unique. An
+empty target touches one row, hence the intermittency. SQLite (offline) already went through a
+temporary slot, which is why the bug only showed online.
+
+`BaseTrainerCreatureInventoryRepository` and `BaseNpcCreatureTeamRepository` now run the same
+three-step script (A → `-1`, B → A, `-1` → B) inside a transaction on both engines; the
+non-transactional overloads delegate to the transactional one so a failure between steps can never
+leave a creature parked in slot `-1`. Postgres-container tests pin the occupied-slot swap for both
+repositories. The AIO server must be restarted to pick up the fix.
+
+Pages: *Unity → Player Menu UI* (Reordering the team → Why the server swaps through a temporary
+slot), *Backend → NPC System* (Other Operations).
+
+## 2026-09-02 — reorder your team from the Team tab
+
+**Team order was fixed at capture order, and there was no way to change it.** The Team tab now has
+two controls: **Move** on every squad card (press once to arm, then press the card, *Swap here*
+button, or empty-slot *Move here* target you want it in; press the armed card again to cancel) and
+**Make lead** on the featured card. Both call `ICreatureInventoryService.SwapTeamSlotsAsync`, which
+is transactional and fires `OnSlotsSwapped`; `TeamSync` now listens to that event so the battle
+swap list shows the new order at once.
+
+Slots are 1–6 with gaps (storage leaves a hole), so a new `GetTeamSlotsAsync` on the service returns
+the real slot number per creature — the view never assumes `index + 1`. The gesture is an
+engine-free state machine (`TeamMoveMode`) plus slot arithmetic (`TeamSlotLayout`) in
+`CR.UI.Logic`, both tested.
+
+Pages: *Unity → Player Menu UI* (Team tab → Reordering the team), *Unity → Domain Sync Pattern*
+(TeamSync events).
+
+## 2026-09-02 — a wild battle that ended before it began
+
+**Visit the Bag tab once, and the next wild encounter ended on the spot.** It looked like a
+creature fainting without the forced swap firing. It was nothing of the kind: the battle aborted
+before turn 1. `UICoordinator.SetContext(Battle)` walked its screen list with a plain `foreach`;
+the bag screen — still an active GameObject behind the closed menu — reacted by deactivating
+itself, `OnDisable` unregistered it mid-loop, and `Collection was modified` escaped
+`BattleEvents.RaiseBattleStarted` into the coordinator's catch, which logged only the message and
+ended the battle `loop_complete`.
+
+Three fixes, each closing the hole from a different side:
+
+- **`ContextScreenRegistry`** (`CR.UI.Logic`, engine-free, tested) now owns screen registration
+  and dispatches over a snapshot, skipping screens that left before their turn. Pinned by a test
+  that reproduces the exact re-entrancy.
+- **`IsolatedDispatch`** (`CR.Game.Battle.Logic`, tested): every `BattleEvents.Raise*` invokes
+  subscribers one at a time. A throwing subscriber is logged by name and skipped; the rest still
+  run; the raiser never sees the exception.
+- **`BagScreenHandler.Dismiss()`**: the menu puts the bag away when it hides, so no orphaned
+  context listener survives a closed menu.
+
+Pages: *Unity → Player Menu UI* (registry, dismiss), *Unity → Battle System* (dispatch).
+
 ## 2026-08-25 — held items stop duplicating, and the pad works
 
 **Equipping a held item offline duplicated it.** The offline path wrote the creature's slot and

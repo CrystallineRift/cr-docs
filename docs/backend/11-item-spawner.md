@@ -119,7 +119,7 @@ seeded-but-unrollable spawner fails the build rather than stocking an empty shop
 
 | Method | Route | Purpose |
 |---|---|---|
-| POST | `/api/v1/item-spawners/sync-config` | Create/replace a spawner (header + pools + templates) by content key — used by Content Studio |
+| POST | `/api/v1/item-spawners/sync-config` | Create/replace a spawner (header + pools + templates) by content key — used by Content Studio. Every `itemContentKey` must resolve: a payload naming an item the server does not have is refused with `409` and nothing is written, because this call replaces the spawner's pools wholesale and skipping the unresolved templates silently emptied it. |
 | GET  | `/api/v1/item-spawners/{contentKey}/roll?seed=` | Preview a roll (distinct item ids + quantities) |
 | GET  | `/api/v1/item-spawners/by-content-key/{contentKey}/config` | Full config (header + pools + templates) — used by Content Studio **Pull** |
 | POST | `/api/v1/merchants/{npcId}/stock-from-spawner` | Roll a spawner into a merchant's inventory (`{ accountId, trainerId, spawnerContentKey, force }`) |
@@ -128,11 +128,13 @@ seeded-but-unrollable spawner fails the build rather than stocking an empty shop
 
 Create an **`ItemSpawnerDefinition`** (`Assets → Create → CR → Content → Item Spawner
 Definition`): set `contentKey`, `maxSlots`, optional `restockCooldownSeconds`, then add pools
-and item templates (item content-key picker, probability slider, quantity range). **Sync Full
-Config** pushes it to the backend. On a Merchant `NpcDefinition`, set **Item Spawner Key** to
-the spawner's content key. Content Studio also has an **Item Spawners** tab (list / create /
-sync), and `ContentAuditTool` flags item-spawner templates or merchant links that reference
-unknown items/spawners.
+and item templates (item content-key picker, probability slider, quantity range). Push it to the
+backend with **Content Studio → Item Spawners → ⬆ Push All** (the inspector's own "Sync Full
+Config" button was removed — see
+[One way to reach the server](../unity/08-content-registry.md#one-way-to-reach-the-server)). On a
+Merchant `NpcDefinition`, set **Item Spawner Key** to the spawner's content key.
+`ContentAuditTool` flags item-spawner templates or merchant links that reference unknown
+items/spawners.
 
 ## Content Studio sync
 

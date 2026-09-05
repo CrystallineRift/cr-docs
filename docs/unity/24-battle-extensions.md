@@ -131,6 +131,103 @@ the opponent AI must account for are battle-system changes. Bolting them onto `A
 reacting one action too late, and there is no inbound seam that can alter a resolution in flight —
 `Augment` only adds options to a menu.
 
+## Elemental reactions are content
+
+*A primer condition already on the target plus an incoming ability of a particular element produce
+an outsized result — Soaked + Lightning is Conduction, Frozen + Ground is Shatter.*
+
+Until 2026-09-03 the three reactions were a hard-coded `static readonly` list:
+`CR.Game.Compat.Battle.ElementalReactionTable.All`. Retuning one meant editing C#, rebuilding the
+compat packages and restarting the API. They are now rows in `elemental_reaction` (Creatures
+`M12006`), served by `GET /api/v1/elemental-reactions`, authored in Content Studio, and cached for
+offline play by the runtime content sync.
+
+**The static table did not go away — it became the fallback default.** `BattleResolver.Resolve`
+takes an optional `IReadOnlyList<ElementalReaction>`; passing `null` falls back to
+`ElementalReactionTable.All`, and `BattleDomainService` falls back to it when a database read
+returns nothing or throws. A hiccup reading the table costs the authored *edits*, not every reaction
+in the fight. Treat the static list as the seed values in code form, and the table as the truth.
+
+What that means on the Unity side:
+
+| Concern | Where it lands |
+|---|---|
+| Offline copy of the rules | `ContentSync` domain `ElementalReactions` → `elemental_reaction` in `game-data.bytes`. See [Runtime Content Sync](27-content-sync.md). |
+| Offline read | `IElementalReactionRepository` (Sqlite, content database), bound in `LocalDevGameInstaller` and injected into the `battle_offline` `BattleDomainService`. |
+| Online read | The server's own repository; nothing client-side. |
+| The battle log line | `ActionOutcome.ReactionLogLine`, printed verbatim by `BattleHUD`. **No runtime Unity code reads the static table.** See [Battle System → Turn narration](07-battle-system.md). |
+| Which reaction fired, for missions | `ActionOutcome.ReactionName` — still the reaction's display **name**, so `condition_key` on an `ElementalReaction` mission still reads `"Conduction"`. |
+
+Two consequences worth stating plainly:
+
+- **A reaction mission's `condition_key` now names authored content.** `mission_storm_chaser` counts
+  `"Conduction"` because a row called Conduction exists, not because the enum does. Rename the
+  reaction and the mission stops counting — the reachability check in
+  `BattleMissionSeedSqliteTests` is what catches that before a player does.
+- **The multiplier range is `[0, 10]`, enforced on both sides.** Server-side validation rejects
+  anything outside it; `ContentSyncWriter` clamps on write, so a payload that bypassed validation
+  still cannot put a negative multiplier into battle math. (`M12007` exists because a
+  Radiant→Radiant `-5.0` did exactly that in the damage matrix.)
+
+The type-matchup matrix travels the same road: `elemental_damage` gains REST routes, per-version
+Content Studio editing, and an offline pull that also writes
+`battle_system_version.active_elemental_damage_version` — the pointer naming the version battles
+resolve against.
+
+### Authoring reactions and the damage matrix in Content Studio
+
+Both now sit in the COMBAT group beside Abilities and Conditions, and both follow the tab contract
+every other content type follows — with the same extra step battle missions have, because their
+offline copy is not written by the push either.
+
+**Reactions (tab 16).** `ElementalReactionDefinition` assets in `Assets/CR/Content/Defs/Reactions/`.
+
+| Control | What it does |
+|---------|--------------|
+| **+ New Reaction** | Creates the asset |
+| **⬆ Push All** | `PUT /api/v1/elemental-reactions/{id}` per reaction, duplicate content keys refused before the plan is built |
+| **⬇ Pull** | `GET /api/v1/elemental-reactions/all?includeInactive=true`, applied by id — this is how the three seeded reactions become editable assets |
+| **Delete** (per row) | Confirms, deletes the `.asset`, then `DELETE /api/v1/elemental-reactions/{id}` |
+| **⬇ Export Seed Migration** | `Creatures/CR.Creatures.Data.Migration/M<n>SeedElementalReactions_<date>.cs` |
+
+The primer and payload are pickers over the project's `StatusConditionConfig` assets, and the
+detonator is a dropdown over `ElementType`. That is not tidiness: a reaction whose primer no content
+defines can never fire, and one whose payload no content defines fires and leaves nothing behind —
+both fail silently, mid-battle, and look like the reaction system is broken. The inspector's
+validation strip and the list's **Invalid** chip run cr-api's own `ElementalReactionValidation`
+against the same condition list, so what they say is what the push would say.
+
+The exported migration **upserts** each row rather than inserting when absent: M12006 already seeds
+those three content keys, so an insert-only seed would leave a retuned Conduction detonating for
+1.75 offline while the server served the new number.
+
+**Elemental Damage (tab 17).** One `ElementalDamageMatrixConfig` per version in
+`Assets/CR/Content/Defs/ElementalDamage/`, edited as a 10×10 grid — rows attack, columns defend,
+green above 1.0, red below, a red outline on anything outside `[0, 10]`, and every cell's tooltip
+naming its pair.
+
+| Control | What it does |
+|---------|--------------|
+| **Version** dropdown | Which version's grid is shown |
+| **Copy as new version…** | `POST /api/v1/elemental-damage/versions/{version}/copy?from=`, then pulls the result back |
+| **Set Active** | `PUT /api/v1/elemental-damage/active`, then re-pulls — the pointer moves for every version at once |
+| **Delete version…** (Advanced) | `DELETE /api/v1/elemental-damage/versions/{version}`; the server refuses while it is active |
+| **⬆ Push All** | One whole-matrix `PUT` per version |
+| **⬇ Pull** | `GET …/versions`, then `GET …?version=` per version, plus the active pointer |
+| **⬇ Export Seed Migration** | `Creatures/CR.Creatures.Data.Migration/M<n>SeedElementalDamage_<date>.cs` for the selected version |
+
+A push always carries all 100 squares. cr-api refuses a partial matrix on purpose — a matchup with
+no row resolves at 1.0 with nothing in the logs to say so, which is indistinguishable from a designer
+having chosen 1.0 — so `ElementalDamageMatrixMapping.Complete` fills any gap with the neutral value
+before sending rather than letting the push fail. The exported migration upserts on
+`(offense_element, defending_element, version)` and, **only when the exported version is the active
+one**, points `battle_system_version` at it — guarded on that table existing, because the pointer
+belongs to the Game domain and this migration is a Creatures one.
+
+Both exporters share `SeedMigrationFileWriter` with the battle-mission exporter: one implementation
+of "regenerate the previous export in place, otherwise take the repo-wide highest migration number
+plus one".
+
 ## Worked example: battle missions
 
 *"Set the same target burning three times → unlock Mega Burn for the rest of this battle."*
@@ -264,9 +361,10 @@ the offline floor, read through a router.
 
 | Layer | Where |
 |-------|-------|
-| Table + seed | `battle_mission_template`, migration **M10004** (cr-api `Game/CR.Game.Data.Migration`), seeded row `mission_pyromaniac` |
+| Table + seed | `battle_mission_template`, migrations **M10004** + **M10008** (cr-api `Game/CR.Game.Data.Migration`) and **M10018** (Creatures) |
 | Reward ability | `Mega Burn` seeded by **M10003** (cr-api `Creatures/CR.Creatures.Data.Migration/M10003SeedMegaBurnAbility.cs`) into `abilities` |
 | Server read | `GET /api/v1/battle-missions` → `IBattleMissionTemplateRepository.GetActiveTemplatesAsync` (active, non-deleted, ordered by name) |
+| Server authoring | `GET /all`, `GET /{id}`, `PUT /{id}`, `DELETE /{id}` under `/api/v1/battle-missions`, all behind `AuthorizationPolicies.RequireContentWrite` — see [Battle Persistence](?page=backend/09-battle-persistence) |
 | Unity online | `BattleMissionTemplateHttpSource` (`SimpleWebClient` on `GameServerHttpAddress`) |
 | Unity offline | `BattleMissionTemplateSqliteSource` reading `battle_mission_template` from the baked GameData DB |
 | Routing | `BattleMissionTemplateRoutedSource` → `SyncRouter.ReadAsync` — server when online, floor when offline **or when the server read fails** |
@@ -283,11 +381,11 @@ Schema (both engines, `isSqlite`-guarded in the migration):
 | `id` | GUID | PK |
 | `content_key` | VARCHAR(255) | Designer-facing key, e.g. `mission_pyromaniac`; indexed |
 | `name` / `description` | VARCHAR / TEXT | `name` is what the HUD shows |
-| `mission_type` | VARCHAR(50) | What the tracker counts. Only `StatusApplication` exists today |
-| `condition_key` | VARCHAR(100) | For `StatusApplication`, the condition name (`Burn`) |
+| `mission_type` | VARCHAR(50) | What the tracker counts: `StatusApplication`, `KnockOut` or `ElementalReaction` — the constants live in `CR.Game.Data.Constants.BattleMissionTypes`, which ships to Unity in `CR.Game.Data.dll`, so editor dropdowns read them rather than repeating the literals |
+| `condition_key` | VARCHAR(100) | Condition name (`Burn`) or reaction name (`Conduction`); unused by `KnockOut` |
 | `threshold` | INT | Qualifying events needed |
 | `same_target` | BOOLEAN | Per-target streak vs. free pool |
-| `reward_type` | VARCHAR(50) | Only `AbilityUnlock` exists today |
+| `reward_type` | VARCHAR(50) | Only `AbilityUnlock` exists today (`CR.Game.Data.Constants.BattleMissionRewardTypes`) |
 | `reward_ability_id` | GUID (nullable) | FK-by-convention into `abilities` |
 | `is_active` | BOOLEAN | Only active rows are served; indexed |
 | `created_at` / `updated_at` / `deleted` | — | Standard soft-delete columns |
@@ -345,20 +443,28 @@ ordinary `Button` on the same submit path as every learned move.
 
 ## The player picks one mission
 
-Six missions ship, and exactly **one runs at a time** — the player chooses which in the team view's
+Ten missions ship, and exactly **one runs at a time** — the player chooses which in the team view's
 sidebar, beside the run summary.
 
-| content_key | Objective | Unlocks |
-|---|---|---|
-| `mission_pyromaniac` | Burn the same target three times | Mega Burn |
-| `mission_deep_freeze` | Slow the same target three times | Blizzard |
-| `mission_mind_games` | Confuse the same target twice | Dawnbreak |
-| `mission_earthbound` | Ground the same target three times | Quake |
-| `mission_venomancer` | Poison the same target three times | Miasma |
-| `mission_wildfire` | Set four creatures burning in one battle | Cyclone |
-| `mission_clean_sweep` | Knock out two creatures in one battle | Hyper Beam |
+| content_key | `mission_type` | `condition_key` | `threshold` | `same_target` | Unlocks | Seeded by |
+|---|---|---|---|---|---|---|
+| `mission_pyromaniac` | `StatusApplication` | `Burn` | 3 | yes | Mega Burn | M10004 |
+| `mission_deep_freeze` | `StatusApplication` | `Slow` | 3 | yes | Blizzard | M10008 |
+| `mission_mind_games` | `StatusApplication` | `Confusion` | 2 | yes | Dawnbreak | M10008 |
+| `mission_earthbound` | `StatusApplication` | `Grounded` | 3 | yes | Quake | M10008 |
+| `mission_venomancer` | `StatusApplication` | `Poisoned` | 3 | yes | Miasma | M10008 |
+| `mission_wildfire` | `StatusApplication` | `Burn` | 4 | no | Cyclone | M10008 |
+| `mission_clean_sweep` | `KnockOut` | *(empty)* | 2 | no | Hyper Beam | M10008 |
+| `mission_storm_chaser` | `ElementalReaction` | `Conduction` | 2 | yes | Thunderbolt | M10018 |
+| `mission_cold_snap` | `ElementalReaction` | `Flash Freeze` | 2 | yes | Blizzard | M10018 |
+| `mission_demolition` | `ElementalReaction` | `Shatter` | 1 | yes | Quake | M10018 |
 
-`mission_clean_sweep` is the first non-status mission — see *Adding a new mission type* below.
+`mission_clean_sweep` is the first non-status mission — see *Adding a new mission type* below. The
+three `ElementalReaction` missions were first seeded from the **Creatures** domain (`M10018`), guarded
+on `battle_mission_template` existing — which a Creatures-before-Game fresh database fails. The Game
+domain's `M12005SeedBattleMissions_20260903` (exported from Content Studio) re-seeds all ten
+idempotently, so every database — fresh Postgres, `cr_dev`, and the baked `game-data.bytes` floor —
+carries all ten.
 
 ### The choice is client state, on purpose
 
@@ -384,10 +490,88 @@ tracker implements.
 
 That check is why no mission uses `Weakened`: exactly one ability (Growl) applies it.
 
+## Authoring missions in Content Studio
+
+Missions used to be a migration and nothing else: a designer who wanted "burn four different
+creatures" wrote C# in cr-api, rebuilt the compat packages and restarted the API. Content Studio →
+**Battle Missions** (COMBAT group) is the same content, edited the way every other content type
+already is — with one extra step no other tab has, because missions are the first content whose
+offline copy is not written by the push.
+
+### The tab
+
+| Control | What it does |
+|---------|--------------|
+| **+ New Battle Mission** | Creates a `BattleMissionDefinition` asset in `Assets/CR/Content/Defs/BattleMissions/` |
+| **⬆ Push All** | `PUT /api/v1/battle-missions/{id}` per mission. Refuses duplicate content keys before sending, and reports the server's own 400/409 `message` on the offending row |
+| **⬇ Pull** | `GET /api/v1/battle-missions/all?includeInactive=true`, applied by id; server-only rows become new assets. This is how the ten seeded missions become editable — the project ships with no mission assets at all |
+| **Delete** (per row) | Confirms, deletes the `.asset`, then `DELETE /api/v1/battle-missions/{id}` (soft delete). A mission that a migration seeds comes back on the next floor rebake — the dialog says so |
+| **⬇ Export Seed Migration** | Writes the authored set into cr-api as a seed migration (see below) |
+
+All write routes carry an editor service token (`EditorServiceAuth`), same as every other Studio
+push. The transport is `BattleMissionEditorSyncHelper`, which reuses `AbilityEditorSyncHelper`'s
+HTTP helpers rather than copying them — one place for the Studio server override, the token attach
+and the single 401 retry after a server restart.
+
+`GET /api/v1/battle-missions` — the active-only feed the *game* reads — is deliberately untouched by
+any of this.
+
+### One validation rule, not two
+
+`BattleMissionTemplateUpsertRequest` and `BattleMissionTemplateValidation` ship to Unity in
+`CR.Game.Data.dll`, so the inspector's "the server would refuse this" strip, the list's **Invalid**
+chip and the push pre-check all call **the server's own validator**. There is no Unity mirror of the
+rules to drift out of step, and the message the author reads before pushing is the message the
+endpoint would have returned.
+
+The same applies to the dropdowns: mission type and reward type are rendered from
+`BattleMissionTypes.All` / `BattleMissionRewardTypes.All`, never from literals. The condition
+dropdown switches on the chosen type — the project's `StatusConditionConfig` names for
+`StatusApplication`, the project's `ElementalReactionDefinition` names for `ElementalReaction`
+(falling back to `ElementalReactionTable.All` only when no reaction assets exist yet), hidden entirely for
+`KnockOut`, which ignores `condition_key`. A value the asset already holds stays selectable even
+when this project has no matching content, so pulling from a richer server never silently retargets
+a mission.
+
+`BattleMissionContentKey` derives the snake_case key from the display name ("Deep Freeze" →
+`mission_deep_freeze`) behind a **Derive** button. It is offered, never forced: the content key is
+identity on the server, so rewriting it on a rename would move the row.
+
+### Pushing is not enough — the offline step
+
+The offline floor is baked from migration seeds **and nothing else** (see
+[Content Pipeline](?page=unity/17-content-pipeline)). Content Studio does not write the local
+SQLite. So a mission that has only been pushed exists online and does not exist for a disconnected
+player.
+
+**⬇ Export Seed Migration** closes that gap. It writes
+`cr-api/Game/CR.Game.Data.Migration/M<version>SeedBattleMissions_<yyyyMMdd>.cs` from the authored
+assets, then the operator runs the cr-api migrations and rebakes the floor. The generated file:
+
+- seeds the **authored id**, so the offline row and the server row are the same row;
+- branches on engine — `INSERT OR IGNORE` + `1`/`0` on SQLite, `ON CONFLICT DO NOTHING` +
+  `true`/`false` on Postgres;
+- guards every insert on `WHERE NOT EXISTS (… content_key)`, so re-running it against a database
+  that already has the mission is a no-op rather than a UNIQUE violation;
+- deletes on `Down()` only where **both** the content key and the id match, so a rollback cannot
+  take rows an earlier migration seeded under the same key;
+- takes the **repo-wide highest** migration number plus one, not the folder's — numbering is one
+  sequence across every domain in cr-api, and it doubles as the content-schema bump `GameDataAdopter`
+  needs to adopt a freshly baked floor.
+
+A previously exported file is regenerated in place; a second export never leaves two migrations
+claiming the same content keys.
+
+Exporting does not run the migration and does not rebuild any package. It writes one file.
+
 ## Recipe: adding a new mission
 
 For a mission that reuses the existing `StatusApplication` type, **no Unity code changes at all** —
 it is a content row.
+
+The short path is [Content Studio → Battle Missions](#authoring-missions-in-content-studio): create
+the asset, push it, export the seed migration, rebake. Write the migration by hand only when there
+is no editor to hand:
 
 1. Write a migration in cr-api `Game/CR.Game.Data.Migration` that inserts into
    `battle_mission_template`. Follow M10004: guard `isSqlite`, use `1`/`0` and `INSERT OR IGNORE` on
@@ -481,6 +665,8 @@ actually raises that event — a query against the migrated database, not a read
 | Suite | Location | Covers |
 |-------|----------|--------|
 | `BattleMissionTrackerTests` | Unity `Assets/CR/Game/Battle/Logic/Tests/` (EditMode, 11 tests) | Every counting rule above |
+| `BattleMissionSeedMigrationGeneratorTests` | Unity `Assets/CR/Game/Battle/Logic/Tests/` (EditMode, 17 tests) | The exported migration's text: both engine branches, idempotency guard, authored id preserved and lowercased, quote/backslash escaping, `Down()` matching id *and* key, stable ordering |
+| `BattleMissionContentKeyTests` | Unity `Assets/CR/Game/Battle/Logic/Tests/` (EditMode, 21 tests) | The snake_case rule, and that a derived key always passes it |
 | `BattleMissionTemplateRepositorySqliteTests` | cr-api `Game/CR.Game.Data.Test/` (2 tests) | Seeded Pyromaniac row is returned; inactive and soft-deleted rows are excluded |
 | `BattleMissionTemplateEndpointsTests` | cr-api `Game/CR.Game.Domain.Services.Test/Endpoints/` (4 tests) | 200 with templates, 200 with empty list, `Problem` on repository throw, cancellation token propagation |
 

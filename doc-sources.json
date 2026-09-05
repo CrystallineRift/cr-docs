@@ -42,10 +42,12 @@
         "Assets/Scripts/Npcs/**/*NpcMerchantBehaviour*.cs",
         "Assets/Scripts/Npcs/**/*INpcSubInitializable*.cs",
         "Assets/CR/Npcs/Runtime/Repository/Implementation/NpcOnlineOfflineRepository.cs",
-        "Assets/CR/Npcs/Runtime/Http/NpcClientUnityHttp.cs"
+        "Assets/CR/Npcs/Runtime/Http/NpcClientUnityHttp.cs",
+        "Assets/CR/Game/World/Behaviours/NpcTrainerBehaviour.cs",
+        "Assets/CR/Npcs/Runtime/Http/INpcClient.cs"
       ]
     },
-    "description": "NPC CRUD, team management, domain service, REST endpoints, NpcCreatureSlotSpec; NPC content globalization via ContentWorldId sentinel and M2010GlobalizeNpcContent"
+    "description": "NPC CRUD, team management, domain service, REST endpoints, NpcCreatureSlotSpec; NPC content globalization via ContentWorldId sentinel and M2010GlobalizeNpcContent; battle_trainer_id minting (M2012) + NPC battle-item use endpoint (use-battle-item)"
   },
   "backend/03-spawner-system": {
     "docPath": "docs/backend/03-spawner-system.md",
@@ -56,14 +58,19 @@
         "Creatures/CR.Creatures.Data.Migration/M10006RepairTemplateCreatureIds.cs",
         "Convenience/CR.Data.Migrations.Test/TemplateCreatureIdRepairSqliteTests.cs",
         "Spawner/CR.Spawner.Test/Domain/Services/SpawnPoolSelectionTests.cs",
-        "Spawner/CR.Spawner.Domain/Services/CreatureSpawnDomainService.cs"
+        "Spawner/CR.Spawner.Domain/Services/CreatureSpawnDomainService.cs",
+        "Creatures/CR.Creatures.Data.Migration/M10016SubdivideAreaLevelBands.cs",
+        "Spawner/CR.Spawner.Domain/Services/SpawnerConfigSyncService.cs",
+        "Game/CR.Game.Model/Sync/UnresolvedContentReferenceException.cs"
       ],
       "cr-data": [
         "Assets/CR/Core/Data/Registry/Definitions/SpawnerDefinition.cs",
         "Assets/CR/Game/World/Behaviours/SpawnerWorldBehaviour.cs",
         "Assets/CR/Game/World/Behaviours/SpawnerEncounterBehaviour.cs",
         "Assets/CR/Game/World/LocalSpawnerSyncClient.cs",
-        "Assets/CR/Game/World/Logic/SpawnerPrunePolicy.cs"
+        "Assets/CR/Game/World/Logic/SpawnerPrunePolicy.cs",
+        "Assets/CR/Game/Areas/Editor/CrEncounterZoneCommand.cs",
+        "Assets/CR/Content/Defs/Spawners/**"
       ]
     },
     "description": "Weighted spawn pools, spawn history, spawner tables, SpawnerDefinition.battleArenaKey, Wild Trainer GUID integration; global read-only spawner template (per-trainer clones retired by M5016RetirePerTrainerSpawner), stateless spawning (no capacity/cooldown)"
@@ -74,11 +81,14 @@
       "cr-api": [
         "Creatures/**/*.cs",
         "Game/CR.Game.CreatureGeneration/**/*.cs",
-        "Game/CR.Game.Domain.Services/**/*.cs"
+        "Game/CR.Game.Domain.Services/**/*.cs",
+        "Game/CR.Game.Model/Spawner/AbilityProgressionSetEntry.cs",
+        "Spawner/CR.Spawner.Data.Migration/M5019AddUnlockQuestToAbilityProgressionSetEntry.cs",
+        "Creatures/CR.Creatures.Data.Migration/M10017SeedAbilitySoundKeys.cs"
       ],
       "cr-data": []
     },
-    "description": "Creature generation pipeline, growth profiles, abilities assignment"
+    "description": "Creature generation pipeline, growth profiles, abilities assignment, quest-gated ability unlocks"
   },
   "backend/05-starter-creature-flow": {
     "docPath": "docs/backend/05-starter-creature-flow.md",
@@ -113,7 +123,9 @@
     "repos": {
       "cr-api": [
         "Quests/**/*.cs",
-        "Quests/**/*.csproj"
+        "Quests/**/*.csproj",
+        "Game/CR.Game.Model/Rewards/*.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Reward/*.cs"
       ],
       "cr-data": [
         "Assets/CR/Quests/**/*.cs"
@@ -203,10 +215,29 @@
       "cr-data": [
         "Assets/Scripts/**/*HttpClient*.cs",
         "Assets/Scripts/**/*SqliteRepository*.cs",
-        "Assets/Scripts/Data/**/*.cs"
+        "Assets/Scripts/Data/**/*.cs",
+        "Assets/CR/Core/Data/Client/Implementation/SimpleWebClient.cs",
+        "Assets/CR/Core/Data/Logic/ServerRequestException.cs",
+        "Assets/CR/Core/Data/Logic/ServerUnreachableException.cs",
+        "Assets/CR/Core/Data/Logic/BadRequestException.cs",
+        "Assets/CR/Core/Data/Logic/NotAuthorizedException.cs",
+        "Assets/CR/Core/Data/Logic/PaymentRequiredException.cs",
+        "Assets/CR/Core/Data/Logic/ForbiddenException.cs",
+        "Assets/CR/Core/Data/Logic/NotFoundException.cs",
+        "Assets/CR/Core/Data/Logic/ConflictException.cs",
+        "Assets/CR/Core/Data/Logic/InternalServerErrorException.cs",
+        "Assets/CR/Core/Data/Logic/ServerResponseClassifier.cs",
+        "Assets/CR/Core/Data/Logic/ServerErrorMessage.cs",
+        "Assets/CR/Core/Data/Logic/PlayerErrorText.cs",
+        "Assets/CR/Core/Data/Logic/Tests/ServerResponseClassifierTests.cs",
+        "Assets/CR/Core/Data/Logic/Tests/ServerErrorMessageTests.cs",
+        "Assets/CR/Core/Data/Logic/Tests/PlayerErrorTextTests.cs",
+        "Assets/CR/Core/Data/Repository/Implementation/Config/VersionCheckClientUnityHttp.cs",
+        "Assets/CR/Core/Data/Logic/AuthRetryPolicy.cs",
+        "Assets/CR/Core/Data/Logic/Tests/AuthRetryPolicyTests.cs"
       ]
     },
-    "description": "Online/offline repository pattern, Best HTTP, SQLite cache"
+    "description": "Online/offline repository pattern, Best HTTP, ServerRequestException family + PlayerErrorText, SQLite cache"
   },
   "unity/06-localization": {
     "docPath": "docs/unity/06-localization.md",
@@ -227,7 +258,9 @@
     "repos": {
       "cr-api": [
         "Game/CR.Game.Service.BFF/Endpoints/BattleEndpoints.cs",
-        "Game/CR.Game.Service.BFF/Endpoints/WildBattleEndpoints.cs"
+        "Game/CR.Game.Service.BFF/Endpoints/WildBattleEndpoints.cs",
+        "Convenience/CR.Game.Compat/Battle/BattleResolver.cs",
+        "Game/CR.Game.Model/Battle/ActionOutcome.cs"
       ],
       "cr-data": [
         "Assets/CR/Game/Battle/BattleCoordinator.cs",
@@ -266,6 +299,8 @@
         "Assets/CR/Game/Battle/Arena/BattleStagingResult.cs",
         "Assets/CR/Game/Battle/Arena/Editor/BattleArenaCreator.cs",
         "Assets/CR/Game/Battle/Events/BattleEvents.cs",
+        "Assets/CR/Game/Battle/Logic/IsolatedDispatch.cs",
+        "Assets/CR/Game/Battle/Logic/Tests/IsolatedDispatchTests.cs",
         "Assets/CR/Game/Battle/DTOs/WildBattleStateDtos.cs",
         "Assets/CR/UI/Battle/BattleHUD.cs",
         "Assets/CR/Game/World/Behaviours/NpcInteractionBehaviour.cs",
@@ -283,10 +318,35 @@
         "Assets/CR/Game/Battle/EncounterAbort.cs",
         "Assets/CR/Game/World/Behaviours/PickupBehaviour.cs",
         "Assets/CR/Core/Notifications/WorldToast.cs",
-        "Assets/CR/UI/Achievements/AchievementToastPresenter.cs"
+        "Assets/CR/UI/Achievements/AchievementToastPresenter.cs",
+        "Assets/CR/Core/Data/Registry/Definitions/TrainerBattleDefinition.cs",
+        "Assets/CR/Game/World/Editor/TrainerBattleAuthoring.cs",
+        "Assets/CR/Game/World/Editor/CrTrainerBattleCommand.cs",
+        "Assets/CR/Game/World/Behaviours/NpcTrainerBehaviour.cs",
+        "Assets/CR/Game/World/Behaviours/NpcBattleRequest.cs",
+        "Assets/CR/Game/World/Editor/UI/TrainerBattleAuthor.uxml",
+        "Assets/CR/Game/World/Editor/UI/TrainerBattleAuthor.uss",
+        "Assets/CR/Game/World/Logic/TrainerAuthorChecklist.cs",
+        "Assets/CR/Game/Battle/Presentation/Editor/CreatureReactionProfileEditor.cs",
+        "Assets/CR/Game/Battle/Presentation/Editor/CreatureReactionProfileBeats.cs",
+        "Assets/CR/Game/Battle/Logic/ReactionBeatDigest.cs",
+        "Assets/CR/Game/Battle/Logic/ReactionBeatSource.cs",
+        "Assets/CR/UI/Battle/DebugOverlay/BattleDebugStatsOverlay.cs",
+        "Assets/CR/UI/Battle/DebugOverlay/Logic/BattleDebugStatsFormatter.cs",
+        "Assets/CR/UI/Battle/DebugOverlay/Logic/BattleDebugCreatureSnapshot.cs",
+        "Assets/CR/UI/Battle/DebugOverlay/Logic/BattleDebugAbilitySnapshot.cs",
+        "Assets/CR/UI/Battle/DebugOverlay/Logic/BattleDebugStatModifierSnapshot.cs",
+        "Assets/CR/UI/Resources/BattleDebugStatsOverlay.uss",
+        "Assets/CR/Resources/CR_GameInput.inputactions",
+        "Assets/CR/Core/DI/LocalDevGameInstaller.cs",
+        "Tests/ContentSync/BattleDomainServiceBindingTests.cs",
+        "Assets/CR/UI/Common/UiIcon.cs",
+        "Assets/CR/Game/Battle/Logic/BattleOutcomeSubtitle.cs",
+        "Assets/CR/Game/Battle/BattleResult.cs",
+        "Assets/CR/UI/Battle/BattleSummaryScreen.cs"
       ]
     },
-    "description": "BattleCoordinator sequential turn loop with battle-scoped CancellationToken, BattleHttpDomainAdapter + OnlineOfflineBattleDomainService stack, BattleEvents static events (incl. StagingFailed), Arena system with IBattleStager returning BattleStagingResult (player teleport + creature visual spawn at PlayerCreaturePosition/OpponentCreaturePosition), self-registering BattleArenaRegistry, reactive Cinemachine 3 cinematic camera (BattleCinematicDirector conductor driven by CameraCue*/TurnStarted, editor-authored BattleCameraRig role vCams + BattleCameraProfile feel SO + decoupled BattleCameraShakeResponder via BattleCameraRigContext, BattleFormation slot model for 1v1->NvN, one-click rig builder + beat simulator), per-creature CreatureBattlePresenter (added to creature prefabs; the stager resolves the creature's shared CreatureReactionProfile from its CreatureDefinition by content key, flattens any base\u2192variant inheritance via Resolve(), and hands the result to Bind; subscribes to BattleEvents and plays the creature's own body \u2014 animation+cry+feedback \u2014 per beat, with a standard Animator state-name convention in CreatureReactionDefaults and HasState-guarded fallbacks), ability VFX/SFX sourced from AbilityConfig keys on the outcome and played positionally by BattleAbilityFxResponder via a single positioned AbilityFxCue + BattleVisualRegistry (id\u2192transform), BattleHUD with Guid-typed creature IDs and HP cache replay, BattleSync SOAP bridge, StartNpcBattle/StartWildBattle, NpcBattleRequest.BattleArenaKey, SpawnerEncounterBehaviour with encounter delay"
+    "description": "BattleCoordinator sequential turn loop with battle-scoped CancellationToken, BattleHttpDomainAdapter + OnlineOfflineBattleDomainService stack, BattleEvents static events (incl. StagingFailed), Arena system with IBattleStager returning BattleStagingResult (player teleport + creature visual spawn at PlayerCreaturePosition/OpponentCreaturePosition), self-registering BattleArenaRegistry, reactive Cinemachine 3 cinematic camera (BattleCinematicDirector conductor driven by CameraCue*/TurnStarted, editor-authored BattleCameraRig role vCams + BattleCameraProfile feel SO + decoupled BattleCameraShakeResponder via BattleCameraRigContext, BattleFormation slot model for 1v1->NvN, one-click rig builder + beat simulator), per-creature CreatureBattlePresenter (added to creature prefabs; the stager resolves the creature's shared CreatureReactionProfile from its CreatureDefinition by content key, flattens any base\u2192variant inheritance via Resolve(), and hands the result to Bind; subscribes to BattleEvents and plays the creature's own body \u2014 animation+cry+feedback \u2014 per beat, with a standard Animator state-name convention in CreatureReactionDefaults and HasState-guarded fallbacks), ability VFX/SFX sourced from AbilityConfig keys on the outcome and played positionally by BattleAbilityFxResponder via a single positioned AbilityFxCue + BattleVisualRegistry (id\u2192transform), BattleHUD with Guid-typed creature IDs and HP cache replay, BattleSync SOAP bridge, StartNpcBattle/StartWildBattle, NpcBattleRequest.BattleArenaKey, SpawnerEncounterBehaviour with encounter delay; trainer battles: bark-then-challenge flow (TrainerChallenged banner, Run hidden, RunRefused log, OpponentItemUsed), shared RunTurnLoopAsync with trainer AI decider + NPC item turns, TrainerBattleDefinition SO + Trainer Battle Author window (spawner plumbing hidden, deterministic md5 ids, bark conversation + scene stamp); Trainer Battle Author rebuilt as the project's first UXML/USS editor window (roster rail + dossier, readiness meter, checklist cards, plain-language copy); dev-only BattleDebugStatsOverlay (F3, Editor/DEVELOPMENT_BUILD only) rendering per-creature stat/status/ability/held-item/stat-modifier panels beside BattleHUD's cards, sourced from the same BattleEvents bus + TeamSync"
   },
   "unity/16-domain-sync-pattern": {
     "docPath": "docs/unity/16-domain-sync-pattern.md",
@@ -296,10 +356,19 @@
         "Assets/CR/Game/World/Behaviours/TeamSync.cs",
         "Assets/CR/Game/World/Behaviours/InventorySync.cs",
         "Assets/CR/Game/Battle/BattleSync.cs",
-        "Assets/CR/Core/DI/LocalDevGameInstaller.cs"
+        "Assets/CR/Core/DI/LocalDevGameInstaller.cs",
+        "Assets/CR/Core/Sync/Logic/SyncRouter.cs",
+        "Assets/CR/Pickups/Repository/PickupDefinitionOnlineOfflineRepository.cs",
+        "Assets/CR/Game/World/Behaviours/PickupCollectedRegistry.cs",
+        "Assets/CR/Achievements/Repository/AchievementDefinitionOnlineOfflineRepository.cs",
+        "Assets/CR/Achievements/Repository/AchievementUnlockedOnlineOfflineRepository.cs",
+        "Assets/CR/Quests/Repository/Implementation/QuestTemplateOnlineOfflineRepository.cs",
+        "Assets/CR/Quests/Repository/Implementation/QuestOnlineOfflineRepository.cs",
+        "Assets/CR/Npcs/Runtime/TrainerDefeatCache.cs",
+        "Assets/CR/Stats/Repository/StatOnlineOfflineRepository.cs"
       ]
     },
-    "description": "IDomainSync pattern: BattleSync (SOAP bridge via events), TeamSync (world-scoped team cache), InventorySync (world-scoped backpack cache), Zenject bindings"
+    "description": "IDomainSync pattern: BattleSync (SOAP bridge via events), TeamSync (world-scoped team cache), InventorySync (world-scoped backpack cache), Zenject bindings; cache-first policy: content (pickup/achievement defs, quest templates) local-first with server on content_key miss, terminal player state (collected pickups, unlocks, completed quests, trainer defeats) local-first with session-once server reconcile, in-progress state server-when-online"
   },
   "unity/08-content-registry": {
     "docPath": "docs/unity/08-content-registry.md",
@@ -308,7 +377,16 @@
         "Creatures/CR.Creatures.Data.Migration/M1015EnforceContentKeyNotNullAndUnique.cs",
         "Npcs/CR.Npcs.Data.Migration/M2006EnforceContentKeyNotNullOnNpcs.cs",
         "Spawner/CR.Spawner.Data.Migration/M5012EnforceContentKeyNotNullOnSpawner.cs",
-        "Game/CR.Game.Model/Creatures/BaseCreature.cs"
+        "Game/CR.Game.Model/Creatures/BaseCreature.cs",
+        "Convenience/CR.REST.AIO/Program.cs",
+        "Creatures/CR.Creatures.Data.Migration/M10021PartialUniqueStatusConditionName.cs",
+        "Trainers/CR.Trainers.Data/Implementation/BaseTrainerInventoryRepository.cs",
+        "Items/CR.Items.Data.Migration/M6021AddIconAssetKeyToItem.cs",
+        "Creatures/CR.Creatures.Data.Migration/M12012AddIconAssetKeyToContent.cs",
+        "Game/CR.Game.Model/Content/ContentManifestResponse.cs",
+        "Creatures/CR.Creatures.Service.REST/Endpoints/AbilityEndpoints.cs",
+        "Items/CR.Items.Data.Migration/M6022BackfillItemIconAssetKey.cs",
+        "Creatures/CR.Creatures.Data.Migration/M12013BackfillContentIconAssetKey.cs"
       ],
       "cr-data": [
         "Assets/CR/Core/Data/Registry/IGameContentRegistry.cs",
@@ -361,10 +439,128 @@
         "Assets/CR/Game/World/OnlineOfflineAbilityLibrarySyncClient.cs",
         "Assets/CR/Game/World/Editor/AbilityEditorSyncHelper.cs",
         "Assets/CR/Game/World/Editor/ContentCreatorSyncHelper.cs",
-        "Assets/CR/Core/DI/LocalDevGameInstaller.cs"
+        "Assets/CR/Core/DI/LocalDevGameInstaller.cs",
+        "Assets/CR/Core/Data/Editor/UI/ContentStudio.uxml",
+        "Assets/CR/Core/Data/Editor/UI/CRStudio.uss",
+        "Assets/CR/Core/Data/Logic/ContentDisplayName.cs",
+        "Assets/CR/Core/Data/Logic/Tests/ContentDisplayNameTests.cs",
+        "Assets/CR/Core/Data/Editor/ContentPicker.cs",
+        "Assets/CR/Core/Data/Editor/TrainerBattleDefinitionEditor.cs",
+        "Assets/CR/Core/Data/Editor/ContentPicker.Spawners.cs",
+        "Assets/CR/Core/Data/Editor/ContentPicker.Definitions.cs",
+        "Assets/CR/Core/Data/Editor/ContentPicker.Npcs.cs",
+        "Assets/CR/Core/Data/Editor/NpcDefinitionEditor.cs",
+        "Assets/CR/Core/Data/Logic/NpcAuthorChecklist.cs",
+        "Assets/CR/Core/Data/Logic/Tests/NpcAuthorChecklistTests.cs",
+        "Assets/CR/Core/Data/Editor/ContentStudioLink.cs",
+        "Assets/CR/Core/Data/Editor/ContentPicker.Assets.cs",
+        "Assets/CR/Core/Data/Editor/ContentPushLog.cs",
+        "Assets/CR/Core/Data/Logic/ContentPushStatus.cs",
+        "Assets/CR/Core/Data/Logic/ContentPushState.cs",
+        "Assets/CR/Core/Data/Logic/ContentSection.cs",
+        "Assets/CR/Core/Data/Logic/ContentSectionCatalog.cs",
+        "Assets/CR/Core/Data/Logic/StudioWorkSummary.cs",
+        "Assets/CR/Core/Data/Logic/StudioWorkState.cs",
+        "Assets/CR/Core/Data/Logic/StudioWorkTone.cs",
+        "Assets/CR/Core/Data/Logic/EditorMemoPolicy.cs",
+        "Assets/CR/Core/Data/Editor/EditorMemo.cs",
+        "Assets/CR/Core/Data/Editor/RegistryScan.cs",
+        "Assets/CR/Core/Data/Logic/StudioJobState.cs",
+        "Assets/CR/Core/Data/Logic/StudioJobTracker.cs",
+        "Assets/CR/Core/Data/Logic/StudioJobQueue.cs",
+        "Assets/CR/Core/Data/Logic/Tests/StudioJobTrackerTests.cs",
+        "Assets/CR/Core/Data/Logic/Tests/StudioJobQueueTests.cs",
+        "Assets/CR/Core/Data/Editor/Studio/Jobs/StudioJob.cs",
+        "Assets/CR/Core/Data/Editor/Studio/Jobs/StudioJobRunner.cs",
+        "Assets/CR/Core/Data/Editor/Studio/Jobs/StudioIteratorJob.cs",
+        "Assets/CR/Core/Data/Editor/Studio/Jobs/StudioProgressBar.cs",
+        "Assets/CR/Core/Data/Editor/Studio/Jobs/StudioLog.cs",
+        "Assets/CR/Core/Data/Logic/NpcPlacement.cs",
+        "Assets/CR/Core/Data/Logic/NpcPlacementSource.cs",
+        "Assets/CR/Core/Data/Logic/NpcPlacementIndex.cs",
+        "Assets/CR/Core/Data/Logic/NpcSceneGroup.cs",
+        "Assets/CR/Core/Data/Logic/NpcPrefabDefinition.cs",
+        "Assets/CR/Core/Data/Logic/NpcPrefabIndex.cs",
+        "Assets/CR/Core/Data/Logic/NpcPrefabClosure.cs",
+        "Assets/CR/Core/Data/Logic/NpcSceneYaml.cs",
+        "Assets/CR/Core/Data/Logic/NpcScenePlacementParser.cs",
+        "Assets/CR/Core/Data/Logic/NpcScanCachePolicy.cs",
+        "Assets/CR/Core/Data/Logic/Tests/NpcScenePlacementParserTests.cs",
+        "Assets/CR/Core/Data/Logic/Tests/NpcPrefabClosureTests.cs",
+        "Assets/CR/Core/Data/Logic/Tests/NpcPlacementIndexTests.cs",
+        "Assets/CR/Core/Data/Logic/Tests/NpcScanCachePolicyTests.cs",
+        "Assets/CR/Core/Data/Editor/Studio/Npc/NpcSceneScanJob.cs",
+        "Assets/CR/Core/Data/Editor/Studio/Npc/NpcSceneIndexStore.cs",
+        "Assets/CR/Core/Data/Editor/Studio/Npc/NpcScanFileReader.cs",
+        "Assets/CR/Core/Data/Editor/Studio/Npc/NpcScanFileFacts.cs",
+        "Assets/CR/Core/Data/Editor/Studio/Npc/NpcScanCacheFile.cs",
+        "Assets/CR/Core/Data/Editor/Studio/Npc/NpcScanSceneRecord.cs",
+        "Assets/CR/Core/Data/Editor/Studio/Npc/NpcScanPrefabRecord.cs",
+        "Assets/CR/Core/Data/Editor/Studio/Npc/NpcScanPlacementRecord.cs",
+        "Assets/CR/Core/Data/Editor/Studio/Npc/NpcPlacementNavigator.cs",
+        "Assets/CR/Core/Data/Editor/Studio/Npc/NpcPlacementPanel.cs",
+        "Assets/CR/Core/Data/Logic/DuplicateNameRule.cs",
+        "Assets/CR/Game/World/Logic/ContentSyncGuard.cs",
+        "Assets/CR/Game/World/Editor/AbilityEditorSyncHelper.cs",
+        "Assets/CR/Game/World/Editor/QuestEditorSyncHelper.cs",
+        "Assets/CR/Game/World/Logic/SyncFieldMerge.cs",
+        "Assets/CR/Core/Data/Editor/StudioAuthPanel.cs",
+        "Assets/CR/Game/World/Editor/EditorServiceAuth.cs",
+        "Assets/CR/Core/Data/Logic/EditorAuthStatus.cs",
+        "Assets/CR/Core/Data/Registry/Definitions/BattleMissionDefinition.cs",
+        "Assets/CR/Core/Data/Editor/BattleMissionDefinitionEditor.cs",
+        "Assets/CR/Core/Data/Editor/BattleMissionSeedMigrationExporter.cs",
+        "Assets/CR/Game/World/Editor/BattleMissionEditorSyncHelper.cs",
+        "Assets/CR/Game/World/Editor/BattleMissionDefinitionMapper.cs",
+        "Assets/CR/Game/Battle/Logic/BattleMissionSeedMigrationGenerator.cs",
+        "Assets/CR/Game/Battle/Logic/BattleMissionSeedEntry.cs",
+        "Assets/CR/Game/Battle/Logic/BattleMissionContentKey.cs",
+        "Assets/CR/Core/Data/Registry/Definitions/ElementalReactionDefinition.cs",
+        "Assets/CR/Core/Data/Registry/Definitions/ElementalDamageMatrixConfig.cs",
+        "Assets/CR/Core/Data/Editor/ElementalReactionDefinitionEditor.cs",
+        "Assets/CR/Core/Data/Editor/ElementalDamageMatrixConfigEditor.cs",
+        "Assets/CR/Core/Data/Editor/ElementalDamageMatrixGrid.cs",
+        "Assets/CR/Core/Data/Editor/ElementalReactionSeedMigrationExporter.cs",
+        "Assets/CR/Core/Data/Editor/ElementalDamageSeedMigrationExporter.cs",
+        "Assets/CR/Core/Data/Editor/Studio/StudioTextPrompt.cs",
+        "Assets/CR/Game/World/Editor/ElementalReactionDefinitionMapper.cs",
+        "Assets/CR/Game/World/Editor/ElementalDamageMatrixConfigMapper.cs",
+        "Assets/CR/Game/World/Editor/ElementalReactionEditorSyncHelper.cs",
+        "Assets/CR/Game/World/Editor/ElementalDamageEditorSyncHelper.cs",
+        "Assets/CR/Game/Battle/Logic/ElementalReactionMapping.cs",
+        "Assets/CR/Game/Battle/Logic/ElementalDamageMatrixMapping.cs",
+        "Assets/CR/Game/Battle/Logic/ElementalReactionSeedMigrationGenerator.cs",
+        "Assets/CR/Game/Battle/Logic/ElementalDamageSeedMigrationGenerator.cs",
+        "Assets/CR/Game/Battle/Logic/ElementalReactionSeedEntry.cs",
+        "Assets/CR/Game/Battle/Logic/ElementalDamageCellEntry.cs",
+        "Assets/CR/Game/Battle/Logic/ElementalReactionContentKey.cs",
+        "Assets/CR/Game/Battle/Logic/ContentKeySlug.cs",
+        "Assets/CR/Game/Battle/Logic/SeedMigrationFileWriter.cs",
+        "Assets/CR/Game/Battle/Logic/SeedMigrationTarget.cs",
+        "Assets/CR/Core/Data/Editor/LiveOps/**",
+        "Assets/CR/Game/World/Editor/EditorAdminAuth.cs",
+        "Assets/CR/Game/World/Editor/AdminEditorHttp.cs",
+        "Assets/CR/Game/World/Editor/AdminPlayerEditorSyncHelper.cs",
+        "Assets/CR/Game/World/Editor/AdminMarketEditorSyncHelper.cs",
+        "Assets/CR/Game/World/Editor/AdminEndpointContext.cs",
+        "Assets/CR/Core/Data/Logic/AdminQueryString.cs",
+        "Assets/CR/Core/Data/Logic/ModerationStamp.cs",
+        "Assets/CR/Core/Data/Logic/IconAddress.cs",
+        "Assets/CR/Core/Data/Editor/IconSlotField.cs",
+        "Assets/CR/Core/Data/Registry/ContentSyncWriter.cs",
+        "Assets/CR/Core/Data/Registry/Sync/SyncAbilityDto.cs",
+        "Assets/CR/Core/Data/Registry/Sync/SyncCreatureDto.cs",
+        "Assets/CR/Core/Data/Editor/ContentReviewWindow.cs",
+        "Assets/CR/Core/Data/Editor/UI/ContentReview.uxml",
+        "Assets/CR/Core/Data/Editor/UI/ContentReview.uss",
+        "Assets/CR/Core/Data/Logic/ReviewRow.cs",
+        "Assets/CR/Core/Data/Logic/ReviewGroup.cs",
+        "Assets/CR/Core/Data/Logic/ContentReviewRows.cs",
+        "Assets/CR/Core/Data/Logic/FieldChange.cs",
+        "Assets/CR/Core/Data/Logic/FieldDiff.cs"
       ]
     },
-    "description": "IGameContentRegistry, ScriptableObjectContentRegistry, ServerContentRegistry, MutableContentRegistry, ContentRegistryInitializer, ContentManifestClientUnityHttp, ContentDefinitionProvider, ContentKeys constants, CreatureDefinition/ItemDefinition/NpcDefinition/SpawnerDefinition ScriptableObjects, CreatureContentDef/ItemContentDef/NpcContentDef/SpawnerContentDef POCOs, IGameAssetLoader.LoadAssetByKeyAsync, ContentStudioTool unified EditorWindow (7 tabs replacing ContentCreatorTool and AbilityLibraryTool), custom Inspectors for all definition types, AddressablesCatalogUpdater, LocalizationEditorWindow, ContentAuditTool, ContentPublishTool, AbilityConfig/AbilityProgressionSetConfig/GrowthProfileConfig SOs, AbilityEditorSyncHelper, ability sync clients (HTTP/local/online-offline)"
+    "description": "IGameContentRegistry, ScriptableObjectContentRegistry, ServerContentRegistry, MutableContentRegistry, ContentRegistryInitializer, ContentManifestClientUnityHttp, ContentDefinitionProvider, ContentKeys constants, CreatureDefinition/ItemDefinition/NpcDefinition/SpawnerDefinition ScriptableObjects, CreatureContentDef/ItemContentDef/NpcContentDef/SpawnerContentDef POCOs, IGameAssetLoader.LoadAssetByKeyAsync, ContentStudioTool unified EditorWindow (7 tabs replacing ContentCreatorTool and AbilityLibraryTool), custom Inspectors for all definition types, AddressablesCatalogUpdater, LocalizationEditorWindow, ContentAuditTool, ContentPublishTool, AbilityConfig/AbilityProgressionSetConfig/GrowthProfileConfig SOs, AbilityEditorSyncHelper, ability sync clients (HTTP/local/online-offline); Content Studio chrome rebuilt in UI Toolkit (CRStudio.uss shared editor design system, grouped navigation rail with live counts, header count chips + server field + connection pill, status bar; tab bodies remain IMGUI in an IMGUIContainer); ContentDisplayName single naming rule + ContentPicker dropdowns (human names stored as keys, dangling references warned, options from project incl. arenas unioned from spawners/trainers/open scenes); header rebuilt around one StudioWorkSummary pill (the single ranked answer to \"what needs doing\", with the button that resolves it) plus Guide and Advanced switches \u2014 Advanced (same pref as the old Debug toggle) holds the server field, raw keys/ids, the all-content sync bar and the recovery actions; ContentSectionCatalog is the one source of the rail's labels, groups and per-section guide sentences; project scans (registry sweep, orphan scan, Addressables lookups, push-state file stats) cached through EditorMemo/EditorMemoPolicy on the IMGUI layout pass instead of running every repaint; Trainer Battles tab; spawner/pool/creature/item reference fields all ContentPicker dropdowns (Fetch-button flows deleted); NpcAuthorChecklist readiness panel on NpcDefinitionEditor; Content Studio's slow work moved off the draw thread into a job system (StudioJobTracker/StudioJobQueue pure logic + StudioJob/StudioIteratorJob/StudioJobRunner stepping on EditorApplication.update within an 8ms budget, yield-a-Task for non-Unity work, StudioProgressBar cr-jobbar strip above the status bar, [Studio]-prefixed console lines on every status transition): per-definition content pushes (plan built without network, one send per tick, cancellable, tab not stamped on a partial run), per-type pulls, and the registry sweep + push comparison (published into a pending slot and adopted only on a Layout pass); NPC placements now scanned across EVERY scene in the project rather than the open ones \u2014 NpcSceneScanJob reads scene/prefab YAML on a worker thread (NpcScanFileReader buffered single-pass pre-filter, NpcScenePlacementParser for Component/PrefabInstance/PrefabReference shapes, NpcPrefabClosure fixed point over m_SourcePrefab so variants and nested NPC prefabs count), results cached per file in Library/CRStudioNpcScenes.json under NpcScanCachePolicy with prefab-state and resolved-prefab fingerprints; NpcPlacementIndex/NpcSceneGroup drive a scan strip, per-row 'in Village (2), Meadow' summaries and per-scene grouped placements with Open scene/Select via NpcPlacementNavigator; NpcDefinitionEditor's checklist reads placement from the scan or the open scene and memoises BuildSnapshot; LIVE OPS group (Players tab 18 + Marketplace tab 19 in Editor/LiveOps/, EditorAdminAuth admin token, StudioJob-backed admin reads/writes, ModerationReasonDialog) \u2014 see backend/18-moderation; Review window (ContentReviewWindow, Review button beside Push All): every unpushed asset grouped by type with per-row Diff (FieldDiff over EditorJsonUtility of local vs server-applied clone), Push (PushOne, single-asset job, tab not stamped) and Revert (RevertOne, same apply as Pull All, confirm-gated, not for Trainer Battles); ContentPushLog per-asset stamps (LastPushUtcTicks_asset_<guid>) so ContentPushStatus counts an asset pushed when newer than the later of tab/asset stamps; ReviewRow/ReviewGroup/ContentReviewRows pure logic"
   },
   "backend/10-asset-management": {
     "docPath": "docs/backend/10-asset-management.md",
@@ -483,7 +679,18 @@
   "unity/10-player-menu-ui": {
     "docPath": "docs/unity/10-player-menu-ui.md",
     "repos": {
-      "cr-api": [],
+      "cr-api": [
+        "Game/CR.Game.Model/Items/ItemType.cs",
+        "Items/CR.Items.Data.Migration/M6019FixSeededConsumableItemType.cs",
+        "Convenience/CR.Data.Migrations.Test/SeededItemTypeSqliteTests.cs",
+        "Game/CR.Game.Model/Items/ItemEffectType.cs",
+        "Game/CR.Game.Model/Items/ItemUsageFlags.cs",
+        "Game/CR.Game.Model/Creatures/CreatureStatusConditionView.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/CreatureStatusEndpoints.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Item/ItemUseDomainService.cs",
+        "Items/CR.Items.Data.Migration/M6020SeedCreatureConsumables.cs",
+        "Items/CR.Items.Data.Migration/M6022BackfillItemIconAssetKey.cs"
+      ],
       "cr-data": [
         "Assets/CR/UI/PlayerMenuWindow.cs",
         "Assets/CR/UI/PlayerTeamView.cs",
@@ -496,7 +703,17 @@
         "Assets/CR/UI/Input/**/*.cs",
         "Assets/CR/UI/Resources/PlayerMenuWindow.uxml",
         "Assets/CR/UI/Resources/PlayerMenuWindow.uss",
-        "Assets/CR/UI/Resources/BagScreen.uxml"
+        "Assets/CR/UI/Resources/BagScreen.uxml",
+        "Assets/CR/UI/Common/CreatureTargetPicker.cs",
+        "Assets/CR/UI/Common/UiFocusRecovery.cs",
+        "Assets/CR/UI/Common/UiIcon.cs",
+        "Assets/CR/UI/Resources/CreatureTargetPicker.uss",
+        "Assets/CR/Core/Data/Client/Interface/ICreatureStatusClient.cs",
+        "Assets/CR/Core/Data/Client/Implementation/CreatureStatus*.cs",
+        "Assets/CR/Core/Data/Repository/LocalDataSources.cs",
+        "Assets/CR/UI/Logic/SpeciesInfo.cs",
+        "Assets/CR/UI/Logic/StatusBadge.cs",
+        "Assets/CR/Content/Defs/Items/*.asset"
       ]
     },
     "description": "Player menu UI: 5-tab overlay (Team/Bag/Quests/Journal/System) wired to real domain data \u2014 PlayerTeamView squad sheet, BagScreenHandler backpack with BagItemPolicy filtering, QuestJournalView active/completed quests, JournalView achievements + stat records, CR.UI.Logic pure rules, input wiring via UICoordinator"
@@ -511,7 +728,14 @@
         "Creatures/CR.Creatures.Data.Migration/M10003SeedMegaBurnAbility.cs",
         "Game/CR.Game.Data/Interface/IBattleMissionTemplateRepository.cs",
         "Game/CR.Game.Data/Implementation/BaseBattleMissionTemplateRepository.cs",
+        "Game/CR.Game.Data/Model/BattleMissionTemplateUpsertRequest.cs",
+        "Game/CR.Game.Data/Validation/BattleMissionTemplateValidation.cs",
+        "Game/CR.Game.Data/Constants/BattleMissionTypes.cs",
+        "Game/CR.Game.Data/Constants/BattleMissionRewardTypes.cs",
         "Game/CR.Game.Service.BFF/Endpoints/BattleMissionTemplateEndpoints.cs",
+        "Game/CR.Game.Data.Test/BattleMissionTemplateValidationTests.cs",
+        "Game/CR.Game.Data.Postgres.Test/BattleMissionTemplateRepositoryPostgresTests.cs",
+        "Convenience/CR.Api.IntegrationTests/BattleMissionTemplateHttpTests.cs",
         "Creatures/CR.Creatures.Data.Migration/M1017AddAbilityProgressionSetIdToBaseCreature.cs",
         "Creatures/CR.Creatures.Data.Migration/M1029CreateGeneratedCreatureStatusConditionsTable.cs",
         "Creatures/CR.Creatures.Data.Migration/M9003AddAnimationKeyToAbilities.cs",
@@ -527,6 +751,11 @@
         "Game/CR.Game.Domain.Services/Interfaces/Battle/IBattleDomainService.cs",
         "Game/CR.Game.Domain.Services/Interfaces/Battle/IWildBattleAIDomainService.cs",
         "Game/CR.Game.Domain.Services/Implementation/Battle/BattleDomainService.cs",
+        "Game/CR.Game.Model/Battle/ActionOutcome.cs",
+        "Game/CR.Game.Model/Elemental/ElementalReaction.cs",
+        "Convenience/CR.Game.Compat/Battle/ElementalReactionTable.cs",
+        "Creatures/CR.Creatures.Data.Migration/M10018SeedElementalReactions.cs",
+        "Creatures/CR.Creatures.Data.Migration/M10019AuthorReactionContent.cs",
         "Game/CR.Game.Domain.Services/Implementation/Creature/CreatureInventoryService.cs",
         "Game/CR.Game.Domain.Services/Interfaces/Creature/ICreatureInventoryService.cs",
         "Game/CR.Game.Service.BFF/Endpoints/TeamEndpoints.cs",
@@ -538,14 +767,43 @@
         "Game/CR.Game.Service.BFF/Endpoints/BattleEndpoints.cs",
         "Game/CR.Game.Service.BFF/Endpoints/WildBattleEndpoints.cs",
         "Convenience/CR.Game.Compat/Battle/**/*.cs",
-        "Convenience/CR.REST.AIO/Program.cs"
+        "Convenience/CR.REST.AIO/Program.cs",
+        "Game/CR.Game.Data.Migration/M8017AddOpponentContentKeyToBattle.cs",
+        "Game/CR.Game.Domain.Services/Interfaces/Battle/ITrainerBattleAIDomainService.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Battle/TrainerBattleAIDomainService.cs",
+        "Creatures/CR.Creatures.Data.Migration/M10020SeedMeadowDemoTrainer.cs",
+        "Convenience/CR.Data.Migrations.Test/MeadowTrainerSeedSqliteTests.cs",
+        "Game/CR.Game.Data.Test/TrainerBattleEndToEndSqliteTests.cs",
+        "Creatures/CR.Creatures.Data.Migration/M12006CreateAndSeedElementalReaction.cs",
+        "Creatures/CR.Creatures.Data.Migration/M12007FixRadiantSelfMultiplier.cs",
+        "Creatures/CR.Creatures.Data/Interface/IElementalReactionRepository.cs",
+        "Creatures/CR.Creatures.Data/Implementation/BaseElementalReactionRepository.cs",
+        "Creatures/CR.Creatures.Data.Postgres/ElementalReactionRepository.cs",
+        "Creatures/CR.Creatures.Data.Sqlite/ElementalReactionRepository.cs",
+        "Creatures/CR.Creatures.Data.Postgres.Test/ElementalReactionRepositoryPostgresTests.cs",
+        "Creatures/CR.Creatures.Data.Sqlite.Test/ElementalReactionRepositorySqliteTests.cs",
+        "Game/CR.Game.Data/Model/Elemental/**/*.cs",
+        "Game/CR.Game.Data/Validation/ElementalReactionValidation.cs",
+        "Game/CR.Game.Data/Validation/ElementalDamageMatrixValidation.cs",
+        "Game/CR.Game.Data.Test/ElementalReactionValidationTests.cs",
+        "Game/CR.Game.Data.Test/ElementalDamageMatrixValidationTests.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/ElementalReactionEndpoints.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/ElementalDamageEndpoints.cs",
+        "Game/CR.Game.Domain.Services/Interfaces/Battle/IBattleConfigurationDomainService.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Battle/BattleConfigurationDomainService.cs",
+        "Game/CR.Game.Data/Interface/IBattleSystemVersionRepository.cs",
+        "Game/CR.Game.Data/Implementation/BaseBattleSystemVersionRepository.cs",
+        "Convenience/CR.Data.Migrations.Test/ElementalReactionTableSeedSqliteTests.cs",
+        "Convenience/CR.Data.Migrations.Test/ReactionReachabilitySqliteTests.cs",
+        "Convenience/CR.Api.IntegrationTests/ElementalReactionHttpTests.cs",
+        "Convenience/CR.Api.IntegrationTests/ElementalDamageHttpTests.cs"
       ],
       "cr-data": [
         "Assets/CR/Game/Battle/BattleHttpDomainAdapter.cs",
         "Assets/CR/Game/Battle/OnlineOfflineBattleDomainService.cs"
       ]
     },
-    "description": "Battle DB tables (battle with active creature IDs, battle_round, battle_round_input, battle_action_log), persistent HP/conditions on generated_creature_current_stats + generated_creature_status_conditions, IBattleRepository, IGeneratedCreatureRepository, BattleDomainService, BattleHttpDomainAdapter, REST endpoints, DI wiring, ability progression, animation_key + VFX/SFX keys on abilities"
+    "description": "Battle DB tables (battle with active creature IDs, battle_round, battle_round_input, battle_action_log), persistent HP/conditions on generated_creature_current_stats + generated_creature_status_conditions, IBattleRepository, IGeneratedCreatureRepository, BattleDomainService, BattleHttpDomainAdapter, REST endpoints, DI wiring, ability progression, animation_key + VFX/SFX keys on abilities; trainer battles (battle_type Wild/Trainer, minted battle trainer via npcs.battle_trainer_id, run refused without turn cost, heal-on-start, 1.5x XP / 2x currency, TrainerBattleAIDomainService swap\u2192heal\u2192attack, opponent_content_key M8017, M10020 Meadow demo trainer); elemental reactions as authored content (elemental_reaction table M12006, IElementalReactionRepository, /api/v1/elemental-reactions, resolver injection + ActionOutcome.ReactionLogLine) and the versioned elemental_damage matrix (/api/v1/elemental-damage, active-version pointer honoured with a has-rows fallback, M12007 Radiant self-multiplier fix + DECIMAL(4,2) widening)"
   },
   "unity/11-dialogue-integration": {
     "docPath": "docs/unity/11-dialogue-integration.md",
@@ -584,10 +842,23 @@
         "Assets/CR/Game/Battle/Arena/BattleCameraProfile.cs",
         "Assets/CR/Game/Battle/Presentation/CreatureReactionProfile.cs",
         "Assets/CR/Game/Battle/Presentation/CreatureBattleReactions.cs",
-        "Assets/CR/Game/Battle/Presentation/CreatureReaction.cs"
+        "Assets/CR/Game/Battle/Presentation/CreatureReaction.cs",
+        "Assets/CR/Core/Data/Registry/Definitions/BattleMissionDefinition.cs",
+        "Assets/CR/Core/Data/Editor/BattleMissionDefinitionEditor.cs",
+        "Assets/CR/Core/Data/Registry/Definitions/ElementalReactionDefinition.cs",
+        "Assets/CR/Core/Data/Registry/Definitions/ElementalDamageMatrixConfig.cs",
+        "Assets/CR/Core/Data/Editor/ElementalReactionDefinitionEditor.cs",
+        "Assets/CR/Core/Data/Editor/ElementalDamageMatrixConfigEditor.cs",
+        "Assets/CR/Game/Battle/Logic/ElementalDamageCellEntry.cs",
+        "Assets/CR/Core/Data/Registry/Definitions/StatusConditionConfig.cs",
+        "Assets/CR/Core/Data/Editor/IconSlotField.cs",
+        "Assets/CR/Core/Data/Editor/ItemDefinitionEditor.cs",
+        "Assets/CR/Core/Data/Editor/StatusConditionConfigEditor.cs",
+        "Assets/CR/Content/Defs/Items/*.asset",
+        "Assets/CR/Content/Defs/StatusConditions/*.asset"
       ]
     },
-    "description": "All ScriptableObject types: what each does, every field, which sync to the backend and via which endpoint, ContentDefinitionProvider registry wiring, BattleCameraProfile cinematic-camera feel SO, CreatureReactionProfile shared body-reaction SO (animation+cry+feedback per beat, baseProfile inheritance/override for evolutions, Resolve() flatten; referenced by CreatureDefinition.reactionProfile; offensive VFX comes from AbilityConfig), Dialogue Database note"
+    "description": "All ScriptableObject types: what each does, every field, which sync to the backend and via which endpoint, ContentDefinitionProvider registry wiring, BattleCameraProfile cinematic-camera feel SO, CreatureReactionProfile shared body-reaction SO (animation+cry+feedback per beat, baseProfile inheritance/override for evolutions, Resolve() flatten; referenced by CreatureDefinition.reactionProfile; offensive VFX comes from AbilityConfig), Dialogue Database note, ElementalReactionDefinition (primer condition + detonator element -> multiplier/applied condition, snake_case content key, seed-migration export) and ElementalDamageMatrixConfig (one asset per matrix version, 100 completed cells, isActive mirrors battle_system_version)"
   },
   "unity/13-battle-bag-ui": {
     "docPath": "docs/unity/13-battle-bag-ui.md",
@@ -596,7 +867,8 @@
         "Game/CR.Game.Model/Items/ItemUsageFlags.cs",
         "Game/CR.Game.Model/Items/ItemEffectType.cs",
         "Items/CR.Items.Domain.Services/Interfaces/IItemEffectHandler.cs",
-        "Game/CR.Game.Service.BFF/Endpoints/ItemEndpoints.cs"
+        "Game/CR.Game.Service.BFF/Endpoints/ItemEndpoints.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Item/Handlers/*.cs"
       ],
       "cr-data": [
         "Assets/CR/UI/Battle/BattleBagPanelHandler.cs",
@@ -604,7 +876,12 @@
         "Assets/CR/UI/Resources/BattleBagPanel.uss",
         "Assets/CR/UI/Battle/BattleHUD.cs",
         "Assets/CR/Core/Data/Registry/Definitions/ItemDefinition.cs",
-        "Assets/CR/Core/Data/Registry/Definitions/ItemEnums.cs"
+        "Assets/CR/Core/Data/Registry/Definitions/ItemEnums.cs",
+        "Assets/CR/UI/Common/UiIcon.cs",
+        "Assets/CR/UI/Common/TargetCandidateBuilder.cs",
+        "Assets/CR/UI/Battle/BattleTargetOption.cs",
+        "Assets/CR/UI/Logic/BattleItemTargeting.cs",
+        "Assets/CR/Core/Data/Logic/ServerErrorMessage.cs"
       ]
     },
     "description": "BattleBagPanelHandler item display logic, item row rendering, capture crystal visual indicators, BattleHUD integration, ItemUsageFlags/CaptureCrystal flag, USS styles for capture items"
@@ -701,11 +978,13 @@
         "Game/CR.Game.Domain.Services/Implementation/Battle/BattleRewardScaling.cs",
         "Game/CR.Game.Domain.Services/Implementation/Battle/BattleDomainService.cs",
         "Game/CR.Game.Data.Migration/M8016AddSpawnerContentKeyToBattle.cs",
-        "Game/CR.Game.Service.BFF/Endpoints/LootEndpoints.cs"
+        "Game/CR.Game.Service.BFF/Endpoints/LootEndpoints.cs",
+        "Game/CR.Game.Data.Migration/M8017AddOpponentContentKeyToBattle.cs",
+        "Creatures/CR.Creatures.Data.Migration/M10020SeedMeadowDemoTrainer.cs"
       ],
       "cr-data": []
     },
-    "description": "Battle-victory loot: layered spawner+creature loot tables, independent per-entry drop chance, LootRollService, RewardGrantService, LootAward on the battle outcome, M7100-M7103 + M8016 spawner linkage, BattleRewardScaling level-scaled victory currency and XP"
+    "description": "Battle-victory loot: layered spawner+creature loot tables, independent per-entry drop chance, LootRollService, RewardGrantService, LootAward on the battle outcome, M7100-M7103 + M8016 spawner linkage, BattleRewardScaling level-scaled victory currency and XP; Npc owner type (LootOwnerType.Npc) unioned via battle.opponent_content_key for trainer-battle drops"
   },
   "backend/14-world-pickups": {
     "docPath": "docs/backend/14-world-pickups.md",
@@ -770,10 +1049,12 @@
         "Assets/CR/Core/Data/Editor/AbilityWorkbench/**/*.cs",
         "Assets/CR/Core/Data/Editor/AbilityConfigEditor.cs",
         "Assets/CR/Core/Data/Editor/AddressableContentRegistrar.cs",
-        "Assets/CR/Core/Data/Editor/Build/GameDataFloorTools.cs"
+        "Assets/CR/Core/Data/Editor/Build/GameDataFloorTools.cs",
+        "Assets/CR/Core/Data/Editor/Build/CrPipelineCommands.cs",
+        "Assets/CR/Core/Data/Editor/Build/EditModeTestRunCommands.cs"
       ]
     },
-    "description": "Ability Workbench editor tooling: readiness strip, FX library picker, one-click Publish pipeline, edit-mode FX preview, FX templates, Studio chips and Ability FX audit checks, FX seed migration exporter (M9997 authoritative snapshot) + one-click floor rebake / full package rebuild menu items."
+    "description": "Ability Workbench editor tooling: readiness strip, FX library picker, one-click Publish pipeline, edit-mode FX preview, FX templates, Studio chips and Ability FX audit checks, FX seed migration exporter (M9997 authoritative snapshot) + one-click floor rebake / full package rebuild menu items; Pipeline CLI commands (cr_fx_seed_status / cr_export_fx_seeds / cr_rebake_floor) and the async EditMode test runner (cr_edit_tests_start / cr_edit_tests_status)."
   },
   "unity/21-standalone-builds": {
     "docPath": "docs/unity/21-standalone-builds.md",
@@ -784,25 +1065,37 @@
       "cr-data": [
         "Assets/CR/Core/Data/Editor/Build/BuildProfileSetupTool.cs",
         "Assets/CR/Core/Data/Editor/Build/PlayerBuild/**",
+        "Assets/CR/Core/Data/Editor/Build/SteamDeck/**",
+        "Assets/CR/Core/Display/**",
+        "ProjectSettings/QualitySettings.asset",
+        "ProjectSettings/TimeManager.asset",
         "Assets/Settings/Build Profiles/**",
         "Assets/AddressableAssetsData/AddressableAssetSettings.asset"
       ]
     },
-    "description": "Standalone desktop builds: Unity 6 build profiles (CR_Game_macOS / CR_Game_Windows / CR_Game_Linux_SteamDeck, BuildProfileSetupTool reflection factory), CR > Build > Build Players\u2026 sequential multi-target window (PlayerBuildPlan pure logic + tests), per-platform e_sqlite3 natives bundled by build-packages.sh, Addressables built with player, game-data.bytes floor, Mono-only Windows cross-build"
+    "description": "Standalone desktop builds: Unity 6 build profiles (CR_Game_macOS / CR_Game_Windows / CR_Game_Linux_SteamDeck, BuildProfileSetupTool reflection factory), CR > Build > Build Players\u2026 sequential multi-target window (PlayerBuildPlan pure logic + tests), per-platform e_sqlite3 natives bundled by build-packages.sh, Addressables built with player, game-data.bytes floor, Mono-only Windows cross-build; CR > Build > Deploy to Steam Deck\u2026 one-step Linux build + rsync-over-SSH push to a fixed folder on the Deck (SteamDeckDeployPlan pure logic + tests)"
   },
   "22-area-scenes": {
     "docPath": "docs/unity/22-area-scenes.md",
     "repos": {
-      "cr-api": [],
+      "cr-api": [
+        "Trainers/CR.Trainers.Data.Migration/M4013AddLastLocationToTrainer.cs",
+        "Trainers/CR.Trainers.Data/Implementation/BaseTrainerRepository.cs",
+        "Trainers/CR.Trainers.Service.REST/Endpoints/TrainerEndpoints.cs",
+        "Trainers/CR.Trainers.Data.Sqlite.Test/TrainerRepositoryLocationTests.cs"
+      ],
       "cr-data": [
         "Assets/CR/Game/Areas/**",
         "Assets/CR/Scenes/**",
         "Assets/CR/Game/Areas/Editor/CrAreaDressingCommand.cs",
         "Assets/CR/Game/Areas/Logic/AreaNpcKeys.cs",
-        "Assets/CR/Prefabs/Areas/CR_NPC_*.prefab"
+        "Assets/CR/Prefabs/Areas/CR_NPC_*.prefab",
+        "Assets/CR/Game/Areas/Presentation/**",
+        "Assets/CR/Resources/Areas/**",
+        "Assets/CR/Game/World/Behaviours/TrainerLocationTracker.cs"
       ]
     },
-    "description": "Core + additive area scenes, the area template, content prefabs, doors and async transitions"
+    "description": "Core + additive area scenes, the area template, content prefabs, doors and async transitions; trainer last-location persistence (M4013 last_area_key/pos/yaw, TrainerLocationTracker throttled saves + forced on switch/quit, TrainerResumeRule teleport/transition resume) and trainer-switch world re-init (AreaWorldInitializer.ResetForNewSession)"
   },
   "23-game-audio": {
     "docPath": "docs/unity/23-game-audio.md",
@@ -825,12 +1118,28 @@
         "Game/CR.Game.Data/Interface/IBattleMissionTemplateRepository.cs",
         "Game/CR.Game.Data/Implementation/BaseBattleMissionTemplateRepository.cs",
         "Game/CR.Game.Data/Model/BattleMissionTemplateEntity.cs",
+        "Game/CR.Game.Data/Model/BattleMissionTemplateUpsertRequest.cs",
+        "Game/CR.Game.Data/Constants/BattleMissionTypes.cs",
+        "Game/CR.Game.Data/Constants/BattleMissionRewardTypes.cs",
         "Game/CR.Game.Data.Sqlite/BattleMissionTemplateRepository.cs",
         "Game/CR.Game.Data.Postgres/BattleMissionTemplateRepository.cs",
         "Game/CR.Game.Service.BFF/Endpoints/BattleMissionTemplateEndpoints.cs",
         "Game/CR.Game.Data.Test/BattleMissionTemplateRepositorySqliteTests.cs",
         "Game/CR.Game.Domain.Services.Test/Endpoints/BattleMissionTemplateEndpointsTests.cs",
-        "Game/CR.Game.Domain.Services/Implementation/Battle/BattleDomainService.cs"
+        "Game/CR.Game.Domain.Services/Implementation/Battle/BattleDomainService.cs",
+        "Game/CR.Game.Data/Validation/BattleMissionTemplateValidation.cs",
+        "Game/CR.Game.Data.Migration/M12005SeedBattleMissions_20260903.cs",
+        "Creatures/CR.Creatures.Data.Migration/M12006CreateAndSeedElementalReaction.cs",
+        "Creatures/CR.Creatures.Data.Migration/M12007FixRadiantSelfMultiplier.cs",
+        "Creatures/CR.Creatures.Data/Interface/IElementalReactionRepository.cs",
+        "Game/CR.Game.Model/Elemental/ElementalReaction.cs",
+        "Convenience/CR.Game.Compat/Battle/ElementalReactionTable.cs",
+        "Game/CR.Game.Data/Model/Elemental/ElementalReactionUpsertRequest.cs",
+        "Game/CR.Game.Data/Model/Elemental/ElementalDamageMatrixUpsertRequest.cs",
+        "Game/CR.Game.Data/Validation/ElementalReactionValidation.cs",
+        "Game/CR.Game.Data/Validation/ElementalDamageMatrixValidation.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/ElementalReactionEndpoints.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/ElementalDamageEndpoints.cs"
       ],
       "cr-data": [
         "Assets/CR/Game/Battle/Missions/**",
@@ -845,7 +1154,44 @@
         "Assets/CR/UI/Battle/BattleHUD.cs",
         "Assets/CR/Game/Battle/Missions/IBattleMissionSelection.cs",
         "Assets/CR/Game/Battle/Missions/BattleMissionSelection.cs",
-        "Assets/CR/UI/PlayerTeamView.cs"
+        "Assets/CR/UI/PlayerTeamView.cs",
+        "Assets/CR/Core/Data/Registry/Definitions/BattleMissionDefinition.cs",
+        "Assets/CR/Core/Data/Editor/BattleMissionDefinitionEditor.cs",
+        "Assets/CR/Core/Data/Editor/BattleMissionSeedMigrationExporter.cs",
+        "Assets/CR/Game/World/Editor/BattleMissionEditorSyncHelper.cs",
+        "Assets/CR/Game/World/Editor/BattleMissionDefinitionMapper.cs",
+        "Assets/CR/Game/Battle/Logic/BattleMissionSeedMigrationGenerator.cs",
+        "Assets/CR/Game/Battle/Logic/BattleMissionSeedEntry.cs",
+        "Assets/CR/Game/Battle/Logic/BattleMissionContentKey.cs",
+        "Assets/CR/Game/Battle/Logic/Tests/BattleMissionSeedMigrationGeneratorTests.cs",
+        "Assets/CR/Game/Battle/Logic/Tests/BattleMissionContentKeyTests.cs",
+        "Assets/CR/Core/Data/Editor/ContentStudioTool.cs",
+        "Assets/CR/Core/Data/Logic/ContentSectionCatalog.cs",
+        "Assets/CR/Content/Defs/BattleMissions/**",
+        "Assets/CR/Core/Data/Registry/ContentSyncWriter.cs",
+        "Assets/CR/Core/Data/Registry/ServerContentSyncService.cs",
+        "Assets/CR/Core/Data/Registry/Definitions/ElementalReactionDefinition.cs",
+        "Assets/CR/Core/Data/Registry/Definitions/ElementalDamageMatrixConfig.cs",
+        "Assets/CR/Core/Data/Editor/ElementalReactionDefinitionEditor.cs",
+        "Assets/CR/Core/Data/Editor/ElementalDamageMatrixConfigEditor.cs",
+        "Assets/CR/Core/Data/Editor/ElementalDamageMatrixGrid.cs",
+        "Assets/CR/Core/Data/Editor/ElementalReactionSeedMigrationExporter.cs",
+        "Assets/CR/Core/Data/Editor/ElementalDamageSeedMigrationExporter.cs",
+        "Assets/CR/Core/Data/Editor/Studio/StudioTextPrompt.cs",
+        "Assets/CR/Game/World/Editor/ElementalReactionDefinitionMapper.cs",
+        "Assets/CR/Game/World/Editor/ElementalDamageMatrixConfigMapper.cs",
+        "Assets/CR/Game/World/Editor/ElementalReactionEditorSyncHelper.cs",
+        "Assets/CR/Game/World/Editor/ElementalDamageEditorSyncHelper.cs",
+        "Assets/CR/Game/Battle/Logic/ElementalReactionMapping.cs",
+        "Assets/CR/Game/Battle/Logic/ElementalDamageMatrixMapping.cs",
+        "Assets/CR/Game/Battle/Logic/ElementalReactionSeedMigrationGenerator.cs",
+        "Assets/CR/Game/Battle/Logic/ElementalDamageSeedMigrationGenerator.cs",
+        "Assets/CR/Game/Battle/Logic/ElementalReactionSeedEntry.cs",
+        "Assets/CR/Game/Battle/Logic/ElementalDamageCellEntry.cs",
+        "Assets/CR/Game/Battle/Logic/ElementalReactionContentKey.cs",
+        "Assets/CR/Game/Battle/Logic/ContentKeySlug.cs",
+        "Assets/CR/Game/Battle/Logic/SeedMigrationFileWriter.cs",
+        "Assets/CR/Game/Battle/Logic/SeedMigrationTarget.cs"
       ]
     },
     "description": "Battle-extension sidecar pattern: the two seams (BattleEvents.ActionResolved outbound, IPlayerAbilityAugmenter inbound via [InjectOptional]), why the battle system is unmodified (no ability-ownership check in BattleDomainService), and battle missions as the worked example \u2014 pure per-battle BattleMissionTracker in CR.Game.Battle.Logic (11 EditMode tests), BattleMissionConductor (reward resolution via IAbilityDomainService, MissionProgressed/MissionCompleted, battle_missions_completed stat), battle_mission_template content (M10004 + M10003 Mega Burn) served by GET /api/v1/battle-missions and routed through SyncRouter, HUD toast/banner/UNLOCKED badge"
@@ -867,7 +1213,9 @@
         "Spawner/CR.Spawner.Service.REST/Endpoints/SpawnerEndpoints.cs",
         "Game/CR.Game.Service.BFF/Endpoints/LootEndpoints.cs",
         "Game/CR.Game.Service.BFF/Endpoints/PickupEndpoints.cs",
-        "Creatures/CR.Creatures.Service.REST/Endpoints/AbilityEndpoints.cs"
+        "Creatures/CR.Creatures.Service.REST/Endpoints/AbilityEndpoints.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/ElementalReactionEndpoints.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/ElementalDamageEndpoints.cs"
       ],
       "cr-data": [
         "Assets/CR/Core/Data/Registry/ServerContentSyncService.cs",
@@ -877,7 +1225,12 @@
         "Assets/CR/Core/Data/Registry/Sync/**",
         "Assets/CR/Core/Data/Registry/ContentRegistryInitializer.cs",
         "Assets/CR/Core/Sync/Logic/Content*.cs",
-        "Tests/ContentSync/**"
+        "Tests/ContentSync/**",
+        "Assets/CR/Game/World/Editor/BattleMissionEditorSyncHelper.cs",
+        "Assets/CR/Game/Battle/Logic/BattleMissionSeedMigrationGenerator.cs",
+        "Assets/CR/Core/Data/Editor/BattleMissionSeedMigrationExporter.cs",
+        "Assets/CR/Game/Battle/Missions/BattleMissionTemplateRoutedSource.cs",
+        "Assets/CR/Core/DI/LocalDevGameInstaller.cs"
       ]
     },
     "description": "Runtime content pull-through cache: ServerContentSyncService fetch+paging, ContentSyncWriter SQL rules (no id rewrites, lowercase GUIDs, named-column upserts, derived junction ids, per-domain transactions), ContentSyncReport version-recording rule, deletion safety, and the dotnet round-trip tests."
@@ -888,17 +1241,27 @@
       "cr-api": [
         "Game/CR.Game.Domain.Services/Interfaces/Creature/ICreatureInventoryService.cs",
         "Game/CR.Game.Domain.Services/Implementation/Creature/CreatureInventoryService.cs",
-        "Game/CR.Game.Domain.Services/Models/TeamStorageSwapResult.cs"
+        "Game/CR.Game.Domain.Services/Models/TeamStorageSwapResult.cs",
+        "Game/CR.Game.Domain.Services/Models/TeamSlotEntry.cs",
+        "Game/CR.Game.Domain.Services.Test/Creature/TeamSlotsTests.cs",
+        "Game/CR.Game.Model/Spawner/AbilityProgressionSetEntry.cs",
+        "Spawner/CR.Spawner.Data.Migration/M5019AddUnlockQuestToAbilityProgressionSetEntry.cs"
       ],
       "cr-data": [
         "Assets/CR/UI/Storage/Logic/**/*.cs",
         "Assets/CR/UI/PlayerStorageView.cs",
         "Assets/CR/UI/PlayerMenuWindow.cs",
         "Assets/CR/UI/Resources/PlayerMenuWindow.uxml",
-        "Assets/CR/UI/Resources/PlayerMenuWindow.uss"
+        "Assets/CR/UI/Resources/PlayerMenuWindow.uss",
+        "Assets/CR/Core/Data/Registry/Definitions/AbilityProgressionSetConfig.cs",
+        "Assets/CR/Core/Data/Editor/AbilityProgressionSetConfigEditor.cs",
+        "Assets/CR/Core/Data/Editor/ContentPicker.Quests.cs",
+        "Assets/CR/Core/Data/Registry/Sync/SyncProgressionEntryDto.cs",
+        "Assets/CR/Game/World/LocalAbilityLibrarySyncClient.cs",
+        "Assets/CR/Game/World/AbilityLibrarySyncHttpClient.cs"
       ]
     },
-    "description": "Creature storage tab: engine-free box/filter/swap rules in CR.UI.Storage.Logic, the Data File panel, and the atomic team<->storage exchange"
+    "description": "Creature storage tab: engine-free box/filter/swap rules in CR.UI.Storage.Logic, the Data File ability roster (learned / level-locked / quest-locked), the quest-gate authoring field and its sync-column parity, and the atomic team<->storage exchange"
   },
   "backend/16-evolution": {
     "docPath": "docs/backend/16-evolution.md",
@@ -919,5 +1282,132 @@
       ]
     },
     "description": "Three-phase server-authoritative evolution, hold-to-cancel, the Bindstone held item, and the seeded evolution lines"
+  },
+  "backend/17-creature-market": {
+    "docPath": "docs/backend/17-creature-market.md",
+    "repos": {
+      "cr-api": [
+        "Market/**"
+      ],
+      "cr-data": [
+        "Assets/CR/Market/**",
+        "Assets/CR/UI/Market/**"
+      ]
+    },
+    "description": "Player-to-player creature marketplace: market_listing/market_transaction, the escrow trainer, the transfer core (list/buy/cancel), and MarketListingView browse joins"
+  },
+  "backend/18-moderation": {
+    "docPath": "docs/backend/18-moderation.md",
+    "repos": {
+      "cr-api": [
+        "Moderation/**/*.cs",
+        "Moderation/**/*.csproj"
+      ],
+      "cr-data": [
+        "Assets/CR/Core/Data/Editor/LiveOps/**",
+        "Assets/CR/Game/World/Editor/Admin*"
+      ]
+    },
+    "description": "Live-ops moderation: account_moderation/admin_action, shadow bans and the hidden-seller rule, player dossiers, currency/item adjustments, and the /api/v1/admin routes behind RequireAdmin"
+  },
+  "unity/28-creature-market": {
+    "docPath": "docs/unity/28-creature-market.md",
+    "repos": {
+      "cr-data": [
+        "Assets/CR/UI/Market/**",
+        "Assets/CR/Market/**",
+        "Assets/CR/UI/Resources/Market*",
+        "Assets/CR/Game/World/Behaviours/NpcMarket*"
+      ]
+    },
+    "description": "Player-facing marketplace window: Browse/Sell/My Listings tabs, the advanced growth-value search panel, the market broker NPC branch, CR.UI.Market.Logic pure rules (fee math, filters, sorting, eligibility, growth summary, error text), and the offline-closed behaviour"
+  },
+  "backend/19-item-effects": {
+    "docPath": "docs/backend/19-item-effects.md",
+    "repos": {
+      "cr-api": [
+        "Game/CR.Game.Model/Items/*.cs",
+        "Game/CR.Game.Model/Items/EffectParameters/*.cs",
+        "Game/CR.Game.Model/Creatures/CreatureStatusConditionView.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Item/ItemUseDomainService.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Item/Handlers/*.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/CreatureStatusEndpoints.cs",
+        "Items/CR.Items.Data.Migration/M6020SeedCreatureConsumables.cs",
+        "Items/CR.Items.Data.Migration/M6021AddIconAssetKeyToItem.cs",
+        "Items/CR.Items.Data.Migration/M6019FixSeededConsumableItemType.cs",
+        "Items/CR.Items.Data/Implementation/BaseItemRepository.cs",
+        "Creatures/CR.Creatures.Data.Migration/M12011SeedStatusHooks.cs",
+        "Creatures/CR.Creatures.Data.Migration/M12012AddIconAssetKeyToContent.cs",
+        "Convenience/CR.Data.Migrations.Test/SeededCreatureConsumablesSqliteTests.cs",
+        "Convenience/CR.Data.Migrations.Test/SeededStatusHooksSqliteTests.cs",
+        "Convenience/CR.Api.IntegrationTests/CreatureStatusEndpointsHttpTests.cs",
+        "Items/CR.Items.Data.Migration/M6022BackfillItemIconAssetKey.cs",
+        "Creatures/CR.Creatures.Data.Migration/M12013BackfillContentIconAssetKey.cs",
+        "Convenience/CR.Data.Migrations.Test/IconAssetKeyRoundTripSqliteTests.cs"
+      ],
+      "cr-data": [
+        "Assets/CR/Game/Battle/Offline/OfflineItemUseService.cs",
+        "Assets/CR/Game/Battle/OnlineOfflineItemDomainService.cs",
+        "Assets/CR/Game/Battle/ItemHttpDomainAdapter.cs",
+        "Assets/CR/Core/Data/Client/Interface/ICreatureStatusClient.cs",
+        "Assets/CR/Core/Data/Client/Implementation/CreatureStatus*.cs",
+        "Assets/CR/UI/Logic/ItemTargetRule.cs",
+        "Assets/CR/Content/Defs/Items/*.asset",
+        "Assets/CR/Content/Defs/StatusConditions/*.asset"
+      ]
+    },
+    "description": "Item use end to end: the item table (incl. icon_asset_key), ItemType/ItemUsageFlags/ItemEffectType, ItemUseDomainService's ordered checks and each handler's refusal sentence, the offline mirror's divergences (BoostStatTemp no-op, TriggerEvolution allowed offline, CureAllStatus refusal, missing stats/quest events), the 15 seeded creature consumables from M6020, the status-condition catalogue and its M12011 ability hooks, and GET /api/v1/trainers/{trainerId}/creatures/{creatureId}/status-conditions with its 401/404 semantics and the parked caller-to-trainer binding"
+  },
+  "unity/29-ui-icons": {
+    "docPath": "docs/unity/29-ui-icons.md",
+    "repos": {
+      "cr-api": [
+        "Items/CR.Items.Data.Migration/M6021AddIconAssetKeyToItem.cs",
+        "Items/CR.Items.Data.Migration/M6022BackfillItemIconAssetKey.cs",
+        "Creatures/CR.Creatures.Data.Migration/M12012AddIconAssetKeyToContent.cs",
+        "Creatures/CR.Creatures.Data.Migration/M12013BackfillContentIconAssetKey.cs",
+        "Convenience/CR.Data.Migrations.Test/IconAssetKeyRoundTripSqliteTests.cs",
+        "Game/CR.Game.Model/Content/ContentManifestResponse.cs",
+        "Creatures/CR.Creatures.Service.REST/Endpoints/AbilityEndpoints.cs"
+      ],
+      "cr-data": [
+        "Assets/CR/UI/Common/UiIcon.cs",
+        "Assets/CR/UI/Resources/UiIcon.uss",
+        "Assets/CR/Core/Data/Logic/IconAddress.cs",
+        "Assets/CR/Core/Data/Logic/IconGlyph.cs",
+        "Assets/CR/Core/Data/Logic/IconMap.cs",
+        "Assets/CR/Core/Data/Logic/IconCopy.cs",
+        "Assets/CR/Core/Data/Logic/IconPlan.cs",
+        "Assets/CR/Core/Data/Logic/IconMapPlan.cs",
+        "Assets/CR/Core/Data/Logic/PortraitMatte.cs",
+        "Assets/CR/Core/Data/Logic/Tests/IconAddressTests.cs",
+        "Assets/CR/Core/Data/Logic/Tests/IconGlyphTests.cs",
+        "Assets/CR/Core/Data/Logic/Tests/IconMapPlanTests.cs",
+        "Assets/CR/Core/Data/Logic/Tests/PortraitMatteTests.cs",
+        "Assets/CR/Core/Data/Editor/IconSlotField.cs",
+        "Assets/CR/Core/Data/Editor/Icons/*.cs",
+        "Assets/CR/Core/Data/Editor/Build/CrAssetLibraryCommands.cs",
+        "Assets/CR/Art/Icons/icon-map.json",
+        "Assets/CR/Art/Icons/README.md",
+        "Assets/CR/Core/Data/Registry/Definitions/ItemDefinition.cs",
+        "Assets/CR/Core/Data/Registry/Definitions/CreatureDefinition.cs",
+        "Assets/CR/Core/Data/Registry/Definitions/AbilityConfig.cs",
+        "Assets/CR/Core/Data/Registry/Definitions/StatusConditionConfig.cs",
+        "Assets/CR/Core/Data/Registry/ContentSyncWriter.cs",
+        "Assets/CR/Game/World/Logic/SyncFieldMerge.cs",
+        "Assets/CR/Game/World/Editor/ContentCreatorSyncHelper.cs",
+        "Assets/CR/Game/World/Editor/AbilityEditorSyncHelper.cs",
+        "Assets/CR/UI/Logic/SpeciesInfo.cs",
+        "Assets/CR/UI/Logic/StatusBadge.cs",
+        "Assets/CR/UI/Common/CreatureTargetPicker.cs",
+        "Assets/CR/UI/Resources/CreatureTargetPicker.uss",
+        "Assets/CR/Core/Data/Registry/Sync/SyncAbilityDto.cs",
+        "Assets/CR/Core/Data/Registry/Sync/SyncCreatureDto.cs",
+        "Assets/CR/Content/Defs/Items/*.asset",
+        "Assets/CR/Content/Defs/StatusConditions/*.asset",
+        "Tests/ContentSync/ContentSyncWriterTests.cs"
+      ]
+    },
+    "description": "One content-icon system: icon_asset_key on item/creature/abilities/status_conditions, IconAddress (icons/<type>/<key>) kept separate from the prefab asset_key, IconGlyph two-letter placeholder, UiIcon.Apply as the single LoadAssetByKeyAsync<Sprite> caller (per-element cancellation, ConditionalWeakTable, Debug-only failure logging) plus UiIcon.uss, the icon/iconKey pair on four SO types drawn by IconSlotField, cr_import_icons + icon-map.json + the three Asset Store packs, cr_bake_portraits with blank/OPAQUE detection, IconImportReport buckets, and how icon keys ride the Content Studio push/pull merge"
   }
 }

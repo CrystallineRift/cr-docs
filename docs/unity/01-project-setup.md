@@ -315,6 +315,48 @@ See [Introduction](?page=00-introduction) for more on the `content_key` vs UUID 
 - **Relative `database_path_*` values resolve against `Application.persistentDataPath`.** A value like `databases/trainer.bytes` becomes `{persistentDataPath}/databases/trainer.bytes`. This is fine for device builds but may be surprising in the Editor where `persistentDataPath` includes Unity's company and project name in the path.
 - **`.bytes` extension required.** SQLite files must use `.bytes` to avoid Unity's asset importer attempting to process them. The `DatabaseConnectionStringFactory.GetConnectionString` method appends `.bytes` automatically when using the database name overload, but `GetConnectionStringForRepository` uses the path from YAML as-is.
 
+## The CR menu
+
+The menu holds what you reach for while working. Five entries sit at the top:
+**Content Studio**, **Trainer Battle Author**, **Localization Editor**, **Database Manager**,
+**Content Audit**. Everything else is grouped by subject:
+
+- **Build/** — Build Players…, Deploy to Steam Deck…, Bake Floor From Server, Create Standalone Build Profiles
+- **Content/** — Rebake Offline Floor, Full Package Rebuild, Bake Game-Data DB, Export Ability FX Seed Migration
+- **Areas/** — Validate Open Area Scene, Link Areas (doors), Dress Playtest Areas, Dress Battle Arenas, Polish Areas, Split Encounter Zones, Fix Walk-Through Props
+- **Battle/** — Create Battle Arena, Camera Director Simulator, Build Camera Rig Prefab, battle controllers, Map Reaction Profiles (dry run / apply), Audit Creature Reaction Coverage
+- **Wiring/**, **Components/**, **Ability Workbench/** — unchanged
+
+### What was removed, and where it went
+
+Three entries were duplicates. The windows are unchanged and open from
+**Content Studio → Pipeline ▾**: *Publish to Server* (was `CR/Publish Content`), *Build & Deploy
+(S3/MinIO)* (was `CR/Deploy Content`), and *Pipeline Status* (was `CR/CR Studio`) — the drift
+dashboard, which reports on exactly the content Content Studio edits.
+
+Fourteen more were one-shot scaffolding or repairs — things run once when a system is first set
+up, or after a specific breakage. **The code is untouched; only the menu entry is gone**, and
+each still runs headlessly, which is how they are usually driven anyway:
+
+| Command | Run it with |
+|---|---|
+| Build Core Scene + Area Template | `unity run --command cr_build_area_template` |
+| Build Playtest Areas | `unity run --command cr_build_playtest_areas` |
+| Lay Out Village | `unity run --command cr_layout_village` |
+| Swap Player Model In Core Scene | `unity run --command cr_swap_player_in_scene` |
+| Build BoZo Player Prefab | `unity run --command cr_build_player_model` |
+| Set Up Master Audio | `unity run --command cr_setup_audio` |
+| Create Music Playlists | `unity run --command cr_create_music_playlists` |
+| Wire Area Audio | `unity run --command cr_wire_area_audio` |
+| Restore Asset Store Packages | `unity run --command cr_assets_restore` |
+| Author Demo Trainer (Meadow Scout) | `unity run --command cr_author_demo_trainer` |
+| Fix LOD / Prop / Trunk Colliders | `cr_fix_lod_colliders`, `cr_fix_prop_colliders`, `cr_fix_trunk_colliders` |
+| Wire Pickup Visual | `unity run --command cr_wire_pickup_visual` |
+
+The first four **replace a scene from a template and discard what is in it**. They used to sit in
+`CR/Areas/`, one slot away from the validators used daily; a headless command you have to type is
+a far better fit for something that destructive.
+
 ## Related Pages
 
 - [Content Pipeline (Two-Database Model)](?page=unity/17-content-pipeline) — game-data vs player-data, baked `game-data.bytes` artifact, cold-start adopt
