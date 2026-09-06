@@ -92,10 +92,16 @@
   trusted.
 - **Evolution and stats endpoints answer 401, not 500, for an account-less token** — the same fix
   already applied to the quest endpoints.
-- **Battle reconcile only expires conditions the snapshot actually carried.** A caught
+- **Battle reconcile skips when the condition definitions failed to load.** A caught
   condition-definition load failure previously handed the reconcile step an empty condition list,
-  which read as "everything expired" and stripped the attacker's real statuses; it now removes only
-  conditions the pre-action snapshot's `ActiveConditions` included.
+  which read as "everything expired" and stripped the attacker's real statuses; `BuildSnapshotAsync`
+  now reports `ConditionsKnown` and the reconcile runs only when it is true — and when it does run
+  it still reaps every expired row, including one whose definition was since soft-deleted.
+- **Stats endpoints log storage faults instead of answering 401.** The ownership check is the only
+  step whose `UnauthorizedAccessException` maps to 401; any other failure is a logged 500.
+- **`M12014` folds its SQLite condition-link subqueries through `LOWER()`** like the surrounding
+  SQLite DML. `M7016`/`M12014` `Down()` are documented no-ops; rolling back past them succeeds and
+  leaves the repair applied (pinned by test).
 - **Two more forward migrations for databases that already ran the fix's original migration.**
   `M7016SeedFirstBattleOnMigratedDatabases` (Postgres) seeds `quest-first-battle` on a server where
   `M7014` was already applied before the amendment above landed. `M12014RepairSeededIconsAndConditionLinks`
