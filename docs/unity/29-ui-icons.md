@@ -463,8 +463,21 @@ creature/ability/condition seed is M12011 — but a new seed migration must set 
 it.
 :::
 
+:::note[Already-migrated databases: M12014]
+M12013's *first* version derived `icons/creatures/<content_key>` for every creature with no
+`asset_key`, including the four placeholder rows — before it was amended to the guard described
+above. That amendment only helps a database created afterward: `version_info` on a server that had
+already run M12013 still records it as applied, so the fix never re-runs there, and those rows kept
+an `icon_asset_key` pointing at an address the catalog never registered — turning "no icon" into "an
+icon that fails to load." `M12014RepairSeededIconsAndConditionLinks` (both engines) puts the key back
+to `NULL` on any database where it still matches that derived shape; a hand-authored key does not
+match it and is left alone. The same migration also re-points `status_condition_stat_changes` /
+`ability_status_conditions` rows that were left naming a condition id nothing holds back onto the
+live condition of the same name — see [Item Effects and Status Cures](../backend/19-item-effects.md).
+:::
+
 After the backfill the baked floor (`Assets/StreamingAssets/CR/game-data.bytes`, schema version
-12013) carries a key on every row **with a `content_key`**: 23 items on `icons/items/%`, and zero
+12014) carries a key on every row **with a `content_key`**: 23 items on `icons/items/%`, and zero
 remaining nulls on `abilities` or `status_conditions`. Two `item` rows with an empty
 `content_key` — junk with nothing to derive a key from — are correctly skipped by
 `M6022BackfillItemIconAssetKey` and stay unbackfilled, as do the four art-less `creature` rows

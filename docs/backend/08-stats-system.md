@@ -352,6 +352,16 @@ rather than another account's stats.
 
 This endpoint returns the full `Dictionary<string, long>` from `GetAllAsync`. It is a **debug endpoint** — not intended for production client use. Gating it behind an internal/admin role before shipping is recommended.
 
+The client-facing route group `StatEndpoints` maps at `/api/v1/stats` — `GET trainer/{trainerId}`,
+`GET trainer/{trainerId}/{statKey}`, `GET trainer/{trainerId}/{statKey}/history`, and
+`POST increment|max|set` — is what `StatClientUnityHttp` actually calls, and carries the same rules:
+the whole group requires `AuthorizationPolicies.RequirePlayer`, every handler takes the account from
+the caller's token rather than the request, and a trainer that isn't the caller's 404s on both reads
+and writes. A write's body still carries an `accountId` field for wire compatibility with the shipped
+client, but it is never read — the account written is always the token's, so a forged body value
+cannot write another account's counters. Either group answers `401 Unauthorized`, not a 500, for a
+token that carries no usable account claim.
+
 ## DI Registration
 
 ```csharp

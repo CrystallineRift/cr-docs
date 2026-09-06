@@ -99,6 +99,11 @@ It is authored as a QuestDefinition and synced into the client's SQLite at world
 seeded it into Postgres — so on a fresh deployment the prerequisite did not exist, could never be
 completed, and the three meadow quests were filtered out of the available list forever.
 
+That seed was added by amending M7014 in place, which only helps a database created after the
+amendment — `version_info` on a server that had already run M7014 still records it as applied, so the
+fix never re-runs there and the three meadow quests stayed permanently unofferable. `M7016SeedFirstBattleOnMigratedDatabases`
+(Postgres only, the same guarded statements) is the forward repair for those servers.
+
 | Quest | Area | Objectives | Requires | XP / gold |
 |---|---|---|---|---|
 | Thin the Meadow | Meadow | defeat 5 creatures | First Battle | 150 / 60 |

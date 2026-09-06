@@ -325,6 +325,19 @@ Spark and Thunder Fang now carry two conditions each (Slow from M10005, Paralyze
 independently — both Speed drops, so a creature that catches both is at Speed −12.
 :::
 
+:::note[Already-migrated databases: M12014]
+M10018, M10019 and M12011 originally wrote their `status_condition_stat_changes` and
+`ability_status_conditions` rows against hard-coded condition ids. Where Content Studio had already
+minted a same-named condition under an id of its own, the seed's own condition insert was silently
+swallowed by the name conflict and the dependent link was left naming an id nothing holds — neither
+join table has a foreign key, so nothing ever raised an error; the cure and the ability-inflicted
+condition above simply did nothing. Those three migrations were amended to resolve the id by name at
+insert time (see the changelog), which only helps a database created afterward.
+`M12014RepairSeededIconsAndConditionLinks` is the forward repair: it re-points a dangling link at the
+live condition of the same name, on both engines, and leaves an already-resolving link — including
+one Content Studio authored — untouched.
+:::
+
 Two open design notes, both recorded in the M12011 header: Asleep and Paralyzed are pure Speed drops,
 and M10018 documents that after the opening turn nothing in the resolver reads Speed except escape
 chance — so they are close to cosmetic. And `Soaked` has no single-condition cure item.

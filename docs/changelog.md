@@ -84,6 +84,48 @@
   can disagree for a trainer at the cap trying to list their last team creature; and
   `PlayerErrorText.For`'s `AggregateException` handling picks the first **non-cancellation** inner
   exception (flattened), not simply the first inner exception.
+- **Stats route group hardened.** The client-facing `/api/v1/stats/trainer/...` and
+  `/api/v1/stats/{increment|max|set}` routes (what `StatClientUnityHttp` actually calls, as opposed
+  to the debug `GET /api/v1/stats` above) now require `RequirePlayer`, take the account from the
+  caller's token rather than the request body, and 404 a trainer that isn't the caller's on every
+  read and write; the body `accountId` the shipped client still sends is now ignored rather than
+  trusted.
+- **Evolution and stats endpoints answer 401, not 500, for an account-less token** — the same fix
+  already applied to the quest endpoints.
+- **Battle reconcile only expires conditions the snapshot actually carried.** A caught
+  condition-definition load failure previously handed the reconcile step an empty condition list,
+  which read as "everything expired" and stripped the attacker's real statuses; it now removes only
+  conditions the pre-action snapshot's `ActiveConditions` included.
+- **Two more forward migrations for databases that already ran the fix's original migration.**
+  `M7016SeedFirstBattleOnMigratedDatabases` (Postgres) seeds `quest-first-battle` on a server where
+  `M7014` was already applied before the amendment above landed. `M12014RepairSeededIconsAndConditionLinks`
+  (both engines) puts a placeholder creature's derived `icon_asset_key` back to `NULL` and re-points
+  `status_condition_stat_changes`/`ability_status_conditions` rows left naming a condition id nothing
+  holds, for servers that already ran M12013/M10018/M10019/M12011 before those were amended. The
+  baked floor moves to schema version 12014.
+- **A failed `npcs`-table probe is retried, not cached as absent.** `BaseTrainerRepository` is a
+  singleton on the AIO host; caching a probe exception used to answer "no npcs table" — the wider,
+  unfiltered query — for the rest of the process after one connection blip.
+- **`HeldItemService.GiveAsync` refuses a swap with nowhere to put the displaced item** before
+  opening the transaction, instead of carrying a `Guid.Empty` bag id in and failing on the FK.
+- **Unity: generated-creature batch reads fall back per id, not all-or-nothing.** One flaky request
+  in a multi-creature read used to serve the *entire* batch from the local cache — empty on a first
+  online session — instead of the rows that did come back; now only the id that failed falls back to
+  its own cached row (or is omitted), and fresh rows are back-filled to the cache as they arrive.
+- **Unity editor: a popup's first real option is selectable again when the field is blank.**
+  `PopupSelection` now draws a leading "(none)" row instead of using the first option as an unwritten
+  placeholder — the placeholder trick made that option impossible to pick once writes were gated on
+  "the index moved." Affects the Elemental Reaction condition/detonator pickers and the Battle
+  Mission condition/reaction key picker.
+- **Unity editor: Content Studio's Register-All sweep no longer runs inline in the draw loop** after
+  a Register All / Push / Delete invalidates it, and the Review window's partial-diff flag is now
+  reported by the revert path itself (closing a gap where the Spawner config-fetch-failed fallback
+  wasn't flagged partial).
+- **Unity: `SessionReconcile`'s failure path no longer deletes a different run's registration.** An
+  account-change `Clear()` mid-run followed by the old run failing used to remove the *new* run's
+  claim on the key, leaving it open for a third caller to start a duplicate reconcile.
+- **Unity: `TrainerDefeatCache` cancels the outgoing account's refresh on an account switch**,
+  instead of letting it keep running and mirror the old account's defeats into the new account's set.
 
 ## 2026-09-05 — Every server error has a status, a body and player-facing text
 

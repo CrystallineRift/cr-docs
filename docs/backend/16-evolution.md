@@ -114,6 +114,8 @@ token**, not the request body: each endpoint resolves the acting trainer's accou
 `context.GetAccountId()` and 404s if that account doesn't own the `trainerId` the body/route names
 — a client-supplied `TrainerId` on `evolution/begin`/`commit`/`cancel` (or the creature's owning
 trainer on the `GET` check) can no longer be used to act on or inspect another account's creature.
+A token that reaches any of the four with no usable account claim gets `401 Unauthorized`, not an
+unhandled 500.
 
 ## The lines
 
