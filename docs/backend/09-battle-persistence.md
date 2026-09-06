@@ -355,7 +355,7 @@ Miss → no damage, no conditions, `ActionOutcome.Missed = true`.
 
 On an ability hit, `BattleResolver` iterates the `resolvedConditions` list passed by the caller. For each condition a probability roll is made; if it succeeds an `ActiveBattleCondition` is constructed with pre-rolled `StatChange` amounts and the condition's `DurationTurns` (or -1 for permanent). Conditions with `ApplyToUser = true` land in `SingleActionResult.AttackerConditionsApplied`; all others in `ConditionsApplied` (defender).
 
-`BattleDomainService` bulk-fetches conditions via `IAbilityRepository.GetStatusConditionsWithStatChanges` (two queries: one for conditions, one JOIN for their stat changes) before calling the resolver. After resolution, defender conditions in `ConditionsApplied` / `ConditionsRemoved` and attacker conditions in `AttackerConditionsApplied` are persisted directly to `generated_creature_status_conditions` via `ApplyStatusConditionAsync` / `RemoveStatusConditionAsync`. Both `ConditionsApplied` and `AttackerConditionsApplied` are included in the `ActionOutcome` returned to the client.
+`BattleDomainService` bulk-fetches conditions via `IAbilityRepository.GetStatusConditionsWithStatChanges` (two queries: one for conditions, one JOIN for their stat changes) before calling the resolver. After resolution, defender conditions in `ConditionsApplied` are persisted to `generated_creature_status_conditions` via `ApplyStatusConditionAsync`; `result.ConditionsRemoved` is actually the **attacker's** expiring conditions (the confusing name is on the resolver's result type, not the target) and is never applied to the defender — the defender's own removals come only from `DefenderConditionsConsumed` (primers burned off by an elemental reaction). Attacker conditions in `AttackerConditionsApplied` are persisted the same way; the attacker's expiring/remaining conditions are reconciled separately (see `SingleActionResult.AttackerRemainingConditions` below). Both `ConditionsApplied` and `AttackerConditionsApplied` are included in the `ActionOutcome` returned to the client.
 
 Miss → no conditions applied regardless of probability.
 
@@ -780,7 +780,7 @@ NPC rows are scoped to the *player's* `(accountId, trainerId)` for world isolati
 
 ### No running
 
-`BattleActionType.Run` in a trainer battle is refused server-side **without consuming the turn**: the action is logged, the round is reopened for the *same* trainer, and the outcome returns `ActionOutcome.RunRefused = true` with `NextActiveTrainerId` still the fleeing trainer. The HUD hides the Run button and prints "You can't run from a trainer battle!" if it arrives anyway.
+`BattleActionType.Run` in a trainer battle is refused server-side **without consuming the turn**: the action is logged, the round is reopened for the *same* trainer, and the outcome returns `ActionOutcome.RunRefused = true` with `NextActiveTrainerId` still the fleeing trainer. The HUD hides the Run button and prints "You can't run from a trainer battle!" if it arrives anyway. This no longer loops forever: after `MaxConsecutiveRefusedRuns` (3) refused Runs in a row from the same trainer, the battle ends as that trainer's loss instead of continuing to reopen the round.
 
 ### No capture crystals
 
@@ -956,6 +956,13 @@ M12008RepointActiveElementalDamageVersion ← (Creatures) moves a dangling battl
 M12009SeedElementalReactions_20260904 ← (Creatures, Studio export) authored reaction snapshot; upserts by content_key
 M12010SeedElementalDamage_20260904    ← (Creatures, Studio export) authored v1.1 matrix snapshot; INSERT-if-absent by (offense, defense, version)
 ```
+
+`M12009`'s and `M12010`'s `Down()` (like `M12005`'s) branch their id predicate by engine rather than
+wrapping every id comparison in `LOWER()`: `lower(uuid)` is not a Postgres function, so the old
+single-branch SQL threw `42883` on rollback there even though it worked on SQLite.
+`M12010.Up()` also no longer overwrites `battle_system_version.active_elemental_damage_version` when
+an operator has already pointed it at a real matrix version — it only sets the pointer when the
+existing value is absent or dangling.
 
 Additional migrations add `trainer{1,2}_active_creature_id` to `battle` and create `generated_creature_current_stats` for persistent HP.
 

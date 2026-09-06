@@ -191,6 +191,13 @@ Step 3 happens **once, ever**. The destination folder is fixed
 (`/home/deck/Games/CrystallineRift`) precisely so the Steam shortcut keeps pointing at a path that
 never changes; later deploys replace the bytes underneath it.
 
+The window tracks which of its three actions actually finished as a `SteamDeckOutcome`
+(`Connected` / `Deployed` / `LogFetched`), not just whether the last SSH call returned without
+error — a mere connectivity check (**Test Connection**) used to leave the window reading
+"Deployed." even though no build had been pushed. Only `Deployed` shows the Steam-shortcut path
+line, and only `LogFetched` (with a log actually saved) shows the **show saved log** button — it
+used to be unreachable because nothing ever set the outcome that gates it.
+
 ### Why rsync rather than a copy
 
 rsync transfers only changed blocks, so a code-only rebuild is a small delta rather than a

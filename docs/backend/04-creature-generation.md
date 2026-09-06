@@ -421,7 +421,7 @@ Three call sites use the same rule:
 
 ```csharp
 Task<IReadOnlyList<Guid>> ApplyQuestUnlocksAsync(
-    Guid accountId, Guid trainerId, string questContentKey, string? onlyAbilityContentKey,
+    Guid trainerId, string questContentKey, string? onlyAbilityContentKey,
     CancellationToken ct = default);
 ```
 

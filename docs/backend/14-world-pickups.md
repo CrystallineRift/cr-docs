@@ -29,8 +29,15 @@ Collection has **one owner both modes**: `IPickupDomainService.CollectAsync(acco
 
 1. If `IsCollected` → returns `AlreadyCollected`, grants nothing.
 2. Definition lookup by content key → missing key returns `DefinitionNotFound`, marks nothing.
-3. Every non-`Quest` reward is granted through `IRewardGrantService.GrantAsync`; `Quest` rewards are returned **ungranted** in `PickupCollectResult.QuestRewards` for the consumer to route (QuestManager owns quest acceptance and its events, and `CR.Game` stays free of a dependency on `CR.Quests`).
-4. `MarkCollected`, and the result carries `GrantedRewards` + `SpawnedCreatureIds`.
+3. **Claim before paying**: `IPickupCollectedRepository.MarkCollectedAsync` runs next and returns
+   `bool` — the claim, not just a write. If it returns `false` (another in-flight `CollectAsync` for
+   the same instance won the race), this call returns `AlreadyCollected` and grants nothing. Granting
+   first and marking afterward meant a retry after a partial failure, or a second concurrent collect,
+   found the instance still uncollected and paid the whole reward list out again — the unique index
+   only stopped the second *row*, long after the money had already been granted twice. The cost of
+   claiming first is a claimed pickup whose grant then fails paying nothing (one lost reward) rather
+   than an unbounded currency faucet.
+4. Every non-`Quest` reward is granted through `IRewardGrantService.GrantAsync`; `Quest` rewards are returned **ungranted** in `PickupCollectResult.QuestRewards` for the consumer to route (QuestManager owns quest acceptance and its events, and `CR.Game` stays free of a dependency on `CR.Quests`). The result carries `GrantedRewards` + `SpawnedCreatureIds`.
 
 Online this runs **on the server** behind `POST /api/v1/pickups/{trainerId}/collect` — reward grants touch server-owned state (currency, backpack, creatures) that the client may not write; the old client-side grant loop died on `TryAdjustCurrencyAsync` (`NotImplementedException`: currency adjustments are server-side only). Offline the same method runs in-process against the local SQLite DBs.
 

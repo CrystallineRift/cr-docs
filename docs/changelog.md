@@ -1,5 +1,90 @@
 # Changelog
 
+## 2026-09-06 — Post-merge review fix round
+
+- **Auth hardening.** `POST /api/v1/npc/reset-teams` and the Npcs `content-registry` routes
+  (PUT/DELETE/GET) now require `AuthorizationPolicies.RequireContentWrite`, not just any
+  authenticated player. `GET /api/v1/stats`, `use-battle-item`, `trainer-defeats`, and the
+  evolution endpoints (`evolution/begin`, `evolutions/{id}/commit`, `evolutions/{id}/cancel`,
+  `GET creatures/{id}/evolution`) now resolve the account from the caller's token
+  (`context.GetAccountId()`) rather than a client-supplied `accountId`/`TrainerId`, and verify the
+  trainer belongs to that account — closing a path where one account could read or act on
+  another's data by naming its id.
+- **Battle condition-expiry fix.** An attacker's own expiring status conditions are now removed
+  from the attacker (not the defender), and the reconcile step runs even when nothing remains.
+- **Held-item slot/backpack fix.** `HeldItemService.ReturnToBagAsync` now allocates a real free bag
+  slot via `ItemSlotAllocator` (previously always wrote slot 0, violating a unique index on the
+  second unequip) and returns the item to the trainer's actual Backpack inventory instead of
+  possibly landing in Storage.
+- **Migration `Down()` fixes.** `M12005SeedBattleMissions_20260903.Down()` now only removes the
+  three missions it introduced instead of also deleting M10004/M10008's rows; `M12009`/`M12010`'s
+  `Down()` no longer throw on Postgres (`lower(uuid)` isn't a Postgres function) and branch by
+  engine.
+- **Status-condition seeds resolve by name.** `M12011SeedStatusHooks`, `M10018SeedElementalReactions`,
+  and `M10019AuthorReactionContent` now look up dependent condition ids (`status_condition_stat_changes`,
+  `ability_status_conditions`) by name at insert time instead of a hard-coded GUID, so a
+  Content-Studio-authored condition under a foreign id still links correctly.
+- **`auth_session` retention.** Rows are now pruned (30-day retention, 1-hour throttle, hard
+  delete) on `CreateSessionAsync` instead of growing unbounded.
+- **Pickup collect idempotency.** `PickupDomainService.CollectAsync` now claims the pickup
+  instance before granting anything, closing a double-grant race.
+- **Unity: `SessionReconcile` in-flight sharing.** A second concurrent caller to `RunOnceAsync` now
+  actually waits for the first call's in-flight run instead of returning before the mirror is
+  written.
+- **Unity: reaction sync retire guard.** Elemental-reaction content sync now retires local rows
+  based on the full server payload, not just the rows the client could write — a row the client
+  rejected is no longer wrongly soft-deleted locally.
+- **Unity: generated-creature batch fix.** `GeneratedCreatureOnlineRepository.GetCreaturesByIdsAsync`
+  no longer mixes fresh and cached rows in one batch response; an unanswered id now falls back to
+  serving the whole batch from cache.
+- **Unity editor: no more repaint writes.** Empty-field popups in the Elemental Reaction and Battle
+  Mission editors no longer write/dirty the asset on a repaint of an empty field, and their warning
+  text now reflects what's actually stored.
+- **Unity editor: damage-matrix version prompt.** Content Studio's "+ New Version" on the Elemental
+  Damage matrix no longer creates a duplicate-version matrix — it now prompts via
+  `StudioTextPrompt.Ask`, suggests the next version, validates, and refuses collisions.
+- **Unity editor: Steam Deck deploy outcomes.** The deploy window no longer reports "Deployed."
+  after a mere connection probe; it now tracks a real `SteamDeckOutcome`
+  (Connected/Deployed/LogFetched), and the "show saved log" button is reachable again.
+- **Unity editor: Review window partial-diff message.** The Content Review window's Diff no longer
+  claims a partially-fetched Progression Set "matches the server" — it now states which tabs are
+  only partially diffed.
+- **`BattleHUD` challenge banner.** `ShowChallengeBanner()` now runs after the log/mission reset, so
+  the trainer-challenge banner is no longer immediately erased.
+- **`EvolutionPresenter` cancel input.** The evolution cutscene's hold-to-cancel now actually
+  enables/disables `UI/Cancel` around the overlay — previously the action was never enabled, so
+  cancel could never fire.
+- **`AreaLoader` arrival reset.** A failed resume transition no longer leaves `_pendingArrival`
+  armed; it now falls through to the area's default spawn point.
+- **Market error text.** The status bar no longer shows raw .NET exception messages — text is now
+  composed via `PlayerErrorText.For(ex)`, matching the rest of the client.
+- **Quest endpoints return 401, not 500, for an account-less token.**
+- **`M7014SeedAreaQuestChain` seeds First Battle.** The quest the first three meadow rungs require
+  (`quest-first-battle`) is now seeded by the same migration that requires it; previously nothing
+  seeded it into Postgres, so the prerequisite could never be completed there. `Down()` is now
+  SQLite-guarded like `Up()`.
+- **Trainer battles no longer stall forever.** A battle now ends — as the stalling trainer's loss —
+  after three consecutive refused Runs, instead of looping indefinitely.
+- **Unity: `ICreatureStatusClient` online implementation honours its "never throws" contract.**
+  `CreatureStatusClientUnityHttp` now catches `ServerRequestException` and returns an empty result
+  like the offline implementation, instead of propagating.
+- **Unity: `ServerErrorMessage.FromBody` unquoting.** A bare JSON string error body is now unquoted
+  and unescaped instead of being shown to the player with its literal quotes intact.
+- **Unity: battle music keys off battle type.** Wild encounters previously always played the
+  trainer-battle theme because the music plan keyed off an always-non-blank active-trainer id; it
+  now keys off the actual battle type.
+- **Unity: `BattleCoordinator.StartNpcBattleAsync` resets stale encounter state**
+  (`_encounterStaged` and stale spawner/abort flags), so a leftover wild-encounter flag can no
+  longer produce a spurious DEFEAT summary on an NPC trainer battle.
+- **Unity: Market species filter actually applies.** The species filter's value-changed callback
+  now assigns `_filter.SpeciesText` before re-rendering; previously the filter never took effect.
+- **Two doc-accuracy corrections** (no behaviour change): the creature-market refusal order is
+  `NotOwned → NotTradable → ListingLimitReached → LastTeamMember → InsufficientFunds` server-side —
+  the client's `SellEligibility` still checks `LastTeamMember` before the listing cap, so the two
+  can disagree for a trainer at the cap trying to list their last team creature; and
+  `PlayerErrorText.For`'s `AggregateException` handling picks the first **non-cancellation** inner
+  exception (flattened), not simply the first inner exception.
+
 ## 2026-09-05 — Every server error has a status, a body and player-facing text
 
 - **One exception family for the HTTP client.** `SimpleWebClient` now classifies every non-2xx

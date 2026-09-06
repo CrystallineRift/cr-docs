@@ -190,7 +190,7 @@ The `battles_won` stat is incremented as a side effect of `objectiveType = 3` (`
 **Get all current stats for a trainer (debug endpoint):**
 
 ```bash
-curl -s "http://localhost:5000/api/v1/stats?accountId=$ACCOUNT_ID&trainerId=$TRAINER_ID" \
+curl -s "http://localhost:5000/api/v1/stats?trainerId=$TRAINER_ID" \
   -H "Authorization: Bearer $TOKEN" | jq .
 
 # Response:
@@ -333,7 +333,7 @@ BattleSystem (future) ──► IStatService
 ## REST Endpoint
 
 ```
-GET /api/v1/stats?accountId={accountId}&trainerId={trainerId}
+GET /api/v1/stats?trainerId={trainerId}
 → 200 OK
 {
   "battles_won": 42,
@@ -343,6 +343,12 @@ GET /api/v1/stats?accountId={accountId}&trainerId={trainerId}
   ...
 }
 ```
+
+The account is taken from the caller's token, never from a query parameter — an `accountId` in the
+query string is accepted but ignored. Because `trainer_stat` rows are keyed by `trainer_id` alone
+(`GetAllAsync` never filters on account), the endpoint additionally checks that `trainerId` belongs
+to the token's account before reading; a trainer that doesn't (or doesn't exist) gets `404 Not Found`
+rather than another account's stats.
 
 This endpoint returns the full `Dictionary<string, long>` from `GetAllAsync`. It is a **debug endpoint** — not intended for production client use. Gating it behind an internal/admin role before shipping is recommended.
 

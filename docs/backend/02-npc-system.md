@@ -409,7 +409,14 @@ All list methods accept `offset` and `limit` for pagination. The default limit i
 
 ## REST Endpoints
 
-All NPC endpoints are prefixed `/api/v1/npc`.
+All NPC endpoints are prefixed `/api/v1/npc`. Player-facing routes take the acting account from the
+validated token, never from the request body/query — a client-sent `accountId` is tolerated but
+ignored (`use-battle-item`, `trainer-defeats`). `use-battle-item` additionally refuses any target
+creature not owned by the NPC's own battle team or the calling trainer. The content-registry routes
+(`GET`/`PUT`/`DELETE /api/v1/npc/content-registry*`) and `POST /api/v1/npc/reset-teams` read and
+write every account's data at once, so — unlike the player-facing routes above — they require
+`AuthorizationPolicies.RequireContentWrite` (the scope `/auth/service-token` mints for the editor),
+not just any authenticated player.
 
 | Method | Path | Description |
 |--------|------|-------------|

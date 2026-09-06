@@ -747,6 +747,11 @@ public record NpcBattleRequest(
 5. If `BattleArenaKey` resolves, calls `_stager.EnterArenaAsync(...)` → `_cameraController.EnterBattle(arena.CameraLookTarget)` — player teleport + both creature visuals + camera lerp
 6. Fires `OnBattleStarted`
 
+`StartNpcBattleAsync` resets `_encounterStaged` (and any stale spawner/abort state) at the start of
+this flow. Without that reset, a wild encounter that left `_encounterStaged` set — from the flag
+described in *An Encounter That Never Starts Has No Result* below — could leak into a subsequent NPC
+trainer battle and produce a spurious `DEFEAT` summary for a fight that never actually ended.
+
 ## Authoring a Trainer Battle
 
 **CR → Trainer Battle Author** is the one place a trainer battle is made. A trainer

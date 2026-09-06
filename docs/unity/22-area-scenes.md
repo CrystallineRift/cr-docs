@@ -830,7 +830,7 @@ in `TrainerResumeTests`) picks one of three plans when the overworld initializes
 |------|------|--------------|
 | `DefaultSpawn` | nothing usable saved | default spawn point, exactly as before |
 | `TeleportInPlace` | saved spot is in the loaded area | `IMovementController.Teleport` to the spot |
-| `TransitionToSavedArea` | saved spot is elsewhere | `GoToAreaAsync` there; a `_pendingArrival` override makes `PlacePlayer` land on the exact saved spot instead of the area's spawn point |
+| `TransitionToSavedArea` | saved spot is elsewhere | `GoToAreaAsync` there; a `_pendingArrival` override makes `PlacePlayer` land on the exact saved spot instead of the area's spawn point. If that transition fails, `_pendingArrival` is cleared rather than left armed, so the player falls through to the area's default spawn point instead of a stale arrival override surfacing on some later, unrelated transition |
 
 All placement goes through the movement controller — writing the transform directly makes
 Malbers drag the player back within ~100 ms.

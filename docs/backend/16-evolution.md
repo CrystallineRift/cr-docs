@@ -109,7 +109,11 @@ A refusal from `begin` is a **200 carrying a reason**, not a 400: "this creature
 Bindstone" is a normal answer to a legitimate question, and the client has a sentence to show.
 
 All four are owner-gated — the service refuses a creature that is not the caller's, which is the
-other half of what server-authoritative has to mean.
+other half of what server-authoritative has to mean. The ownership check is on the **caller's
+token**, not the request body: each endpoint resolves the acting trainer's account from
+`context.GetAccountId()` and 404s if that account doesn't own the `trainerId` the body/route names
+— a client-supplied `TrainerId` on `evolution/begin`/`commit`/`cancel` (or the creature's owning
+trainer on the `GET` check) can no longer be used to act on or inspect another account's creature.
 
 ## The lines
 

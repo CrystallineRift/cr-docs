@@ -433,7 +433,7 @@ derive the key from what the importer already used as the address:
 | Migration | Table | Rule |
 |---|---|---|
 | `M6022BackfillItemIconAssetKey` | `item` | `'icons/items/' \|\| content_key` |
-| `M12013BackfillContentIconAssetKey` | `creature` | `'icons/creatures/' \|\| content_key` |
+| `M12013BackfillContentIconAssetKey` | `creature` | `'icons/creatures/' \|\| content_key`, only when `asset_key` is non-null and non-empty |
 | | `abilities` | `'icons/abilities/' \|\| name` |
 | | `status_conditions` | `'icons/status/' \|\| name` |
 
@@ -443,11 +443,15 @@ de-spacing the key produces an address the catalog does not contain, which reads
 rather than a failure.
 
 Both are `WHERE icon_asset_key IS NULL` (plus "the source column is non-null and non-empty"), so they
-are idempotent and never overwrite a key a designer authored. Each `UPDATE` is guarded on its table
-**and** its column existing, matching M12012, because the runner is also pointed at per-domain
-databases where only some of the three Creatures tables live. `Down()` is a no-op on both: the values
-are derivable, and blanking the column would take authored keys with it. Soft-deleted rows are
-backfilled too — a derived key on a hidden row is inert, and skipping them would cost an
+are idempotent and never overwrite a key a designer authored. `creature` carries an extra predicate on
+top of that — `asset_key IS NOT NULL AND asset_key <> ''` — because four rows (`cindris`,
+`starter_1`, `starter_2`, `starter_3`) are placeholders with no model at all, and the catalog has no
+`icons/creatures/<key>` for them either; deriving a key anyway would turn "no icon" into "an icon that
+fails to load", the exact distinction M12012's nullable column exists to preserve. Each `UPDATE` is
+guarded on its table **and** its column existing, matching M12012, because the runner is also pointed
+at per-domain databases where only some of the three Creatures tables live. `Down()` is a no-op on
+both: the values are derivable, and blanking the column would take authored keys with it. Soft-deleted
+rows are backfilled too — a derived key on a hidden row is inert, and skipping them would cost an
 engine-specific boolean literal for no gain.
 
 :::warning[A later seed is not covered]
@@ -461,9 +465,10 @@ it.
 
 After the backfill the baked floor (`Assets/StreamingAssets/CR/game-data.bytes`, schema version
 12013) carries a key on every row **with a `content_key`**: 23 items on `icons/items/%`, and zero
-remaining nulls on `creature`, `abilities` or `status_conditions`. Two `item` rows with an empty
+remaining nulls on `abilities` or `status_conditions`. Two `item` rows with an empty
 `content_key` — junk with nothing to derive a key from — are correctly skipped by
-`M6022BackfillItemIconAssetKey` and stay unbackfilled. The art is registered at those addresses too:
+`M6022BackfillItemIconAssetKey` and stay unbackfilled, as do the four art-less `creature` rows
+(`cindris`, `starter_1`, `starter_2`, `starter_3`) skipped by the `asset_key` guard above. The art is registered at those addresses too:
 `cr_import_icons` has run against the filled map (`copied 70, skipped 1` — `toy_bouncy_ball` has a
 sprite but no `ItemDefinition`) and `cr_bake_portraits` wrote all 15 portraits with `notes 0`, so 85
 definitions carry an `iconKey` and `CRContent` holds 86 `icons/` entries. A slot that still draws the

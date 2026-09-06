@@ -65,6 +65,11 @@ is a first-class online login, not a guest mode. `/auth/oauth` returns 401 (neve
 unknown or stale provider tokens for the same reason: the client's 401 handler is the recovery
 path.
 
+`auth_session` is bounded: every `CreateSessionAsync` call also runs a throttled retention sweep
+(`BaseSessionRepository.PruneExpiredIfDueAsync`, at most once per hour) that hard-deletes rows
+expired more than 30 days ago (`SessionRetention`). A prune failure only logs — it never fails the
+login that triggered it.
+
 On the Unity side, `GameAuthRepository.TryGetAccessToken` walks the **token ladder**
 (`AuthTokenLadder`, pure logic + tests): use the live access token, else spend the refresh
 token, else run the two calls above from nothing. `SimpleWebClient` retries any 401 once after

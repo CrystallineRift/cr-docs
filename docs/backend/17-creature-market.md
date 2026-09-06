@@ -53,9 +53,9 @@ precondition failing to apply).
 
 Refused, in order, when: the acting trainer doesn't currently own the creature (`NotOwned`); the
 acting trainer isn't found or doesn't belong to the acting account (`NotOwned`); the creature has
-`is_tradable = false` (`NotTradable`); the creature is the only member of the acting trainer's
-active team (`LastTeamMember`); the acting *account* already holds `MarketMaxActiveListings`
-`Active` listings (`ListingLimitReached`); the trainer can't afford the fee (`InsufficientFunds`).
+`is_tradable = false` (`NotTradable`); the acting *account* already holds `MarketMaxActiveListings`
+`Active` listings (`ListingLimitReached`); the creature is the only member of the acting trainer's
+active team (`LastTeamMember`); the trainer can't afford the fee (`InsufficientFunds`).
 
 **`is_tradable`** (`M1032AddIsTradableToGeneratedCreature`, default `true`) exists purely to lock
 story-critical creatures — starters — out of the marketplace. It's a flag on the *generated*

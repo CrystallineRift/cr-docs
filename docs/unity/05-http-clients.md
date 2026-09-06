@@ -143,7 +143,7 @@ Every instance carries:
 - `IsTransient` — true when retrying later could plausibly succeed (no response, 429, or 5xx).
 - `ServerUnreachableException.TransportMessage` — Best HTTP's own wording, for the log.
 
-The body is parsed for **every** status, not only 400, because cr-api is not uniform about where the reason lives. `ServerErrorMessage` tries `message`, `errorMessage` (market result objects), `error`, `detail` then `title` (ASP.NET ProblemDetails — `detail` first because only it says what actually happened), then a short bare-text body; JSON arrays, markup, malformed JSON and non-string fields are never shown. Two entry points read the result differently:
+The body is parsed for **every** status, not only 400, because cr-api is not uniform about where the reason lives. `ServerErrorMessage` tries `message`, `errorMessage` (market result objects), `error`, `detail` then `title` (ASP.NET ProblemDetails — `detail` first because only it says what actually happened), then a short bare-text body; JSON arrays, markup, malformed JSON and non-string fields are never shown. A bare JSON string document — what `Results.BadRequest("AreaKey is required.")` serialises to — is unquoted and unescaped rather than shown to the player with its literal quotes intact. Two entry points read the result differently:
 
 - `ForPlayer(status, reason, body)` — what `ServerRequestException.Message` carries: body (4xx only, capped) → status default. Used by the classifier.
 - `From(status, reason, body)` — what an author or a log wants: body (any status, any length) → status default → reason phrase → "Request refused.". Used by the editor sync helpers' `DescribeFailure`, where a 500's detail and a 409's full list of missing names are exactly the point.
@@ -343,7 +343,7 @@ Ensure the backend's `Program.cs` maps the corresponding endpoint group. See [Ba
 |-----------|---------|
 | `ServerRequestException` (any subclass) | its `Message` — already player-facing |
 | `OperationCanceledException` / `TaskCanceledException` | `null` — show nothing, the player cancelled |
-| `AggregateException` | unwrapped to its first inner exception, then the rules above |
+| `AggregateException` | the first non-cancellation inner exception (flattened), or the first inner exception if all are cancellations — then the rules above |
 | anything else | `PlayerErrorText.Generic` ("Something went wrong.") — a bug's message is for the log, never the screen |
 
 ```csharp

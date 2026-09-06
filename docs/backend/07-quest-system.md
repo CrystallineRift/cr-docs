@@ -94,6 +94,11 @@ Eight quests (M7014) follow the habitat level ladder, so "where do I go next" is
 rather than by walking into a habitat twenty levels above you. Each gates on the one before it; the
 middle rungs also gate on creature level.
 
+M7014 also seeds **First Battle** (`quest-first-battle`), the quest the first three rungs require.
+It is authored as a QuestDefinition and synced into the client's SQLite at world init, but nothing
+seeded it into Postgres — so on a fresh deployment the prerequisite did not exist, could never be
+completed, and the three meadow quests were filtered out of the available list forever.
+
 | Quest | Area | Objectives | Requires | XP / gold |
 |---|---|---|---|---|
 | Thin the Meadow | Meadow | defeat 5 creatures | First Battle | 150 / 60 |
@@ -426,6 +431,11 @@ overwrites its stored account id from that value on every successful authenticat
 (`GameAuthRepository.PersistAccountTokenLocally`). Pinned by
 `CR.Api.IntegrationTests.QuestIdentityHttpTests` (bogus body accountId must not be persisted;
 auth must echo the account id).
+
+A token that passes the fallback authentication policy but carries no account claim is an
+authorization problem, not a server fault: every quest handler now catches
+`UnauthorizedAccessException` from `GetAccountId()` and returns `401 Unauthorized`, where it
+previously fell through to the generic `catch (Exception)` and answered `500`.
 
 ### Why those two reads do not branch on connectivity
 
@@ -813,7 +823,7 @@ The trigger chain at claim time:
    `SourceKey` carries the quest's content key; `ReferenceKey` (from `reward.reference_id`) optionally
    narrows the grant to a single ability's content key.
 3. `RewardGrantService` dispatches to
-   `ICreatureProgressionService.ApplyQuestUnlocksAsync(accountId, trainerId, questContentKey, abilityContentKey, ct)`.
+   `ICreatureProgressionService.ApplyQuestUnlocksAsync(trainerId, questContentKey, abilityContentKey, ct)`.
 4. The returned creature ids are surfaced on `QuestClaimResult.AbilityUnlockedCreatureIds`, separate
    from `SpawnedCreatureIds`. The client should re-read those creatures to show the new move set.
 
