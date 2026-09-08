@@ -120,7 +120,7 @@ only when the item carries `HeldByCreature` **and neither** `UsableInBattle` **n
 | 7 | `BoostStatPerm` | `BoostStatPermHandler` | |
 | 8 | `LevelUp` | `LevelUpHandler` | |
 | 9 | `GrantExperience` | `GrantExperienceHandler` | |
-| 10 | `TriggerEvolution` | `TriggerEvolutionHandler` | Begins an evolution through `IEvolutionService` with the item as `usedItemId`; no parameters — the species' rules pick the target. Consumed at Commit, not at use |
+| 10 | `TriggerEvolution` | `TriggerEvolutionHandler` | Begins an evolution through `IEvolutionService` with the item as `usedItemId` — this handler is the only path that supplies one, after `ItemUseDomainService` has verified ownership; no parameters — the species' rules pick the target. Consumed at Commit and only when the winning group's `HeldItem` requirement names it with `consume_on_evolve`, so a stone used on a creature evolving on level alone is not spent |
 | 11 | `CaptureCreature` | `CaptureCreatureHandler` | See [Capture Mechanic](../unity/14-capture-mechanic.md) |
 | 12 | `IncreaseExpShare` | `IncreaseExpShareHandler` | |
 | 20–25 | `HeldStatBoost`, `HeldDamageReduce`, `HeldTypeBoost`, `HeldRegenHp`, `HeldStatusImmune`, `HeldReviveOnce` | *(none)* | Held-item passives, evaluated by `IHeldItemTriggerEvaluator`, never by a use handler |

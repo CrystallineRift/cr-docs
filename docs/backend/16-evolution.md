@@ -28,13 +28,24 @@ Thorn Seed" means the level always wins when both hold.
 | `StatusCondition = 3` | `guid_value` (condition id) | the at-rest condition is on the creature |
 | `InArea = 4` | `string_value` (area key) | equals the owning trainer's `trainers.last_area_key`, ordinal. A trainer with no recorded area **fails** — location never fails open |
 
-`consume_on_evolve` only means something on `HeldItem`. A consumed item is destroyed at Commit —
-the held slot is cleared in the same creature write as the species change; it is not returned to
-the bag. An item used from the bag to trigger the evolution is consumed at Commit too, and only
-then: cancelling leaves it in the bag.
+`consume_on_evolve` only means something on `HeldItem`, and it is **the only** thing that decides
+whether an item is spent. A consumed item is destroyed at Commit — the held slot is cleared in the
+same creature write as the species change; it is not returned to the bag. An item used from the bag
+is spent only when the winning group carries a `HeldItem` requirement naming it with
+`consume_on_evolve` set (a used item satisfies such a requirement the same way a held one does), and
+only at Commit: cancelling leaves it in the bag.
+
+So using a Sun Stone on a creature whose winning rule is a plain `MinLevel` evolves it **and keeps
+the stone** — the rule says what an evolution costs; the act of using an item does not. The same
+applies to a held copy of that item: nothing the winning group did not ask for is destroyed.
 
 Rules live in `CR.Game.Model/Evolution` (`EvolutionRule`, `EvolutionRequirement`) and are read
 through `IEvolutionRuleRepository` (`GetByCreatureAsync`, `GetAllAsync`, `ReplaceForCreatureAsync`).
+Both reads cost **two queries**, not one per rule: the rules, then every live requirement joined to
+its live rule in one pass, grouped in memory. It is a join rather than a `WHERE rule_id IN (...)`
+list on purpose — the SQLite GUID normaliser rewrites parameters, not arrays, so an id list would
+arrive uppercase and match nothing, and the join needs no id list at all.
+
 `ReplaceForCreatureAsync` writes the whole ordered set in one transaction: rules absent from the
 set are soft-deleted along with their requirement rows, present ones upserted by id, and every
 listed rule's requirements deleted and re-inserted. The repository writes whatever `SortOrder` the
@@ -65,10 +76,19 @@ Order of decisions:
    one cause the player can undo.
 3. Rules in `sort_order`; within a rule, groups in `group_index`. The first rule with a passing
    group → `Ready(target, ruleId, itemsToConsume)`.
-4. Otherwise → `Blocked(RequirementsNotMet)` with `FailedGroups`: per rule, per group, the
+4. A rule with no target, no groups, an empty group, or a requirement whose value column for its
+   type is null cannot be evaluated. It is **skipped**, its id collected in
+   `UnevaluableRuleIds`, and the remaining rules are tried — one broken rule must not make its
+   species unevolvable through the good rules beside it. A skipped rule contributes no
+   `FailedGroups`, not even from the groups it got through before the bad requirement.
+5. Otherwise → `Blocked(RequirementsNotMet)` with `FailedGroups`: per rule, per group, the
    requirement types that failed, so a client can say "needs level 30 or a Fire Stone".
-5. A rule with no target, no groups, an empty group, or a requirement whose value column for its
-   type is null → `Blocked(IncompleteEvolutionData)`. Content bugs are reported, not hidden.
+6. If **every** group that failed did so purely on `InArea`, that is reported as
+   `NotInRequiredArea` instead — the player can walk somewhere else, so say that. Deliberately
+   strict: one group that also wants a level or an item means the honest answer is still
+   `RequirementsNotMet`, because walking would not be enough.
+7. If **no** rule was evaluable at all → `Blocked(IncompleteEvolutionData)`, with every offending
+   rule id in `UnevaluableRuleIds`. Content bugs are reported, not hidden.
 
 | Reason | Meaning |
 |---|---|
@@ -76,9 +96,20 @@ Order of decisions:
 | `NoEvolutionForSpecies` | This species is meant to stay as it is |
 | `BlockedByHeldItem` | Something it is holding is stopping it |
 | `RequirementsNotMet` | It has rules; none passes yet (`FailedGroups` says which) |
-| `IncompleteEvolutionData` | A half-authored rule — a content bug |
+| `IncompleteEvolutionData` | Every rule is half authored — a content bug (`UnevaluableRuleIds` names them) |
+| `NotInRequiredArea = 6` | It is ready except for where it is standing |
 
 `LevelTooLow` is gone; `RequirementsNotMet` subsumes it.
+
+The `NotInRequiredArea` conversion lives in `EvolutionEligibility.Evaluate` itself, not at a caller.
+It used to live in `EvolutionService`, which meant `CreatureProgressionService`'s level-up path —
+which calls the evaluator directly — reported `RequirementsNotMet` for the same creature Begin would
+have told to walk east. Both triggers now say the same thing, because there is only one place that
+says it.
+
+A species whose rules are all half authored also gets a `LogWarning` from the level-up path naming
+the offending rule ids: a species that quietly stops evolving is the bug nobody notices for a
+release.
 
 ## The facts builder
 
@@ -93,9 +124,13 @@ but never sets `HeldItemPreventsEvolution` — a lookup failure must not silentl
 block. Unreadable status conditions are treated as none. An unreadable trainer leaves `AreaKey` null,
 and `InArea` then fails: location is the one fact a rule should never assume open.
 
-Separately, at Commit, if the target species or its growth profile cannot be found the species
-change still applies — it is the thing the player asked for and watched happen — but the stat
-recompute is skipped and a warning is logged rather than the evolution being refused after the fact.
+Separately, at Commit, if the **growth profile** cannot be found the species change still applies —
+it is the thing the player asked for and watched happen — but the stat recompute is skipped and a
+warning is logged rather than the evolution being refused after the fact. A missing **target
+species** is the opposite case and is refused: it is resolved before the ledger row is claimed, and
+a commit that cannot resolve its target fails with the offer left `Pending`, so the same offer works
+again the moment the species is back. Writing the change anyway would leave a live creature carrying
+a `BaseCreatureId` that resolves to nothing, which nothing later can detect or undo.
 
 ## Why three phases
 
@@ -170,8 +205,8 @@ keeps its moves).
 
 | Route | Purpose |
 |---|---|
-| `GET /api/v1/creatures/{id}/evolution?usedItemId=` | Could this evolve right now, and why not — `FailedGroups` included |
-| `POST /api/v1/creatures/{id}/evolution/begin` | Offer one, start the clock (`usedItemId` optional as a query parameter; the trainer id is in the body) |
+| `GET /api/v1/creatures/{id}/evolution` | Could this evolve right now, and why not — `FailedGroups` included |
+| `POST /api/v1/creatures/{id}/evolution/begin` | Offer one, start the clock (the trainer id is in the body) |
 | `POST /api/v1/evolutions/{evolutionId}/commit` | Apply it |
 | `POST /api/v1/evolutions/{evolutionId}/cancel` | Decline it |
 | `GET /api/v1/evolution-rules` | Every live rule with its requirement groups — runtime content sync and Content Studio pull |
@@ -182,11 +217,23 @@ The four player routes are owner-gated on the caller's token: each resolves the 
 account from `context.GetAccountId()` and 404s if that account doesn't own the trainer named. A
 token with no usable account claim gets `401 Unauthorized`.
 
+**Neither route takes a used item id from the wire.** Nothing out here verifies that the caller owns
+the item, so a `usedItemId` query parameter would satisfy any `HeldItem` requirement for free — and
+Commit re-evaluates with the offer's stored item, so the replay would pass there too. Both routes
+pass `null`. `IEvolutionService.CheckAsync` / `BeginAsync` still take the parameter, because the
+server's item-use flow (`ItemUseDomainService` → `TriggerEvolutionHandler`) supplies it after
+verifying ownership, and the offline client calls the same service in-process. Using an item is the
+only way one enters the facts.
+
 ## The lines
 
 The five legacy lines were folded into rules by **M12018** (one rule, one group, one `MinLevel`
 requirement each, with deterministic ids so a re-run changes nothing) and the old
-`creature.evolution_level` / `evolution_creature_id` columns nulled:
+`creature.evolution_level` / `evolution_creature_id` columns nulled. All three of its statements
+share one predicate — a level **and** a target — so a half-authored species (a level, no target)
+is skipped whole: no rule, no requirement, and its legacy columns left intact for whoever finishes
+authoring it. Guarding the requirement insert on the level alone would strand a row under a
+`rule_id` that was never created, holding a fixed uuid5 id that can never be re-used.
 
 | Species | Becomes | Rule |
 |---|---|---|
@@ -199,8 +246,16 @@ requirement each, with deterministic ids so a re-run changes nothing) and the ol
 **M13003** (`SeedEvolutionRules_<date>`) is the authored set exported from Content Studio (see
 [Evolution Authoring](../unity/30-evolution-authoring.md)) and is what the offline floor is baked
 from. It upserts rules by id, replaces requirements, and retires any rule of a covered species
-that the export no longer lists — the seed mirrors the authored set, as a Studio push mirrors it
-on the server.
+that the export no longer lists.
+
+:::caution A deploy can retire a live Studio push
+That retire sweep runs over `Covered` — **every** seeded species, not only the five that have rules —
+so it is not a one-way mirror. Deploying a build whose M13003 predates a Studio push will retire the
+rules that push added, on any database that has not yet run 13003. Nothing is lost: re-push from
+Content Studio and the rules come back under the same ids. But if rules an author pushed last week
+vanish after a deploy, this is why — and the fix is to re-export M13003 from the Editor so the seed
+and the authored set agree again.
+:::
 
 :::note Why a Creatures migration carries a 13xxx number
 `SeedMigrationFileWriter` takes the next free number across **every** domain's migrations, not just

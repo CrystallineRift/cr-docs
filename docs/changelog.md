@@ -29,6 +29,20 @@
   species owns — duplicating a creature asset copies its rule ids, and the unscoped write silently
   re-parented the original's rule. Retiring a rule now retires its requirement rows with it. The
   inspector actually makes the duplicate-requirement check its docs promised.
+- **Second review round.** `usedItemId` is no longer accepted as a query parameter on
+  `GET creatures/{id}/evolution` or `evolution/begin` — nothing out there verified that the caller
+  owned the item, so any player could have satisfied a `HeldItem` requirement by naming a stone's
+  guid. The item-use flow, which checks ownership first, remains the only way one enters the facts.
+  Consumption now follows `consume_on_evolve` and nothing else: a stone used on a creature evolving
+  on level alone is not destroyed, and neither is a held copy of it. A half-authored rule is skipped
+  rather than making its whole species unevolvable — `IncompleteEvolutionData` is reported only when
+  no rule was evaluable, and the level-up path logs a warning naming the offending rule ids. The
+  `NotInRequiredArea` conversion moved into `EvolutionEligibility.Evaluate`, so the level-up trigger
+  and Begin give the same reason. `GET /api/v1/evolution-rules` is two queries instead of `1+R+S`
+  (one join for all requirements, one roster read for the content keys). A commit whose target
+  species no longer resolves is refused instead of writing a dangling `BaseCreatureId`. M12018's
+  requirement insert shares the rule insert's predicate, so a species with a level but no target can
+  no longer leave an orphan requirement row.
 - Docs: `backend/16-evolution` rewritten, new `unity/30-evolution-authoring`,
   `backend/19-item-effects` and `unity/12-scriptable-objects` updated.
 
