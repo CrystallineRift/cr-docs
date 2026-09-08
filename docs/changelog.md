@@ -14,7 +14,8 @@
 - **Authoring.** `CreatureDefinition.evolutions` with an inline-validated inspector section;
   Content Studio pushes rules per species (`PUT …/by-content-key/{key}/evolution-rules`), pulls
   them with the creatures, and shows a target badge. `CR/Content/Export Evolution Rule Seed
-  Migration` writes M12019 for the offline floor; floor schema 12019.
+  Migration` writes the seed migration (M13003 today — the writer takes the next free number
+  across every domain) for the offline floor; floor schema 13003.
 - **Presentation.** The overlay shows real species art strobing old ↔ new, `EvolutionCopy`
   headlines, and refreshes the team on `EvolutionEvents.Completed`.
 - Docs: `backend/16-evolution` rewritten, new `unity/30-evolution-authoring`,

@@ -185,7 +185,7 @@ requirement each, with deterministic ids so a re-run changes nothing) and the ol
 | Snakelet | Poison Bomb | `MinLevel 18` |
 | Dragon Spark | Dragon Fire | `MinLevel 24` |
 
-**M12019** is the authored set exported from Content Studio (see
+**M13003** (`SeedEvolutionRules_<date>`) is the authored set exported from Content Studio (see
 [Evolution Authoring](../unity/30-evolution-authoring.md)) and is what the offline floor is baked
 from. It upserts rules by id, replaces requirements, and retires any rule of a covered species
 that the export no longer lists — the seed mirrors the authored set, as a Studio push mirrors it
@@ -193,7 +193,7 @@ on the server.
 
 :::caution
 Seeds sit behind table-exists guards, so without tests they go inert silently. Pinned:
-`M12018` folds the five lines both ways; `M12019` leaves every live rule with a seeded species on
+`M12018` folds the five lines both ways; `M13003` leaves every live rule with a seeded species on
 both ends and at least one requirement; the Bindstone actually blocks and is actually unusable.
 :::
 

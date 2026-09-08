@@ -1285,7 +1285,7 @@
         "Creatures/CR.Creatures.Data.Migration/M12016*.cs",
         "Creatures/CR.Creatures.Data.Migration/M12017*.cs",
         "Creatures/CR.Creatures.Data.Migration/M12018*.cs",
-        "Creatures/CR.Creatures.Data.Migration/M12019*.cs",
+        "Creatures/CR.Creatures.Data.Migration/*SeedEvolutionRules_*.cs",
         "Items/CR.Items.Data.Migration/M6016*.cs",
         "Items/CR.Items.Data.Migration/M6017*.cs"
       ],
@@ -1428,12 +1428,11 @@
     "repos": {
       "cr-api": [
         "Game/CR.Game.Service.BFF/Endpoints/EvolutionRuleEndpoints.cs",
-        "Creatures/CR.Creatures.Data.Migration/M12019*.cs"
+        "Creatures/CR.Creatures.Data.Migration/*SeedEvolutionRules_*.cs"
       ],
       "cr-data": [
         "Assets/CR/Core/Data/Registry/Definitions/Evolution/**/*.cs",
         "Assets/CR/Core/Data/Registry/Definitions/CreatureDefinition.cs",
-        "Assets/CR/Core/Data/Logic/*Evolution*.cs",
         "Assets/CR/Core/Data/Editor/*Evolution*.cs",
         "Assets/CR/Core/Data/Editor/Evolution/**/*.cs",
         "Assets/CR/Core/Sync/Logic/Evolution/**/*.cs",
@@ -1444,6 +1443,6 @@
         "Assets/CR/Game/World/Editor/ContentCreatorSyncHelper.cs"
       ]
     },
-    "description": "Authoring evolution rules on CreatureDefinition, the inspector section and its validation, Content Studio push/pull/revert/diff, the M12019 seed export and floor rebake, runtime rule sync"
+    "description": "Authoring evolution rules on CreatureDefinition, the inspector section and its validation, Content Studio push/pull/revert/diff, the seed migration export (M13003) and floor rebake, runtime rule sync"
   }
 }

@@ -74,7 +74,7 @@ offline play does not see a rule until it is a seed:
 
 1. Author, then **Push** (so the server and the assets agree on ids).
 2. Creatures tab → **Export seed** (or `CR/Content/Export Evolution Rule Seed Migration`). This
-   writes `cr-api/Creatures/CR.Creatures.Data.Migration/M12019SeedEvolutionRules_<date>.cs` —
+   writes `cr-api/Creatures/CR.Creatures.Data.Migration/M<version>SeedEvolutionRules_<date>.cs` (M13003 today) —
    regenerated in place; the version stays the highest in the repository, which is also what makes
    the client adopt the freshly baked floor. "Already up to date" means the assets and the file
    agree byte for byte.
