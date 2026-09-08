@@ -134,10 +134,10 @@ battle, once the summary screen is done.
 **Item use.** `TriggerEvolutionHandler` (effect type 10) calls
 `IEvolutionService.BeginAsync(target, trainer, usedItemId: itemId)`. A refusal comes back as a
 200 with a reason and a player-facing sentence — a normal answer to a legitimate question, not an
-error. An offer comes back with `EvolutionTriggered = true` and the `EvolutionOffer` on the result,
-and `ItemUseDomainService` **skips consumption** when a handler reports it: the stone is consumed
-at Commit, not at use. The handler no longer takes a target parameter — the rules decide the
-target.
+error. An offer comes back with `EvolutionTriggered = true` and the offer itself on the `Evolution`
+property (an `EvolutionOffer`) of the item-use result, and `ItemUseDomainService` **skips
+consumption** when a handler reports it: the stone is consumed at Commit, not at use. The handler
+no longer takes a target parameter — the rules decide the target.
 
 ## The Bindstone
 

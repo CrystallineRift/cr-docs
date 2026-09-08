@@ -48,8 +48,9 @@ scans the AssetDatabase per repaint.
 
 ## Content Studio
 
-The **Creatures** tab shows a `⇢ Blossom` badge (the first rule's target) on every species with
-rules. Unpushed rule edits count in the work pill like any other creature field.
+The **Creatures** tab shows a `⇢ N` badge (`ContentStudioTool.cs`, e.g. `⇢ 2`) on every species
+with at least one rule, tooltipped "Evolution rules on this species" — a rule *count*, not a
+target name. Unpushed rule edits count in the work pill like any other creature field.
 
 **Push** sends every creature first, then a second pass sends every species' rules to
 `PUT /api/v1/creatures/by-content-key/{contentKey}/evolution-rules` — *every* species, including

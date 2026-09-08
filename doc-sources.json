@@ -1274,6 +1274,7 @@
         "Game/CR.Game.Domain.Services/Implementation/Item/Handlers/TriggerEvolutionHandler.cs",
         "Game/CR.Game.Service.BFF/Endpoints/EvolutionRuleEndpoints.cs",
         "Game/CR.Game.Service.BFF/Endpoints/EvolutionRuleMapper.cs",
+        "Convenience/CR.REST.AIO/Program.cs",
         "Creatures/CR.Creatures.Data/**/*CreatureEvolution*.cs",
         "Creatures/CR.Creatures.Data/**/*EvolutionRule*.cs",
         "Creatures/CR.Creatures.Data.Sqlite/*EvolutionRule*.cs",
