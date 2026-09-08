@@ -1268,11 +1268,23 @@
     "repos": {
       "cr-api": [
         "Game/CR.Game.Model/Evolution/**/*.cs",
+        "Game/CR.Game.Model.REST/Evolution/**/*.cs",
         "Game/CR.Game.Domain.Services/Implementation/Evolution/**/*.cs",
         "Game/CR.Game.Domain.Services/Interfaces/Evolution/**/*.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Item/Handlers/TriggerEvolutionHandler.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/EvolutionRuleEndpoints.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/EvolutionRuleMapper.cs",
         "Creatures/CR.Creatures.Data/**/*CreatureEvolution*.cs",
+        "Creatures/CR.Creatures.Data/**/*EvolutionRule*.cs",
+        "Creatures/CR.Creatures.Data.Sqlite/*EvolutionRule*.cs",
+        "Creatures/CR.Creatures.Data.Postgres/*EvolutionRule*.cs",
         "Creatures/CR.Creatures.Data.Migration/M10014*.cs",
         "Creatures/CR.Creatures.Data.Migration/M10015*.cs",
+        "Creatures/CR.Creatures.Data.Migration/M12015*.cs",
+        "Creatures/CR.Creatures.Data.Migration/M12016*.cs",
+        "Creatures/CR.Creatures.Data.Migration/M12017*.cs",
+        "Creatures/CR.Creatures.Data.Migration/M12018*.cs",
+        "Creatures/CR.Creatures.Data.Migration/M12019*.cs",
         "Items/CR.Items.Data.Migration/M6016*.cs",
         "Items/CR.Items.Data.Migration/M6017*.cs"
       ],
@@ -1281,7 +1293,7 @@
         "Assets/CR/Resources/Evolution/**"
       ]
     },
-    "description": "Three-phase server-authoritative evolution, hold-to-cancel, the Bindstone held item, and the seeded evolution lines"
+    "description": "Rule-based server-authoritative evolution: requirement groups, the pure evaluator and facts builder, level-up and item-use triggers, consumption at Commit, hold-to-cancel, the Bindstone, and the seeded lines"
   },
   "backend/17-creature-market": {
     "docPath": "docs/backend/17-creature-market.md",
@@ -1409,5 +1421,28 @@
       ]
     },
     "description": "One content-icon system: icon_asset_key on item/creature/abilities/status_conditions, IconAddress (icons/<type>/<key>) kept separate from the prefab asset_key, IconGlyph two-letter placeholder, UiIcon.Apply as the single LoadAssetByKeyAsync<Sprite> caller (per-element cancellation, ConditionalWeakTable, Debug-only failure logging) plus UiIcon.uss, the icon/iconKey pair on four SO types drawn by IconSlotField, cr_import_icons + icon-map.json + the three Asset Store packs, cr_bake_portraits with blank/OPAQUE detection, IconImportReport buckets, and how icon keys ride the Content Studio push/pull merge"
+  },
+  "unity/30-evolution-authoring": {
+    "docPath": "docs/unity/30-evolution-authoring.md",
+    "repos": {
+      "cr-api": [
+        "Game/CR.Game.Service.BFF/Endpoints/EvolutionRuleEndpoints.cs",
+        "Creatures/CR.Creatures.Data.Migration/M12019*.cs"
+      ],
+      "cr-data": [
+        "Assets/CR/Core/Data/Registry/Definitions/Evolution/**/*.cs",
+        "Assets/CR/Core/Data/Registry/Definitions/CreatureDefinition.cs",
+        "Assets/CR/Core/Data/Logic/*Evolution*.cs",
+        "Assets/CR/Core/Data/Editor/*Evolution*.cs",
+        "Assets/CR/Core/Data/Editor/Evolution/**/*.cs",
+        "Assets/CR/Core/Sync/Logic/Evolution/**/*.cs",
+        "Assets/CR/Core/Data/Registry/ContentSyncWriter.cs",
+        "Assets/CR/Core/Data/Registry/ServerContentSyncService.cs",
+        "Assets/CR/Game/Battle/Logic/*EvolutionRule*.cs",
+        "Assets/CR/Game/Battle/Logic/SeedIds.cs",
+        "Assets/CR/Game/World/Editor/ContentCreatorSyncHelper.cs"
+      ]
+    },
+    "description": "Authoring evolution rules on CreatureDefinition, the inspector section and its validation, Content Studio push/pull/revert/diff, the M12019 seed export and floor rebake, runtime rule sync"
   }
 }

@@ -73,6 +73,7 @@ Defines a creature species. Base stats here feed directly into the backend's `ba
 | `baseSpeed` | int | Base Speed stat |
 | `abilityProgressionSetId` | string | GUID of the `AbilityProgressionSetConfig` SO that drives this species' level-up moves. Empty = none |
 | `growthProfileId` | string | GUID of the `GrowthProfileConfig` SO that governs stat scaling per level. Empty = none |
+| `evolutions` | `List<EvolutionRuleEntry>` | Evolution rules in priority order — target species and OR-groups of AND-requirements. Pushed on their own route after the creature; see [Evolution Authoring](./30-evolution-authoring.md) |
 
 ---
 

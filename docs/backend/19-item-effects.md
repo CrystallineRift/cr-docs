@@ -120,7 +120,7 @@ only when the item carries `HeldByCreature` **and neither** `UsableInBattle` **n
 | 7 | `BoostStatPerm` | `BoostStatPermHandler` | |
 | 8 | `LevelUp` | `LevelUpHandler` | |
 | 9 | `GrantExperience` | `GrantExperienceHandler` | |
-| 10 | `TriggerEvolution` | `TriggerEvolutionHandler` | Always refuses on the server today |
+| 10 | `TriggerEvolution` | `TriggerEvolutionHandler` | Begins an evolution through `IEvolutionService` with the item as `usedItemId`; no parameters — the species' rules pick the target. Consumed at Commit, not at use |
 | 11 | `CaptureCreature` | `CaptureCreatureHandler` | See [Capture Mechanic](../unity/14-capture-mechanic.md) |
 | 12 | `IncreaseExpShare` | `IncreaseExpShareHandler` | |
 | 20–25 | `HeldStatBoost`, `HeldDamageReduce`, `HeldTypeBoost`, `HeldRegenHp`, `HeldStatusImmune`, `HeldReviveOnce` | *(none)* | Held-item passives, evaluated by `IHeldItemTriggerEvaluator`, never by a use handler |
@@ -160,6 +160,10 @@ After a successful handler:
    `item_type = KeyItem`. Both are wrapped in try/catch — a quest failure must not undo a use that
    already happened.
 
+One exception to consumption: when a handler reports `EvolutionTriggered = true`, the item is
+**not** consumed here. The evolution's Commit consumes it, so a cancelled evolution leaves the
+stone in the bag. See [Evolution](./16-evolution.md).
+
 ## Handler refusal rules
 
 `cr-api/Game/CR.Game.Domain.Services/Implementation/Item/Handlers/`
@@ -181,7 +185,7 @@ After a successful handler:
 | `LevelUpHandler` | Already at max level | `Creature is already at the maximum level.` |
 | `GrantExperienceHandler` | Target missing | `Target creature not found.` |
 | `IncreaseExpShareHandler` | `Percent <= 0` | `Item grants no EXP-share bonus.` |
-| `TriggerEvolutionHandler` | **always** | `Evolution system not yet available.` |
+| `TriggerEvolutionHandler` | No rule matches this item, a Bindstone is held, or the creature isn't the caller's | `Its held item is stopping it from evolving.` (Bindstone) or `<item> has no effect on this creature.` otherwise |
 | `CaptureCreatureHandler` | Not a wild battle / wrong target / fainted target / missing records | see [Capture Mechanic](../unity/14-capture-mechanic.md) |
 
 A restore that lands is reported as `HpRestored` = the delta actually applied, not the item's
@@ -216,14 +220,14 @@ Where the two do **not** agree:
 | Ownership, usage flags, held-only | Checked (steps 2–5 above) | **Not checked.** `ValidateItemUseAsync` returns `Valid()` unconditionally |
 | `CureAllStatus` on a healthy creature | Succeeds, cures nothing, consumes the item | **Fails** with `None of the target conditions are active on this creature.` (`CureConditionsAsync` shares one code path with `CureStatus`) |
 | `BoostStatTemp` | Battle-only; enforces the stage limit; writes a modifier | Returns `Success = true` and **persists nothing** — a reported boost that does not exist |
-| `TriggerEvolution` | Always `Evolution system not yet available.` | Actually rewrites `BaseCreatureId` and recalculates stats when the parameters name a target |
+| `TriggerEvolution` | Begins an offer; consumes at Commit | Same — `OfflineItemUseService` calls the same `IEvolutionService` over the baked rules |
 | `items_used_total` / `items_used_<key>` stats | Written | **Not written** |
 | `UsedItem` / `ActivateKeyItem` quest events | Raised | **Not raised** |
 | `IncreaseExpShare` | Handler writes the stat | Same — the one stat the offline path does write |
 
 The first row is by design: offline there is no adversary to guard against, and the bag it reads is
-the same database it writes. The rest are gaps, and `BoostStatTemp` and `TriggerEvolution` are the two
-worth fixing — an offline player can evolve a creature the online rules refuse to evolve.
+the same database it writes. The rest are gaps, and `BoostStatTemp` is the one worth fixing — a
+reported boost that does not exist.
 
 ## Seeded items
 

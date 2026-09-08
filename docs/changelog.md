@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-09-07 — Evolution rules
+
+- **Rules replace the level column.** A species now owns ordered `evolution_rule` rows with
+  `evolution_requirement` groups (OR of AND: `MinLevel`, `HeldItem` with `consume_on_evolve`,
+  `StatusCondition`, `InArea`). `EvolutionEligibility.Evaluate(rules, facts)` decides for the
+  server and the offline client alike; `EvolutionBlockReason.RequirementsNotMet` (with
+  `FailedGroups`) replaces `LevelTooLow`. M12015–M12017 add the tables and the ledger's `rule_id` /
+  `used_item_id`; M12018 folds the five legacy lines into rules and nulls the old columns.
+- **Items trigger evolution.** `TriggerEvolutionHandler` begins an offer with the used item;
+  consumption happens at Commit, and a cancelled evolution leaves the stone in the bag. Commit
+  re-evaluates and reports `OfferStale` when a different target now wins.
+- **Authoring.** `CreatureDefinition.evolutions` with an inline-validated inspector section;
+  Content Studio pushes rules per species (`PUT …/by-content-key/{key}/evolution-rules`), pulls
+  them with the creatures, and shows a target badge. `CR/Content/Export Evolution Rule Seed
+  Migration` writes M12019 for the offline floor; floor schema 12019.
+- **Presentation.** The overlay shows real species art strobing old ↔ new, `EvolutionCopy`
+  headlines, and refreshes the team on `EvolutionEvents.Completed`.
+- Docs: `backend/16-evolution` rewritten, new `unity/30-evolution-authoring`,
+  `backend/19-item-effects` and `unity/12-scriptable-objects` updated.
+
 ## 2026-09-06 — Post-merge review fix round
 
 - **Auth hardening.** `POST /api/v1/npc/reset-teams` and the Npcs `content-registry` routes
