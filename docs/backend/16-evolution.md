@@ -36,8 +36,16 @@ then: cancelling leaves it in the bag.
 Rules live in `CR.Game.Model/Evolution` (`EvolutionRule`, `EvolutionRequirement`) and are read
 through `IEvolutionRuleRepository` (`GetByCreatureAsync`, `GetAllAsync`, `ReplaceForCreatureAsync`).
 `ReplaceForCreatureAsync` writes the whole ordered set in one transaction: rules absent from the
-set are soft-deleted, present ones upserted by id with `sort_order` 0..n-1, and every rule's
-requirements deleted and re-inserted.
+set are soft-deleted along with their requirement rows, present ones upserted by id, and every
+listed rule's requirements deleted and re-inserted. The repository writes whatever `SortOrder` the
+caller supplies — it is `EvolutionRuleSoMapper.ToDtos` on the Unity side (`SortOrder = i`) that
+guarantees a contiguous 0..n-1, not the server.
+
+The upsert is scoped: `WHERE id = @Id AND creature_id = @CreatureId`. A rule id that belongs to a
+different species falls through to the INSERT and fails on the primary key rather than silently
+re-parenting that species' rule — the shape a duplicated `CreatureDefinition` asset produces, since
+Ctrl+D copies the authored rule ids verbatim. The PUT catches it first and answers **409** naming
+the rule and its owning species.
 
 ## The evaluator
 
@@ -118,7 +126,7 @@ Commit's outcomes:
 - Not eligible → the refusal path, reason attached.
 - Eligible but a **different** target now wins (left the area, another branch qualifies) →
   `EvolutionResult.OfferStale = true`, the row marked `EvolutionStatus.Stale`. The client shows
-  "stopped changing" and the next trigger re-offers.
+  "stopped evolving" and the next trigger re-offers.
 
 The row is claimed first, then the creature is changed. If the claim wins and the creature write
 fails, the creature is unevolved and still eligible — one wasted offer. The other order risks
@@ -133,8 +141,11 @@ battle, once the summary screen is done.
 
 **Item use.** `TriggerEvolutionHandler` (effect type 10) calls
 `IEvolutionService.BeginAsync(target, trainer, usedItemId: itemId)`. A refusal comes back as a
-200 with a reason and a player-facing sentence — a normal answer to a legitimate question, not an
-error. An offer comes back with `EvolutionTriggered = true` and the offer itself on the `Evolution`
+**400** whose body carries the handler's player-facing sentence (`ItemEndpoints` answers every
+unsuccessful handler that way, for every item effect). The bag shows that sentence verbatim —
+`SimpleWebClient` turns the 400 into a `ServerRequestException` carrying it, and
+`ItemUseFailureText.For` hands it to the toast — so online says exactly what offline says. An offer
+comes back with `EvolutionTriggered = true` and the offer itself on the `Evolution`
 property (an `EvolutionOffer`) of the item-use result, and `ItemUseDomainService` **skips
 consumption** when a handler reports it: the stone is consumed at Commit, not at use. The handler
 no longer takes a target parameter — the rules decide the target.
@@ -165,7 +176,7 @@ keeps its moves).
 | `POST /api/v1/evolutions/{evolutionId}/cancel` | Decline it |
 | `GET /api/v1/evolution-rules` | Every live rule with its requirement groups — runtime content sync and Content Studio pull |
 | `GET /api/v1/creatures/by-content-key/{contentKey}/evolution-rules` | One species' rules |
-| `PUT /api/v1/creatures/by-content-key/{contentKey}/evolution-rules` | Replace one species' rules (`RequireContentWrite`). 200 with the stored list; 400 with `{message, errors[]}` on validation; 404 unknown species; 409 unknown target species |
+| `PUT /api/v1/creatures/by-content-key/{contentKey}/evolution-rules` | Replace one species' rules (`RequireContentWrite`). 200 with the stored list; 400 with `{message, errors[]}` on validation; 404 unknown species; 409 unknown target species, or a rule id another species already owns |
 
 The four player routes are owner-gated on the caller's token: each resolves the acting trainer's
 account from `context.GetAccountId()` and 404s if that account doesn't own the trainer named. A
@@ -190,6 +201,14 @@ requirement each, with deterministic ids so a re-run changes nothing) and the ol
 from. It upserts rules by id, replaces requirements, and retires any rule of a covered species
 that the export no longer lists — the seed mirrors the authored set, as a Studio push mirrors it
 on the server.
+
+:::note Why a Creatures migration carries a 13xxx number
+`SeedMigrationFileWriter` takes the next free number across **every** domain's migrations, not just
+the domain it is writing into — which is why M13003 sits above Moderation's M13001/M13002 rather
+than in the Creatures band. There is no per-domain `IVersionTableMetaData`, so every migrator shares
+one `VersionInfo` table and a number used once is used for good. A hand-written migration must
+therefore check the whole repository for its next number, never just its own domain folder.
+:::
 
 :::caution
 Seeds sit behind table-exists guards, so without tests they go inert silently. Pinned:

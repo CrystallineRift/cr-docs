@@ -168,6 +168,14 @@ stone in the bag. See [Evolution](./16-evolution.md).
 
 `cr-api/Game/CR.Game.Domain.Services/Implementation/Item/Handlers/`
 
+A refusal is an answer, not a crash — but it still travels as a **400**: `ItemEndpoints` returns
+`BadRequest(new { message = result.ErrorMessage })` for every unsuccessful handler. So the sentences
+below reach the player through the error path, not the success path: `SimpleWebClient` turns the 400
+into a `ServerRequestException` carrying the message, and `ItemUseFailureText.For` (beside
+`ItemUseResultText`) hands it straight to the toast. Offline the same sentence arrives on
+`ItemUseResult.ErrorMessage` and `ItemUseResultText.Describe` shows it. Both modes therefore say the
+same words.
+
 | Handler | Refuses when | Sentence |
 |---|---|---|
 | `RestoreHpHandler` | Target missing | `Target creature not found.` |
@@ -185,7 +193,7 @@ stone in the bag. See [Evolution](./16-evolution.md).
 | `LevelUpHandler` | Already at max level | `Creature is already at the maximum level.` |
 | `GrantExperienceHandler` | Target missing | `Target creature not found.` |
 | `IncreaseExpShareHandler` | `Percent <= 0` | `Item grants no EXP-share bonus.` |
-| `TriggerEvolutionHandler` | No rule matches this item, a Bindstone is held, or the creature isn't the caller's | `Its held item is stopping it from evolving.` (Bindstone) or `<item> has no effect on this creature.` otherwise |
+| `TriggerEvolutionHandler` | No rule matches this item, a Bindstone is held, the only unmet requirement is the area, or the creature isn't the caller's | `It is holding something that stopped it changing.` (Bindstone), `It can't evolve here.` (every failing group failed on `InArea` alone), or `<item> has no effect on this creature.` otherwise |
 | `CaptureCreatureHandler` | Not a wild battle / wrong target / fainted target / missing records | see [Capture Mechanic](../unity/14-capture-mechanic.md) |
 
 A restore that lands is reported as `HpRestored` = the delta actually applied, not the item's

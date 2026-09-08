@@ -1344,6 +1344,7 @@
         "Game/CR.Game.Model/Creatures/CreatureStatusConditionView.cs",
         "Game/CR.Game.Domain.Services/Implementation/Item/ItemUseDomainService.cs",
         "Game/CR.Game.Domain.Services/Implementation/Item/Handlers/*.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/ItemEndpoints.cs",
         "Game/CR.Game.Service.BFF/Endpoints/CreatureStatusEndpoints.cs",
         "Items/CR.Items.Data.Migration/M6020SeedCreatureConsumables.cs",
         "Items/CR.Items.Data.Migration/M6021AddIconAssetKeyToItem.cs",
@@ -1365,6 +1366,8 @@
         "Assets/CR/Core/Data/Client/Interface/ICreatureStatusClient.cs",
         "Assets/CR/Core/Data/Client/Implementation/CreatureStatus*.cs",
         "Assets/CR/UI/Logic/ItemTargetRule.cs",
+        "Assets/CR/UI/Logic/ItemUseResultText.cs",
+        "Assets/CR/UI/Logic/ItemUseFailureText.cs",
         "Assets/CR/Content/Defs/Items/*.asset",
         "Assets/CR/Content/Defs/StatusConditions/*.asset"
       ]

@@ -18,6 +18,17 @@
   across every domain) for the offline floor; floor schema 13003.
 - **Presentation.** The overlay shows real species art strobing old ↔ new, `EvolutionCopy`
   headlines, and refreshes the team on `EvolutionEvents.Completed`.
+- **Review fixes.** The copy says what happens: "{name} is evolving!", "{from} evolved into {to}!",
+  "{name} stopped evolving." — and `{name}` is now the nickname the player gave the creature
+  (`EvolutionDisplayName`) rather than the species. A refused item use reaches the bag as its own
+  sentence instead of "could not be used right now": the route's 400 carries the handler's reason
+  and `ItemUseFailureText` shows it, so online and offline finally read the same. A rule gated on an
+  area gets a sentence of its own (`EvolutionBlockReason.NotInRequiredArea` → "It can't evolve
+  here.") when the area is the *only* thing standing in the way. `ReplaceForCreatureAsync` upserts
+  `WHERE id = @Id AND creature_id = @CreatureId` and the PUT answers 409 for a rule id another
+  species owns — duplicating a creature asset copies its rule ids, and the unscoped write silently
+  re-parented the original's rule. Retiring a rule now retires its requirement rows with it. The
+  inspector actually makes the duplicate-requirement check its docs promised.
 - Docs: `backend/16-evolution` rewritten, new `unity/30-evolution-authoring`,
   `backend/19-item-effects` and `unity/12-scriptable-objects` updated.
 

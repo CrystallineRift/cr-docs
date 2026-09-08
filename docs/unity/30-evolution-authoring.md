@@ -40,7 +40,10 @@ rule count in its header and lists rules top to bottom in priority order.
 Validation is inline and red, never silent: `EvolutionRuleValidation.Validate` runs against the
 same DTOs a push would send and reports a missing target, a target equal to the species, a rule
 with no groups, an empty group, `minLevel < 1`, a null item / condition / empty area key, and a
-duplicate requirement in a group. Separately, `EvolutionCycleCheck.FindCycle` walks
+duplicate requirement in a group — a second minimum level always (a creature has one level), and a
+held item / status condition / area repeated with the *same* reference; two different held items in
+one group stay authorable, since an unsatisfiable AND is the author's business, not a shape error.
+Separately, `EvolutionCycleCheck.FindCycle` walks
 species → targets across every `CreatureDefinition` in the project and flags a loop that includes
 the open asset. That graph is cached and rebuilt on a Layout pass at most every two seconds, then
 patched with the open asset's own (possibly unsaved) edges on every call — the inspector never
@@ -65,7 +68,10 @@ items and conditions are resolved by id through the definitions provider; a rule
 not a known asset is dropped and counted in the status line.
 
 **Revert** on a creature row in the Review window pulls that species' rules with the creature.
-**Diff** shows rule changes because it diffs the DTO the server returns.
+**Diff** shows rule changes because the server copy it diffs against now carries the species' rules:
+`ContentReviewWindow.BuildDiff` compares the asset's JSON with a clone that `ApplyServerCopy` filled,
+and for a creature that clone is now run through `FetchEvolutionRulesFor` +
+`EvolutionRuleSoMapper.ApplyDtos`. (`ServerCreatureDto` itself has no `evolutions` field.)
 
 ## Getting rules offline
 
@@ -78,6 +84,14 @@ offline play does not see a rule until it is a seed:
    regenerated in place; the version stays the highest in the repository, which is also what makes
    the client adopt the freshly baked floor. "Already up to date" means the assets and the file
    agree byte for byte.
+
+   :::note The number is global, not per domain
+   `SeedMigrationFileWriter.HighestMigrationVersion` scans **every** domain's migrations and takes
+   the next free number, which is why a Creatures seed can land in Moderation's 13xxx band (M13003
+   did). Every migrator shares one `VersionInfo` table, so a number used once is gone: a
+   hand-written migration must check the whole repository for its next number, not just its own
+   domain folder.
+   :::
 3. Rebuild the compat package: `cd cr-api/Convenience/CR.Game.Compat && ./build-packages.sh`.
 4. `CR/Content/Rebake Offline Floor`.
 
@@ -104,11 +118,16 @@ evaluator the server runs.
   `EvolutionStrobe.SlowPeriod` (0.9s) toward `EvolutionStrobe.FastPeriod` (0.14s) as
   `EvolutionStrobe.Period(progress)` reads the fill, with `ShowsTarget(phase, progress)` deciding
   which sprite is up each half-cycle. The hold-to-cancel track runs on `UI/Cancel`.
-- Copy comes from `EvolutionCopy`: the headline "What?", then "{name} is changing!",
-  "{fromName} became {toName}!", "{name} stopped changing.", and a refusal sentence shared with the
-  server's `TriggerEvolutionHandler` (e.g. "Its held item is stopping it from evolving." for a
-  Bindstone, or "{item} has no effect on this creature." otherwise). `{name}` is the nickname when
-  set, else the species display name.
+- Copy comes from `EvolutionCopy`: the headline "What?", then "{name} is evolving!",
+  "{fromName} evolved into {toName}!", "{name} stopped evolving.", and a refusal sentence shared
+  word for word with the server's `TriggerEvolutionHandler` — "It is holding something that stopped
+  it changing." for a Bindstone, "It can't evolve here." for a rule gated on an area the creature is
+  not in, and "{item} has no effect on this creature." otherwise. `EvolutionCopy.Refusal` is the
+  only copy of those sentences on the client; the level-up path's toast calls into it rather than
+  keeping a second one, and stays silent on the area case (nothing the player did prompted the
+  check). `{name}` is the nickname when the player set one, else the species display name —
+  `EvolutionDisplayName.For` decides, reading the `GeneratedCreature` the presenter loads alongside
+  the two species rows.
 - On dismiss `EvolutionEvents.Completed(creatureId, newBaseCreatureId)` fires and the team roster
   and bag refresh.
 
