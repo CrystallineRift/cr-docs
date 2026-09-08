@@ -246,15 +246,21 @@ authoring it. Guarding the requirement insert on the level alone would strand a 
 **M13003** (`SeedEvolutionRules_<date>`) is the authored set exported from Content Studio (see
 [Evolution Authoring](../unity/30-evolution-authoring.md)) and is what the offline floor is baked
 from. It upserts rules by id, replaces requirements, and retires any rule of a covered species
-that the export no longer lists.
+that the export no longer lists, along with the requirements sitting under those retired rules.
 
 :::caution A deploy can retire a live Studio push
-That retire sweep runs over `Covered` — **every** seeded species, not only the five that have rules —
-so it is not a one-way mirror. Deploying a build whose M13003 predates a Studio push will retire the
-rules that push added, on any database that has not yet run 13003. Nothing is lost: re-push from
-Content Studio and the rules come back under the same ids. But if rules an author pushed last week
-vanish after a deploy, this is why — and the fix is to re-export M13003 from the Editor so the seed
-and the authored set agree again.
+The retire sweep runs over `Covered`, which lists only the species this export actually carries
+rules for — five today, not all fifteen seeded species. Within those species it is still not a
+one-way mirror: deploying a build whose M13003 predates a Studio push will retire the rules that
+push added to one of them, on any database that has not yet run 13003. Nothing is lost — re-push
+from Content Studio and the rules come back under the same ids — but if rules an author pushed last
+week vanish after a deploy, this is why, and the fix is to re-export M13003 from the Editor so the
+seed and the authored set agree again.
+
+A species the export carries no rules for is never swept, so a push that gives a brand-new species
+its first rule survives any deploy. That is also why deleting a species' last rule in the Studio
+does not propagate through the seed: on a live server the push retires the rule directly, and the
+offline floor is baked from seeds alone, so the deleted rule was never in it to begin with.
 :::
 
 :::note Why a Creatures migration carries a 13xxx number
