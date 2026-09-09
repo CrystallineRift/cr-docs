@@ -50,8 +50,27 @@ not share.
 | `ElementalDamage` | `GET /api/v1/elemental-damage/versions` then `?version=` per version | no | n/a — dense grid, overwritten |
 
 **The sync carries the player's bearer token.** Every content route sits behind the API's fallback
-authorization policy, so an unauthenticated `GET /api/v1/abilities` comes back `401` and the domain
-reports Failed. `ServerContentSyncService` takes an optional `ITokenManager` and the installer
+authorization policy — `RequireAuthenticatedUser` — so an unauthenticated `GET /api/v1/abilities`
+comes back `401` and the domain reports Failed.
+
+:::caution A content *read* must never be gated on content:write
+Two of the routes in this table quietly stopped honouring that, and the sync failed those domains on
+every single boot:
+
+- `GET /api/v1/ability-progression/sets` was gated on `RequireContentWrite`. A player token has no
+  write scope, so it answered **403 Not allowed** forever.
+- `GET /api/v1/spawners/content-registry/full` was never mapped on the AIO host at all — that host
+  hand-maps spawner routes instead of calling `MapSpawnerEndpoints` — so it answered **404**. Its
+  sibling `/content-registry` had already been hand-mapped once for the same reason.
+
+Neither broke gameplay, which is why they survived: a failed domain falls back to the baked offline
+floor, and the only symptom is the warning "local content may be behind the server". That is the
+failure mode to watch for — content silently a build behind, not a crash.
+
+The rule: reads the client performs take the fallback policy; `content:write` gates writing. The AIO
+route now delegates to the shared `SpawnerEndpoints` handler rather than carrying its own copy,
+because two implementations of one route on two hosts is how they drifted apart to begin with.
+::: `ServerContentSyncService` takes an optional `ITokenManager` and the installer
 supplies the same one every other HTTP client uses; the Editor's bake-from-server tool constructs
 the service without one.
 
