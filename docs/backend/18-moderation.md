@@ -21,7 +21,8 @@ added to `Convenience/CR.Data.Migrations` (the baked offline floor), so no `acco
 ever ships inside `game-data.bytes`.
 
 `AdminActionKind`: `ShadowBan`, `LiftShadowBan`, `RemoveListing`, `AdjustCurrency`, `GrantItem`,
-`RemoveItem`, `Note` (unused in v1).
+`RemoveItem`, `Note` (unused in v1), `GrantExperience`. Members are appended, never renumbered — the
+integer is persisted in `admin_action.kind`, so reordering rewrites history.
 
 ## Repositories
 
@@ -71,7 +72,20 @@ worse than no action at all, which is why `admin_action.reason` is `NOT NULL`.
 | `AdjustCurrencyAsync(trainerId, delta, reason, actor)` | Delta 0 → `InvalidQuantity`. Uses `ITrainerRepository.TryAdjustCurrencyInTransactionAsync`, which refuses to go negative → `InsufficientFunds` with nothing written. `CurrencyAfter` is **read back inside the same transaction**, so the number returned is the one that committed, not `before + delta`. Metadata `{"delta":D,"after":A}`. |
 | `GrantItemAsync(trainerId, itemId, quantity, reason, actor)` | Quantity ≤ 0 → `InvalidQuantity`. Target is the trainer's backpack (`Trainer.ItemBackpackInventoryId`); an existing stack is topped up, otherwise the lowest free slot is used, or `StorageFull`. Item slots are **1-based** (`1..max_slots`), the same numbering `ItemInventoryService.FindNextAvailableSlot` and the market's storage placement use. The current quantity and the free-slot lookup are read **inside the transaction that writes**, via `GetItemsInTransactionAsync` / `GetInventoriesInTransactionAsync`, so a concurrent write cannot land between the decision and the insert. Metadata `{"itemId":"…","quantity":Q,"after":A}`. |
 | `RemoveItemAsync(trainerId, itemId, quantity, reason, actor)` | Entry missing → `NotFound`; more than held → `InsufficientQuantity`; the whole stack clears the slot, less reduces it. Reads in-transaction like the grant, so the audited `after` is the committed one. Same metadata shape. |
+| `GrantExperienceAsync(generatedCreatureId, amount, reason, actor)` | Amount ≤ 0 → `InvalidQuantity`; unknown creature → `NotFound`. Applies the **exact** amount through `ICreatureProgressionService.ApplyExperienceAsync`, not the growth-profile-scaled `ApplyEarnedExperienceAsync` — an operator typed the number and should get the number. Real progression, so level-ups, ability unlocks and the evolution check all happen exactly as they do in play. |
 | `ListActionsAsync(filter)` | The audit log, newest first. |
+
+:::note Why the experience grant audits outside the mutating transaction
+Every other write here audits inside the transaction that mutates. Progression owns its own
+connections and writes, so there is no transaction to join — the audit row goes in its own,
+immediately after a grant that succeeded. The property that matters still holds and is tested: a row
+is only ever written for a grant that landed. `RemoveListingAsync` already works this way for the
+same reason.
+
+A grant that reports failure *after* the creature was confirmed to exist is an invariant violation,
+not a bad id, so it throws rather than answering `NotFound` — calling it not-found would send an
+operator hunting for a creature sitting right in front of them.
+:::
 
 Registered by `AddModerationDomainServices()` (`AddScoped`). It requires the caller to have already
 registered the three Moderation repositories, `IMarketService`, the Trainer/Creature/Item
@@ -146,6 +160,7 @@ sets it (and `AdminActorName`) through its environment or secret store, never in
 | POST | `/trainers/{trainerId}/currency` | `AdjustCurrencyRequest { delta, reason }` | `AdjustCurrencyResponse { currencyAfter }` | 400 `InvalidReason`/`InvalidQuantity`, 404, 409 `InsufficientFunds` |
 | POST | `/trainers/{trainerId}/items` | `ItemChangeRequest { itemId, quantity, reason }` | `TrainerDossier` (refreshed) | 400, 404, 409 `StorageFull` |
 | DELETE | `/trainers/{trainerId}/items` | `ItemChangeRequest` | `TrainerDossier` (refreshed) | 400, 404, 409 `InsufficientQuantity` |
+| POST | `/creatures/{generatedCreatureId}/experience` | `GrantExperienceRequest { amount, reason }` | `GrantExperienceResponse` (below) | 400 `InvalidReason`/`InvalidQuantity`, 404 |
 | GET | `/market/listings?state=&sellerAccountId=&offset=&limit=` | | `MarketListingView[]` — hidden rows **included**, `sellerShadowBanned` set | |
 | DELETE | `/market/listings/{id}` | `ReasonRequest` | `MarketListingView` (post-removal, `state = Cancelled`) | 400, 404, 409 `AlreadySold`/`StorageFull` |
 | GET | `/actions?accountId=&trainerId=&listingId=&offset=&limit=` | | `AdminAction[]`, newest first | |
@@ -154,6 +169,27 @@ Both item routes and both shadow-ban routes are method pairs on the same path; t
 that carry a body (`/shadow-ban`, `/trainers/{id}/items`, `/market/listings/{id}`) read it via
 `[FromBody]` — minimal APIs accept a request body on `DELETE`, and the reason is not optional, so it
 cannot move to the query string.
+
+### Granting experience
+
+The response says what the grant did, so an operator testing an evolution can see it worked without
+opening the game:
+
+```json
+{ "generatedCreatureId": "6f1c…", "amountApplied": 370,
+  "levelBefore": 11, "levelAfter": 12,
+  "experienceBefore": 1300, "experienceAfter": 1670,
+  "leveledUp": true, "readyToEvolve": true,
+  "evolvesIntoCreatureId": "9ab2…", "evolutionBlockedBecause": 0 }
+```
+
+`evolvesIntoCreatureId` is null unless `readyToEvolve`. `evolutionBlockedBecause` is the **integer**
+of `EvolutionBlockReason` (see [Evolution](16-evolution.md) — note the gap where `LevelTooLow = 2`
+used to be), so a Unity client must read it as an int and map it, not as a string.
+
+This is the intended way to test an evolution chain: grant enough experience to cross a rule's
+`MinLevel` and the offer is raised server-side, reaching the player as a cutscene next time they
+play.
 
 ### Error shape
 

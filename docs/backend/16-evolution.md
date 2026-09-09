@@ -242,8 +242,25 @@ authoring it. Guarding the requirement insert on the level alone would strand a 
 | Crabby | Shell | `MinLevel 16` |
 | Snakelet | Poison Bomb | `MinLevel 18` |
 | Dragon Spark | Dragon Fire | `MinLevel 24` |
+| Cindris | Cindralis | `MinLevel 8` |
+| Cindralis | Cindrakar | `MinLevel 20` |
 
-**M13003** (`SeedEvolutionRules_<date>`) is the authored set exported from Content Studio (see
+The last two are the Cindris line, seeded by **M13004** (`SeedCindraLine`). Cindralis shares Dragon
+Fire's model (`creatures/dragonfire`) rather than carrying art of its own; each species still has its
+own portrait, because a portrait is what tells two species sharing a model apart on a team card.
+
+:::danger The species seed must run before the rules seed
+The rule insert is guarded on **both** species already existing — a rule pointing at an absent
+species is a row no reader can follow. A rules migration numbered below the species it targets
+therefore writes nothing at all, and says nothing about it: the bake reports success and the floor
+comes out with the species present and the links missing.
+
+This is why the exported rules migration is **M13005**, above the species seed at M13004, and why it
+was renumbered from 13003 when the Cindris line was added. `CindraLineSeedSqliteTests` pins the
+ordering directly — renumbering the species seed above the rules seed fails three of its tests.
+:::
+
+**M13005** (`SeedEvolutionRules_<date>`) is the authored set exported from Content Studio (see
 [Evolution Authoring](../unity/30-evolution-authoring.md)) and is what the offline floor is baked
 from. It upserts rules by id, replaces requirements, and retires any rule of a covered species
 that the export no longer lists, along with the requirements sitting under those retired rules.
@@ -251,10 +268,10 @@ that the export no longer lists, along with the requirements sitting under those
 :::caution A deploy can retire a live Studio push
 The retire sweep runs over `Covered`, which lists only the species this export actually carries
 rules for — five today, not all fifteen seeded species. Within those species it is still not a
-one-way mirror: deploying a build whose M13003 predates a Studio push will retire the rules that
+one-way mirror: deploying a build whose M13005 predates a Studio push will retire the rules that
 push added to one of them, on any database that has not yet run 13003. Nothing is lost — re-push
 from Content Studio and the rules come back under the same ids — but if rules an author pushed last
-week vanish after a deploy, this is why, and the fix is to re-export M13003 from the Editor so the
+week vanish after a deploy, this is why, and the fix is to re-export M13005 from the Editor so the
 seed and the authored set agree again.
 
 A species the export carries no rules for is never swept, so a push that gives a brand-new species
@@ -265,7 +282,7 @@ offline floor is baked from seeds alone, so the deleted rule was never in it to 
 
 :::note Why a Creatures migration carries a 13xxx number
 `SeedMigrationFileWriter` takes the next free number across **every** domain's migrations, not just
-the domain it is writing into — which is why M13003 sits above Moderation's M13001/M13002 rather
+the domain it is writing into — which is why the evolution seeds sit above Moderation's M13001/M13002 rather
 than in the Creatures band. There is no per-domain `IVersionTableMetaData`, so every migrator shares
 one `VersionInfo` table and a number used once is used for good. A hand-written migration must
 therefore check the whole repository for its next number, never just its own domain folder.
@@ -273,7 +290,7 @@ therefore check the whole repository for its next number, never just its own dom
 
 :::caution
 Seeds sit behind table-exists guards, so without tests they go inert silently. Pinned:
-`M12018` folds the five lines both ways; `M13003` leaves every live rule with a seeded species on
+`M12018` folds the five lines both ways; `M13005` leaves every live rule with a seeded species on
 both ends and at least one requirement; the Bindstone actually blocks and is actually unusable.
 :::
 

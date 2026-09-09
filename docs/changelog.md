@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-09-09 — The Cindris line, and granting experience from live ops
+
+- **Two new species.** Cindris now evolves into **Cindralis** at level 8, and Cindralis into
+  **Cindrakar** at level 20 — both Fire, both far stronger than the cub (80/22/32/14/14/32 and
+  120/38/55/26/26/40). Cindralis shares Dragon Fire's model rather than carrying art of its own;
+  Cindrakar uses the Dragon Inferno model, newly addressable at `creatures/dragoninferno`. Each has
+  its own baked portrait, which is what tells two species sharing a model apart on a team card.
+  Seeded by **M13004**, with the rules exported to **M13005**.
+- **The species seed must run before the rules seed.** The rule insert is guarded on both species
+  existing, so a rules migration numbered below the species it targets writes nothing and reports
+  nothing: the first bake produced a floor carrying both new species and neither new link, with no
+  error anywhere. The exported rules migration moved from 13003 to 13005 to sit above the species
+  seed, and `CindraLineSeedSqliteTests` now fails if that ordering is ever reintroduced.
+- **Grant experience from the Players tab.** `POST /api/v1/admin/creatures/{id}/experience`
+  (`RequireAdmin`) applies the exact amount through real progression, so level-ups, ability unlocks
+  and the evolution check all happen as they do in play — which makes it the way to test an
+  evolution chain. The response reports level before/after and whether the creature is now ready to
+  evolve. Audited as `AdminActionKind.GrantExperience`.
+- **A push cannot mint an authored id.** The server upserts creatures by `content_key` and assigns
+  its own id, so ids authored on a new `CreatureDefinition` never survive the first push — leaving
+  the new rules pointing at ids the server did not have, refused with "Target creature does not
+  exist. Push creatures before their evolution rules."
+
 ## 2026-09-07 — Evolution rules
 
 - **Rules replace the level column.** A species now owns ordered `evolution_rule` rows with
@@ -14,8 +37,8 @@
 - **Authoring.** `CreatureDefinition.evolutions` with an inline-validated inspector section;
   Content Studio pushes rules per species (`PUT …/by-content-key/{key}/evolution-rules`), pulls
   them with the creatures, and shows a target badge. `CR/Content/Export Evolution Rule Seed
-  Migration` writes the seed migration (M13003 today — the writer takes the next free number
-  across every domain) for the offline floor; floor schema 13003.
+  Migration` writes the seed migration (M13005 today — the writer takes the next free number
+  across every domain) for the offline floor; floor schema 13005.
 - **Presentation.** The overlay shows real species art strobing old ↔ new, `EvolutionCopy`
   headlines, and refreshes the team on `EvolutionEvents.Completed`.
 - **Review fixes.** The copy says what happens: "{name} is evolving!", "{from} evolved into {to}!",
