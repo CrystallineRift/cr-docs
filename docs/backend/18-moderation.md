@@ -268,6 +268,24 @@ guess what happened:
   `ITrainerRepository.GetTrainerById(trainerId).AccountId` → `GetPlayerDossierAsync`);
 - the listing removal returns the post-removal `MarketListingView`.
 
+### One trainer, not the whole account
+
+A search matches a **trainer**; the dossier behind it is an **account**, and an account can carry
+several. Opening a hit therefore shows only the trainer that matched — `PlayersTab` keeps the hit's
+`TrainerId` as its focus and draws that trainer alone, with a `Showing <name>. This account has N
+other trainers.` line and a **Show all** button beside it. The siblings are folded, never dropped:
+"this player also owns that character" is often the thing an operator is trying to establish.
+
+`TrainerFocus` (in `CR.Core.Data.Logic`, tested there) holds the three rules — which trainer is in
+focus, whether a given trainer is drawn, and the line naming what is hidden. Its one non-obvious
+rule: a focus the dossier does not contain resolves to *no* focus. A hit can name a trainer the
+dossier no longer carries, and focusing on an absent id would draw an account header with nothing
+beneath it, which an operator reads as an empty account.
+
+The focus survives a re-read. Both `↻ Refresh` and the reload that follows every mutation pass the
+current focus back into the dossier request, so a grant does not unfold the account's other trainers
+and move the row being worked on down the panel.
+
 ## Program.cs wiring
 
 ```csharp
