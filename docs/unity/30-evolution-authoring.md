@@ -114,7 +114,42 @@ evaluator the server runs.
 - After a battle, each creature that levelled is checked; the first the server offers plays the
   cutscene. From the bag, using a `TriggerEvolution` item on a roster creature plays it straight
   from the offer on the item-use result.
-- The overlay strobes the old and new species icons, the cycle shrinking from
+- **It is staged in an arena.** `EvolutionStageDirector` teleports the player onto a battle arena's
+  trainer mark, stands the creature on the creature anchor, hands the camera to
+  `BattleCinematicDirector`, and runs five beats — arrive, charge, blend, reveal, depart — from
+  `EvolutionStagePlan`. The effect spawns on **charge**; the old model shrinks away as the new one
+  grows in through **blend**; the new species is held through **reveal**.
+- **What an author controls** lives in `Assets/CR/Resources/Evolution/EvolutionPresentationConfig.asset`:
+  the default arena, per-species arena overrides ("this one evolves in *that* arena"), one effect
+  row per `ElementType`, and the five beat lengths. Effects are referenced through the asset rather
+  than from code, so replacing a placeholder is an inspector drag with no rebuild. The effect follows
+  the element of the species being evolved **into** — the moment is about what it becomes — falling
+  back to the old element when the new one cannot be read.
+- **The blend is a placeholder.** Old scales out, new scales in, under the effect's peak. A true
+  cross-dissolve needs a shader across creature materials the project does not own yet; the effect
+  covers the seam, and swapping it later touches only those lines.
+
+:::caution The player is a spectator, and must not be strandable
+While it plays, the UI context is `Cutscene`: `UIContextRules` gives gameplay input to nobody, and
+`EncounterSuppression` holds off every spawner, which previously had no such flag at all — the only
+thing keeping a wild battle out of a cutscene was the player happening not to walk into a trigger.
+
+Because it teleports, a crash mid-cutscene would leave the player inside an arena with no walking
+route home. `EvolutionReturnPoint` is written to storage **before** anything moves and cleared only
+once they are back, so a point still there at world init means the last session ended mid-evolution,
+and `EvolutionReturnRescue` puts them back. A point belonging to another area is kept, not deleted —
+they may load into that area later and still need it.
+
+Teardown runs in a `finally` behind a fade: a cutscene that throws must not leave someone parked in
+an arena with no input and no encounters, which is indistinguishable from a hang.
+:::
+
+- **Timing matters at the battle seam.** Candidates are raised on `BattleClosed`, not when the
+  summary's button is pressed. `CloseBattle` tears the battle's arena down and hands the camera back
+  asynchronously, so raising them earlier put the cutscene's `EnterBattle` in a race with the
+  battle's `ExitBattle` over the same Cinemachine hand-off.
+- Where no arena is loaded, the director declines and the original 2D overlay plays instead — the
+  evolution still happens. That overlay strobes the old and new species icons, the cycle shrinking from
   `EvolutionStrobe.SlowPeriod` (0.9s) toward `EvolutionStrobe.FastPeriod` (0.14s) as
   `EvolutionStrobe.Period(progress)` reads the fill, with `ShowsTarget(phase, progress)` deciding
   which sprite is up each half-cycle. The hold-to-cancel track runs on `UI/Cancel`.

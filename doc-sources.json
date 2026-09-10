@@ -1447,7 +1447,11 @@
         "Assets/CR/Core/Data/Registry/ServerContentSyncService.cs",
         "Assets/CR/Game/Battle/Logic/*EvolutionRule*.cs",
         "Assets/CR/Game/Battle/Logic/SeedIds.cs",
-        "Assets/CR/Game/World/Editor/ContentCreatorSyncHelper.cs"
+        "Assets/CR/Game/World/Editor/ContentCreatorSyncHelper.cs",
+        "Assets/CR/Game/Evolution/**/*.cs",
+        "Assets/CR/Resources/Evolution/**",
+        "Assets/CR/Game/World/Logic/EncounterSuppression.cs",
+        "Assets/CR/UI/Logic/UIContext.cs"
       ]
     },
     "description": "Authoring evolution rules on CreatureDefinition, the inspector section and its validation, Content Studio push/pull/revert/diff, the seed migration export (M13003) and floor rebake, runtime rule sync"
