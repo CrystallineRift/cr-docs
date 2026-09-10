@@ -32,6 +32,11 @@ public interface ICreatureGenerationService
     Task<GeneratedCreature> CreateFromSpawnerAsync(
         Guid spawnerTemplateId, Guid trainerId, int? seed = null, CancellationToken ct = default);
 
+    // Same, but at a caller-chosen level instead of one drawn from the template's band
+    Task<GeneratedCreature> CreateFromSpawnerAtLevelAsync(
+        Guid spawnerTemplateId, Guid trainerId, int? levelOverride,
+        int? seed = null, CancellationToken ct = default);
+
     // Validate a creation request before committing
     Task<bool> ValidateRequestAsync(CreateCreatureRequest request, CancellationToken ct = default);
 
@@ -184,9 +189,11 @@ This method bridges the Spawner system to the creature generation pipeline:
 1. Validate `spawnerTemplateId` and `trainerId` are non-empty
 2. Fetch `CreatureSpawnerTemplate` — throws `InvalidOperationException` if not found or not active
 3. `ResolveBaseCreatureIdAsync` — resolves the creature UUID with stale-reference fallback (see below)
-4. `DetermineLevelFromTemplate` — picks a random level in `[template.MinLevel, template.MaxLevel]` using `seed` if provided; defaults to level 1 if no range set
+4. `DetermineLevelFromTemplate` — picks a random level in `[template.MinLevel, template.MaxLevel]` using `seed` if provided; defaults to level 1 if no range set. Skipped entirely when a `levelOverride` was passed
 5. `ResolveGrowthProfileIdAsync` — resolves the growth profile UUID with stale-reference fallback (see below)
 6. Builds `CreateCreatureRequest` with `Gender = Unknown`, `FirstNature = default(Nature)`, and delegates to `CreateAsync`
+
+`CreateFromSpawnerAsync` is a one-line delegation to `CreateFromSpawnerAtLevelAsync(…, levelOverride: null, …)`; there is exactly one body, so the forced-level path cannot drift from the wild one. The override replaces **only** step 4 — species, growth profile and ability progression set still come from the template, so an operator granting a level 20 creature for testing gets the creature the world would have produced, aged. It exists for tooling that has to reach a level-gated rule without grinding to it; see [Moderation → Granting a creature from a spawn pool](?page=backend/18-moderation).
 
 ### Stale-UUID Fallback {#staleuuid-fallback}
 

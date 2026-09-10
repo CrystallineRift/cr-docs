@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-09-10 — Granting a creature from a spawn pool
+
+- **Roll the encounter instead of hunting for it.** `POST
+  /api/v1/admin/trainers/{trainerId}/creatures/from-spawner` (`RequireAdmin`) names a spawner by its
+  `content_key` and hands the trainer whatever the pool rolls, placed on the team when there is room
+  and in storage when there is not — the response says which, and in what slot. Audited as
+  `AdminActionKind.GrantCreature`, with the spawner, species and level in the metadata. Sibling of
+  the experience grant, built the same way.
+- **It is the world's own roll, not a creature built by hand.** The grant goes through
+  `ICreatureSpawnDomainService.SpawnCreaturesAsync` — the same weighted pool draw, template draw and
+  generation a wild encounter and a trainer team go through — so what a developer gets is what the
+  world would have produced, down to the growth profile and the abilities. It even records the spawn
+  in `spawner_spawn_history`. A creature assembled inside Moderation would have been a second,
+  quietly diverging generator.
+- **Aim it without breaking it.** `SpawnRequest` gained `PoolName` and `LevelOverride`. A named pool
+  narrows the draw *before* the weighted pick and refuses (409 `NoSpawnCandidate`) rather than
+  falling back — a creature from a pool nobody asked for is worse than no creature.
+  `CreateFromSpawnerAtLevelAsync` replaces only the level; `CreateFromSpawnerAsync` is now a
+  one-line delegation to it, so the forced-level path cannot drift from the wild one.
+
 ## 2026-09-09 — The Cindris line, and granting experience from live ops
 
 - **Two new species.** Cindris now evolves into **Cindralis** at level 8, and Cindralis into

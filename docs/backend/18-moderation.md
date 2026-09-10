@@ -21,8 +21,8 @@ added to `Convenience/CR.Data.Migrations` (the baked offline floor), so no `acco
 ever ships inside `game-data.bytes`.
 
 `AdminActionKind`: `ShadowBan`, `LiftShadowBan`, `RemoveListing`, `AdjustCurrency`, `GrantItem`,
-`RemoveItem`, `Note` (unused in v1), `GrantExperience`. Members are appended, never renumbered — the
-integer is persisted in `admin_action.kind`, so reordering rewrites history.
+`RemoveItem`, `Note` (unused in v1), `GrantExperience`, `GrantCreature`. Members are appended, never
+renumbered — the integer is persisted in `admin_action.kind`, so reordering rewrites history.
 
 ## Repositories
 
@@ -37,8 +37,8 @@ with AND.
 
 ## `IModerationService`
 
-Refusals travel back as `ModerationResult { Success, Reason, CurrencyAfter }` rather than as
-exceptions, so the caller always learns *which rule* stopped it.
+Refusals travel back as `ModerationResult { Success, Reason, CurrencyAfter, ExperienceGrant,
+SpawnGrant }` rather than as exceptions, so the caller always learns *which rule* stopped it.
 
 | `ModerationReason` | Meaning |
 |---|---|
@@ -49,9 +49,10 @@ exceptions, so the caller always learns *which rule* stopped it.
 | `InsufficientQuantity` | More was asked to be removed than the trainer holds. |
 | `AlreadySold` | The listing is no longer `Active`. |
 | `InvalidReason` | Blank reason, or longer than `ModerationReasonRules.MaxLength` (512). |
-| `InvalidQuantity` | A zero delta, or a non-positive item quantity. |
+| `InvalidQuantity` | A zero delta, a non-positive item quantity or experience amount, or a forced spawn level outside 1..100. |
 | `InvalidSearchTerm` | A search term too short to be worth running against the player table (REST-side; <2 characters). |
 | `InvalidArgument` | A well-formed request carrying a value the operation cannot act on — most visibly a shadow-ban expiry already in the past. |
+| `NoSpawnCandidate` | The spawner exists but has no pool holding an active template — either it is empty, or the pool the operator named is. |
 
 ### The reason rule
 
@@ -73,14 +74,28 @@ worse than no action at all, which is why `admin_action.reason` is `NOT NULL`.
 | `GrantItemAsync(trainerId, itemId, quantity, reason, actor)` | Quantity ≤ 0 → `InvalidQuantity`. Target is the trainer's backpack (`Trainer.ItemBackpackInventoryId`); an existing stack is topped up, otherwise the lowest free slot is used, or `StorageFull`. Item slots are **1-based** (`1..max_slots`), the same numbering `ItemInventoryService.FindNextAvailableSlot` and the market's storage placement use. The current quantity and the free-slot lookup are read **inside the transaction that writes**, via `GetItemsInTransactionAsync` / `GetInventoriesInTransactionAsync`, so a concurrent write cannot land between the decision and the insert. Metadata `{"itemId":"…","quantity":Q,"after":A}`. |
 | `RemoveItemAsync(trainerId, itemId, quantity, reason, actor)` | Entry missing → `NotFound`; more than held → `InsufficientQuantity`; the whole stack clears the slot, less reduces it. Reads in-transaction like the grant, so the audited `after` is the committed one. Same metadata shape. |
 | `GrantExperienceAsync(generatedCreatureId, amount, reason, actor)` | Amount ≤ 0 → `InvalidQuantity`; unknown creature → `NotFound`. Applies the **exact** amount through `ICreatureProgressionService.ApplyExperienceAsync`, not the growth-profile-scaled `ApplyEarnedExperienceAsync` — an operator typed the number and should get the number. Real progression, so level-ups, ability unlocks and the evolution check all happen exactly as they do in play. |
+| `GrantCreatureFromSpawnerAsync(trainerId, spawnerContentKey, poolName?, level?, reason, actor)` | Rolls a spawn pool and hands the trainer what came out. A level outside 1..100 → `InvalidQuantity`; unknown trainer **or** unknown `spawnerContentKey` → `NotFound`; a spawner (or named pool) with no active template → `NoSpawnCandidate`. All three are refused *before* anything is generated. The roll goes through `ICreatureSpawnDomainService.SpawnCreaturesAsync` — the same weighted pool draw, template draw and `CreateFromSpawnerAtLevelAsync` generation a wild encounter and a trainer team go through — then places the creature with `ICreatureInventoryService.AddToTeamOrStorageAsync`. Metadata `{"spawnerContentKey":…,"poolName":…,"generatedCreatureId":"…","speciesContentKey":…,"speciesName":…,"level":L,"placedIn":"Team"|"Storage","slotNumber":S}`. |
 | `ListActionsAsync(filter)` | The audit log, newest first. |
 
-:::note Why the experience grant audits outside the mutating transaction
-Every other write here audits inside the transaction that mutates. Progression owns its own
-connections and writes, so there is no transaction to join — the audit row goes in its own,
-immediately after a grant that succeeded. The property that matters still holds and is tested: a row
-is only ever written for a grant that landed. `RemoveListingAsync` already works this way for the
-same reason.
+:::note Why the creature grant reuses the spawn path instead of building a creature
+The whole point of the route is that a developer testing the game is handed *the creature the world
+would have produced* — same species odds, same growth profile, same ability progression set. A
+creature assembled here would be a second, quietly diverging generator. So the grant calls the spawn
+domain service, which also records the spawn in `spawner_spawn_history` exactly as a wild encounter
+does. `BypassValidation` is set: an operator naming a spawner has already decided to roll it, and
+whether that zone is currently active says nothing about the creature it makes.
+
+`poolName` narrows the draw to one pool and, when it matches nothing productive, refuses rather than
+falling back — a grant from a pool the operator did not ask for is worse than no grant. `level`
+overrides only the level; species, growth and abilities still come from the template.
+:::
+
+:::note Why the experience and creature grants audit outside the mutating transaction
+Every other write here audits inside the transaction that mutates. Progression, and likewise the
+spawn and placement path, own their own connections and writes, so there is no transaction to join —
+the audit row goes in its own, immediately after a grant that succeeded. The property that matters
+still holds and is tested: a row is only ever written for a grant that landed. `RemoveListingAsync`
+already works this way for the same reason.
 
 A grant that reports failure *after* the creature was confirmed to exist is an invariant violation,
 not a bad id, so it throws rather than answering `NotFound` — calling it not-found would send an
@@ -89,8 +104,9 @@ operator hunting for a creature sitting right in front of them.
 
 Registered by `AddModerationDomainServices()` (`AddScoped`). It requires the caller to have already
 registered the three Moderation repositories, `IMarketService`, the Trainer/Creature/Item
-repositories, **and the same `IDbConnectionFactory` those domains use** — a mutation and its audit
-row commit together, which only works if they share one connection.
+repositories, `ICreatureProgressionService`, `ICreatureSpawnDomainService`, `ISpawnerRepository`,
+`ICreatureInventoryService`, **and the same `IDbConnectionFactory` those domains use** — a mutation
+and its audit row commit together, which only works if they share one connection.
 
 ## Shadow bans and the market
 
@@ -161,6 +177,7 @@ sets it (and `AdminActorName`) through its environment or secret store, never in
 | POST | `/trainers/{trainerId}/items` | `ItemChangeRequest { itemId, quantity, reason }` | `TrainerDossier` (refreshed) | 400, 404, 409 `StorageFull` |
 | DELETE | `/trainers/{trainerId}/items` | `ItemChangeRequest` | `TrainerDossier` (refreshed) | 400, 404, 409 `InsufficientQuantity` |
 | POST | `/creatures/{generatedCreatureId}/experience` | `GrantExperienceRequest { amount, reason }` | `GrantExperienceResponse` (below) | 400 `InvalidReason`/`InvalidQuantity`, 404 |
+| POST | `/trainers/{trainerId}/creatures/from-spawner` | `GrantCreatureFromSpawnerRequest { spawnerContentKey, poolName?, level?, reason }` | `GrantCreatureFromSpawnerResponse` (below) | 400 `InvalidReason`/`InvalidQuantity`, 404, 409 `NoSpawnCandidate`/`StorageFull` |
 | GET | `/market/listings?state=&sellerAccountId=&offset=&limit=` | | `MarketListingView[]` — hidden rows **included**, `sellerShadowBanned` set | |
 | DELETE | `/market/listings/{id}` | `ReasonRequest` | `MarketListingView` (post-removal, `state = Cancelled`) | 400, 404, 409 `AlreadySold`/`StorageFull` |
 | GET | `/actions?accountId=&trainerId=&listingId=&offset=&limit=` | | `AdminAction[]`, newest first | |
@@ -190,6 +207,36 @@ used to be), so a Unity client must read it as an int and map it, not as a strin
 This is the intended way to test an evolution chain: grant enough experience to cross a rule's
 `MinLevel` and the offer is raised server-side, reaching the player as a cutscene next time they
 play.
+
+### Granting a creature from a spawn pool
+
+`POST /api/v1/admin/trainers/{trainerId}/creatures/from-spawner` is how a developer gets the
+encounter without hunting for it:
+
+```json
+{ "spawnerContentKey": "starter-wild-zone", "poolName": null, "level": null,
+  "reason": "testing the cindris line" }
+```
+
+```json
+{ "generatedCreatureId": "6f1c…", "speciesContentKey": "creature_cindris", "speciesName": "Cindris",
+  "level": 6, "placedIn": "Team", "slotNumber": 3 }
+```
+
+The response is the **roll's** outcome, not an echo of the request: the operator named a zone, the
+pool chose the species, and a full team quietly pushes the creature to storage — so `placedIn` is the
+string `"Team"` or `"Storage"` and `slotNumber` is the slot in whichever container took it.
+
+`poolName` null rolls the spawner over every pool it can reach, as the world does; naming a pool
+restricts the draw to it (case-insensitive) and refuses with 409 `NoSpawnCandidate` if that pool
+holds no active template. `level` null uses the selected template's band.
+
+:::tip A rolled creature with no abilities is not a generation bug
+A generated creature learns from its template's ability progression set. If the grant comes back with
+four empty slots, check whether that set has entries (see
+[Creature Generation](04-creature-generation.md)) before suspecting the generator — that is the
+failure `M13007RestoreProgressionSetEntries` was written to repair.
+:::
 
 ### Error shape
 
@@ -248,8 +295,8 @@ database).
 | Project | Covers |
 |---|---|
 | `Moderation/CR.Moderation.Data.Postgres.Test` | Repository round-trips, the four ways a ban fails to be active (missing / deleted / unflagged / lapsed), audit filtering + limit clamp + ordering, the `MaxShadowBannedIds` bound on the banned-id read, and every search branch (prefix, email, account GUID, trainer GUID, no match, deleted trainer excluded, and a `%`/`_` in the term matched literally). |
-| `Moderation/CR.Moderation.Domain.Services.Test` | The service against real Postgres: dossier contents, ban idempotency, refusals writing nothing, currency metadata, 1-based backpack slot allocation and `StorageFull`, that a grant reads the backpack through the in-transaction path (proved with a recording repository decorator), a past shadow-ban expiry → `InvalidArgument`, a lift on an unknown account → `NotFound`, that a dossier carries active listings only including ones a shadow ban hides, item removal arithmetic, and that a listing removal produces exactly one audit row. |
-| `Convenience/CR.Api.IntegrationTests/AdminEndpointsHttpTests` | The routes end-to-end through the real AIO host: all ten refuse an anonymous caller (401), a `content:write` token (403) **and an ordinary player's session token (403)**, then — with an admin token — search, dossier, a shadow ban that genuinely hides a listing from another *player's* `GET /api/v1/market/listings` while `/api/v1/market/mine` still shows it, double-lift → 409 `NotBanned`, currency credit and overdraw, item grant/remove and over-removal, the admin feed carrying `sellerShadowBanned`, a removal that puts the creature back in the seller's storage, a second removal → 409 `AlreadySold`, a blank reason → 400 with no row written, and `/actions` newest-first. |
+| `Moderation/CR.Moderation.Domain.Services.Test` | The service against real Postgres: dossier contents, ban idempotency, refusals writing nothing, currency metadata, 1-based backpack slot allocation and `StorageFull`, that a grant reads the backpack through the in-transaction path (proved with a recording repository decorator), a past shadow-ban expiry → `InvalidArgument`, a lift on an unknown account → `NotFound`, that a dossier carries active listings only including ones a shadow ban hides, item removal arithmetic, and that a listing removal produces exactly one audit row. The spawn-pool grant is wired to the **real** spawn, generation and inventory services against the floor-seeded `starter-wild-zone`: the roll's species and level, the creature really existing and owned by that trainer, a forced level the template's band could not have produced, a full team falling back to storage, unknown trainer/spawner, a named pool that holds nothing → `NoSpawnCandidate` with nothing rolled, and exactly one audit row carrying the spawner, species and level. |
+| `Convenience/CR.Api.IntegrationTests/AdminEndpointsHttpTests` | The routes end-to-end through the real AIO host: all eleven refuse an anonymous caller (401), a `content:write` token (403) **and an ordinary player's session token (403)**, then — with an admin token — search, dossier, a shadow ban that genuinely hides a listing from another *player's* `GET /api/v1/market/listings` while `/api/v1/market/mine` still shows it, double-lift → 409 `NotBanned`, currency credit and overdraw, item grant/remove and over-removal, the admin feed carrying `sellerShadowBanned`, a removal that puts the creature back in the seller's storage, a second removal → 409 `AlreadySold`, a blank reason → 400 with no row written, `/actions` newest-first, and a spawn-pool grant that rolls `starter-wild-zone`, lands a real Cindris on the trainer's team at the forced level and audits once (plus its 404/400/409 refusals, each leaving no creature behind). |
 
 ## Related
 
@@ -257,3 +304,5 @@ database).
 - [Auth and Accounts](06-auth-and-accounts.md) — service tokens, `AdminServiceKey`, the scope ladder.
 - [Trainer Currency](12-trainer-currency.md) — the balance `AdjustCurrencyAsync` moves.
 - [Item Spawner & Merchant Stock](11-item-spawner.md) — the `items` catalogue `GrantItemAsync` grants from.
+- [Spawner System](03-spawner-system.md) — the pools, templates and weighted draw `GrantCreatureFromSpawnerAsync` rolls.
+- [Creature Generation](04-creature-generation.md) — `CreateFromSpawnerAtLevelAsync` and what a template decides.

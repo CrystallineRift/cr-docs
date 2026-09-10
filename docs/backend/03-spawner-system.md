@@ -129,10 +129,10 @@ Key columns on `creature_spawner_template`:
 The full spawn flow in `CreatureSpawnDomainService.SpawnCreaturesAsync`:
 
 1. **Validation phase** — fetch the spawner; verify it exists and `is_active = true`. **No capacity or cooldown check** — the spawner is global, read-only content with no per-player counters. (A `BypassValidation` request flag skips even the active check.)
-2. **Pool selection phase** — fetch all active pools for the spawner; compute `totalWeight = SUM(pool.spawn_weight × pool.rarity_multiplier)`; pick a uniform random value in `[0, totalWeight]`; walk the pools accumulating weight until the random value is covered; fall back to the last pool if floating-point rounding overshoots. With per-trainer clones retired, a spawner with no pools of its own falls back to the global template's pools (resolved by `content_key`).
+2. **Pool selection phase** — fetch all active pools for the spawner; if `request.PoolName` is set, keep only the pool with that name (case-insensitive); compute `totalWeight = SUM(pool.spawn_weight × pool.rarity_multiplier)`; pick a uniform random value in `[0, totalWeight]`; walk the pools accumulating weight until the random value is covered; fall back to the last pool if floating-point rounding overshoots. With per-trainer clones retired, a spawner with no pools of its own falls back to the global template's pools (resolved by `content_key`).
 3. **Template selection phase** — fetch all active templates for the selected pool via `GetTemplatesByProbabilityAsync`; normalize by `SUM(spawn_probability)`; same weighted random walk; fall back to last template
 4. **Quantity generation** — use `request.RequestedQuantity` (future: clamp to `[min_quantity, max_quantity]` from the template)
-5. **Creature generation** — call `ICreatureGenerationService.CreateFromSpawnerAsync(template.Id, trainerId, seed)` for each creature; null results (e.g., from a missing trainer ID) are silently skipped
+5. **Creature generation** — call `ICreatureGenerationService.CreateFromSpawnerAtLevelAsync(template.Id, trainerId, request.LevelOverride, seed)` for each creature; null results (e.g., from a missing trainer ID) are silently skipped
 6. **Spawn execution (transactional)** — open a connection, begin a transaction; write one `spawner_spawn_history` row per spawned creature; commit; roll back on failure. The template is global, read-only content, so spawning **never mutates the spawner** (`current_count` / `last_spawn_time` are not touched).
 
 The transaction in step 6 ensures spawn-history rows are written atomically.
@@ -366,10 +366,22 @@ public class SpawnRequest
     public Guid? TrainerId { get; set; }       // required for creature generation
     public int RequestedQuantity { get; set; } = 1;
     public Guid? SpawnSessionId { get; set; }  // optional; auto-generated if null
+    public bool BypassValidation { get; set; } // skip the active check (quest rewards, admin grants)
+    public string? PoolName { get; set; }      // null = roll every reachable pool, as the world does
+    public int? LevelOverride { get; set; }    // null = draw from the selected template's band
 }
 ```
 
 `TrainerId` is optional at the API level but required for creature generation. If `TrainerId` is null, `GenerateCreatureAsync` returns null and the creature is skipped. A spawn request with `TrainerId = null` will return a successful result with zero spawned creatures.
+
+`PoolName` and `LevelOverride` exist for tooling that has to aim a roll rather than take what the
+world gives — today, the admin "grant a creature from a spawn pool" action (see
+[Moderation](?page=backend/18-moderation)). `PoolName` is matched case-insensitively against
+`spawner_pool.name` and narrows the candidates **before** the weighted draw, so a caller who named a
+pool either gets that pool or gets `NoTemplatesAvailable`; it never falls back to a pool nobody asked
+for. `LevelOverride` replaces only the level — species, growth profile and ability progression set
+still come from the drawn template, so an overridden creature is the same creature, only older or
+younger.
 
 ## Error Codes
 
