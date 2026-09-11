@@ -111,14 +111,29 @@ evaluator the server runs.
 
 ## In game
 
-- After a battle, each creature that levelled is checked; the first the server offers plays the
-  cutscene. From the bag, using a `TriggerEvolution` item on a roster creature plays it straight
-  from the offer on the item-use result.
+- After a battle, **the whole team** is checked — not only the creatures that levelled — and the
+  first the server offers plays the cutscene. `EvolutionReadySweep` runs the same check ~2s after
+  world init, which is what catches a creature that crossed its threshold outside a fight (an
+  operator's XP grant, an experience item, a creature acquired above its level). From the bag, using
+  a `TriggerEvolution` item on a roster creature plays it straight from the offer on the item-use
+  result. See [Evolution → Who gets asked](../backend/16-evolution.md).
 - **It is staged in an arena.** `EvolutionStageDirector` teleports the player onto a battle arena's
   trainer mark, stands the creature on the creature anchor, hands the camera to
   `BattleCinematicDirector`, and runs five beats — arrive, charge, blend, reveal, depart — from
   `EvolutionStagePlan`. The effect spawns on **charge**; the old model shrinks away as the new one
   grows in through **blend**; the new species is held through **reveal**.
+- **Which arena.** Arenas live *inside area scenes* — Meadow carries `meadow-arena`, Crags carries
+  `crags-arena` — so the only arena loaded at any moment is the one belonging to the area the player
+  is standing in. `EvolutionStageChoice.ResolveArena` therefore treats the authored key as a
+  *preference*: it is used when that arena is loaded, and otherwise the evolution is staged in
+  whichever arena is here, which is the same arena the player's battles use. Leave `defaultArenaKey`
+  empty to always mean "wherever they are".
+
+  This was a live bug worth remembering. The director used to insist on its configured arena, and
+  the shipped default named `sandbox_arena_1` — an arena that exists in no area scene. The condition
+  "preferred arena not loaded" was therefore *always* true, every evolution silently fell through to
+  the flat 2D overlay, and the staged cutscene never ran once. A default that names something
+  nonexistent fails as a total outage, not as a wrong choice.
 - **What an author controls** lives in `Assets/CR/Resources/Evolution/EvolutionPresentationConfig.asset`:
   the default arena, per-species arena overrides ("this one evolves in *that* arena"), one effect
   row per `ElementType`, and the five beat lengths. Effects are referenced through the asset rather
@@ -148,7 +163,7 @@ an arena with no input and no encounters, which is indistinguishable from a hang
   summary's button is pressed. `CloseBattle` tears the battle's arena down and hands the camera back
   asynchronously, so raising them earlier put the cutscene's `EnterBattle` in a race with the
   battle's `ExitBattle` over the same Cinemachine hand-off.
-- Where no arena is loaded, the director declines and the original 2D overlay plays instead — the
+- Where no arena is loaded **anywhere**, the director declines and the original 2D overlay plays instead — the
   evolution still happens. That overlay strobes the old and new species icons, the cycle shrinking from
   `EvolutionStrobe.SlowPeriod` (0.9s) toward `EvolutionStrobe.FastPeriod` (0.14s) as
   `EvolutionStrobe.Period(progress)` reads the fill, with `ShowsTarget(phase, progress)` deciding

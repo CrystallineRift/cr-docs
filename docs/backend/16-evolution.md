@@ -223,6 +223,13 @@ Candidates are questions, never answers. Eligibility stays the server's call, ma
 wider sweep costs one request per team member at the two moments a cutscene may start, and cancels
 nothing: a player who declined can decline again, or hold the Bindstone.
 
+Being asked is only half of it: the offer still has to be *shown*. Arenas live inside area scenes,
+so `EvolutionStageDirector` treats its configured arena as a preference and stages in whichever
+arena is loaded when that one is not — see
+[Evolution authoring → Which arena](../unity/30-evolution-authoring.md). Insisting on the configured
+arena meant every evolution played the flat 2D fallback, because the shipped default named an arena
+no area carries.
+
 ## The Bindstone
 
 `item.prevents_evolution` — a column, not a new `HeldItemTriggerType` value. Every value that enum
