@@ -174,6 +174,10 @@ the evaluator after the level is written and reports `ReadyToEvolve` / `EvolvesI
 `EvolutionBlockedBecause` on the apply result. No Begin here — the client Begins on the way out of
 battle, once the summary screen is done.
 
+Note what this means: the server *records* readiness, it does not act on it. Something on the
+client has to ask, and **who gets asked is a client-side decision** — see "Who gets asked" below.
+A creature the server calls ready that nobody asks about simply stays unevolved.
+
 **Item use.** `TriggerEvolutionHandler` (effect type 10) calls
 `IEvolutionService.BeginAsync(target, trainer, usedItemId: itemId)`. A refusal comes back as a
 **400** whose body carries the handler's player-facing sentence (`ItemEndpoints` answers every
@@ -184,6 +188,40 @@ comes back with `EvolutionTriggered = true` and the offer itself on the `Evoluti
 property (an `EvolutionOffer`) of the item-use result, and `ItemUseDomainService` **skips
 consumption** when a handler reports it: the stone is consumed at Commit, not at use. The handler
 no longer takes a target parameter — the rules decide the target.
+
+## Who gets asked
+
+The client decides which creatures are offered to `BeginAsync`, and it asks about **the whole
+team**, not only the creatures that levelled. `EvolutionCandidates.Sweep(leveledInBattle, team)`
+(pure logic, in `CR.Game.Evolution.Logic`) builds the list: everyone who just levelled first, then
+the rest of the team, de-duplicated, with empty ids dropped. Order is load-bearing — the presenter
+plays the **first** eligible candidate and stops, so a creature the player just watched level up
+must come before a team-mate that has been quietly ready for a while.
+
+This was a real bug. The candidate list used to be exactly "creatures that levelled in the battle
+that just ended", which made *levelling in a battle* the only route into an evolution. A creature
+that crossed its threshold any other way — an operator's `Grant XP…`, an experience item, or being
+handed over already above the level its rule asks for — was never asked, and stayed unevolved with
+the server reporting `readyToEvolve: true` the whole time. Content Studio even prints "ready to
+evolve into Cindralis" when it grants the experience, a promise nothing on the client kept.
+
+Two moments ask:
+
+| Moment | Source | Covers |
+|---|---|---|
+| A battle finishes closing | `BattleSummaryScreen.OnBattleClosedRaised` | Levelling in a fight, plus anyone else on the team who is owed one |
+| ~2s after world init | `EvolutionReadySweep` (`IWorldInitializable`, bound `FromNewComponentOnNewGameObject().NonLazy()`) | XP grants, experience items, creatures acquired above their threshold |
+
+World load is the only moment available for the second row: nothing tells a running client that the
+server changed a creature underneath it. So **an XP grant made mid-session pays off on the next
+load, not instantly** — worth knowing before concluding the trigger is still broken. The grace delay
+is not cosmetic either: the sweep can start a cutscene that teleports the player, and doing that on
+the frame the world finishes loading lands on top of `EvolutionReturnRescue` (execution order 10;
+the sweep is 20, so the player is put back before anything moves them again).
+
+Candidates are questions, never answers. Eligibility stays the server's call, made per creature — a
+wider sweep costs one request per team member at the two moments a cutscene may start, and cancels
+nothing: a player who declined can decline again, or hold the Bindstone.
 
 ## The Bindstone
 
