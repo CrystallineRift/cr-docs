@@ -5,7 +5,7 @@ mutation audited in the same transaction that applies it. `CR.Moderation.*` owns
 (`account_moderation`, `admin_action`) and composes the Auth, Trainer, Creature, Item and Market
 domains through their repository/service interfaces — it never touches their tables directly.
 
-The operator UI is Content Studio's **LIVE OPS** rail group (Players and Marketplace tabs, plus the
+The operator UI is Crystalline Rift Studio's **LIVE OPS** rail group (Players and Marketplace tabs, plus the
 admin-key row in the Auth tab); this page is the server contract it talks to.
 
 ## Data model
@@ -154,7 +154,7 @@ TOKEN=$(curl -s -X POST http://localhost:8080/auth/service-token \
 curl -s "http://localhost:8080/api/v1/admin/players?q=al" -H "Authorization: Bearer $TOKEN"
 ```
 
-`admin` implies `content:write` and `player`; the reverse is not true, so a Content Studio
+`admin` implies `content:write` and `player`; the reverse is not true, so a Crystalline Rift Studio
 (`content:write`) token gets **403** from every route below. `AdminServiceKey` left blank or unset
 disables the admin exchange entirely — the safe default for a production host.
 

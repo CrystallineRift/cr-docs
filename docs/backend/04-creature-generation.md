@@ -211,7 +211,7 @@ The fallback keys (`creature_content_key`, `growth_profile_name`) are written to
 
 ### One id per species: `M10022AlignCreatureIdsToAuthored`
 
-The template fallback above only covers `creature_spawner_template`. `generated_creature.base_creature_id` has no content-key fallback, and since `ICreatureRepository` became local-only in Unity, an online capture's server-minted `base_creature_id` is resolved against the local `creature` table alone. The seed migrations M9998/M10000 inserted twelve species under ids of their own; on Postgres those seeds lost to `uix_creature_content_key` (`ON CONFLICT DO NOTHING`) and the server kept the ids the Content Studio push had minted, while every SQLite database (baked floor, player save, online caches) kept the seed ids. Result: those twelve species resolved to nothing in online play — no model in battle, blank portrait — while Cindris/Crabby/Mudcalf (authored before any seed) kept working.
+The template fallback above only covers `creature_spawner_template`. `generated_creature.base_creature_id` has no content-key fallback, and since `ICreatureRepository` became local-only in Unity, an online capture's server-minted `base_creature_id` is resolved against the local `creature` table alone. The seed migrations M9998/M10000 inserted twelve species under ids of their own; on Postgres those seeds lost to `uix_creature_content_key` (`ON CONFLICT DO NOTHING`) and the server kept the ids the Crystalline Rift Studio push had minted, while every SQLite database (baked floor, player save, online caches) kept the seed ids. Result: those twelve species resolved to nothing in online play — no model in battle, blank portrait — while Cindris/Crabby/Mudcalf (authored before any seed) kept working.
 
 `M10022AlignCreatureIdsToAuthored` (Creatures domain) closes the split on every engine. The canonical id of a species is **the `id` on its `CreatureDefinition` asset** (which equals the dev server's id). For each species it first repoints every column that holds a base-creature id — `generated_creature.base_creature_id`, `creature.evolution_creature_id`, `creature_evolution.from/to_base_creature_id`, `creature_spawner_template.base_creature_id` — wherever it names either the row's current (different) id or the retired seed id, then moves `creature.id` onto the authored id. Rows already pointing at a retired seed id are repointed even when the local `creature` row never carried it (the server's case: captures pushed from offline saves under seed ids). Idempotent, `Schema.Table(...).Exists()`-guarded, `LOWER(CAST(... AS TEXT))` on SQLite and plain `=` on Postgres uuid. Covered by `CR.Data.Migrations.Test/CreatureIdAlignmentSqliteTests` (invariant: every species carries its authored id; no retired seed id survives; drifted row + all references converge; re-run is a no-op). The seed ids in M9998/M10000 are therefore transient — a fully migrated database never carries them, and new seeds should use the asset id directly.
 
@@ -449,7 +449,7 @@ shares one set.
 
 ### Authoring
 
-The field round-trips through the Content Studio surfaces:
+The field round-trips through the Crystalline Rift Studio surfaces:
 
 - `POST /api/v1/ability-progression/sets/{id}/entries` — `unlockQuestContentKey` on the request and response
 - `POST /api/v1/ability-progression/sets/sync` — `unlockQuestContentKey` per entry; a changed gate on an

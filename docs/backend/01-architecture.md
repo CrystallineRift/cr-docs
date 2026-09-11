@@ -227,7 +227,7 @@ All endpoint groups registered in `Program.cs` via `app.Map*Endpoints()`:
 `SpawnerEndpoints.cs` defines a full route group, but AIO never calls `MapSpawnerEndpoints` — it
 declares its own subset inline. A route can therefore exist in the endpoint class and still 404
 against the local dev host. `GET /api/v1/spawners/content-registry` was missing exactly this way,
-which silently broke Content Studio's **Spawners → Pull**: spawners seeded by migrations existed as
+which silently broke Crystalline Rift Studio's **Spawners → Pull**: spawners seeded by migrations existed as
 rows but could never become `SpawnerDefinition` assets in Unity.
 
 When you add a route to a hand-mapped group, add it in both places and check a running host

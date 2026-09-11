@@ -201,10 +201,10 @@ Two details these writers get right and a new one must too:
   string is a gate naming a quest that cannot exist, and the entry would never unlock.
 - **The gate rides every push payload.** `/api/v1/ability-progression/sets/sync` reconciles by
   `(level, slot)` and rewrites the row from the payload, so an *omitted* gate is an *erased* gate,
-  not an unchanged one. `AbilityEditorSyncHelper.SyncProgressionSet` (Content Studio) and
+  not an unchanged one. `AbilityEditorSyncHelper.SyncProgressionSet` (Crystalline Rift Studio) and
   `AbilityLibrarySyncHttpClient` both send it.
 
-> Content Studio's progression **pull** still applies top-level set fields only — entries are a
+> Crystalline Rift Studio's progression **pull** still applies top-level set fields only — entries are a
 > manual update. `ServerProgressionEntryDto` now carries `unlockQuestContentKey`, so an entry-level
 > pull has the field the day someone writes one.
 

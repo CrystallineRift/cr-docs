@@ -1,7 +1,7 @@
 # Evolution Authoring
 
 Evolution rules are authored on the species, in the `CreatureDefinition` inspector, and travel the
-same road as every other piece of content: push to the server from Content Studio, pull the
+same road as every other piece of content: push to the server from Crystalline Rift Studio, pull the
 server's copy back, export a seed migration so offline play has them too.
 
 ## Where rules live
@@ -49,7 +49,7 @@ the open asset. That graph is cached and rebuilt on a Layout pass at most every 
 patched with the open asset's own (possibly unsaved) edges on every call — the inspector never
 scans the AssetDatabase per repaint.
 
-## Content Studio
+## Crystalline Rift Studio
 
 The **Creatures** tab shows a `⇢ N` badge (`ContentStudioTool.cs`, e.g. `⇢ 2`) on every species
 with at least one rule, tooltipped "Evolution rules on this species" — a rule *count*, not a

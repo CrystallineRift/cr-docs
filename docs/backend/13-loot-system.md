@@ -63,7 +63,7 @@ All grant logic is shared: `IRewardGrantService.GrantAsync(accountId, trainerId,
 
 `loot_entry`: `id`, `loot_table_id`, `reward_type`, `reference_key` (nullable), `min_quantity`, `max_quantity`, `drop_chance`, `deleted`, `created_at`, `updated_at`.
 
-Migrations `M7100`–`M7102` (dual-engine, soft-delete, idempotent seeds). Seeded demo tables exist so loot is functional off seeds before any Content Studio authoring.
+Migrations `M7100`–`M7102` (dual-engine, soft-delete, idempotent seeds). Seeded demo tables exist so loot is functional off seeds before any Crystalline Rift Studio authoring.
 
 `M7103` seeds a loot table for each of the five area spawners (`meadow-`, `cave-`, `shore-`,
 `crags-`, `dunes-wild-zone`). Until it existed, the only two tables in the database belonged to the
@@ -82,7 +82,7 @@ bundled `MAX(Version)` is strictly greater.
 
 - `GET /api/v1/loot-tables` — paginated list of every non-deleted loot table (with entries), for bulk client sync. `offset`/`limit` query params (default and max `limit` 500). Response: `{ data: [...], offset, limit, total }`, `total` is the full matching row count so a client can detect truncation.
 - `GET /api/v1/loot-tables/{ownerType}/{ownerContentKey}` — table + entries.
-- `GET|POST /api/v1/loot-tables/sync-config` — Content Studio pull/push (write path registers a sync service; returns 501 until wired).
+- `GET|POST /api/v1/loot-tables/sync-config` — Crystalline Rift Studio pull/push (write path registers a sync service; returns 501 until wired).
 
 ## Offline parity
 
@@ -90,4 +90,4 @@ The offline battle path runs the same `BattleDomainService` against local SQLite
 
 ## Follow-ups
 
-- Content Studio authoring (`LootTableDefinition` SO + tab + sync write service).
+- Crystalline Rift Studio authoring (`LootTableDefinition` SO + tab + sync write service).

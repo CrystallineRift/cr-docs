@@ -202,7 +202,7 @@ This was a real bug. The candidate list used to be exactly "creatures that level
 that just ended", which made *levelling in a battle* the only route into an evolution. A creature
 that crossed its threshold any other way — an operator's `Grant XP…`, an experience item, or being
 handed over already above the level its rule asks for — was never asked, and stayed unevolved with
-the server reporting `readyToEvolve: true` the whole time. Content Studio even prints "ready to
+the server reporting `readyToEvolve: true` the whole time. Crystalline Rift Studio even prints "ready to
 evolve into Cindralis" when it grants the experience, a promise nothing on the client kept.
 
 Two moments ask:
@@ -254,7 +254,7 @@ keeps its moves).
 | `POST /api/v1/creatures/{id}/evolution/begin` | Offer one, start the clock (the trainer id is in the body) |
 | `POST /api/v1/evolutions/{evolutionId}/commit` | Apply it |
 | `POST /api/v1/evolutions/{evolutionId}/cancel` | Decline it |
-| `GET /api/v1/evolution-rules` | Every live rule with its requirement groups — runtime content sync and Content Studio pull |
+| `GET /api/v1/evolution-rules` | Every live rule with its requirement groups — runtime content sync and Crystalline Rift Studio pull |
 | `GET /api/v1/creatures/by-content-key/{contentKey}/evolution-rules` | One species' rules |
 | `PUT /api/v1/creatures/by-content-key/{contentKey}/evolution-rules` | Replace one species' rules (`RequireContentWrite`). 200 with the stored list; 400 with `{message, errors[]}` on validation; 404 unknown species; 409 unknown target species, or a rule id another species already owns |
 
@@ -305,7 +305,7 @@ was renumbered from 13003 when the Cindris line was added. `CindraLineSeedSqlite
 ordering directly — renumbering the species seed above the rules seed fails three of its tests.
 :::
 
-**M13005** (`SeedEvolutionRules_<date>`) is the authored set exported from Content Studio (see
+**M13005** (`SeedEvolutionRules_<date>`) is the authored set exported from Crystalline Rift Studio (see
 [Evolution Authoring](../unity/30-evolution-authoring.md)) and is what the offline floor is baked
 from. It upserts rules by id, replaces requirements, and retires any rule of a covered species
 that the export no longer lists, along with the requirements sitting under those retired rules.
@@ -315,7 +315,7 @@ The retire sweep runs over `Covered`, which lists only the species this export a
 rules for — five today, not all fifteen seeded species. Within those species it is still not a
 one-way mirror: deploying a build whose M13005 predates a Studio push will retire the rules that
 push added to one of them, on any database that has not yet run 13003. Nothing is lost — re-push
-from Content Studio and the rules come back under the same ids — but if rules an author pushed last
+from Crystalline Rift Studio and the rules come back under the same ids — but if rules an author pushed last
 week vanish after a deploy, this is why, and the fix is to re-export M13005 from the Editor so the
 seed and the authored set agree again.
 
@@ -341,7 +341,7 @@ both ends and at least one requirement; the Bindstone actually blocks and is act
 
 ## Related
 
-- [Evolution Authoring](../unity/30-evolution-authoring.md) — rules in Content Studio, push/pull, the seed export
+- [Evolution Authoring](../unity/30-evolution-authoring.md) — rules in Crystalline Rift Studio, push/pull, the seed export
 - [Item Effects](./19-item-effects.md) — the `TriggerEvolution` effect
 - [Creature Generation](./04-creature-generation.md) — the experience curve and the growth trait
 - [Area Scenes](../unity/22-area-scenes.md) — the area keys `InArea` compares against

@@ -139,7 +139,7 @@ an outsized result — Soaked + Lightning is Conduction, Frozen + Ground is Shat
 Until 2026-09-03 the three reactions were a hard-coded `static readonly` list:
 `CR.Game.Compat.Battle.ElementalReactionTable.All`. Retuning one meant editing C#, rebuilding the
 compat packages and restarting the API. They are now rows in `elemental_reaction` (Creatures
-`M12006`), served by `GET /api/v1/elemental-reactions`, authored in Content Studio, and cached for
+`M12006`), served by `GET /api/v1/elemental-reactions`, authored in Crystalline Rift Studio, and cached for
 offline play by the runtime content sync.
 
 **The static table did not go away — it became the fallback default.** `BattleResolver.Resolve`
@@ -170,11 +170,11 @@ Two consequences worth stating plainly:
   Radiant→Radiant `-5.0` did exactly that in the damage matrix.)
 
 The type-matchup matrix travels the same road: `elemental_damage` gains REST routes, per-version
-Content Studio editing, and an offline pull that also writes
+Crystalline Rift Studio editing, and an offline pull that also writes
 `battle_system_version.active_elemental_damage_version` — the pointer naming the version battles
 resolve against.
 
-### Authoring reactions and the damage matrix in Content Studio
+### Authoring reactions and the damage matrix in Crystalline Rift Studio
 
 Both now sit in the COMBAT group beside Abilities and Conditions, and both follow the tab contract
 every other content type follows — with the same extra step battle missions have, because their
@@ -462,7 +462,7 @@ sidebar, beside the run summary.
 `mission_clean_sweep` is the first non-status mission — see *Adding a new mission type* below. The
 three `ElementalReaction` missions were first seeded from the **Creatures** domain (`M10018`), guarded
 on `battle_mission_template` existing — which a Creatures-before-Game fresh database fails. The Game
-domain's `M12005SeedBattleMissions_20260903` (exported from Content Studio) re-seeds all ten
+domain's `M12005SeedBattleMissions_20260903` (exported from Crystalline Rift Studio) re-seeds all ten
 idempotently, so every database — fresh Postgres, `cr_dev`, and the baked `game-data.bytes` floor —
 carries all ten.
 
@@ -490,10 +490,10 @@ tracker implements.
 
 That check is why no mission uses `Weakened`: exactly one ability (Growl) applies it.
 
-## Authoring missions in Content Studio
+## Authoring missions in Crystalline Rift Studio
 
 Missions used to be a migration and nothing else: a designer who wanted "burn four different
-creatures" wrote C# in cr-api, rebuilt the compat packages and restarted the API. Content Studio →
+creatures" wrote C# in cr-api, rebuilt the compat packages and restarted the API. Crystalline Rift Studio →
 **Battle Missions** (COMBAT group) is the same content, edited the way every other content type
 already is — with one extra step no other tab has, because missions are the first content whose
 offline copy is not written by the push.
@@ -540,7 +540,7 @@ identity on the server, so rewriting it on a rename would move the row.
 ### Pushing is not enough — the offline step
 
 The offline floor is baked from migration seeds **and nothing else** (see
-[Content Pipeline](?page=unity/17-content-pipeline)). Content Studio does not write the local
+[Content Pipeline](?page=unity/17-content-pipeline)). Crystalline Rift Studio does not write the local
 SQLite. So a mission that has only been pushed exists online and does not exist for a disconnected
 player.
 
@@ -569,7 +569,7 @@ Exporting does not run the migration and does not rebuild any package. It writes
 For a mission that reuses the existing `StatusApplication` type, **no Unity code changes at all** —
 it is a content row.
 
-The short path is [Content Studio → Battle Missions](#authoring-missions-in-content-studio): create
+The short path is [Crystalline Rift Studio → Battle Missions](#authoring-missions-in-content-studio): create
 the asset, push it, export the seed migration, rebake. Write the migration by hand only when there
 is no editor to hand:
 
