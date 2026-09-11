@@ -494,6 +494,41 @@ The `PostgresGlobalErrorMiddleware` catches unhandled exceptions and maps them t
 
 In development mode, Swagger UI is served at `/swagger` for exploring all endpoints.
 
+### Connection strings in logs
+
+Migrators log the connection string they are about to use so that a wrong host/port/database is
+obvious in the startup log. That value carries the Postgres password in production, so every log
+site passes it through `ConnectionStringRedaction.Redact` first
+(`Common/CR.Common.Data.Migration.Core/ConnectionStringRedaction.cs`):
+
+- `Password=`, `Pwd=` and `Passwd=` (case-insensitive, quoted or not) have their **value** replaced with `***`.
+- URI-form strings (`postgres://user:secret@host/db`) become `postgres://user:***@host/db`.
+- Everything else is preserved byte-for-byte, so a string with no secret comes back unchanged.
+- `Redact` never throws; malformed input falls back to a regex mask.
+
+Use it for any new log line, exception message, or diagnostic that includes a connection string:
+
+```csharp
+Console.WriteLine($"Connection String: {ConnectionStringRedaction.Redact(connectionString)}");
+```
+
+### DataProtection keys
+
+`Program.cs` calls `AddDataProtection().SetApplicationName("cr-api").PersistKeysToFileSystem(...)`
+right after configuration is built. Without it ASP.NET falls back to an in-memory key ring and warns
+on every start, and antiforgery/cookie payloads stop being readable after a restart. JWT signing is
+unaffected — that key comes from configuration, not the DataProtection key ring, so rotating or
+losing the key directory does **not** invalidate issued tokens.
+
+| Setting | Value |
+|---|---|
+| Config key | `DataProtection:KeysPath` (`appsettings.json` default: `keys`) |
+| Environment variable | `DataProtection__KeysPath` |
+| Production path | `/app/keys`, backed by the `api_keys` Docker volume (`cr-ops/compose.yaml`) |
+
+If the directory cannot be created (read-only filesystem), startup logs to stderr and falls back to
+in-memory keys rather than failing — the API must never fail to boot over key persistence.
+
 ## Error Handling
 
 The backend uses a small set of typed exceptions that map to HTTP status codes in middleware:

@@ -23,7 +23,9 @@
         "Common/CR.Common.Data.Interface/**/*.cs",
         "Common/CR.Common.Data.Postgres/**/*.cs",
         "Common/CR.Common.Data.Sqlite/**/*.cs",
-        "Common/CR.Common.REST.Server/**/*.cs"
+        "Common/CR.Common.REST.Server/**/*.cs",
+        "Common/CR.Common.Data.Migration.Core/**/*.cs",
+        "Convenience/CR.REST.AIO/appsettings.json"
       ],
       "cr-data": []
     },
