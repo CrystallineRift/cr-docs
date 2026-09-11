@@ -484,7 +484,7 @@ dotnet run
 
 1. Build configuration from `config.yml` + environment variables
 2. Register repositories (keyed and non-keyed for each domain)
-3. Run FluentMigrator for each domain (`AuthDatabaseMigrator`, `CreatureDatabaseMigrator`, etc.)
+3. Run FluentMigrator for every domain, in the single order defined by `MigrationOrder.All`
 4. Register domain services (`AddScoped` for services that depend on `IDbConnectionFactory` or other Scoped services)
 5. Register middleware (`PostgresGlobalErrorMiddleware`)
 6. Map all endpoint groups (`app.MapNpcEndpoints()`, `app.MapQuestEndpoints()`, etc.)
@@ -528,6 +528,60 @@ losing the key directory does **not** invalidate issued tokens.
 
 If the directory cannot be created (read-only filesystem), startup logs to stderr and falls back to
 in-memory keys rather than failing — the API must never fail to boot over key persistence.
+
+### Migration order is one list
+
+`Convenience/CR.REST.AIO/MigrationOrder.cs` holds `All` — the fourteen domain migrators and the
+order they run in. `Program.cs` and the integration-test fixture both iterate it; neither keeps its
+own copy (they used to, and the copies had already drifted apart).
+
+Two things about that order are load-bearing, and neither is obvious from reading a single domain:
+
+- **Every domain shares one FluentMigrator `VersionInfo` table.** Migration version numbers are
+  therefore a *global* namespace, not per-domain. Auth's `M0001CreateAccountTable` and Creatures'
+  `M0001CreatePostgresTypes` are both version `1`: whichever domain migrates first claims that
+  number and the other's version-1 migration is silently skipped as already-applied. This is why
+  **Auth must stay first** — if Creatures ran first, `accounts` would never be created.
+- **Market and Moderation stay last.** Market's `M12004` seeds an escrow account/trainer and guards
+  on those tables existing; Moderation must be applied before the first market browse reads
+  `account_moderation`.
+
+A migration that depends on another domain's table is invisible against a database something has
+already migrated, which is every developer machine and the live server. `FreshDatabaseMigrationOrderTests`
+(in `CR.Api.IntegrationTests`) runs `MigrationOrder.All` against a blank Postgres container and
+asserts seven different domains' tables exist afterwards, so the next such dependency fails in CI
+rather than on a fresh deploy.
+
+### `MIGRATE_ONLY` — migrate without serving
+
+`MIGRATE_ONLY=1` (also `true`) applies every migrator in `MigrationOrder.All` and exits without
+building the web host: `0` on success, `1` if any migrator throws. It does not create the
+DataProtection key directory either, since it never serves a request.
+
+```bash
+docker compose run --rm -e MIGRATE_ONLY=1 api
+```
+
+`cr-ops/deploy.sh` runs this in a throwaway container *before* restarting `api`, so a failing
+migration stops the deploy while the previous version is still serving, instead of crash-looping
+the new one.
+
+### `GET /health`
+
+Anonymous (an orchestrator has no token), mapped beside `version-check`, and deliberately free of
+domain services — it has to keep answering when DI or a domain service is the broken thing.
+
+| Outcome | Status | Body |
+|---|---|---|
+| `SELECT 1` on `ConnectionStrings:CreatureDatabase` succeeds within 2s | `200` | `{ "status": "ok", "version": "...", "db": "ok", "utc": "..." }` |
+| Connection fails or times out | `503` | `{ "status": "degraded", ..., "db": "unavailable", "error": "<redacted>" }` |
+
+The error text goes through `ConnectionStringRedaction.Redact` — Npgsql puts host and user details
+into several of its exception messages. `version` is the assembly's informational version, or `dev`.
+
+The `api` container healthcheck curls this every 15s, and `deploy.sh` polls it after a restart. The
+`aspnet:8.0` base image ships neither `curl` nor `wget`, so the AIO `Dockerfile` installs `curl`
+purely so the healthcheck has something to call.
 
 ## Error Handling
 

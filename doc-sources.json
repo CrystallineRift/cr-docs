@@ -25,7 +25,9 @@
         "Common/CR.Common.Data.Sqlite/**/*.cs",
         "Common/CR.Common.REST.Server/**/*.cs",
         "Common/CR.Common.Data.Migration.Core/**/*.cs",
-        "Convenience/CR.REST.AIO/appsettings.json"
+        "Convenience/CR.REST.AIO/appsettings.json",
+        "Convenience/CR.REST.AIO/MigrationOrder.cs",
+        "Convenience/CR.REST.AIO/Dockerfile"
       ],
       "cr-data": []
     },
