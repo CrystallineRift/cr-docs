@@ -566,6 +566,14 @@ docker compose run --rm -e MIGRATE_ONLY=1 api
 migration stops the deploy while the previous version is still serving, instead of crash-looping
 the new one.
 
+**The image says whether it can.** The Dockerfile's final stage sets `LABEL cr.migrate-only="1"`, and
+`cr-ops/deploy.sh` reads it before anything ships. An image built before `b731cb9` has no label and no
+`MIGRATE_ONLY` handling: told to migrate-and-exit it starts Kestrel instead and never returns, and the
+deploy hung on that step. The script now refuses such an image outright, runs the migrate step under
+`timeout` on the box regardless, builds only a **named** ref (`main`, or `DEPLOY_REF=…` said out loud)
+rather than whatever is checked out, and keeps the outgoing image as `cr-api:previous` for a one-command
+rollback. See `cr-ops/README.md`.
+
 ### `GET /health`
 
 Anonymous (an orchestrator has no token), mapped beside `version-check`, and deliberately free of
