@@ -128,7 +128,12 @@ evaluator the server runs.
   prop. Wide answers "too close"; the continuous orbit answers the props, since anything blocking
   one angle stops blocking a second later where a fixed close shot stays blocked for the whole
   cutscene. The intro pull-in runs only on the first framing, and the subject is cleared on
-  `ExitBattle` so the next battle does not orbit a destroyed model. That call is not optional decoration: `EnterBattle` deliberately starts
+  `ExitBattle` so the next battle does not orbit a destroyed model.
+
+  **The orbit is switched off while a subject is framed.** The slow rotation keeps a static battle
+  alive, but over a seven-second cutscene it carries the camera round to whatever is behind the
+  creature — the evolution ended up filmed from the far side of the arena. With a subject set, the
+  horizontal angle is held exactly where the shot opened. That call is not optional decoration: `EnterBattle` deliberately starts
   *dormant*, leaving every battle camera disabled so the Brain keeps showing the overworld until a
   battle cue arrives, and an evolution raises no cues. Without `FocusOn` the entire cutscene played
   under the overworld follow camera — the creature was somewhere down there while the camera watched
@@ -163,12 +168,26 @@ evaluator the server runs.
   the camera is holding. The `What?` headline is dropped when staged: it is the fallback panel's
   opening beat, where it is the only thing on screen, and the headline stays empty until the closing
   line.
+
+  Above the sentence sits an **eyebrow** — `EVOLVING`, then `EVOLVED` or `STOPPED`. It is upper-case
+  in `EvolutionCopy` rather than through styling, because USS has no `text-transform`; a label that
+  must read as a label has to arrive already shouting. Its opacity breathes from `Paint`, which the
+  now-static camera makes necessary rather than decorative: with the shot held, nothing else on
+  screen moves for seven seconds. The card takes a 0.22s scale beat when the closing line lands so
+  the sentence is not silently swapped out underneath the player, and the closing hold is painted
+  per frame instead of a flat `WaitForSeconds` — the breath and the beat both need frames someone
+  paints. The cancel prompt is a rounded pill beneath the band.
 - **The staged card's sizes come from code, not from USS.** This panel scales its pixels against
   screen **width**, so a card authored in px grows with the width of the monitor until it is a slab
   — the bug that cost the arrival banner a rewrite. The evolution card shares that maths rather than
-  rediscovering it: `AreaBannerLayout.For(bandHeight)` drives font size, padding and the rule, with
-  the band itself a percentage of screen height (`70%` top, `BandHeightFraction` tall) applied on
-  `GeometryChangedEvent`. The prompt below it is sized from the same font at `0.42`.
+  rediscovering it: `AreaBannerLayout.For(bandHeight * 0.78)` drives font size, padding and the
+  rule, with the band itself a percentage of screen height (`70%` top, `19%` tall) applied on
+  `GeometryChangedEvent`. The prompt below it is sized from the same font at `0.42`, the eyebrow at
+  `0.44`. The band is taller than the arrival banner's 15% and the card is sized from a *fraction*
+  of it because this card carries a line the banner does not: measured with the banner's own
+  figures, the card came to 103px inside a 105px band — it fitted, but a longer species name would
+  have overflowed. Feeding the taller band straight back into the layout would simply grow the type
+  to fill it again, which is why the ratio exists.
 - **The blend is a placeholder.** Old scales out, new scales in, under the effect's peak. A true
   cross-dissolve needs a shader across creature materials the project does not own yet; the effect
   covers the seam, and swapping it later touches only those lines.
