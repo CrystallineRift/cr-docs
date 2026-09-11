@@ -120,8 +120,15 @@ evaluator the server runs.
 - **It is staged in an arena.** `EvolutionStageDirector` teleports the player onto a battle arena's
   trainer mark, stands the creature on the creature anchor, hands the camera to
   `BattleCinematicDirector` **and then asks for a shot** — `IBattleCameraController.FocusOn(subject)`,
-  which aims the rig's `Hero` role (its single-creature shot, the one the victory beat uses) at the
-  creature and holds it. That call is not optional decoration: `EnterBattle` deliberately starts
+  which activates the rig's `Establishing` role (the wide, slowly orbiting arena shot battles
+  already use) re-centred on the creature, by having `GroupCenter` prefer the framed subject over
+  the formation's midpoint. It is deliberately **not** the `Hero` role, which this reached for
+  first: Hero is authored as a close rising shot for victory and capture, and at that distance the
+  arena's own dressing sits between the lens and the creature — the evolution played half-behind a
+  prop. Wide answers "too close"; the continuous orbit answers the props, since anything blocking
+  one angle stops blocking a second later where a fixed close shot stays blocked for the whole
+  cutscene. The intro pull-in runs only on the first framing, and the subject is cleared on
+  `ExitBattle` so the next battle does not orbit a destroyed model. That call is not optional decoration: `EnterBattle` deliberately starts
   *dormant*, leaving every battle camera disabled so the Brain keeps showing the overworld until a
   battle cue arrives, and an evolution raises no cues. Without `FocusOn` the entire cutscene played
   under the overworld follow camera — the creature was somewhere down there while the camera watched
