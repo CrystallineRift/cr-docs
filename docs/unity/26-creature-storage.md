@@ -237,6 +237,27 @@ Postgres in one `UPDATE … FROM`). Because slots have gaps, callers read the re
 rather than assuming `index + 1`. The Team tab's Move / Make lead controls are the consumer — see
 [Player Menu UI](10-player-menu-ui.md#reordering-the-team).
 
+## Keeping one on the team
+
+`MoveToStorageAsync(trainerId, creatureId)` refuses when the creature is the **only** one on the
+team: *"That is your last creature — keep at least one on your team."* An empty team is not a quiet
+state — the world carries on and the next encounter trigger opens a battle with nobody to send out —
+and `TeamRemovalFailureReason` had named `LastCreatureInTeam` since long before anything checked for
+it.
+
+Two details worth keeping:
+
+- It counts **occupied slots** (`GetTeamSlotsAsync`), not `GetTeamAsync`. That one resolves every
+  creature row and drops the ones it cannot read, so a single unreadable row would under-count the
+  team and wave through the exact move the guard exists to stop.
+- The refusal **refuses**: it returns before the transaction opens, and a test asserts neither
+  inventory is touched. A rule that produces a message while the move still happens is worse than no
+  rule.
+
+The client hides the affordance for a last creature too (see
+[Player Menu UI](10-player-menu-ui.md#reordering-the-team)), but the client is not the only caller
+and the server is where the rule actually lives.
+
 ## Related
 
 - [Battle Extensions](24-battle-extensions.md) — the same pure-logic-in-an-asmdef pattern
