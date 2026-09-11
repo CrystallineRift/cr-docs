@@ -119,7 +119,15 @@ evaluator the server runs.
   result. See [Evolution → Who gets asked](../backend/16-evolution.md).
 - **It is staged in an arena.** `EvolutionStageDirector` teleports the player onto a battle arena's
   trainer mark, stands the creature on the creature anchor, hands the camera to
-  `BattleCinematicDirector`, and runs five beats — arrive, charge, blend, reveal, depart — from
+  `BattleCinematicDirector` **and then asks for a shot** — `IBattleCameraController.FocusOn(subject)`,
+  which aims the rig's `Hero` role (its single-creature shot, the one the victory beat uses) at the
+  creature and holds it. That call is not optional decoration: `EnterBattle` deliberately starts
+  *dormant*, leaving every battle camera disabled so the Brain keeps showing the overworld until a
+  battle cue arrives, and an evolution raises no cues. Without `FocusOn` the entire cutscene played
+  under the overworld follow camera — the creature was somewhere down there while the camera watched
+  the player's back. The shot moves to the new species on the first `Reveal` frame, because the old
+  model is switched off underneath it and a camera following a disabled transform frames nothing.
+  Then it runs five beats — arrive, charge, blend, reveal, depart — from
   `EvolutionStagePlan`. The effect spawns on **charge**; the old model shrinks away as the new one
   grows in through **blend**; the new species is held through **reveal**.
 - **Which arena.** Arenas live *inside area scenes* — Meadow carries `meadow-arena`, Crags carries
@@ -140,15 +148,20 @@ evaluator the server runs.
   than from code, so replacing a placeholder is an inspector drag with no rebuild. The effect follows
   the element of the species being evolved **into** — the moment is about what it becomes — falling
   back to the old element when the new one cannot be read.
-- **The titling is a title card, not a panel.** The same `EvolutionOverlay.uxml` serves both
+- **The titling is the arrival banner's card.** The same `EvolutionOverlay.uxml` serves both
   presentations, and `.evolution-root--staged` rewrites it: the backdrop clears, the species icons
-  and the progress track go away, two cinematic bars grow in from the edges over 0.45s, the line
-  sits centred in the lower bar, and the cancel prompt moves to that bar's right corner at 12px.
-  The bar is the contrast, so the copy carries no scrim — the previous version put each line in its
-  own dark rounded pill, two different widths stacked over a live scene, with a progress bar under
-  them that read as something still loading. The `What?` headline is also dropped when staged: it is
-  the fallback panel's opening beat, where it is the only thing on screen, and the headline is left
-  empty until the closing line.
+  and the progress track go away, and what is left is the name card the game already shows when you
+  walk into an area — same ground (`rgba(8,10,18,0.72)`, radius 4), same bold letter-spaced line,
+  same accent rule beneath it — sitting in a band in the lower third so it never covers the creature
+  the camera is holding. The `What?` headline is dropped when staged: it is the fallback panel's
+  opening beat, where it is the only thing on screen, and the headline stays empty until the closing
+  line.
+- **The staged card's sizes come from code, not from USS.** This panel scales its pixels against
+  screen **width**, so a card authored in px grows with the width of the monitor until it is a slab
+  — the bug that cost the arrival banner a rewrite. The evolution card shares that maths rather than
+  rediscovering it: `AreaBannerLayout.For(bandHeight)` drives font size, padding and the rule, with
+  the band itself a percentage of screen height (`70%` top, `BandHeightFraction` tall) applied on
+  `GeometryChangedEvent`. The prompt below it is sized from the same font at `0.42`.
 - **The blend is a placeholder.** Old scales out, new scales in, under the effect's peak. A true
   cross-dissolve needs a shader across creature materials the project does not own yet; the effect
   covers the seam, and swapping it later touches only those lines.

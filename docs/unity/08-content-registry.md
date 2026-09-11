@@ -1143,6 +1143,15 @@ The backend must have a row in the `creatures` table with a matching `content_ke
 - As long as the prefab is marked Addressable with the correct address, `CreatureSpawner` and other systems will find it immediately in editor play mode — no ContentPublishTool run required.
 - The fallback only triggers on a registry miss, so published production builds are unaffected.
 
+**How the fallback reports itself.** A project that has never published has an *empty* `game_assets`
+table, so every single load takes this path — and the loader used to log a **warning** on arrival,
+before knowing whether the fallback worked. Icons are re-applied on every panel rebuild, so one
+session produced hundreds of warnings, all of them announcing a path that then succeeded, and it
+read as "the Addressables build is broken" when nothing was wrong. It now reports by **outcome**:
+a key that resolves through Addressables is a `LogDebug`, said **once per key**; only a key that is
+in neither the registry *nor* Addressables is a warning, because that one is a genuinely missing
+asset. A warning that fires on success is how a console becomes something nobody reads.
+
 #### Step 6 — Publish before shipping (production only)
 
 When you're ready to ship or test against a real server, run `Window → Content Studio → Pipeline ▾ → Publish to Server`. This calls `POST /api/v1/content/publish`, which seeds the `game_assets` table row for the creature's `assetKey`. After that, `LoadAssetByKeyAsync` resolves via the registry (the normal path) rather than the fallback.
