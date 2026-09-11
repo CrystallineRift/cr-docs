@@ -268,6 +268,25 @@ guess what happened:
   `ITrainerRepository.GetTrainerById(trainerId).AccountId` → `GetPlayerDossierAsync`);
 - the listing removal returns the post-removal `MarketListingView`.
 
+### Enter runs the search
+
+`PlayersTab`'s search box submits on Return, and getting that to work in IMGUI is not the two lines
+it looks like. Two things bite, and `SearchSubmitGesture` (pure logic, in `CR.Core.Data.Logic`,
+tested) holds the rule that survives both:
+
+- **The key must be claimed before the text field draws.** A focused IMGUI text field handles Return
+  itself on the way past, so a check placed after the field can find the event already spent. It
+  also stops the field treating the key as an edit.
+- **An empty focused-control name counts as ours.** `GUI.GetNameOfFocusedControl()` returns an empty
+  string in a hosted `IMGUIContainer` — measured, not assumed — so the strict
+  `focused == SearchControlName` test refused every press, and the feature sat in the code having
+  never once worked. Empty means IMGUI is not naming a focused control, not that something else owns
+  the keyboard; a different *named* control still blocks it. Worst case of the looser rule is
+  running a search the operator asked for by pressing Enter.
+
+Enter is also ignored while a search is already running, matching the Search button's disabled state
+rather than queueing a second request.
+
 ### One trainer, not the whole account
 
 A search matches a **trainer**; the dossier behind it is an **account**, and an account can carry
