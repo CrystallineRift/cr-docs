@@ -140,6 +140,15 @@ evaluator the server runs.
   than from code, so replacing a placeholder is an inspector drag with no rebuild. The effect follows
   the element of the species being evolved **into** — the moment is about what it becomes — falling
   back to the old element when the new one cannot be read.
+- **The titling is a title card, not a panel.** The same `EvolutionOverlay.uxml` serves both
+  presentations, and `.evolution-root--staged` rewrites it: the backdrop clears, the species icons
+  and the progress track go away, two cinematic bars grow in from the edges over 0.45s, the line
+  sits centred in the lower bar, and the cancel prompt moves to that bar's right corner at 12px.
+  The bar is the contrast, so the copy carries no scrim — the previous version put each line in its
+  own dark rounded pill, two different widths stacked over a live scene, with a progress bar under
+  them that read as something still loading. The `What?` headline is also dropped when staged: it is
+  the fallback panel's opening beat, where it is the only thing on screen, and the headline is left
+  empty until the closing line.
 - **The blend is a placeholder.** Old scales out, new scales in, under the effect's peak. A true
   cross-dissolve needs a shader across creature materials the project does not own yet; the effect
   covers the seam, and swapping it later touches only those lines.
