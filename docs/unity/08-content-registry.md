@@ -556,6 +556,44 @@ points at. See *Live ops tabs* below.
 - **Elemental Damage tab (17)** — one `ElementalDamageMatrixConfig` asset per matrix version in `Assets/CR/Content/Defs/ElementalDamage/`, and one 10×10 grid at a time. The version dropdown picks which asset is shown; **+ New Version** prompts via `StudioTextPrompt.Ask` (suggesting the next version via `ElementalDamageMatrixMapping.SuggestNextVersion`), validates the name against `ElementalDamageMatrixValidation.IsValidVersion`, and refuses a name any existing asset already carries — it used to create the asset at its field default with no prompt, which was born a duplicate of the seeded v1.1 (the tab kept showing the old grid while the new asset sat un-editable, and neither could be pushed). **Copy as new version…** calls `POST /api/v1/elemental-damage/versions/{version}/copy?from=` and pulls the result back, **Set Active** calls `PUT /api/v1/elemental-damage/active` and re-pulls (the pointer moves for every version at once), and **Delete version…** (Advanced only) calls `DELETE /api/v1/elemental-damage/versions/{version}`, which the server refuses while that version is active. Push sends the whole 100-cell matrix per version — cr-api rejects a partial write, because a matchup with no row resolves at 1.0 with nothing in the logs to say so, so `ElementalDamageMatrixMapping.Complete` fills any gap with the neutral 1.0 before sending. Pull reads `GET …/versions` then `GET …?version=` per version. **⬇ Export Seed Migration** writes the selected version into `Creatures/CR.Creatures.Data.Migration` as `M<n>SeedElementalDamage_<date>.cs`, upserting on `(offense_element, defending_element, version)` and — only when that version is active, and only guarded on the table existing, because it belongs to the Game domain — pointing `battle_system_version` at it.
 - **Status Conditions tab (8)** — server-browser with no local SO; `↻ Fetch from Server` loads all conditions; `+ New Condition` / `✎ Edit` open an inline form with name, applyToUser, probability, duration, and a per-condition stat changes sub-list; `Delete` soft-deletes on server. Backed by `AbilityEditorSyncHelper.FetchAllStatusConditions/CreateStatusCondition/UpdateStatusCondition/DeleteStatusCondition` and new `POST /PUT /DELETE /api/v1/status-conditions` endpoints.
 
+### Configuration section — which backend everything points at
+
+Under **SYSTEM**, before Registry and Auth. Three things name a backend and nothing forces them to
+agree: the editor's own server address (EditorPrefs, this machine only — the same value the header's
+*Server* field edits), the game's `game_config.yaml` (fourteen `*_server_http_address` lines that
+all mean one host), and the Addressables profile's `Remote.LoadPath` (where a build fetches content).
+Before this section, switching to production meant knowing all three places existed and editing
+each by hand. The failure that bit was the editor pushing content to one server while the game in
+Play mode read from another — which looks exactly like a push that did nothing.
+
+The section is built around **environments** and those three **targets**:
+
+- Environments live in `Assets/CR/Resources/configuration/BackendEnvironments.asset`
+  (`BackendEnvironmentsConfig`, a list of `BackendEnvironmentEntry { name, apiBaseUrl,
+  contentCdnBaseUrl }`). It ships with **Local** (`http://localhost:8080`, the MinIO dev CDN) and
+  **Production** (`https://api.crystallinerift.com`, `https://content.crystallinerift.com/content/[BuildTarget]`);
+  add a staging box in the inspector (Advanced → *Edit environments…*). If the asset is missing the
+  section offers to create it with those two.
+- The first line says where each target points — `Editor → Local · Game → Production · Content →
+  Production` — with `custom` for an address that is nobody's environment (a colleague's branch
+  server is deliberate, not an error). A warning appears when Editor and Game disagree.
+- Per environment: **Use for editor** writes the EditorPrefs override and re-pings; **Use for game**
+  rewrites every `*_server_http_address` in `game_config.yaml` **except** `discord_server_http_address`
+  (a third-party host, never ours to repoint) and imports the asset — that is a file in the repo, so
+  it is what the next build ships with, and the note says to commit it; **Use for content** sets the
+  active Addressables profile's `Remote.LoadPath`, keeping the `[BuildTarget]` token; **Use
+  everywhere** does all three.
+
+The rules are engine-free in `CR.Core.Data.Logic` and tested (25 tests): `BackendUrl` (one
+normalisation — trailing slash and case — so `http://localhost:8080/` is Local, not custom),
+`GameConfigRewrite` (`Apply` changes only the lines that are ours and is byte-identical elsewhere,
+CRLF and no-trailing-newline included; `DetectApiBaseUrl` answers **null** when the file disagrees
+with itself, because "half the game on production" is a state to be told about, not averaged over),
+`BackendEnvironmentMatch` and `BackendTargetsSummary` (the line and the drift warning).
+`StudioConfigurationPanel` only reads files, writes files and draws. Class names, EditorPrefs keys
+(`CR_ContentStudio_*`) and asmdef names kept the old "Content Studio" spelling when the window was
+renamed — changing them would lose every developer's saved server address for nothing visible.
+
 ### Live ops tabs — Players (18) and Marketplace (19)
 
 Both tabs live in `Assets/CR/Core/Data/Editor/LiveOps/` and talk to the backend's admin surface
