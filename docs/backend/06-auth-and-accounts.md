@@ -156,9 +156,9 @@ The Unity `TokenManager` proactively refreshes before expiry. `IGameSessionRepos
 
 **Token refresh flow:** Access token expires → Unity `SimpleWebClient` receives 401 → calls `TokenManager.RefreshAccessTokenAsync()` → presents refresh token to `/api/v1/auth/refresh` → stores new access + refresh tokens → retries original request. This is transparent to other Unity systems.
 
-## Service Tokens (Content Studio and Live Ops)
+## Service Tokens (Crystalline Rift Studio and Live Ops)
 
-Tooling that is not a player — the Unity editor's Content Studio, operator/live-ops screens — does not log in as an account. It exchanges a **pre-shared service key** for a short-lived JWT at `POST /auth/service-token` (`ServiceTokenEndpoints.cs`). The issued token's session row uses `Guid.Empty` as its `account_id`: a service token is deliberately tied to no player account, so it carries no `player` scope and cannot touch player-owned data.
+Tooling that is not a player — the Unity editor's Crystalline Rift Studio, operator/live-ops screens — does not log in as an account. It exchanges a **pre-shared service key** for a short-lived JWT at `POST /auth/service-token` (`ServiceTokenEndpoints.cs`). The issued token's session row uses `Guid.Empty` as its `account_id`: a service token is deliberately tied to no player account, so it carries no `player` scope and cannot touch player-owned data.
 
 There are **two** keys, each read from configuration and each granting a different scope:
 
@@ -179,7 +179,7 @@ curl -s -X POST http://localhost:8080/auth/service-token \
   -H "Content-Type: application/json" \
   -d '{"serviceKey":"local-dev-admin-service-key"}' | jq -r .accessToken
 
-# Content Studio token
+# Crystalline Rift Studio token
 curl -s -X POST http://localhost:8080/auth/service-token \
   -H "Content-Type: application/json" \
   -d '{"serviceKey":"local-dev-editor-service-key"}' | jq -r .accessToken

@@ -828,7 +828,7 @@ to the default and nothing had to be re-authored.
 
 Changing an existing trainer's team used to mean writing a migration by hand — M10020's pattern —
 which is why the checklist's last row is a *Manual* hand-off. For edits it no longer is:
-**Content Studio → Trainer Battles → ⬆ Push** sends the definition to cr-api (the hidden team
+**Crystalline Rift Studio → Trainer Battles → ⬆ Push** sends the definition to cr-api (the hidden team
 spawner's metadata, one template per slot under its deterministic id, a sweep of every account's
 cached copy of that team, and the trainer's `npcType` / rematch flag) and mirrors the same team into
 the local SQLite game-data, so an offline playtest sees the edit without a floor re-bake.
@@ -989,7 +989,7 @@ Stale rows surviving one extra sync is the recoverable failure. The deletion is 
 
 **`BattleStager` no `TrainerWorldBehaviour` in `WorldRegistry`.** Means no player trainer GO is in the scene yet. Stager logs a warning and skips the teleport; creature visuals still spawn. Usually indicates a scene without `TrainerWorldBehaviour` registered (e.g. main menu testing).
 
-**A trainer's team must not also exist as a `SpawnerDefinition`.** `npc-trainer-meadow-scout-team.asset` did, and `SpawnerDefinitionSyncBehaviour` re-synced it into the local database on every world load — silently reverting whatever had just been pushed. The asset is deleted and Content Studio now excludes `<trainerKey>-team` spawners from the Spawners tab entirely (see [Content Registry](?page=unity/08-content-registry)).
+**A trainer's team must not also exist as a `SpawnerDefinition`.** `npc-trainer-meadow-scout-team.asset` did, and `SpawnerDefinitionSyncBehaviour` re-synced it into the local database on every world load — silently reverting whatever had just been pushed. The asset is deleted and Crystalline Rift Studio now excludes `<trainerKey>-team` spawners from the Spawners tab entirely (see [Content Registry](?page=unity/08-content-registry)).
 
 **`BattleHUD` IDs are now `Guid`, not `string`.** Comparisons inside the HUD use `Guid` equality; HpChanged events arriving before `CreaturesIdentified` are cached in `_hpCache` and replayed when the IDs land. Out-of-order or dropped events no longer leave the opponent panel blank.
 

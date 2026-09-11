@@ -130,7 +130,7 @@ Three things this chain depends on, each of which was a trap:
   `ContentDefinitionProvider.quests` is therefore load-bearing; the chain is registered in dependency
   order.
 - **The seed ids are UUIDv5 of the content key**, matching what the authored assets carry. A seed
-  with an id of its own is discarded the moment Content Studio pushes the asset — the unique index is
+  with an id of its own is discarded the moment Crystalline Rift Studio pushes the asset — the unique index is
   on `content_key`, so the row already exists and every objective and reward hangs off a template
   nothing points at.
 
@@ -147,7 +147,7 @@ migration rebuilds exactly the divergence M7012 exists to remove.
 (underscore), id `F0E1D2C3-…`. That quest is **not** the one anything in Unity grants — it predates
 the `QuestDefinition` ScriptableObject rewrite of onboarding and was superseded by a hand-authored SO
 (`Assets/CR/Content/Defs/Quests/Starter Quest.asset`, `content_key = "quest-welcome-to-cr"`, hyphen,
-id `f1921cfd-26a0-4b70-b45f-0e28a58fb7e1`) that Content Studio pushed to Postgres directly — never
+id `f1921cfd-26a0-4b70-b45f-0e28a58fb7e1`) that Crystalline Rift Studio pushed to Postgres directly — never
 through a migration. `M7008`'s row has since been manually removed from dev/prod Postgres (Studio
 deletes aren't migration-tracked, so `VersionInfo` still shows `M7008` as applied even though its row
 is gone).
@@ -158,7 +158,7 @@ identical id/content_key existed only in every player's local SQLite (synced fro
 world init), so `AcceptQuestAsync` online would 404/fail on the FK the moment anyone actually tried it
 there. `M7015_SeedLiveWelcomeToCRQuest` fixes this: it seeds the SAME id/content_key/objective/reward
 the SO carries, Postgres only (SQLite already gets this from the SO sync — seeding it there too would
-recreate the exact divergence M7012 removed), guarded so a Content Studio push that already fully
+recreate the exact divergence M7012 removed), guarded so a Crystalline Rift Studio push that already fully
 authored the template (parent row **and** its own objective/reward children) is left completely
 alone — the guard checks "does this template have any children yet", not just "does a child with my
 own hardcoded id exist", so it never bolts a duplicate objective/reward onto an already-authored
@@ -168,9 +168,9 @@ template. Covered by `WelcomeQuestSeedPostgresTests` / `WelcomeQuestSeedGuardPos
 :::note
 Investigating this also surfaced that `quest_objective_template` / `quest_reward_template` carry
 **eight duplicate rows** each for the live `quest-welcome-to-cr` template in dev Postgres — repeated
-Content Studio pushes insert new child rows instead of upserting against existing ones (unlike the
+Crystalline Rift Studio pushes insert new child rows instead of upserting against existing ones (unlike the
 parent `quest_template` row, which IS matched by `content_key`). This is a separate, still-open bug in
-the Content Studio push path (`PUT /api/v1/quests/templates/bulk` → `UpsertTemplateWithChildrenAsync`,
+the Crystalline Rift Studio push path (`PUT /api/v1/quests/templates/bulk` → `UpsertTemplateWithChildrenAsync`,
 step 4/6 in the walkthrough above soft-deletes *all* existing children before re-inserting, which
 should be idempotent — the duplicates predate that soft-delete-then-insert design and were never
 cleaned up). Not fixed here: live `quest_objective_progress`/`quest_instance` rows for existing
@@ -276,7 +276,7 @@ In the Unity editor, right-click in the Project window and select **Create → C
 | `objectives[0].description` | `"Win 3 battles"` |
 | `objectives[0].targetCount` | 3 |
 
-The SO is the Unity-side source of truth for display data. The `content_key` must match the database row exactly. Push the template to the server with **Content Studio → Quests → ⬆ Push All** (`PUT /api/v1/quests/templates/bulk`) rather than writing a separate migration for the template row — the migration is only needed for seed data in environments without the editor.
+The SO is the Unity-side source of truth for display data. The `content_key` must match the database row exactly. Push the template to the server with **Crystalline Rift Studio → Quests → ⬆ Push All** (`PUT /api/v1/quests/templates/bulk`) rather than writing a separate migration for the template row — the migration is only needed for seed data in environments without the editor.
 
 ### Step 3: Add a requirement (optional)
 
@@ -651,7 +651,7 @@ All quest endpoints are prefixed `/api/v1/quests`.
 | `POST` | `/api/v1/quests/abandon` | Abandon an active quest instance |
 | `POST` | `/api/v1/quests/progress` | Record a progress event against active quests |
 | `POST` | `/api/v1/quests/claim` | Claim rewards for a completed quest |
-| `PUT` | `/api/v1/quests/templates/bulk` | Bulk create-or-update quest templates by `content_key` (Content Studio sync) |
+| `PUT` | `/api/v1/quests/templates/bulk` | Bulk create-or-update quest templates by `content_key` (Crystalline Rift Studio sync) |
 | `GET` | `/api/v1/quests/templates/by-content-key/{contentKey}` | One template with objectives, rewards and requirements; 404 on unknown key. The Unity `QuestTemplateOnlineOfflineRepository` calls this only when a `content_key` misses the local `quest_template` cache, then upserts the result locally |
 
 ### Query parameters (GET endpoints)
@@ -726,9 +726,9 @@ POST /api/v1/quests/claim
 
 On the Unity client, `QuestManager.ClaimRewardsAsync` deserializes this result and forwards it to `QuestRewardDispatcher`, which places spawned creatures, fires `OnRewardsDispatched`, and routes through the event-wiring system (see `docs/unity/15-event-wiring.md`). Stat writes (`TrainerExperiencePoints`, `QuestsCompleted`) are performed by the backend during `ClaimRewardsAsync` — the Unity side must not double-write them.
 
-### Content Studio sync: `PUT /api/v1/quests/templates/bulk`
+### Crystalline Rift Studio sync: `PUT /api/v1/quests/templates/bulk`
 
-Used by the Unity editor Content Studio to push `QuestDefinition` ScriptableObjects to the server. Each entry is matched by `content_key` and the template row plus all its objectives, rewards, and requirements are replaced atomically.
+Used by the Unity editor Crystalline Rift Studio to push `QuestDefinition` ScriptableObjects to the server. Each entry is matched by `content_key` and the template row plus all its objectives, rewards, and requirements are replaced atomically.
 
 ```json
 PUT /api/v1/quests/templates/bulk
@@ -846,7 +846,7 @@ nothing to match the progression entries against.
 
 `GrantRewardAsync` never throws. If a required lookup fails (item content key not found, spawner not found, empty `referenceId`), it logs a warning and moves on to the next reward. The `quests_completed` stat and `rewards_claimed = true` are still written — partial reward delivery is preferred over blocking the claim entirely.
 
-### Content Studio usage
+### Crystalline Rift Studio usage
 
 When pushing quest templates via `PUT /api/v1/quests/templates/bulk`, set `referenceId` to the content key string directly:
 

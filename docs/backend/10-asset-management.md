@@ -360,7 +360,7 @@ Bundles first, hash second, catalog last ensures clients never see a new catalog
 
 ### Unity Editor deploy window
 
-`Window → Content Studio → Pipeline ▾ → Build & Deploy (S3/MinIO)` opens `ContentDeployTool.cs`, which wraps both scripts in a GUI:
+`Window → Crystalline Rift Studio → Pipeline ▾ → Build & Deploy (S3/MinIO)` opens `ContentDeployTool.cs`, which wraps both scripts in a GUI:
 
 - **Bucket Name / Region / AWS Profile** — saved in `EditorPrefs` (not committed to git)
 - **Custom Endpoint URL** — set to `http://localhost:9000` for MinIO; leave empty for real AWS. When set the window banner turns teal and the setup/deploy buttons switch to MinIO mode
@@ -434,8 +434,8 @@ The `asset_key` on a definition is intentionally separate from `content_key`. Tw
 ```
 1. Designer edits/creates definition SOs in Unity
 2. Window → CR → Content Creator  (create & register definitions)
-3. Window → Content Studio → Pipeline ▾ → Publish to Server  (push asset keys to cr-api backend)
-4. Window → Content Studio → Pipeline ▾ → Build & Deploy (S3/MinIO)   (build Addressables + sync to S3)
+3. Window → Crystalline Rift Studio → Pipeline ▾ → Publish to Server  (push asset keys to cr-api backend)
+4. Window → Crystalline Rift Studio → Pipeline ▾ → Build & Deploy (S3/MinIO)   (build Addressables + sync to S3)
 5. Clients fetch /api/v1/content/manifest on next startup → ServerContentRegistry upgraded
    Addressables.CheckForCatalogUpdates() picks up new catalog → bundles downloaded on demand
 ```

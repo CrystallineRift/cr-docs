@@ -5,7 +5,7 @@
       "cr-api": [],
       "cr-data": []
     },
-    "description": "Top-level overview \u2014 no single source file; changes whenever any major subsystem changes"
+    "description": "Top-level overview — no single source file; changes whenever any major subsystem changes"
   },
   "changelog": {
     "docPath": "docs/changelog.md",
@@ -23,7 +23,11 @@
         "Common/CR.Common.Data.Interface/**/*.cs",
         "Common/CR.Common.Data.Postgres/**/*.cs",
         "Common/CR.Common.Data.Sqlite/**/*.cs",
-        "Common/CR.Common.REST.Server/**/*.cs"
+        "Common/CR.Common.REST.Server/**/*.cs",
+        "Common/CR.Common.Data.Migration.Core/**/*.cs",
+        "Convenience/CR.REST.AIO/appsettings.json",
+        "Convenience/CR.REST.AIO/MigrationOrder.cs",
+        "Convenience/CR.REST.AIO/Dockerfile"
       ],
       "cr-data": []
     },
@@ -346,7 +350,7 @@
         "Assets/CR/UI/Battle/BattleSummaryScreen.cs"
       ]
     },
-    "description": "BattleCoordinator sequential turn loop with battle-scoped CancellationToken, BattleHttpDomainAdapter + OnlineOfflineBattleDomainService stack, BattleEvents static events (incl. StagingFailed), Arena system with IBattleStager returning BattleStagingResult (player teleport + creature visual spawn at PlayerCreaturePosition/OpponentCreaturePosition), self-registering BattleArenaRegistry, reactive Cinemachine 3 cinematic camera (BattleCinematicDirector conductor driven by CameraCue*/TurnStarted, editor-authored BattleCameraRig role vCams + BattleCameraProfile feel SO + decoupled BattleCameraShakeResponder via BattleCameraRigContext, BattleFormation slot model for 1v1->NvN, one-click rig builder + beat simulator), per-creature CreatureBattlePresenter (added to creature prefabs; the stager resolves the creature's shared CreatureReactionProfile from its CreatureDefinition by content key, flattens any base\u2192variant inheritance via Resolve(), and hands the result to Bind; subscribes to BattleEvents and plays the creature's own body \u2014 animation+cry+feedback \u2014 per beat, with a standard Animator state-name convention in CreatureReactionDefaults and HasState-guarded fallbacks), ability VFX/SFX sourced from AbilityConfig keys on the outcome and played positionally by BattleAbilityFxResponder via a single positioned AbilityFxCue + BattleVisualRegistry (id\u2192transform), BattleHUD with Guid-typed creature IDs and HP cache replay, BattleSync SOAP bridge, StartNpcBattle/StartWildBattle, NpcBattleRequest.BattleArenaKey, SpawnerEncounterBehaviour with encounter delay; trainer battles: bark-then-challenge flow (TrainerChallenged banner, Run hidden, RunRefused log, OpponentItemUsed), shared RunTurnLoopAsync with trainer AI decider + NPC item turns, TrainerBattleDefinition SO + Trainer Battle Author window (spawner plumbing hidden, deterministic md5 ids, bark conversation + scene stamp); Trainer Battle Author rebuilt as the project's first UXML/USS editor window (roster rail + dossier, readiness meter, checklist cards, plain-language copy); dev-only BattleDebugStatsOverlay (F3, Editor/DEVELOPMENT_BUILD only) rendering per-creature stat/status/ability/held-item/stat-modifier panels beside BattleHUD's cards, sourced from the same BattleEvents bus + TeamSync"
+    "description": "BattleCoordinator sequential turn loop with battle-scoped CancellationToken, BattleHttpDomainAdapter + OnlineOfflineBattleDomainService stack, BattleEvents static events (incl. StagingFailed), Arena system with IBattleStager returning BattleStagingResult (player teleport + creature visual spawn at PlayerCreaturePosition/OpponentCreaturePosition), self-registering BattleArenaRegistry, reactive Cinemachine 3 cinematic camera (BattleCinematicDirector conductor driven by CameraCue*/TurnStarted, editor-authored BattleCameraRig role vCams + BattleCameraProfile feel SO + decoupled BattleCameraShakeResponder via BattleCameraRigContext, BattleFormation slot model for 1v1->NvN, one-click rig builder + beat simulator), per-creature CreatureBattlePresenter (added to creature prefabs; the stager resolves the creature's shared CreatureReactionProfile from its CreatureDefinition by content key, flattens any base→variant inheritance via Resolve(), and hands the result to Bind; subscribes to BattleEvents and plays the creature's own body — animation+cry+feedback — per beat, with a standard Animator state-name convention in CreatureReactionDefaults and HasState-guarded fallbacks), ability VFX/SFX sourced from AbilityConfig keys on the outcome and played positionally by BattleAbilityFxResponder via a single positioned AbilityFxCue + BattleVisualRegistry (id→transform), BattleHUD with Guid-typed creature IDs and HP cache replay, BattleSync SOAP bridge, StartNpcBattle/StartWildBattle, NpcBattleRequest.BattleArenaKey, SpawnerEncounterBehaviour with encounter delay; trainer battles: bark-then-challenge flow (TrainerChallenged banner, Run hidden, RunRefused log, OpponentItemUsed), shared RunTurnLoopAsync with trainer AI decider + NPC item turns, TrainerBattleDefinition SO + Trainer Battle Author window (spawner plumbing hidden, deterministic md5 ids, bark conversation + scene stamp); Trainer Battle Author rebuilt as the project's first UXML/USS editor window (roster rail + dossier, readiness meter, checklist cards, plain-language copy); dev-only BattleDebugStatsOverlay (F3, Editor/DEVELOPMENT_BUILD only) rendering per-creature stat/status/ability/held-item/stat-modifier panels beside BattleHUD's cards, sourced from the same BattleEvents bus + TeamSync"
   },
   "unity/16-domain-sync-pattern": {
     "docPath": "docs/unity/16-domain-sync-pattern.md",
@@ -560,7 +564,7 @@
         "Assets/CR/Core/Data/Logic/FieldDiff.cs"
       ]
     },
-    "description": "IGameContentRegistry, ScriptableObjectContentRegistry, ServerContentRegistry, MutableContentRegistry, ContentRegistryInitializer, ContentManifestClientUnityHttp, ContentDefinitionProvider, ContentKeys constants, CreatureDefinition/ItemDefinition/NpcDefinition/SpawnerDefinition ScriptableObjects, CreatureContentDef/ItemContentDef/NpcContentDef/SpawnerContentDef POCOs, IGameAssetLoader.LoadAssetByKeyAsync, ContentStudioTool unified EditorWindow (7 tabs replacing ContentCreatorTool and AbilityLibraryTool), custom Inspectors for all definition types, AddressablesCatalogUpdater, LocalizationEditorWindow, ContentAuditTool, ContentPublishTool, AbilityConfig/AbilityProgressionSetConfig/GrowthProfileConfig SOs, AbilityEditorSyncHelper, ability sync clients (HTTP/local/online-offline); Content Studio chrome rebuilt in UI Toolkit (CRStudio.uss shared editor design system, grouped navigation rail with live counts, header count chips + server field + connection pill, status bar; tab bodies remain IMGUI in an IMGUIContainer); ContentDisplayName single naming rule + ContentPicker dropdowns (human names stored as keys, dangling references warned, options from project incl. arenas unioned from spawners/trainers/open scenes); header rebuilt around one StudioWorkSummary pill (the single ranked answer to \"what needs doing\", with the button that resolves it) plus Guide and Advanced switches \u2014 Advanced (same pref as the old Debug toggle) holds the server field, raw keys/ids, the all-content sync bar and the recovery actions; ContentSectionCatalog is the one source of the rail's labels, groups and per-section guide sentences; project scans (registry sweep, orphan scan, Addressables lookups, push-state file stats) cached through EditorMemo/EditorMemoPolicy on the IMGUI layout pass instead of running every repaint; Trainer Battles tab; spawner/pool/creature/item reference fields all ContentPicker dropdowns (Fetch-button flows deleted); NpcAuthorChecklist readiness panel on NpcDefinitionEditor; Content Studio's slow work moved off the draw thread into a job system (StudioJobTracker/StudioJobQueue pure logic + StudioJob/StudioIteratorJob/StudioJobRunner stepping on EditorApplication.update within an 8ms budget, yield-a-Task for non-Unity work, StudioProgressBar cr-jobbar strip above the status bar, [Studio]-prefixed console lines on every status transition): per-definition content pushes (plan built without network, one send per tick, cancellable, tab not stamped on a partial run), per-type pulls, and the registry sweep + push comparison (published into a pending slot and adopted only on a Layout pass); NPC placements now scanned across EVERY scene in the project rather than the open ones \u2014 NpcSceneScanJob reads scene/prefab YAML on a worker thread (NpcScanFileReader buffered single-pass pre-filter, NpcScenePlacementParser for Component/PrefabInstance/PrefabReference shapes, NpcPrefabClosure fixed point over m_SourcePrefab so variants and nested NPC prefabs count), results cached per file in Library/CRStudioNpcScenes.json under NpcScanCachePolicy with prefab-state and resolved-prefab fingerprints; NpcPlacementIndex/NpcSceneGroup drive a scan strip, per-row 'in Village (2), Meadow' summaries and per-scene grouped placements with Open scene/Select via NpcPlacementNavigator; NpcDefinitionEditor's checklist reads placement from the scan or the open scene and memoises BuildSnapshot; LIVE OPS group (Players tab 18 + Marketplace tab 19 in Editor/LiveOps/, EditorAdminAuth admin token, StudioJob-backed admin reads/writes, ModerationReasonDialog) \u2014 see backend/18-moderation; Review window (ContentReviewWindow, Review button beside Push All): every unpushed asset grouped by type with per-row Diff (FieldDiff over EditorJsonUtility of local vs server-applied clone), Push (PushOne, single-asset job, tab not stamped) and Revert (RevertOne, same apply as Pull All, confirm-gated, not for Trainer Battles); ContentPushLog per-asset stamps (LastPushUtcTicks_asset_<guid>) so ContentPushStatus counts an asset pushed when newer than the later of tab/asset stamps; ReviewRow/ReviewGroup/ContentReviewRows pure logic"
+    "description": "IGameContentRegistry, ScriptableObjectContentRegistry, ServerContentRegistry, MutableContentRegistry, ContentRegistryInitializer, ContentManifestClientUnityHttp, ContentDefinitionProvider, ContentKeys constants, CreatureDefinition/ItemDefinition/NpcDefinition/SpawnerDefinition ScriptableObjects, CreatureContentDef/ItemContentDef/NpcContentDef/SpawnerContentDef POCOs, IGameAssetLoader.LoadAssetByKeyAsync, ContentStudioTool unified EditorWindow (7 tabs replacing ContentCreatorTool and AbilityLibraryTool), custom Inspectors for all definition types, AddressablesCatalogUpdater, LocalizationEditorWindow, ContentAuditTool, ContentPublishTool, AbilityConfig/AbilityProgressionSetConfig/GrowthProfileConfig SOs, AbilityEditorSyncHelper, ability sync clients (HTTP/local/online-offline); Crystalline Rift Studio chrome rebuilt in UI Toolkit (CRStudio.uss shared editor design system, grouped navigation rail with live counts, header count chips + server field + connection pill, status bar; tab bodies remain IMGUI in an IMGUIContainer); ContentDisplayName single naming rule + ContentPicker dropdowns (human names stored as keys, dangling references warned, options from project incl. arenas unioned from spawners/trainers/open scenes); header rebuilt around one StudioWorkSummary pill (the single ranked answer to \"what needs doing\", with the button that resolves it) plus Guide and Advanced switches — Advanced (same pref as the old Debug toggle) holds the server field, raw keys/ids, the all-content sync bar and the recovery actions; ContentSectionCatalog is the one source of the rail's labels, groups and per-section guide sentences; project scans (registry sweep, orphan scan, Addressables lookups, push-state file stats) cached through EditorMemo/EditorMemoPolicy on the IMGUI layout pass instead of running every repaint; Trainer Battles tab; spawner/pool/creature/item reference fields all ContentPicker dropdowns (Fetch-button flows deleted); NpcAuthorChecklist readiness panel on NpcDefinitionEditor; Crystalline Rift Studio's slow work moved off the draw thread into a job system (StudioJobTracker/StudioJobQueue pure logic + StudioJob/StudioIteratorJob/StudioJobRunner stepping on EditorApplication.update within an 8ms budget, yield-a-Task for non-Unity work, StudioProgressBar cr-jobbar strip above the status bar, [Studio]-prefixed console lines on every status transition): per-definition content pushes (plan built without network, one send per tick, cancellable, tab not stamped on a partial run), per-type pulls, and the registry sweep + push comparison (published into a pending slot and adopted only on a Layout pass); NPC placements now scanned across EVERY scene in the project rather than the open ones — NpcSceneScanJob reads scene/prefab YAML on a worker thread (NpcScanFileReader buffered single-pass pre-filter, NpcScenePlacementParser for Component/PrefabInstance/PrefabReference shapes, NpcPrefabClosure fixed point over m_SourcePrefab so variants and nested NPC prefabs count), results cached per file in Library/CRStudioNpcScenes.json under NpcScanCachePolicy with prefab-state and resolved-prefab fingerprints; NpcPlacementIndex/NpcSceneGroup drive a scan strip, per-row 'in Village (2), Meadow' summaries and per-scene grouped placements with Open scene/Select via NpcPlacementNavigator; NpcDefinitionEditor's checklist reads placement from the scan or the open scene and memoises BuildSnapshot; SYSTEM → Configuration section (StudioConfigurationPanel + BackendEnvironmentsConfig asset: Local/Production environments applied to the editor's server pref, every *_server_http_address in game_config.yaml via GameConfigRewrite, and the Addressables Remote.LoadPath; BackendUrl/BackendEnvironmentMatch/BackendTargetsSummary pure logic); LIVE OPS group (Players tab 18 + Marketplace tab 19 in Editor/LiveOps/, EditorAdminAuth admin token, StudioJob-backed admin reads/writes, ModerationReasonDialog) — see backend/18-moderation; Review window (ContentReviewWindow, Review button beside Push All): every unpushed asset grouped by type with per-row Diff (FieldDiff over EditorJsonUtility of local vs server-applied clone), Push (PushOne, single-asset job, tab not stamped) and Revert (RevertOne, same apply as Pull All, confirm-gated, not for Trainer Battles); ContentPushLog per-asset stamps (LastPushUtcTicks_asset_<guid>) so ContentPushStatus counts an asset pushed when newer than the later of tab/asset stamps; ReviewRow/ReviewGroup/ContentReviewRows pure logic"
   },
   "backend/10-asset-management": {
     "docPath": "docs/backend/10-asset-management.md",
@@ -633,7 +637,7 @@
         "Assets/CR/Game/World/Editor/ContentCreatorSyncHelper.cs"
       ]
     },
-    "description": "Item spawner mirroring the creature spawner: item_spawner/_pool/_template tables (M6010\u2013M6012), weighted roll (pool by weight\u00d7rarity, template by probability, guaranteed at p=1.0), NpcMerchantService.StockFromSpawnerAsync into npc_inventory, sync-config + roll + stock-from-spawner endpoints, ItemSpawnerDefinition authoring + NpcDefinition.itemSpawnerContentKey"
+    "description": "Item spawner mirroring the creature spawner: item_spawner/_pool/_template tables (M6010–M6012), weighted roll (pool by weight×rarity, template by probability, guaranteed at p=1.0), NpcMerchantService.StockFromSpawnerAsync into npc_inventory, sync-config + roll + stock-from-spawner endpoints, ItemSpawnerDefinition authoring + NpcDefinition.itemSpawnerContentKey"
   },
   "backend/12-trainer-currency": {
     "docPath": "docs/backend/12-trainer-currency.md",
@@ -716,7 +720,7 @@
         "Assets/CR/Content/Defs/Items/*.asset"
       ]
     },
-    "description": "Player menu UI: 5-tab overlay (Team/Bag/Quests/Journal/System) wired to real domain data \u2014 PlayerTeamView squad sheet, BagScreenHandler backpack with BagItemPolicy filtering, QuestJournalView active/completed quests, JournalView achievements + stat records, CR.UI.Logic pure rules, input wiring via UICoordinator"
+    "description": "Player menu UI: 5-tab overlay (Team/Bag/Quests/Journal/System) wired to real domain data — PlayerTeamView squad sheet, BagScreenHandler backpack with BagItemPolicy filtering, QuestJournalView active/completed quests, JournalView achievements + stat records, CR.UI.Logic pure rules, input wiring via UICoordinator"
   },
   "backend/09-battle-persistence": {
     "docPath": "docs/backend/09-battle-persistence.md",
@@ -803,7 +807,7 @@
         "Assets/CR/Game/Battle/OnlineOfflineBattleDomainService.cs"
       ]
     },
-    "description": "Battle DB tables (battle with active creature IDs, battle_round, battle_round_input, battle_action_log), persistent HP/conditions on generated_creature_current_stats + generated_creature_status_conditions, IBattleRepository, IGeneratedCreatureRepository, BattleDomainService, BattleHttpDomainAdapter, REST endpoints, DI wiring, ability progression, animation_key + VFX/SFX keys on abilities; trainer battles (battle_type Wild/Trainer, minted battle trainer via npcs.battle_trainer_id, run refused without turn cost, heal-on-start, 1.5x XP / 2x currency, TrainerBattleAIDomainService swap\u2192heal\u2192attack, opponent_content_key M8017, M10020 Meadow demo trainer); elemental reactions as authored content (elemental_reaction table M12006, IElementalReactionRepository, /api/v1/elemental-reactions, resolver injection + ActionOutcome.ReactionLogLine) and the versioned elemental_damage matrix (/api/v1/elemental-damage, active-version pointer honoured with a has-rows fallback, M12007 Radiant self-multiplier fix + DECIMAL(4,2) widening)"
+    "description": "Battle DB tables (battle with active creature IDs, battle_round, battle_round_input, battle_action_log), persistent HP/conditions on generated_creature_current_stats + generated_creature_status_conditions, IBattleRepository, IGeneratedCreatureRepository, BattleDomainService, BattleHttpDomainAdapter, REST endpoints, DI wiring, ability progression, animation_key + VFX/SFX keys on abilities; trainer battles (battle_type Wild/Trainer, minted battle trainer via npcs.battle_trainer_id, run refused without turn cost, heal-on-start, 1.5x XP / 2x currency, TrainerBattleAIDomainService swap→heal→attack, opponent_content_key M8017, M10020 Meadow demo trainer); elemental reactions as authored content (elemental_reaction table M12006, IElementalReactionRepository, /api/v1/elemental-reactions, resolver injection + ActionOutcome.ReactionLogLine) and the versioned elemental_damage matrix (/api/v1/elemental-damage, active-version pointer honoured with a has-rows fallback, M12007 Radiant self-multiplier fix + DECIMAL(4,2) widening)"
   },
   "unity/11-dialogue-integration": {
     "docPath": "docs/unity/11-dialogue-integration.md",
@@ -1073,7 +1077,7 @@
         "Assets/AddressableAssetsData/AddressableAssetSettings.asset"
       ]
     },
-    "description": "Standalone desktop builds: Unity 6 build profiles (CR_Game_macOS / CR_Game_Windows / CR_Game_Linux_SteamDeck, BuildProfileSetupTool reflection factory), CR > Build > Build Players\u2026 sequential multi-target window (PlayerBuildPlan pure logic + tests), per-platform e_sqlite3 natives bundled by build-packages.sh, Addressables built with player, game-data.bytes floor, Mono-only Windows cross-build; CR > Build > Deploy to Steam Deck\u2026 one-step Linux build + rsync-over-SSH push to a fixed folder on the Deck (SteamDeckDeployPlan pure logic + tests)"
+    "description": "Standalone desktop builds: Unity 6 build profiles (CR_Game_macOS / CR_Game_Windows / CR_Game_Linux_SteamDeck, BuildProfileSetupTool reflection factory), CR > Build > Build Players… sequential multi-target window (PlayerBuildPlan pure logic + tests), per-platform e_sqlite3 natives bundled by build-packages.sh, Addressables built with player, game-data.bytes floor, Mono-only Windows cross-build; CR > Build > Deploy to Steam Deck… one-step Linux build + rsync-over-SSH push to a fixed folder on the Deck (SteamDeckDeployPlan pure logic + tests)"
   },
   "22-area-scenes": {
     "docPath": "docs/unity/22-area-scenes.md",
@@ -1194,7 +1198,7 @@
         "Assets/CR/Game/Battle/Logic/SeedMigrationTarget.cs"
       ]
     },
-    "description": "Battle-extension sidecar pattern: the two seams (BattleEvents.ActionResolved outbound, IPlayerAbilityAugmenter inbound via [InjectOptional]), why the battle system is unmodified (no ability-ownership check in BattleDomainService), and battle missions as the worked example \u2014 pure per-battle BattleMissionTracker in CR.Game.Battle.Logic (11 EditMode tests), BattleMissionConductor (reward resolution via IAbilityDomainService, MissionProgressed/MissionCompleted, battle_missions_completed stat), battle_mission_template content (M10004 + M10003 Mega Burn) served by GET /api/v1/battle-missions and routed through SyncRouter, HUD toast/banner/UNLOCKED badge"
+    "description": "Battle-extension sidecar pattern: the two seams (BattleEvents.ActionResolved outbound, IPlayerAbilityAugmenter inbound via [InjectOptional]), why the battle system is unmodified (no ability-ownership check in BattleDomainService), and battle missions as the worked example — pure per-battle BattleMissionTracker in CR.Game.Battle.Logic (11 EditMode tests), BattleMissionConductor (reward resolution via IAbilityDomainService, MissionProgressed/MissionCompleted, battle_missions_completed stat), battle_mission_template content (M10004 + M10003 Mega Burn) served by GET /api/v1/battle-missions and routed through SyncRouter, HUD toast/banner/UNLOCKED badge"
   },
   "unity/25-player-character": {
     "docPath": "docs/unity/25-player-character.md",
@@ -1268,20 +1272,37 @@
     "repos": {
       "cr-api": [
         "Game/CR.Game.Model/Evolution/**/*.cs",
+        "Game/CR.Game.Model.REST/Evolution/**/*.cs",
         "Game/CR.Game.Domain.Services/Implementation/Evolution/**/*.cs",
         "Game/CR.Game.Domain.Services/Interfaces/Evolution/**/*.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Item/Handlers/TriggerEvolutionHandler.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/EvolutionRuleEndpoints.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/EvolutionRuleMapper.cs",
+        "Convenience/CR.REST.AIO/Program.cs",
         "Creatures/CR.Creatures.Data/**/*CreatureEvolution*.cs",
+        "Creatures/CR.Creatures.Data/**/*EvolutionRule*.cs",
+        "Creatures/CR.Creatures.Data.Sqlite/*EvolutionRule*.cs",
+        "Creatures/CR.Creatures.Data.Postgres/*EvolutionRule*.cs",
         "Creatures/CR.Creatures.Data.Migration/M10014*.cs",
         "Creatures/CR.Creatures.Data.Migration/M10015*.cs",
+        "Creatures/CR.Creatures.Data.Migration/M12015*.cs",
+        "Creatures/CR.Creatures.Data.Migration/M12016*.cs",
+        "Creatures/CR.Creatures.Data.Migration/M12017*.cs",
+        "Creatures/CR.Creatures.Data.Migration/M12018*.cs",
+        "Creatures/CR.Creatures.Data.Migration/M13004*.cs",
+        "Creatures/CR.Creatures.Data.Sqlite.Test/CindraLineSeedSqliteTests.cs",
+        "Creatures/CR.Creatures.Data.Migration/*SeedEvolutionRules_*.cs",
         "Items/CR.Items.Data.Migration/M6016*.cs",
         "Items/CR.Items.Data.Migration/M6017*.cs"
       ],
       "cr-data": [
         "Assets/CR/Game/Evolution/**/*.cs",
-        "Assets/CR/Resources/Evolution/**"
+        "Assets/CR/Resources/Evolution/**",
+        "Assets/CR/Content/Defs/Creatures/**",
+        "Assets/CR/Prefabs/Creatures/**"
       ]
     },
-    "description": "Three-phase server-authoritative evolution, hold-to-cancel, the Bindstone held item, and the seeded evolution lines"
+    "description": "Rule-based server-authoritative evolution: requirement groups, the pure evaluator and facts builder, level-up and item-use triggers, consumption at Commit, hold-to-cancel, the Bindstone, and the seeded lines"
   },
   "backend/17-creature-market": {
     "docPath": "docs/backend/17-creature-market.md",
@@ -1331,6 +1352,7 @@
         "Game/CR.Game.Model/Creatures/CreatureStatusConditionView.cs",
         "Game/CR.Game.Domain.Services/Implementation/Item/ItemUseDomainService.cs",
         "Game/CR.Game.Domain.Services/Implementation/Item/Handlers/*.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/ItemEndpoints.cs",
         "Game/CR.Game.Service.BFF/Endpoints/CreatureStatusEndpoints.cs",
         "Items/CR.Items.Data.Migration/M6020SeedCreatureConsumables.cs",
         "Items/CR.Items.Data.Migration/M6021AddIconAssetKeyToItem.cs",
@@ -1352,6 +1374,8 @@
         "Assets/CR/Core/Data/Client/Interface/ICreatureStatusClient.cs",
         "Assets/CR/Core/Data/Client/Implementation/CreatureStatus*.cs",
         "Assets/CR/UI/Logic/ItemTargetRule.cs",
+        "Assets/CR/UI/Logic/ItemUseResultText.cs",
+        "Assets/CR/UI/Logic/ItemUseFailureText.cs",
         "Assets/CR/Content/Defs/Items/*.asset",
         "Assets/CR/Content/Defs/StatusConditions/*.asset"
       ]
@@ -1408,6 +1432,32 @@
         "Tests/ContentSync/ContentSyncWriterTests.cs"
       ]
     },
-    "description": "One content-icon system: icon_asset_key on item/creature/abilities/status_conditions, IconAddress (icons/<type>/<key>) kept separate from the prefab asset_key, IconGlyph two-letter placeholder, UiIcon.Apply as the single LoadAssetByKeyAsync<Sprite> caller (per-element cancellation, ConditionalWeakTable, Debug-only failure logging) plus UiIcon.uss, the icon/iconKey pair on four SO types drawn by IconSlotField, cr_import_icons + icon-map.json + the three Asset Store packs, cr_bake_portraits with blank/OPAQUE detection, IconImportReport buckets, and how icon keys ride the Content Studio push/pull merge"
+    "description": "One content-icon system: icon_asset_key on item/creature/abilities/status_conditions, IconAddress (icons/<type>/<key>) kept separate from the prefab asset_key, IconGlyph two-letter placeholder, UiIcon.Apply as the single LoadAssetByKeyAsync<Sprite> caller (per-element cancellation, ConditionalWeakTable, Debug-only failure logging) plus UiIcon.uss, the icon/iconKey pair on four SO types drawn by IconSlotField, cr_import_icons + icon-map.json + the three Asset Store packs, cr_bake_portraits with blank/OPAQUE detection, IconImportReport buckets, and how icon keys ride the Crystalline Rift Studio push/pull merge"
+  },
+  "unity/30-evolution-authoring": {
+    "docPath": "docs/unity/30-evolution-authoring.md",
+    "repos": {
+      "cr-api": [
+        "Game/CR.Game.Service.BFF/Endpoints/EvolutionRuleEndpoints.cs",
+        "Creatures/CR.Creatures.Data.Migration/*SeedEvolutionRules_*.cs"
+      ],
+      "cr-data": [
+        "Assets/CR/Core/Data/Registry/Definitions/Evolution/**/*.cs",
+        "Assets/CR/Core/Data/Registry/Definitions/CreatureDefinition.cs",
+        "Assets/CR/Core/Data/Editor/*Evolution*.cs",
+        "Assets/CR/Core/Data/Editor/Evolution/**/*.cs",
+        "Assets/CR/Core/Sync/Logic/Evolution/**/*.cs",
+        "Assets/CR/Core/Data/Registry/ContentSyncWriter.cs",
+        "Assets/CR/Core/Data/Registry/ServerContentSyncService.cs",
+        "Assets/CR/Game/Battle/Logic/*EvolutionRule*.cs",
+        "Assets/CR/Game/Battle/Logic/SeedIds.cs",
+        "Assets/CR/Game/World/Editor/ContentCreatorSyncHelper.cs",
+        "Assets/CR/Game/Evolution/**/*.cs",
+        "Assets/CR/Resources/Evolution/**",
+        "Assets/CR/Game/World/Logic/EncounterSuppression.cs",
+        "Assets/CR/UI/Logic/UIContext.cs"
+      ]
+    },
+    "description": "Authoring evolution rules on CreatureDefinition, the inspector section and its validation, Crystalline Rift Studio push/pull/revert/diff, the seed migration export (M13003) and floor rebake, runtime rule sync"
   }
 }

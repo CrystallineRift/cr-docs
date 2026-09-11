@@ -120,14 +120,33 @@ necessarily slot 1. The view reads the real slot numbers with
 `ICreatureInventoryService.GetTeamSlotsAsync` (same order as `GetTeamAsync`) and never derives them
 from list position.
 
-Two controls:
+Three controls:
 
 - **Move** — a `Button` on every squad card. Press it to arm that creature (card turns amber, header
   reads *Moving &lt;name&gt; — pick a slot*), then press any other card, its *Swap here* button, or an
   empty slot's *Move here (slot N)* target. Pressing the armed card again (*Cancel*) abandons the
   gesture. Empty slots become `Button`s only while a move is armed.
+- **→ Storage** — a `Button` beside Move, on the **picked card only**. One press moves that creature
+  off the team and into storage via `MoveToStorageAsync`, then redraws with the selection back on
+  the first card (there is no creature left to follow) and a toast naming what moved. No
+  confirmation prompt: the storage screen moves it straight back, and a dialog in front of a
+  reversible action is a tax on the common case.
 - **Make lead** — a `Button` on the featured card, shown only when the selected creature is not
   already the lead. One press swaps it with the lowest occupied slot.
+
+`TeamStorageOption` (engine-free, in `CR.UI.Logic`, NUnit-tested) holds the three rules behind the
+Storage button, each for its own reason. It appears **only on the picked card**, because a Send on
+all six is six chances to store the wrong creature by mis-tapping for something done rarely — and
+tapping a card already means "this one" here. It is **absent while a reorder is armed**, because an
+armed card already reads *swap here* end to end, and a second button inside a card that is itself a
+button for something else is how a player does what they did not mean. And it is **disabled for the
+last creature on the team**, visible but flat grey with the reason on its tooltip, since an action
+that looks available and then fails is worse than one that explains itself up front.
+
+That last rule is enforced **on the server as well**, in `MoveToStorageAsync` — see
+[Creature Storage → Keeping one on the team](./26-creature-storage.md). The client is not the only
+caller and it can be looking at a stale team; the refusal text the player reads always comes from
+the server rather than being written a second time in the view.
 
 Both end in `SwapTeamSlotsAsync(trainerId, from, to)`, which is transactional and fires
 `OnSlotsSwapped`; `TeamSync` subscribes to that event so the battle swap list shows the new order

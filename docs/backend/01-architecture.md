@@ -227,7 +227,7 @@ All endpoint groups registered in `Program.cs` via `app.Map*Endpoints()`:
 `SpawnerEndpoints.cs` defines a full route group, but AIO never calls `MapSpawnerEndpoints` — it
 declares its own subset inline. A route can therefore exist in the endpoint class and still 404
 against the local dev host. `GET /api/v1/spawners/content-registry` was missing exactly this way,
-which silently broke Content Studio's **Spawners → Pull**: spawners seeded by migrations existed as
+which silently broke Crystalline Rift Studio's **Spawners → Pull**: spawners seeded by migrations existed as
 rows but could never become `SpawnerDefinition` assets in Unity.
 
 When you add a route to a hand-mapped group, add it in both places and check a running host
@@ -484,7 +484,7 @@ dotnet run
 
 1. Build configuration from `config.yml` + environment variables
 2. Register repositories (keyed and non-keyed for each domain)
-3. Run FluentMigrator for each domain (`AuthDatabaseMigrator`, `CreatureDatabaseMigrator`, etc.)
+3. Run FluentMigrator for every domain, in the single order defined by `MigrationOrder.All`
 4. Register domain services (`AddScoped` for services that depend on `IDbConnectionFactory` or other Scoped services)
 5. Register middleware (`PostgresGlobalErrorMiddleware`)
 6. Map all endpoint groups (`app.MapNpcEndpoints()`, `app.MapQuestEndpoints()`, etc.)
@@ -493,6 +493,103 @@ dotnet run
 The `PostgresGlobalErrorMiddleware` catches unhandled exceptions and maps them to appropriate HTTP status codes, preventing raw exception details from leaking to clients.
 
 In development mode, Swagger UI is served at `/swagger` for exploring all endpoints.
+
+### Connection strings in logs
+
+Migrators log the connection string they are about to use so that a wrong host/port/database is
+obvious in the startup log. That value carries the Postgres password in production, so every log
+site passes it through `ConnectionStringRedaction.Redact` first
+(`Common/CR.Common.Data.Migration.Core/ConnectionStringRedaction.cs`):
+
+- `Password=`, `Pwd=` and `Passwd=` (case-insensitive, quoted or not) have their **value** replaced with `***`.
+- URI-form strings (`postgres://user:secret@host/db`) become `postgres://user:***@host/db`.
+- Everything else is preserved byte-for-byte, so a string with no secret comes back unchanged.
+- `Redact` never throws; malformed input falls back to a regex mask.
+
+Use it for any new log line, exception message, or diagnostic that includes a connection string:
+
+```csharp
+Console.WriteLine($"Connection String: {ConnectionStringRedaction.Redact(connectionString)}");
+```
+
+### DataProtection keys
+
+`Program.cs` calls `AddDataProtection().SetApplicationName("cr-api").PersistKeysToFileSystem(...)`
+right after configuration is built. Without it ASP.NET falls back to an in-memory key ring and warns
+on every start, and antiforgery/cookie payloads stop being readable after a restart. JWT signing is
+unaffected — that key comes from configuration, not the DataProtection key ring, so rotating or
+losing the key directory does **not** invalidate issued tokens.
+
+| Setting | Value |
+|---|---|
+| Config key | `DataProtection:KeysPath` (`appsettings.json` default: `keys`) |
+| Environment variable | `DataProtection__KeysPath` |
+| Production path | `/app/keys`, backed by the `api_keys` Docker volume (`cr-ops/compose.yaml`) |
+
+If the directory cannot be created (read-only filesystem), startup logs to stderr and falls back to
+in-memory keys rather than failing — the API must never fail to boot over key persistence.
+
+### Migration order is one list
+
+`Convenience/CR.REST.AIO/MigrationOrder.cs` holds `All` — the fourteen domain migrators and the
+order they run in. `Program.cs` and the integration-test fixture both iterate it; neither keeps its
+own copy (they used to, and the copies had already drifted apart).
+
+Two things about that order are load-bearing, and neither is obvious from reading a single domain:
+
+- **Every domain shares one FluentMigrator `VersionInfo` table.** Migration version numbers are
+  therefore a *global* namespace, not per-domain. Auth's `M0001CreateAccountTable` and Creatures'
+  `M0001CreatePostgresTypes` are both version `1`: whichever domain migrates first claims that
+  number and the other's version-1 migration is silently skipped as already-applied. This is why
+  **Auth must stay first** — if Creatures ran first, `accounts` would never be created.
+- **Market and Moderation stay last.** Market's `M12004` seeds an escrow account/trainer and guards
+  on those tables existing; Moderation must be applied before the first market browse reads
+  `account_moderation`.
+
+A migration that depends on another domain's table is invisible against a database something has
+already migrated, which is every developer machine and the live server. `FreshDatabaseMigrationOrderTests`
+(in `CR.Api.IntegrationTests`) runs `MigrationOrder.All` against a blank Postgres container and
+asserts seven different domains' tables exist afterwards, so the next such dependency fails in CI
+rather than on a fresh deploy.
+
+### `MIGRATE_ONLY` — migrate without serving
+
+`MIGRATE_ONLY=1` (also `true`) applies every migrator in `MigrationOrder.All` and exits without
+building the web host: `0` on success, `1` if any migrator throws. It does not create the
+DataProtection key directory either, since it never serves a request.
+
+```bash
+docker compose run --rm -e MIGRATE_ONLY=1 api
+```
+
+`cr-ops/deploy.sh` runs this in a throwaway container *before* restarting `api`, so a failing
+migration stops the deploy while the previous version is still serving, instead of crash-looping
+the new one.
+
+**The image says whether it can.** The Dockerfile's final stage sets `LABEL cr.migrate-only="1"`, and
+`cr-ops/deploy.sh` reads it before anything ships. An image built before `b731cb9` has no label and no
+`MIGRATE_ONLY` handling: told to migrate-and-exit it starts Kestrel instead and never returns, and the
+deploy hung on that step. The script now refuses such an image outright, runs the migrate step under
+`timeout` on the box regardless, builds only a **named** ref (`main`, or `DEPLOY_REF=…` said out loud)
+rather than whatever is checked out, and keeps the outgoing image as `cr-api:previous` for a one-command
+rollback. See `cr-ops/README.md`.
+
+### `GET /health`
+
+Anonymous (an orchestrator has no token), mapped beside `version-check`, and deliberately free of
+domain services — it has to keep answering when DI or a domain service is the broken thing.
+
+| Outcome | Status | Body |
+|---|---|---|
+| `SELECT 1` on `ConnectionStrings:CreatureDatabase` succeeds within 2s | `200` | `{ "status": "ok", "version": "...", "db": "ok", "utc": "..." }` |
+| Connection fails or times out | `503` | `{ "status": "degraded", ..., "db": "unavailable", "error": "<redacted>" }` |
+
+The error text goes through `ConnectionStringRedaction.Redact` — Npgsql puts host and user details
+into several of its exception messages. `version` is the assembly's informational version, or `dev`.
+
+The `api` container healthcheck curls this every 15s, and `deploy.sh` polls it after a restart. The
+`aspnet:8.0` base image ships neither `curl` nor `wget`, so the AIO `Dockerfile` installs `curl`
+purely so the healthcheck has something to call.
 
 ## Error Handling
 

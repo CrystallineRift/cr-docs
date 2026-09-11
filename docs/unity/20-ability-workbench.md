@@ -7,7 +7,7 @@ window. Everything technical stays available under an **Advanced** foldout.
 
 ## The designer workflow
 
-1. Open an ability (inspector, or inline in Content Studio's Abilities tab).
+1. Open an ability (inspector, or inline in Crystalline Rift Studio's Abilities tab).
 2. Read the **readiness strip**: `Basics ✓ · Effects 2/3 · Sound 0/3 · Not published`.
 3. Fill the **Effects** slot cards (Cast / Travel / Impact) via **Choose Effect…** — this opens
    the FX Library picker. Travel is optional (projectile moves only).

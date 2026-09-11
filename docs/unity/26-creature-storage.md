@@ -201,10 +201,10 @@ Two details these writers get right and a new one must too:
   string is a gate naming a quest that cannot exist, and the entry would never unlock.
 - **The gate rides every push payload.** `/api/v1/ability-progression/sets/sync` reconciles by
   `(level, slot)` and rewrites the row from the payload, so an *omitted* gate is an *erased* gate,
-  not an unchanged one. `AbilityEditorSyncHelper.SyncProgressionSet` (Content Studio) and
+  not an unchanged one. `AbilityEditorSyncHelper.SyncProgressionSet` (Crystalline Rift Studio) and
   `AbilityLibrarySyncHttpClient` both send it.
 
-> Content Studio's progression **pull** still applies top-level set fields only — entries are a
+> Crystalline Rift Studio's progression **pull** still applies top-level set fields only — entries are a
 > manual update. `ServerProgressionEntryDto` now carries `unlockQuestContentKey`, so an entry-level
 > pull has the field the day someone writes one.
 
@@ -236,6 +236,27 @@ Postgres in one `UPDATE … FROM`). Because slots have gaps, callers read the re
 `GetTeamSlotsAsync` (`TeamSlotEntry { SlotNumber, CreatureId }`, same order as `GetTeamAsync`)
 rather than assuming `index + 1`. The Team tab's Move / Make lead controls are the consumer — see
 [Player Menu UI](10-player-menu-ui.md#reordering-the-team).
+
+## Keeping one on the team
+
+`MoveToStorageAsync(trainerId, creatureId)` refuses when the creature is the **only** one on the
+team: *"That is your last creature — keep at least one on your team."* An empty team is not a quiet
+state — the world carries on and the next encounter trigger opens a battle with nobody to send out —
+and `TeamRemovalFailureReason` had named `LastCreatureInTeam` since long before anything checked for
+it.
+
+Two details worth keeping:
+
+- It counts **occupied slots** (`GetTeamSlotsAsync`), not `GetTeamAsync`. That one resolves every
+  creature row and drops the ones it cannot read, so a single unreadable row would under-count the
+  team and wave through the exact move the guard exists to stop.
+- The refusal **refuses**: it returns before the transaction opens, and a test asserts neither
+  inventory is touched. A rule that produces a message while the move still happens is worse than no
+  rule.
+
+The client hides the affordance for a last creature too (see
+[Player Menu UI](10-player-menu-ui.md#reordering-the-team)), but the client is not the only caller
+and the server is where the rule actually lives.
 
 ## Related
 
