@@ -591,6 +591,25 @@ The `api` container healthcheck curls this every 15s, and `deploy.sh` polls it a
 `aspnet:8.0` base image ships neither `curl` nor `wget`, so the AIO `Dockerfile` installs `curl`
 purely so the healthcheck has something to call.
 
+### `GET /api/v1/builds`
+
+Any signed-in account (`RequirePlayer`). The Unity `build-game` workflow publishes player zips to
+the content CDN with a `builds/latest.json` and a `builds/index.json` (every version, newest first —
+see `ci/publish.sh` and `ci/builds-index.sh` in cr-api-unity). The CDN sends no CORS headers, so
+the browser Studio cannot read them; this route reads both on its behalf (`BuildsCatalogSource`,
+`Builds:ContentUrl`, default `https://content.crystallinerift.com`), merges them
+(`BuildsCatalog.Merge`: the index is the catalogue, `latest.json` wins for the version it names)
+and caches the answer for 60s.
+
+| Outcome | Status | Body |
+|---|---|---|
+| Either document read | `200` | `{ "latest": manifest \| null, "versions": [manifest…], "contentUrl": "…" }` |
+| Both documents 403/404 (nothing published, index not backfilled) | `200` | `{ "latest": null, "versions": [], … }` |
+| CDN unreachable / 5xx on both | `503` | problem `Builds unavailable` — no host named |
+
+A manifest is `{ version, sha, date, files: { windows\|linux\|mac: { url, latest, bytes } } }`.
+Studio's dashboard "Latest build" card and its Builds page read this route.
+
 ## Error Handling
 
 The backend uses a small set of typed exceptions that map to HTTP status codes in middleware:
