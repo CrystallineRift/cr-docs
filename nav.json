@@ -100,6 +100,11 @@
     "path": "backend/19-item-effects"
   },
   {
+    "section": "Backend",
+    "title": "Personal API Keys",
+    "path": "backend/20-personal-api-keys"
+  },
+  {
     "section": "Introduction",
     "title": "Changelog",
     "path": "changelog"
