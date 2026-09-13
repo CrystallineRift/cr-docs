@@ -610,6 +610,80 @@ and caches the answer for 60s.
 A manifest is `{ version, sha, date, files: { windows\|linux\|mac: { url, latest, bytes } } }`.
 Studio's dashboard "Latest build" card and its Builds page read this route.
 
+#### Signed download links
+
+The CloudFront behaviour for `/builds/*.zip` sits behind a trusted key group; the catalogue JSONs
+stay public, so `BuildsCatalogSource` reads them unchanged. `CloudFrontUrlSigner` mints canned-policy
+signed URLs (RSA-SHA1 PKCS#1 v1.5 over the policy bytes, CloudFront's own base64 alphabet) and
+`BuildsUrlSigner` maps a `BuildsResponse` onto a copy whose `files[].url` and `files[].latest` are
+signed. Nothing else in the response changes, and the cached catalogue is never mutated.
+
+| Key | `.env` name | Default |
+|---|---|---|
+| `Builds:Signing:KeyPairId` | `Builds__Signing__KeyPairId` | unset — signing off |
+| `Builds:Signing:PrivateKeyPem` | `Builds__Signing__PrivateKeyPem` | unset — signing off |
+| `Builds:Signing:TtlMinutes` | `Builds__Signing__TtlMinutes` | `360` |
+
+Signing is optional: with either key unset the links come back exactly as the CDN published them,
+which is what a deployment whose behaviour is still public needs. A key that is *set but unreadable*
+throws at host startup naming `Builds:Signing:PrivateKeyPem` — coming up with unsigned links from a
+deployment that meant to sign them looks like a working downloads page right until CloudFront
+refuses every one of them. A `.env` line cannot hold a real newline, so the PEM is accepted
+verbatim, with its newlines written as the two characters `\n`, or base64-encoded whole.
+
+### `POST /api/v1/builds/unlock`
+
+Anonymous. Exchanges the operator-set shared download password for the same `BuildsResponse`, so
+someone with no Studio account can be handed one password and fetch the zips. The password lives on
+the `app_config` singleton (M8018: `download_password_hash`, `_salt`, `_updated_at`, `_updated_by`)
+hashed with the same PBKDF2-SHA512/350k the accounts table uses — those iterations *are* the
+brute-force cost on a route with no account behind it, so there is no cheaper fast path.
+
+| Outcome | Status | Body |
+|---|---|---|
+| Password matches | `200` | the catalogue, links signed if signing is configured |
+| Wrong or missing password | `401` | problem `Invalid download password` |
+| No password set | `503` | problem `Downloads closed` |
+| CDN unreachable | `503` | problem `Builds unavailable` |
+| Budget spent | `429` | problem |
+
+The submitted password is never logged, and nothing beyond those failure statuses tells an anonymous
+caller which of "closed" and "wrong" they hit.
+
+#### Rate limit and the forwarded client address
+
+Those same 350k iterations are what would make this route worth flooding on a one-core droplet, so
+it is the one endpoint with a rate-limit policy: a fixed window of `Builds:Unlock:PermitLimit`
+(default `10`) per `Builds:Unlock:WindowSeconds` (default `60`), partitioned by caller address.
+
+| Key | `.env` name | Default |
+|---|---|---|
+| `Builds:Unlock:PermitLimit` | `Builds__Unlock__PermitLimit` | `10` |
+| `Builds:Unlock:WindowSeconds` | `Builds__Unlock__WindowSeconds` | `60` |
+| `TrustedProxyNetworks` | `TrustedProxyNetworks` | `127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16` |
+
+Production is `caddy -> reverse_proxy api:8080` on a compose bridge, so `Connection.RemoteIpAddress`
+is Caddy's container address for every caller in the world. Partitioning on that raw value would put
+the entire internet in one 10/minute bucket, and a single curl loop would 429 the unlock route for
+every tester — an unauthenticated denial of the whole feature. `app.UseForwardedHeaders()` therefore
+runs at the front of the pipeline (`XForwardedFor` only, so `UseHttpsRedirection` is unaffected;
+`ForwardLimit = 1`) and rewrites the remote address from the header.
+
+`KnownNetworks`/`KnownProxies` are cleared and repopulated from `TrustedProxyNetworks` — see
+`TrustedProxies.cs` — because the ASP.NET default is loopback-only, which is wrong in a container.
+Trusting the header from *any* peer would be worse than running no limiter at all: an attacker picks
+a fresh `X-Forwarded-For` per request, mints a new partition every time and never spends a budget,
+while honest callers behind the real proxy still share one.
+
+### `/api/v1/admin/builds/download-password`
+
+`RequireAdmin`. `GET` answers `{ isSet, updatedAt, updatedBy }` — never the password or its hash.
+`PUT {"password":"…"}` sets it (`400` under 8 characters or blank), `DELETE` closes downloads and is
+idempotent. Both mutations append an `admin_action` row under kind `SetDownloadPassword` with
+`{"action":"builds.download_password_set"}` / `…_cleared` as metadata; the password reaches neither
+the audit row nor any log. Clearing wipes `updatedAt`/`updatedBy` as well, so a closed deployment
+never reads as an open one.
+
 ## Error Handling
 
 The backend uses a small set of typed exceptions that map to HTTP status codes in middleware:
