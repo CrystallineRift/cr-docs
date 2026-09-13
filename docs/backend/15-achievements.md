@@ -68,7 +68,7 @@ Seeded by `M7303SeedAchievements` (idempotent, dual-engine):
   The unlock *record* is authoritative for the badge: lowering or raising a `threshold` by a content
   edit never re-locks an already-earned achievement. `Hidden` definitions stay off the list until
   earned. The same tab's **Records** section lists the trainer's raw lifetime `StatKey` totals.
-- Content Studio authoring for achievement definitions is still deferred.
+- Crystalline Rift Studio authoring for achievement definitions is still deferred.
 
 ## Migration ranges
 

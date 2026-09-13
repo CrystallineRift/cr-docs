@@ -117,7 +117,7 @@ Key convention matches the existing YAML files:
 
 ### `LocalizationKeyField`
 
-A static drawing utility used by all definition Inspectors and the Content Studio. Replace bare `TextField` calls for localization keys with `LocalizationKeyField.Draw(...)`.
+A static drawing utility used by all definition Inspectors and the Crystalline Rift Studio. Replace bare `TextField` calls for localization keys with `LocalizationKeyField.Draw(...)`.
 
 All `GUIStyle` objects are cached as `private static` fields (badge valid/invalid, resolved value preview, missing preview) with lazy init — no style allocations occur during `Draw()` after the first call.
 
@@ -147,7 +147,7 @@ Display Name Key  [creature_emberox_name     ] ✗  [Suggest] [+YAML]
   └────────────────────────────────────────┘
 ```
 
-### Auto-suggest in Content Studio
+### Auto-suggest in Crystalline Rift Studio
 
 When you type a content key in the `+ New` panel (tabs 0–3) and the Display Name Key field is empty, it auto-fills the suggested key. Example: typing `"cindris"` in the Creatures tab immediately fills `"creature_cindris_name"`.
 
@@ -438,7 +438,7 @@ foreach (var key in _registry.CreatureKeys)
 | `ServerNpcDto` | `contentKey`, `npcType` (string) |
 | `ServerSpawnerDto` | `contentKey`, `name`, `description`, `battleArenaKey`, `maxCapacity`, `spawnCooldownSeconds`, `updatedAt` |
 
-**Fetch methods** — called by the **⬇ Pull** action in Content Studio (tabs 0, 2, 3):
+**Fetch methods** — called by the **⬇ Pull** action in Crystalline Rift Studio (tabs 0, 2, 3):
 
 | Method | HTTP call |
 |--------|-----------|
@@ -495,7 +495,7 @@ See [UI Icons](29-ui-icons.md).
 | `ApplyToNpc(def, dto)` | Sets `npcType`. Auto-generates `displayNameKey` (`npc_{contentKey}_display`) with the `contentKey` as a placeholder value. |
 | `ApplyToSpawner(def, dto)` | Sets `displayName`, `description`, `maxCapacity`, `spawnCooldownSeconds`, `battleArenaKey`. |
 
-#### Content Studio Sync UI (tabs 0, 2, 3)
+#### Crystalline Rift Studio Sync UI (tabs 0, 2, 3)
 
 Sync is **drift-free**: SOs are the source of truth and pushes are idempotent upserts keyed by `content_key`, so there is no fetch-compare-resolve step. Each synced tab shows two buttons (hidden on Items):
 
@@ -506,12 +506,12 @@ There is no diff preview, conflict resolution, or in-review delete step — push
 
 `CreateAssetSilent<T>()` is an internal helper that creates a definition SO asset at a default path without opening a save dialog, handling name collisions by appending `_1`, `_2`, etc.
 
-### Content Studio Tool — `Window → CR → Content Studio`
+### Crystalline Rift Studio Tool — `Window → CR → Crystalline Rift Studio`
 
-The **Content Studio** is a unified EditorWindow (`CR/Core/Data/Editor/ContentStudioTool.cs`) that replaces the former Content Creator and Ability Library windows. It handles all 7 content domains in a single window with a consistent dual-panel UX: clicking a row in the list opens its full custom inspector inline below.
+The **Crystalline Rift Studio** is a unified EditorWindow (`CR/Core/Data/Editor/ContentStudioTool.cs`) that replaces the former Content Creator and Ability Library windows. It handles all 7 content domains in a single window with a consistent dual-panel UX: clicking a row in the list opens its full custom inspector inline below.
 
 ```
-Window → CR → Content Studio
+Window → CR → Crystalline Rift Studio
 ```
 
 **Tab layout (20 tabs, grouped in the nav rail):**
@@ -551,10 +551,48 @@ points at. See *Live ops tabs* below.
 - **`Unregister` button** — shown in the detail panel toolbar for tabs 0–3; removes from the provider array while keeping the `.asset` file. For Creatures and Spawners, a dialog appears after unregistering asking "Also delete from server?" — choosing **Delete from server** calls `ContentCreatorSyncHelper.DeleteCreature/DeleteSpawner`; any server-side block (e.g. 409 creature guard) is surfaced in a follow-up dialog.
 - **`⬆ Push All` / `⬇ Pull` buttons** — **Push All** upserts every local SO on the tab; **Pull** (confirm-gated) overwrites local from server and creates SOs for server-only keys. No diff/review step. See *One way to reach the server*.
 - **File-dialog `New` button** (tabs 4–6) — opens a save dialog to create a new `AbilityConfig`, `AbilityProgressionSetConfig`, or `GrowthProfileConfig` SO
-- **Battle Missions tab (15)** — loose `BattleMissionDefinition` SOs in `Assets/CR/Content/Defs/BattleMissions/`. Push is `PUT /api/v1/battle-missions/{id}`, Pull is `GET /api/v1/battle-missions/all?includeInactive=true` applied by id (this is how the ten seeded missions become editable assets — the project ships with none). Per-row **Delete** removes the asset and soft-deletes on the server. The extra **⬇ Export Seed Migration** button writes the authored set into cr-api as a seed migration, because the offline floor is baked from migration seeds only and a push alone never reaches it. Type, reward type and condition dropdowns are built from `CR.Game.Data.Constants.*` and project content, and the row/inspector validation runs the server's own `BattleMissionTemplateValidation`. See [Battle Extensions → Authoring missions in Content Studio](?page=unity/24-battle-extensions).
+- **Battle Missions tab (15)** — loose `BattleMissionDefinition` SOs in `Assets/CR/Content/Defs/BattleMissions/`. Push is `PUT /api/v1/battle-missions/{id}`, Pull is `GET /api/v1/battle-missions/all?includeInactive=true` applied by id (this is how the ten seeded missions become editable assets — the project ships with none). Per-row **Delete** removes the asset and soft-deletes on the server. The extra **⬇ Export Seed Migration** button writes the authored set into cr-api as a seed migration, because the offline floor is baked from migration seeds only and a push alone never reaches it. Type, reward type and condition dropdowns are built from `CR.Game.Data.Constants.*` and project content, and the row/inspector validation runs the server's own `BattleMissionTemplateValidation`. See [Battle Extensions → Authoring missions in Crystalline Rift Studio](?page=unity/24-battle-extensions).
 - **Reactions tab (16)** — loose `ElementalReactionDefinition` SOs in `Assets/CR/Content/Defs/Reactions/`. Push is `PUT /api/v1/elemental-reactions/{id}`, Pull is `GET /api/v1/elemental-reactions/all?includeInactive=true` applied by id (this is how the three seeded reactions — Conduction, Flash Freeze, Shatter — become editable assets; the project ships with none). Push All refuses duplicate content keys before building the plan, because the key is identity on the server and two assets sharing one would 409 against each other. Per-row **Delete** removes the asset and soft-deletes on the server (`DeleteReactionConfirmed` is the seam without the dialog). The extra **⬇ Export Seed Migration** button writes the authored set into `Creatures/CR.Creatures.Data.Migration` as `M<n>SeedElementalReactions_<date>.cs` — each row an upsert, because M12006 already seeds those content keys and an insert-only seed would leave a retuned reaction at its shipped numbers offline. Primer/payload dropdowns are built from the project's `StatusConditionConfig` assets and the detonator dropdown from `ElementType`; the row and inspector validation run the server's own `ElementalReactionValidation`.
 - **Elemental Damage tab (17)** — one `ElementalDamageMatrixConfig` asset per matrix version in `Assets/CR/Content/Defs/ElementalDamage/`, and one 10×10 grid at a time. The version dropdown picks which asset is shown; **+ New Version** prompts via `StudioTextPrompt.Ask` (suggesting the next version via `ElementalDamageMatrixMapping.SuggestNextVersion`), validates the name against `ElementalDamageMatrixValidation.IsValidVersion`, and refuses a name any existing asset already carries — it used to create the asset at its field default with no prompt, which was born a duplicate of the seeded v1.1 (the tab kept showing the old grid while the new asset sat un-editable, and neither could be pushed). **Copy as new version…** calls `POST /api/v1/elemental-damage/versions/{version}/copy?from=` and pulls the result back, **Set Active** calls `PUT /api/v1/elemental-damage/active` and re-pulls (the pointer moves for every version at once), and **Delete version…** (Advanced only) calls `DELETE /api/v1/elemental-damage/versions/{version}`, which the server refuses while that version is active. Push sends the whole 100-cell matrix per version — cr-api rejects a partial write, because a matchup with no row resolves at 1.0 with nothing in the logs to say so, so `ElementalDamageMatrixMapping.Complete` fills any gap with the neutral 1.0 before sending. Pull reads `GET …/versions` then `GET …?version=` per version. **⬇ Export Seed Migration** writes the selected version into `Creatures/CR.Creatures.Data.Migration` as `M<n>SeedElementalDamage_<date>.cs`, upserting on `(offense_element, defending_element, version)` and — only when that version is active, and only guarded on the table existing, because it belongs to the Game domain — pointing `battle_system_version` at it.
 - **Status Conditions tab (8)** — server-browser with no local SO; `↻ Fetch from Server` loads all conditions; `+ New Condition` / `✎ Edit` open an inline form with name, applyToUser, probability, duration, and a per-condition stat changes sub-list; `Delete` soft-deletes on server. Backed by `AbilityEditorSyncHelper.FetchAllStatusConditions/CreateStatusCondition/UpdateStatusCondition/DeleteStatusCondition` and new `POST /PUT /DELETE /api/v1/status-conditions` endpoints.
+
+### Configuration section — which backend everything points at
+
+Under **SYSTEM**, before Registry and Auth. Three things name a backend and nothing forces them to
+agree: the editor's own server address (EditorPrefs, this machine only — the same value the header's
+*Server* field edits), the game's `game_config.yaml` (fourteen `*_server_http_address` lines that
+all mean one host), and the Addressables profile's `Remote.LoadPath` (where a build fetches content).
+Before this section, switching to production meant knowing all three places existed and editing
+each by hand. The failure that bit was the editor pushing content to one server while the game in
+Play mode read from another — which looks exactly like a push that did nothing.
+
+The section is built around **environments** and those three **targets**:
+
+- Environments live in `Assets/CR/Resources/configuration/BackendEnvironments.asset`
+  (`BackendEnvironmentsConfig`, a list of `BackendEnvironmentEntry { name, apiBaseUrl,
+  contentCdnBaseUrl }`). It ships with **Local** (`http://localhost:8080`, the MinIO dev CDN) and
+  **Production** (`https://api.crystallinerift.com`, `https://content.crystallinerift.com/content/[BuildTarget]`);
+  add a staging box in the inspector (Advanced → *Edit environments…*). If the asset is missing the
+  section offers to create it with those two.
+- The first line says where each target points — `Editor → Local · Game → Production · Content →
+  Production` — with `custom` for an address that is nobody's environment (a colleague's branch
+  server is deliberate, not an error). A warning appears when Editor and Game disagree.
+- Per environment: **Use for editor** writes the EditorPrefs override and re-pings; **Use for game**
+  rewrites every `*_server_http_address` in `game_config.yaml` **except** `discord_server_http_address`
+  (a third-party host, never ours to repoint) and imports the asset — that is a file in the repo, so
+  it is what the next build ships with, and the note says to commit it; **Use for content** sets the
+  active Addressables profile's `Remote.LoadPath`, keeping the `[BuildTarget]` token; **Use
+  everywhere** does all three.
+
+The rules are engine-free in `CR.Core.Data.Logic` and tested (25 tests): `BackendUrl` (one
+normalisation — trailing slash and case — so `http://localhost:8080/` is Local, not custom),
+`GameConfigRewrite` (`Apply` changes only the lines that are ours and is byte-identical elsewhere,
+CRLF and no-trailing-newline included; `DetectApiBaseUrl` answers **null** when the file disagrees
+with itself, because "half the game on production" is a state to be told about, not averaged over),
+`BackendEnvironmentMatch` and `BackendTargetsSummary` (the line and the drift warning).
+`StudioConfigurationPanel` only reads files, writes files and draws. Class names, EditorPrefs keys
+(`CR_ContentStudio_*`) and asmdef names kept the old "Content Studio" spelling when the window was
+renamed — changing them would lose every developer's saved server address for nothing visible.
 
 ### Live ops tabs — Players (18) and Marketplace (19)
 
@@ -810,11 +848,11 @@ pass` / `207 scanned, 207 unchanged`.
   from the open scene — the open scene still counts because an NPC dragged in a moment ago exists
   only in memory. Its facts are also memoised now (`EditorMemo`, 3 s): `BuildSnapshot` is four
   project-wide asset sweeps plus a scene search, and this inspector is drawn *inline* inside
-  Content Studio's list, so it was re-scanning the project several times a second.
+  Crystalline Rift Studio's list, so it was re-scanning the project several times a second.
 
 ### One way to reach the server
 
-There is **one vocabulary — Push and Pull — at two scopes, and it lives in Content Studio.**
+There is **one vocabulary — Push and Pull — at two scopes, and it lives in Crystalline Rift Studio.**
 
 | Scope | Where | What it does |
 |-------|-------|--------------|
@@ -827,7 +865,7 @@ Push is an **idempotent upsert keyed by content key**, so pushing a tab is a saf
 
 - **Ability conditions** went through a second endpoint reached only by "Sync Conditions", so pressing "Sync to Server" alone reported success while the server kept stale conditions. Folding that call into `SyncAbility` looked like the fix and was **reverted the same day**: the endpoint was delete-and-recreate over *shared* rows, so running it once per ability during a bulk push destroyed them (see *Ability Library Authoring*). The endpoint has since been rewritten to upsert; the split is kept anyway, because conditions are shared content edited on their own tab.
 - **"Sync Metadata Only"** on a spawner skipped its pools and templates; the tab's Push All has always used `SyncSpawnerFull`.
-- **The item inspector's** payload was a different shape from Content Studio's (`effectParametersJson` vs `effectParameters`, no `captureModifier`, and no fetch-merge of server-owned fields like name and base value). The merge-aware bulk path is the one that survived.
+- **The item inspector's** payload was a different shape from Crystalline Rift Studio's (`effectParametersJson` vs `effectParameters`, no `captureModifier`, and no fetch-merge of server-owned fields like name and base value). The merge-aware bulk path is the one that survived.
 
 #### A push that cannot be completed is refused, not half-applied
 
@@ -960,7 +998,7 @@ The push row is answered by `ContentPushLog` (editor) over `ContentPushStatus` (
 - An asset with **unsaved** edits counts as changed. Its file on disk is still the old one, so a pure file-time check would report in-progress work as already pushed — the one wrong answer this row must never give.
 - The existing content signature in the pipeline dashboard (`CRStudioWindow`) is **not** reused here: it hashes only content keys and ids, so it cannot see an edit that changes a creature's stats without renaming it — which is most edits.
 
-Each inspector now ends with a single footer (`ContentStudioLink.DrawFooter`) naming the tab that owns the asset, plus **Open in Content Studio** — which navigates to that tab and selects the asset (`ContentStudioTool.NavigateTo`), and is replaced by a plain note when the inspector is already being drawn inline inside Content Studio.
+Each inspector now ends with a single footer (`ContentStudioLink.DrawFooter`) naming the tab that owns the asset, plus **Open in Crystalline Rift Studio** — which navigates to that tab and selects the asset (`ContentStudioTool.NavigateTo`), and is replaced by a plain note when the inspector is already being drawn inline inside Crystalline Rift Studio.
 
 ### Localization Editor Window — `Window → CR → Localization Editor`
 
@@ -994,7 +1032,7 @@ When switching tabs with unsaved changes, a dialog ("Unsaved Changes — Switch 
 
 A **summary bar** counts errors/warnings/info at the top. Each row has a `[↑]` ping button to locate the asset in the Project window.
 
-### Content Publish Tool — `Window → Content Studio → Pipeline ▾ → Publish to Server`
+### Content Publish Tool — `Window → Crystalline Rift Studio → Pipeline ▾ → Publish to Server`
 
 `ContentPublishTool` (`CR/Core/Data/Editor/ContentPublishTool.cs`) sends a `POST /api/v1/content/publish` request to the backend with the full asset manifest and a content version hash.
 
@@ -1052,7 +1090,7 @@ Every definition Inspector shows:
 - Colored type banner (via `DefinitionEditorExtensions.DrawBanner`)
 - Validated field rows (green `✓` / red `✗` badge, via `prop.DrawValidated`)
 - HelpBox indicating whether the content key is present in `ContentKeys.cs` (via `key.DrawContentKeyInfo`)
-- `[Open in Content Studio]` button
+- `[Open in Crystalline Rift Studio]` button
 
 `ContentDefinitionProviderEditor` additionally shows:
 - Count summary (`4 Creatures · 0 Items · 0 NPCs · 1 Spawner`)
@@ -1070,7 +1108,7 @@ All deletes are **soft-deletes** (`deleted = true`). The row is never physically
 
 ### Via Unregister (removing a specific definition)
 
-1. Open the definition in Content Studio (click its row to open the detail panel).
+1. Open the definition in Crystalline Rift Studio (click its row to open the detail panel).
 2. Click **Unregister** in the detail panel toolbar — this removes the SO from the `ContentDefinitionProvider` array and clears the selection. The `.asset` file is kept on disk.
 3. A dialog appears: **"Also delete from server?"**
    - **Delete from server** → calls `ContentCreatorSyncHelper.DeleteCreature/DeleteSpawner`, which sends `DELETE /api/v1/creatures/by-content-key/{contentKey}` or `DELETE /api/v1/spawners/by-content-key/{contentKey}`. If the server rejects the delete (e.g. 409 for a creature that trainers own), an error dialog shows the server's message and the record is left intact.
@@ -1110,7 +1148,7 @@ This is the most common case and involves the most moving parts. Work through th
 
 #### Step 2 — Create the definition SO and fill it in
 
-Open `Window → CR → Content Studio` → **Creatures** tab → `[+ New]`.
+Open `Window → CR → Crystalline Rift Studio` → **Creatures** tab → `[+ New]`.
 
 Fill in:
 
@@ -1133,7 +1171,7 @@ Open `Window → CR → Localization Editor` → **Creatures** tab → **Missing
 
 The backend must have a row in the `creatures` table with a matching `content_key`. Options:
 
-- **Sync from Unity** — use the `[⬆ Push All]` button in the Creatures tab of Content Studio. This calls `PUT /api/v1/creatures/by-content-key/{contentKey}` for each local SO to push its values to the server (creates the row if missing).
+- **Sync from Unity** — use the `[⬆ Push All]` button in the Creatures tab of Crystalline Rift Studio. This calls `PUT /api/v1/creatures/by-content-key/{contentKey}` for each local SO to push its values to the server (creates the row if missing).
 - **Manual migration seed** — add the key to the creature seed migration and re-run migrations.
 
 #### Step 5 — Testing in-editor / local dev (no publish required)
@@ -1143,9 +1181,18 @@ The backend must have a row in the `creatures` table with a matching `content_ke
 - As long as the prefab is marked Addressable with the correct address, `CreatureSpawner` and other systems will find it immediately in editor play mode — no ContentPublishTool run required.
 - The fallback only triggers on a registry miss, so published production builds are unaffected.
 
+**How the fallback reports itself.** A project that has never published has an *empty* `game_assets`
+table, so every single load takes this path — and the loader used to log a **warning** on arrival,
+before knowing whether the fallback worked. Icons are re-applied on every panel rebuild, so one
+session produced hundreds of warnings, all of them announcing a path that then succeeded, and it
+read as "the Addressables build is broken" when nothing was wrong. It now reports by **outcome**:
+a key that resolves through Addressables is a `LogDebug`, said **once per key**; only a key that is
+in neither the registry *nor* Addressables is a warning, because that one is a genuinely missing
+asset. A warning that fires on success is how a console becomes something nobody reads.
+
 #### Step 6 — Publish before shipping (production only)
 
-When you're ready to ship or test against a real server, run `Window → Content Studio → Pipeline ▾ → Publish to Server`. This calls `POST /api/v1/content/publish`, which seeds the `game_assets` table row for the creature's `assetKey`. After that, `LoadAssetByKeyAsync` resolves via the registry (the normal path) rather than the fallback.
+When you're ready to ship or test against a real server, run `Window → Crystalline Rift Studio → Pipeline ▾ → Publish to Server`. This calls `POST /api/v1/content/publish`, which seeds the `game_assets` table row for the creature's `assetKey`. After that, `LoadAssetByKeyAsync` resolves via the registry (the normal path) rather than the fallback.
 
 ---
 
@@ -1159,7 +1206,7 @@ The flow is the same as creatures with these differences:
 | NPC | Not typically | Pull-only (server is authoritative for `npcType`) | NPCs |
 | Spawner | No — see backend spawner system | Push via `[⬆ Push All]` → `POST /api/v1/spawners/sync-config` (metadata + pools + templates) | Spawners |
 
-For all types: `[+ New]` in Content Studio creates, registers, and adds the `ContentKeys` constant in one step.
+For all types: `[+ New]` in Crystalline Rift Studio creates, registers, and adds the `ContentKeys` constant in one step.
 
 ---
 
@@ -1210,7 +1257,7 @@ If a content key in the registry has no matching row in the DB, `EnsureNpcAsync`
 
 ## Ability Library Authoring
 
-Three ScriptableObjects form the ability authoring pipeline. None of them has its own sync button — every content type reaches the server the same way, through Content Studio's **⬆ Push All** / **⬇ Pull** (see *One way to reach the server* below). The endpoints each type pushes to are listed here because they are still what runs; `AbilityEditorSyncHelper` (editor-only, blocking HTTP) makes the calls.
+Three ScriptableObjects form the ability authoring pipeline. None of them has its own sync button — every content type reaches the server the same way, through Crystalline Rift Studio's **⬆ Push All** / **⬇ Pull** (see *One way to reach the server* below). The endpoints each type pushes to are listed here because they are still what runs; `AbilityEditorSyncHelper` (editor-only, blocking HTTP) makes the calls.
 
 ### `AbilityConfig`
 
@@ -1232,7 +1279,7 @@ Created via `Assets > Create > CR > Content > Ability Config`. Fields:
 
 The Inspector warns if `power > 0` and `category == "Status"`.
 
-Pushed by Content Studio → Abilities → ⬆ Push All → `PUT {game_server_http_address}/api/v1/abilities/{id}`, immediately followed by `POST /api/v1/abilities/{id}/sync-conditions` for the ability's status conditions (see *One way to reach the server*).
+Pushed by Crystalline Rift Studio → Abilities → ⬆ Push All → `PUT {game_server_http_address}/api/v1/abilities/{id}`, immediately followed by `POST /api/v1/abilities/{id}/sync-conditions` for the ability's status conditions (see *One way to reach the server*).
 
 ### `AbilityProgressionSetConfig`
 
@@ -1250,7 +1297,7 @@ The Inspector shows a per-entry foldout sorted by level and warns on duplicate `
 
 `unlockQuestContentKey` is the entry's **quest gate** (`ability_progression_set_entry.unlock_quest_content_key`, M5019): empty means the ordinary "learn it at `level`" entry, a value means the owning trainer must also have completed that quest. It is drawn as a `ContentPicker.Quests()` dropdown of authored `QuestDefinition` content keys rather than a text box, and it rides the push payload — `/sets/sync` reconciles by `(level, slot)` and rewrites the row from the payload, so an *omitted* gate is an *erased* gate. See [Creature Storage → Authoring a gate](26-creature-storage.md#authoring-a-gate-and-keeping-it-through-sync).
 
-Pushed by Content Studio → Progression → ⬆ Push All → `POST {game_server_http_address}/api/v1/ability-progression/sets/sync`
+Pushed by Crystalline Rift Studio → Progression → ⬆ Push All → `POST {game_server_http_address}/api/v1/ability-progression/sets/sync`
 
 ### `GrowthProfileConfig`
 
@@ -1271,11 +1318,11 @@ Created via `Assets > Create > CR > Content > Growth Profile Config`. Fields:
 
 The Inspector renders a two-column grid for the six stat fields and shows a live preview: `Base 50 @ Lv1 → HP:{50*hp/100} ATK:{50*atk/100} ...`. A warning appears if any value is below 10.
 
-Pushed by Content Studio → Growth → ⬆ Push All → `PUT {creature_server_http_address}/api/v1/growth-profiles/{id}`
+Pushed by Crystalline Rift Studio → Growth → ⬆ Push All → `PUT {creature_server_http_address}/api/v1/growth-profiles/{id}`
 
 ### `AbilityEditorSyncHelper`
 
-`CR/Game/World/Editor/AbilityEditorSyncHelper.cs` — Editor-only static helper. Reads `game_server_http_address` from `game_config.yaml` via `Resources.Load<TextAsset>("configuration/game_config")` and uses blocking `System.Net.Http.HttpClient` calls (acceptable in editor context). Returns `(bool ok, string message)` tuples that Content Studio records per asset and shows in the row.
+`CR/Game/World/Editor/AbilityEditorSyncHelper.cs` — Editor-only static helper. Reads `game_server_http_address` from `game_config.yaml` via `Resources.Load<TextAsset>("configuration/game_config")` and uses blocking `System.Net.Http.HttpClient` calls (acceptable in editor context). Returns `(bool ok, string message)` tuples that Crystalline Rift Studio records per asset and shows in the row.
 
 `SyncAbility` pushes **the ability row only**; conditions are pushed from the Conditions tab. Folding the conditions call into it was tried and reverted on 2026-08-30 — at the time `sync-conditions` was destructive (see below). The endpoint is safe now, but the split is kept deliberately: a shared condition is content in its own right, and the tab that lists it is where it should be edited and pushed.
 
@@ -1292,7 +1339,7 @@ The response reports `conditionsCreated` / `conditionsReused` so a push says whi
 
 #### Bidirectional sync support
 
-`AbilityEditorSyncHelper` also provides fetch and apply methods used by the Content Studio **⬆ Push All** / **⬇ Pull** actions (tabs 4–6):
+`AbilityEditorSyncHelper` also provides fetch and apply methods used by the Crystalline Rift Studio **⬆ Push All** / **⬇ Pull** actions (tabs 4–6):
 
 **Server response DTOs** (defined in the same file, `namespace CR.Game.World.Editor`):
 
@@ -1313,7 +1360,7 @@ The response reports `conditionsCreated` / `conditionsReused` so a push says whi
 | `FetchAllProgressionSets()` | `GET /api/v1/ability-progression/sets` |
 | `FetchAllStatusConditions()` | `GET /api/v1/status-conditions?limit=500` |
 
-**Status condition CRUD** — used by the Content Studio Conditions tab (tab 8):
+**Status condition CRUD** — used by the Crystalline Rift Studio Conditions tab (tab 8):
 
 | Method | HTTP call | Returns |
 |--------|-----------|---------|
@@ -1336,9 +1383,9 @@ Each returns `(bool ok, string error, List<T> data)`.
 
 `SpawnerTemplateConfig.abilityProgressionSet` is now a `AbilityProgressionSetConfig?` SO reference (previously a raw UUID string). The `SpawnerDefinitionEditor` renders it as an object drag field with a warning if empty. Both `SpawnerSyncHttpClient` and `LocalSpawnerSyncClient` read `t.abilityProgressionSet?.id` to extract the UUID.
 
-### Ability Sync Workflow (Tabs 4–6 in Content Studio)
+### Ability Sync Workflow (Tabs 4–6 in Crystalline Rift Studio)
 
-The Abilities, Progression Sets, and Growth Profiles tabs in **Content Studio** each have **"⬆ Push All"** and **"⬇ Pull"** buttons (plus a per-row **Sync** button). (These tabs formerly lived in the standalone `AbilityLibraryTool` window.) Sync is drift-free — no fetch-compare or conflict resolution.
+The Abilities, Progression Sets, and Growth Profiles tabs in **Crystalline Rift Studio** each have **"⬆ Push All"** and **"⬇ Pull"** buttons (plus a per-row **Sync** button). (These tabs formerly lived in the standalone `AbilityLibraryTool` window.) Sync is drift-free — no fetch-compare or conflict resolution.
 
 #### Push All / Pull workflow
 
@@ -1386,12 +1433,12 @@ Container.Bind<IAbilityLibrarySyncClient>()
 
 **Content key case and separator conventions.** Use lowercase with underscores for creature keys and lowercase with hyphens for spawners — matching the backend convention.
 
-## Content Studio's shell is UI Toolkit
+## Crystalline Rift Studio's shell is UI Toolkit
 
-Content Studio's chrome was rebuilt on the same design system as the Trainer Battle Author
+Crystalline Rift Studio's chrome was rebuilt on the same design system as the Trainer Battle Author
 (`Core/Data/Editor/UI/ContentStudio.uxml` + the shared `CRStudio.uss`):
 
-- **Header** — the CONTENT STUDIO wordmark, live count chips (creatures / items / NPCs /
+- **Header** — the CRYSTALLINE RIFT STUDIO wordmark, live count chips (creatures / items / NPCs /
   spawners / quests), the server-address field with its apply button, a **connection pill**
   (coloured dot *and* the word CONNECTED / DISCONNECTED / CHECKING — never colour alone;
   click it to re-ping), plus Pipeline ▾ and Refresh.
@@ -1467,7 +1514,7 @@ step owns it).
 ### Advanced detail (formerly "Debug mode")
 
 Unity's own Debug inspector mode is per-Inspector and cannot reach a custom `EditorWindow`, so
-Content Studio has its own: the **Advanced** toggle in the header (lit while on). With it off you
+Crystalline Rift Studio has its own: the **Advanced** toggle in the header (lit while on). With it off you
 see names; with it on every raw key and id appears dimmed beneath its field, along with the rest of
 the plumbing listed under *Reading the window*.
 
@@ -1497,7 +1544,7 @@ compiled together):
   id became immediate dropdowns (server pull demoted to an optional extra).
   VFX/SFX key fields were deliberately left as text: they are the asset's *own* identity keys
   derived from its AssetReference address, not references into another content list.
-- **Trainer battles** now have a Content Studio tab of their own, under CONTENT.
+- **Trainer battles** now have a Crystalline Rift Studio tab of their own, under CONTENT.
 - **The Registry tab could not be scrolled.** `DrawContentProviderTab` still opened its own
   `BeginScrollView` from before the chrome rebuild — nested inside the shared one *and reusing
   the same `_listScroll` field*, so the inner call clobbered the field mid-layout, and with no
@@ -1506,9 +1553,9 @@ compiled together):
 - **NPCs** got the Trainer-Author treatment: readable name first, a readiness checklist
   (`NpcAuthorChecklist`, pure + 38 tests) covering identity, type, merchant stock, trainer team,
   a quest that names it, registry membership and scene placement, with one-click fixes. Its
-  "Open in Content Studio" button was dead for two reasons — it called `ShowWindow()`, which
-  never selects anything, *and* it was drawn inside Content Studio's own inline inspector, where
-  there is nowhere to go. It now calls `NavigateToNpc` and says "Already open in Content Studio"
+  "Open in Crystalline Rift Studio" button was dead for two reasons — it called `ShowWindow()`, which
+  never selects anything, *and* it was drawn inside Crystalline Rift Studio's own inline inspector, where
+  there is nowhere to go. It now calls `NavigateToNpc` and says "Already open in Crystalline Rift Studio"
   in that context instead of offering a no-op.
 
 ## When the editor falls behind the data model

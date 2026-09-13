@@ -1,5 +1,94 @@
 # Changelog
 
+## 2026-09-10 — Granting a creature from a spawn pool
+
+- **Roll the encounter instead of hunting for it.** `POST
+  /api/v1/admin/trainers/{trainerId}/creatures/from-spawner` (`RequireAdmin`) names a spawner by its
+  `content_key` and hands the trainer whatever the pool rolls, placed on the team when there is room
+  and in storage when there is not — the response says which, and in what slot. Audited as
+  `AdminActionKind.GrantCreature`, with the spawner, species and level in the metadata. Sibling of
+  the experience grant, built the same way.
+- **It is the world's own roll, not a creature built by hand.** The grant goes through
+  `ICreatureSpawnDomainService.SpawnCreaturesAsync` — the same weighted pool draw, template draw and
+  generation a wild encounter and a trainer team go through — so what a developer gets is what the
+  world would have produced, down to the growth profile and the abilities. It even records the spawn
+  in `spawner_spawn_history`. A creature assembled inside Moderation would have been a second,
+  quietly diverging generator.
+- **Aim it without breaking it.** `SpawnRequest` gained `PoolName` and `LevelOverride`. A named pool
+  narrows the draw *before* the weighted pick and refuses (409 `NoSpawnCandidate`) rather than
+  falling back — a creature from a pool nobody asked for is worse than no creature.
+  `CreateFromSpawnerAtLevelAsync` replaces only the level; `CreateFromSpawnerAsync` is now a
+  one-line delegation to it, so the forced-level path cannot drift from the wild one.
+
+## 2026-09-09 — The Cindris line, and granting experience from live ops
+
+- **Two new species.** Cindris now evolves into **Cindralis** at level 8, and Cindralis into
+  **Cindrakar** at level 20 — both Fire, both far stronger than the cub (80/22/32/14/14/32 and
+  120/38/55/26/26/40). Cindralis shares Dragon Fire's model rather than carrying art of its own;
+  Cindrakar uses the Dragon Inferno model, newly addressable at `creatures/dragoninferno`. Each has
+  its own baked portrait, which is what tells two species sharing a model apart on a team card.
+  Seeded by **M13004**, with the rules exported to **M13005**.
+- **The species seed must run before the rules seed.** The rule insert is guarded on both species
+  existing, so a rules migration numbered below the species it targets writes nothing and reports
+  nothing: the first bake produced a floor carrying both new species and neither new link, with no
+  error anywhere. The exported rules migration moved from 13003 to 13005 to sit above the species
+  seed, and `CindraLineSeedSqliteTests` now fails if that ordering is ever reintroduced.
+- **Grant experience from the Players tab.** `POST /api/v1/admin/creatures/{id}/experience`
+  (`RequireAdmin`) applies the exact amount through real progression, so level-ups, ability unlocks
+  and the evolution check all happen as they do in play — which makes it the way to test an
+  evolution chain. The response reports level before/after and whether the creature is now ready to
+  evolve. Audited as `AdminActionKind.GrantExperience`.
+- **A push cannot mint an authored id.** The server upserts creatures by `content_key` and assigns
+  its own id, so ids authored on a new `CreatureDefinition` never survive the first push — leaving
+  the new rules pointing at ids the server did not have, refused with "Target creature does not
+  exist. Push creatures before their evolution rules."
+
+## 2026-09-07 — Evolution rules
+
+- **Rules replace the level column.** A species now owns ordered `evolution_rule` rows with
+  `evolution_requirement` groups (OR of AND: `MinLevel`, `HeldItem` with `consume_on_evolve`,
+  `StatusCondition`, `InArea`). `EvolutionEligibility.Evaluate(rules, facts)` decides for the
+  server and the offline client alike; `EvolutionBlockReason.RequirementsNotMet` (with
+  `FailedGroups`) replaces `LevelTooLow`. M12015–M12017 add the tables and the ledger's `rule_id` /
+  `used_item_id`; M12018 folds the five legacy lines into rules and nulls the old columns.
+- **Items trigger evolution.** `TriggerEvolutionHandler` begins an offer with the used item;
+  consumption happens at Commit, and a cancelled evolution leaves the stone in the bag. Commit
+  re-evaluates and reports `OfferStale` when a different target now wins.
+- **Authoring.** `CreatureDefinition.evolutions` with an inline-validated inspector section;
+  Crystalline Rift Studio pushes rules per species (`PUT …/by-content-key/{key}/evolution-rules`), pulls
+  them with the creatures, and shows a target badge. `CR/Content/Export Evolution Rule Seed
+  Migration` writes the seed migration (M13005 today — the writer takes the next free number
+  across every domain) for the offline floor; floor schema 13005.
+- **Presentation.** The overlay shows real species art strobing old ↔ new, `EvolutionCopy`
+  headlines, and refreshes the team on `EvolutionEvents.Completed`.
+- **Review fixes.** The copy says what happens: "{name} is evolving!", "{from} evolved into {to}!",
+  "{name} stopped evolving." — and `{name}` is now the nickname the player gave the creature
+  (`EvolutionDisplayName`) rather than the species. A refused item use reaches the bag as its own
+  sentence instead of "could not be used right now": the route's 400 carries the handler's reason
+  and `ItemUseFailureText` shows it, so online and offline finally read the same. A rule gated on an
+  area gets a sentence of its own (`EvolutionBlockReason.NotInRequiredArea` → "It can't evolve
+  here.") when the area is the *only* thing standing in the way. `ReplaceForCreatureAsync` upserts
+  `WHERE id = @Id AND creature_id = @CreatureId` and the PUT answers 409 for a rule id another
+  species owns — duplicating a creature asset copies its rule ids, and the unscoped write silently
+  re-parented the original's rule. Retiring a rule now retires its requirement rows with it. The
+  inspector actually makes the duplicate-requirement check its docs promised.
+- **Second review round.** `usedItemId` is no longer accepted as a query parameter on
+  `GET creatures/{id}/evolution` or `evolution/begin` — nothing out there verified that the caller
+  owned the item, so any player could have satisfied a `HeldItem` requirement by naming a stone's
+  guid. The item-use flow, which checks ownership first, remains the only way one enters the facts.
+  Consumption now follows `consume_on_evolve` and nothing else: a stone used on a creature evolving
+  on level alone is not destroyed, and neither is a held copy of it. A half-authored rule is skipped
+  rather than making its whole species unevolvable — `IncompleteEvolutionData` is reported only when
+  no rule was evaluable, and the level-up path logs a warning naming the offending rule ids. The
+  `NotInRequiredArea` conversion moved into `EvolutionEligibility.Evaluate`, so the level-up trigger
+  and Begin give the same reason. `GET /api/v1/evolution-rules` is two queries instead of `1+R+S`
+  (one join for all requirements, one roster read for the content keys). A commit whose target
+  species no longer resolves is refused instead of writing a dangling `BaseCreatureId`. M12018's
+  requirement insert shares the rule insert's predicate, so a species with a level but no target can
+  no longer leave an orphan requirement row.
+- Docs: `backend/16-evolution` rewritten, new `unity/30-evolution-authoring`,
+  `backend/19-item-effects` and `unity/12-scriptable-objects` updated.
+
 ## 2026-09-06 — Post-merge review fix round
 
 - **Auth hardening.** `POST /api/v1/npc/reset-teams` and the Npcs `content-registry` routes
@@ -40,7 +129,7 @@
 - **Unity editor: no more repaint writes.** Empty-field popups in the Elemental Reaction and Battle
   Mission editors no longer write/dirty the asset on a repaint of an empty field, and their warning
   text now reflects what's actually stored.
-- **Unity editor: damage-matrix version prompt.** Content Studio's "+ New Version" on the Elemental
+- **Unity editor: damage-matrix version prompt.** Crystalline Rift Studio's "+ New Version" on the Elemental
   Damage matrix no longer creates a duplicate-version matrix — it now prompts via
   `StudioTextPrompt.Ask`, suggests the next version, validates, and refuses collisions.
 - **Unity editor: Steam Deck deploy outcomes.** The deploy window no longer reports "Deployed."
@@ -123,7 +212,7 @@
   placeholder — the placeholder trick made that option impossible to pick once writes were gated on
   "the index moved." Affects the Elemental Reaction condition/detonator pickers and the Battle
   Mission condition/reaction key picker.
-- **Unity editor: Content Studio's Register-All sweep no longer runs inline in the draw loop** after
+- **Unity editor: Crystalline Rift Studio's Register-All sweep no longer runs inline in the draw loop** after
   a Register All / Push / Delete invalidates it, and the Review window's partial-diff flag is now
   reported by the revert path itself (closing a gap where the Spawner config-fetch-failed fallback
   wasn't flagged partial).
@@ -183,7 +272,7 @@
 - **Real server refusals in the battle log.** A 400 now surfaces the server's `message` ("This
   item cannot be used in battle.") instead of the bare "Bad Request" — `ServerErrorMessage.From`
   (6 tests) in `SimpleWebClient`.
-- **Content Studio: Review.** A **Review** button beside **Push All** opens a window listing every
+- **Crystalline Rift Studio: Review.** A **Review** button beside **Push All** opens a window listing every
   edit not yet pushed, grouped by content type, with **Diff** (field-by-field against the server's
   copy), **Push** (one asset) and **Revert** (confirm-gated, takes the server's copy). Push stamps
   are now kept per asset as well as per tab, so pushing two of five edited creatures leaves the
@@ -351,7 +440,7 @@
 
 - **Why:** there was no way to answer "what does this player actually own?" or "take this listing
   down" short of hand-written SQL against `cr_dev`. Live support needs to inspect a player and act
-  on the market from the Content Studio, server-authoritatively, with every action attributable.
+  on the market from the Crystalline Rift Studio, server-authoritatively, with every action attributable.
 - **New `Moderation` domain (`cr-api/Moderation/`):** the ten-project layout mirroring `Market/`.
   `M13001CreateAccountModerationTable` (`account_moderation`: one soft-deleted row per account,
   `shadow_banned`, `shadow_ban_reason`, `shadow_ban_expires_at`, `notes`, `updated_by`) and
@@ -385,7 +474,7 @@
   rather than an acknowledgement; refusals share one body,
   `{ error: "<sentence>", reason: "<ModerationReason>" }`, with `NotFound` → 404,
   `InvalidReason`/`InvalidQuantity` → 400 and everything else → 409.
-- **Unity:** Content Studio gains a **LIVE OPS** rail group with **Players** and **Marketplace**
+- **Unity:** Crystalline Rift Studio gains a **LIVE OPS** rail group with **Players** and **Marketplace**
   tabs — search a player, inspect account, trainers, team, storage, backpack and live listings,
   shadow-ban / lift, adjust currency, grant or remove items, and pull abusive listings (the creature
   goes back to its seller). Every action opens a reason dialog and is audited; the tabs read the
@@ -420,11 +509,11 @@
   read-only (the admin item routes are backpack-only). New pure-logic `AdminQueryString` and
   `ModerationStamp` with tests.
 
-## 2026-09-04 — Elemental reactions + damage matrix are content: backend tables, offline cache sync, Content Studio tabs
+## 2026-09-04 — Elemental reactions + damage matrix are content: backend tables, offline cache sync, Crystalline Rift Studio tabs
 
 - **Why:** the three elemental reactions (Conduction, Flash Freeze, Shatter) lived in a hardcoded
   `ElementalReactionTable`, and the type-matchup matrix (`elemental_damage`) could only be edited by
-  writing a migration. Designers need both in the Content Studio, pushed to the server, and pulled
+  writing a migration. Designers need both in the Crystalline Rift Studio, pushed to the server, and pulled
   into the offline cache like every other content domain.
 - **Backend (Creatures / Game):** `M12006CreateAndSeedElementalReaction` (new `elemental_reaction`
   table, seeded with the shipped rules under their authored ids), `M12007FixRadiantSelfMultiplier`
@@ -445,7 +534,7 @@
   `IBattleSystemVersionRepository` now read `game-data.bytes` (content, not player state).
   `ServerContentSyncService` takes an optional `ITokenManager` so the sync GETs carry the session
   token. The battle HUD prints the reaction's `LogLine` with a `{ReactionName}!` fallback.
-- **Content Studio:** two new tabs — **Reactions** (tab 16, `ElementalReactionDefinition` assets in
+- **Crystalline Rift Studio:** two new tabs — **Reactions** (tab 16, `ElementalReactionDefinition` assets in
   `Assets/CR/Content/Defs/Reactions/`, pull / push / delete) and **Elemental Damage** (tab 17,
   `ElementalDamageMatrixConfig` grid with a version bar: dropdown, Copy as new version, Set Active,
   Delete). Both export seed migrations (`Creatures/CR.Creatures.Data.Migration/M<next>SeedElementalReactions_<date>.cs`
@@ -489,12 +578,12 @@
 - **Not done:** Steam Deck / player builds under `cr-api-unity/Builds/` still carry the stale DLL
   until rebuilt.
 
-## 2026-09-03 — Content Studio: battle mission editor tab (push/pull/delete + seed export)
+## 2026-09-03 — Crystalline Rift Studio: battle mission editor tab (push/pull/delete + seed export)
 
 - **Why:** the ten battle missions were authorable only by writing a FluentMigrator class in cr-api,
   rebuilding the compat packages and restarting the API. Backend CRUD landed the same day; this is
   the half a designer touches. Without it the new `PUT` / `DELETE` routes had no caller.
-- **Content Studio → Battle Missions** (COMBAT group, tab 15): list rows with type · condition ·
+- **Crystalline Rift Studio → Battle Missions** (COMBAT group, tab 15): list rows with type · condition ·
   ×threshold · same-target / Active / Invalid chips · reward ability, **+ New**, per-row **Delete**
   (asset + `DELETE /api/v1/battle-missions/{id}`; the post-confirm half is its own
   `DeleteBattleMissionConfirmed` so the destructive sequence can be exercised without the modal),
@@ -582,7 +671,7 @@
 
 - **Why:** `battle_mission_template` had exactly one route — the game's active-only feed — so the
   ten seeded missions could only be changed by writing a migration. Missions are content, and
-  content is authored in the Content Studio.
+  content is authored in the Crystalline Rift Studio.
 - **cr-api:** `IBattleMissionTemplateRepository` gains `GetAllAsync(includeInactive)`,
   `GetByIdAsync`, `GetByContentKeyAsync(contentKey, includeDeleted)`, `UpsertAsync` and
   `SoftDeleteAsync`. Four new routes sit beside the existing feed, all behind
@@ -803,10 +892,10 @@ merchant. No backend seed migration was needed — `NpcWorldBehaviour.Initialize
 
 See [Creature Market Window](unity/28-creature-market.md).
 
-## 2026-09-03 — Content Studio background jobs, and NPC placements across every scene
+## 2026-09-03 — Crystalline Rift Studio background jobs, and NPC placements across every scene
 
 **"Where is this NPC placed?" is now a question about the project, not about what happens to be
-open.** Content Studio and `NpcDefinitionEditor` answered it with `FindObjectsByType`, which sees
+open.** Crystalline Rift Studio and `NpcDefinitionEditor` answered it with `FindObjectsByType`, which sees
 only loaded scenes — so an NPC placed in `Village` read as *unplaced* while the author had `Meadow`
 open, and the readiness checklist said so. `NpcSceneScanJob` now reads every `.unity` under
 `Assets/` (build-settings scenes first) plus every `.prefab` on a worker thread. No scene is opened
@@ -888,7 +977,7 @@ knows to re-read move sets rather than to add party members. `RewardGrant` gaine
 carry the unlocking quest's content key — it is a property of the source, not of the reward, and
 folding it into `ReferenceKey` would have cost the per-ability filter.
 
-The field round-trips through Content Studio push/pull (`/sets/sync`, `GET /sets`, the entry
+The field round-trips through Crystalline Rift Studio push/pull (`/sets/sync`, `GET /sets`, the entry
 create endpoint and both REST DTOs). 42 new tests: `AbilityUnlockGate` (10),
 `CreatureProgressionService` gate + retroactive pass (18), `RewardGrantService` ability dispatch (3),
 `QuestDomainService` claim routing (2), SQLite + Postgres column round-trip (8), and a migration-chain
@@ -897,7 +986,7 @@ test pinning the column and that no seeded entry is gated (3, one shared with th
 No demo seed: quest templates are seeded Postgres-only by design (M7012/M7015 — SQLite gets them from
 ScriptableObjects), and Unity's `LocalAbilityLibrarySyncClient` soft-deletes progression entries the
 SO does not declare, so a migration-authored gate would not survive offline. The first gated ability
-should be authored in Content Studio and pushed. See [Creature Generation — Quest-gated
+should be authored in Crystalline Rift Studio and pushed. See [Creature Generation — Quest-gated
 abilities](?page=backend/04-creature-generation#quest-gated-abilities) and [Quest System — Ability
 rewards](?page=backend/07-quest-system#ability-rewards-quest-gated-ability-unlocks).
 
@@ -1686,7 +1775,7 @@ layer before.
 
 The chain, cause first:
 
-1. The eight newest species were authored through the Content Studio, so Postgres assigned their ids.
+1. The eight newest species were authored through the Crystalline Rift Studio, so Postgres assigned their ids.
    `M10000SeedRosterCreatures` seeded the same content keys with different hard-coded ids, lost to
    the UNIQUE index on `creature.content_key`, and `ON CONFLICT DO NOTHING` dropped the rows in
    silence.
@@ -1694,7 +1783,7 @@ The chain, cause first:
    `creature_spawner_template.base_creature_id` to `creature.id`, so every insert succeeded.
 3. The spawner config endpoint resolves the creature by id to fill `creatureContentKey`, and
    returned `""` for each affected template.
-4. A Content Studio pull wrote those blanks into the `SpawnerDefinition` assets.
+4. A Crystalline Rift Studio pull wrote those blanks into the `SpawnerDefinition` assets.
 5. The offline spawner sync read the assets, resolved no creature for a single template, and applied
    its normal rule for templates missing from a config: it soft-deleted all 23 of them. Meadow, Cave
    and Crags lost their entire spawn list.
@@ -1841,7 +1930,7 @@ Also fixed while in there: `BattlePresentationSequencer` reported `ConditionsTri
 condition list — so a burn ticking on your own creature was announced as the opponent's.
 
 **Spawners** — `CR.REST.AIO/Program.cs` declares spawner routes inline instead of calling
-`MapSpawnerEndpoints`, and `GET /api/v1/spawners/content-registry` was missing. Content Studio's
+`MapSpawnerEndpoints`, and `GET /api/v1/spawners/content-registry` was missing. Crystalline Rift Studio's
 Spawners **Pull** therefore 404'd against the dev host no matter what the database held, which is why
 the five area spawners seeded by `M10001`/`M10002` (meadow, cave, shore, crags, dunes) existed as
 rows but never as `SpawnerDefinition` assets. Route added; Pull now creates the missing assets.
@@ -2676,10 +2765,10 @@ New editor tooling so a designer ships a fully-effected ability without touching
 
 - **Reworked `AbilityConfig` inspector**: readiness strip (`Basics ✓ · Effects 2/3 · Sound 0/3 · Not published`), visual Cast/Travel/Impact effect slot cards, auditionable sound rows, status-effect summary rows, and a single **Publish** button; every technical field (keys, raw AssetReferences, individual sync buttons) moved under an **Advanced** foldout. ([Ability Workbench](?page=unity/20-ability-workbench))
 - **FX Library picker**: virtualized thumbnail grid over the project's ~400 FX prefabs (ParticleSystem + VFX Graph detection) with element filter chips and heavy-asset warnings; one pick assigns the slot, registers the asset addressable (`fx/<name>` / `sfx/<name>` in `CRContent`, collision-uniquified), and derives the key.
-- **Publish pipeline**: validate → register addressables → derive keys → sync ability → sync status effects, reported as a plain-language checklist; Content Studio **Publish All** adds a reachability probe and cancelable progress bar. Readiness logic lives in a pure, unit-tested asmdef (`CR.AbilityWorkbench.Logic`).
+- **Publish pipeline**: validate → register addressables → derive keys → sync ability → sync status effects, reported as a plain-language checklist; Crystalline Rift Studio **Publish All** adds a reachability probe and cancelable progress bar. Readiness logic lives in a pure, unit-tested asmdef (`CR.AbilityWorkbench.Logic`).
 - **Edit-mode FX preview**: ▶ Preview plays cast → travel → impact between marker capsules using explicit `ParticleSystem.Simulate`/`VisualEffect.Simulate` ticking, reading the scene sequencer's timing values when present; leak-proof cleanup incl. domain-reload sweep and a **CR → Ability Workbench → Clear FX Preview** safety.
 - **FX templates**: `AbilityFxTemplate` SO + "Start from template…" fills all six slots in one click (starter set hand-authored under `Assets/CR/Content/Editor/FxTemplates/`).
-- **Visibility**: Content Studio ability rows show readiness chips (`FX 2/3 · SFX 0/3 · Published`); Content Audit gained an **Ability FX** category — assigned-but-not-addressable (with Fix), keys addressing nothing, and keys resolving to non-FX assets (catches the mis-authored `Scratch → creatures/crabby`).
+- **Visibility**: Crystalline Rift Studio ability rows show readiness chips (`FX 2/3 · SFX 0/3 · Published`); Content Audit gained an **Ability FX** category — assigned-but-not-addressable (with Fix), keys addressing nothing, and keys resolving to non-FX assets (catches the mis-authored `Scratch → creatures/crabby`).
 
 ## 2026-06-26
 
@@ -2704,17 +2793,17 @@ Both dual-engine (Postgres + SQLite, `isSqlite`-guarded) and idempotent (`INSERT
 
 ## 2026-06-25
 
-### Content Studio — editable server address
+### Crystalline Rift Studio — editable server address
 
-The target server is no longer buried in `game_config.yaml`. The Content Studio banner has a **Server** field (with a ⟳ apply-&-test button) that overrides `game_server_http_address` per-machine via EditorPrefs (`ContentCreatorSyncHelper.ServerAddressPrefKey`) — no yaml edit or Unity restart, and it shows exactly what every sync/ping targets. Both `ContentCreatorSyncHelper.GetBaseUrl` and `AbilityEditorSyncHelper.GetBaseUrl` honor the override (empty = fall back to the config value, exposed as `ConfigBaseUrl`). Note the AIO's default `dotnet run` binds **http://localhost:5124** (its launch profile), not `:8080` — so either run it with `--urls http://localhost:8080` or point this field at `:5124`.
+The target server is no longer buried in `game_config.yaml`. The Crystalline Rift Studio banner has a **Server** field (with a ⟳ apply-&-test button) that overrides `game_server_http_address` per-machine via EditorPrefs (`ContentCreatorSyncHelper.ServerAddressPrefKey`) — no yaml edit or Unity restart, and it shows exactly what every sync/ping targets. Both `ContentCreatorSyncHelper.GetBaseUrl` and `AbilityEditorSyncHelper.GetBaseUrl` honor the override (empty = fall back to the config value, exposed as `ConfigBaseUrl`). Note the AIO's default `dotnet run` binds **http://localhost:5124** (its launch profile), not `:8080` — so either run it with `--urls http://localhost:8080` or point this field at `:5124`.
 
-### Content Studio — connection-poll fixes (lag + stuck "Checking…")
+### Crystalline Rift Studio — connection-poll fixes (lag + stuck "Checking…")
 
 Follow-up to the live-status/server-field work:
-- **Lag:** removed `EditorGUIUtility.AddCursorRect` on the status dot — it forced the window to repaint every frame while hovered, and Content Studio's heavy OnGUI made that lag the editor.
+- **Lag:** removed `EditorGUIUtility.AddCursorRect` on the status dot — it forced the window to repaint every frame while hovered, and Crystalline Rift Studio's heavy OnGUI made that lag the editor.
 - **Stuck on "Checking…":** the background ping task touched Unity APIs off the main thread — first resolving the URL (`EditorPrefs`/`Resources`), then updating the UI from the `ContinueWith` (`Repaint`/`EditorApplication.delayCall`). Off-thread Unity calls fail silently, so the dot never repainted out of "Checking…" and `_pingInFlight` looked wedged. Rewritten so the URL resolves on the main thread, the `Task.Run` body touches **no** Unity APIs (it only writes plain result fields), and the main-thread `OnEditorTick` drains the result to log + repaint. Added an 8s watchdog and made the dot click / ⟳ always re-check (abandon any in-flight ping) so it can never get wedged.
 
-### Content Studio — live connection status
+### Crystalline Rift Studio — live connection status
 
 The banner connection dot now polls on a timer instead of only when the window repaints (so it no longer reads stale "Disconnected" while the server is up). `ContentStudioTool` drives `SchedulePingIfNeeded` from `EditorApplication.update` (subscribed in `OnEnable`, removed in `OnDisable`), the poll interval is 30s, and the dot is now a click-to-recheck button (`ForcePing` backdates the last-ping time and re-pings immediately, showing a transient "● Checking…").
 
@@ -2741,11 +2830,11 @@ Move VFX wasn't playing on hit. The runtime chain (`BattleDomainService` → `ou
 
 - **`AbilityConfigEditor.DrawAssetWithKeyRow`** now auto-fills a blank key from the asset's Addressables address whenever the asset is set (the inspector comment finally matches the code). Designers can still override.
 - **`AbilityEditorSyncHelper.SyncAbility`** self-heals at push time via a new `KeyOrDerived(storedKey, assetRef)` helper (and an `AssetReference` overload of `TryDeriveAddressableKey`), so a bulk/Content-Studio push can't ship a null VFX/SFX key.
-- **Prerequisite:** the VFX/SFX prefab must be **Addressable** — derivation reads `FindAssetEntry`. Recovery for existing abilities: ensure the prefab is addressable (Content Studio "Fix All Addressables"), then re-open or re-sync the ability. Disambiguator in the log — `[BattleAbilityFx] load '<key>' failed` means key present but address unbuilt; silence means the key is still empty.
+- **Prerequisite:** the VFX/SFX prefab must be **Addressable** — derivation reads `FindAssetEntry`. Recovery for existing abilities: ensure the prefab is addressable (Crystalline Rift Studio "Fix All Addressables"), then re-open or re-sync the ability. Disambiguator in the log — `[BattleAbilityFx] load '<key>' failed` means key present but address unbuilt; silence means the key is still empty.
 
 ### Migration seed idempotency — content_key collisions
 
-The AIO Postgres migration crashed with `23505 duplicate key … idx_item_spawner_content_key_unique`: content seeds used `ON CONFLICT (id) DO NOTHING`, which only guards the primary key, but content tables have a UNIQUE on `content_key` — and Content Studio pushes content with fresh UUIDs, so the same `content_key` can already exist under a different id.
+The AIO Postgres migration crashed with `23505 duplicate key … idx_item_spawner_content_key_unique`: content seeds used `ON CONFLICT (id) DO NOTHING`, which only guards the primary key, but content tables have a UNIQUE on `content_key` — and Crystalline Rift Studio pushes content with fresh UUIDs, so the same `content_key` can already exist under a different id.
 
 - **Single-table seeds:** `ON CONFLICT (id) DO NOTHING` → `ON CONFLICT DO NOTHING` (no target) across all cr-api migrations — ignores a conflict on *any* unique constraint, the true equivalent of SQLite `INSERT OR IGNORE`.
 - **FK-chain seeds (parent + child rows under hardcoded ids):** `ON CONFLICT` alone isn't enough — skipping just the parent orphans the child FKs. These now gate the whole seed on the parent's `content_key` being absent (`INSERT … SELECT … WHERE NOT EXISTS`), so it's all-or-nothing per parent and a clean no-op once the content exists. Fixed: item-spawner (`M6014`), creature spawner (`M5009`), quests (`M7006`/`M7008`), loot (`M7102`), achievements (`M7303`).
@@ -2800,7 +2889,7 @@ A multi-system audit of the recently-built features surfaced several offline cor
 - **New `CR.Achievements` domain.** Achievements unlock on gameplay triggers (battle won, creature captured/defeated, item collected, quest completed, location visited, NPC talked to, creature level reached), record a per-trainer badge, and grant zero or more rewards. `achievement_definition` + child `achievement_reward` are baked content (GameData); `achievement_unlocked` is per-trainer state (PlayerData) with a did-I-win-the-insert upsert so re-triggers never double-grant. ([Achievements](backend/15-achievements.md))
 - **Stats-driven, no parallel counter.** `threshold` (default 1 = binary) is checked against existing lifetime `StatKey` aggregates via one batched read. Referenced achievements are `threshold == 1` in this version.
 - **Rides the quest funnel.** `QuestDomainService` takes an optional `IAchievementDomainService`; after the lifetime-stat write it evaluates and returns unlocks on `QuestProgressResult.NewlyUnlocked` / `QuestClaimResult.NewlyUnlocked`. Online and offline behave identically. `M7300`–`M7303` + `M9993` content bump.
-- **Unity.** `QuestManager` re-broadcasts `OnAchievementUnlocked`; `AchievementToastPresenter` shows the unlock toast; new `LocationTriggerBehaviour` (the first caller of `QuestManager.OnLocationVisited`) drives location achievements. Trophy screen + Content Studio authoring deferred.
+- **Unity.** `QuestManager` re-broadcasts `OnAchievementUnlocked`; `AchievementToastPresenter` shows the unlock toast; new `LocationTriggerBehaviour` (the first caller of `QuestManager.OnLocationVisited`) drives location achievements. Trophy screen + Crystalline Rift Studio authoring deferred.
 
 ## 2026-06-17
 
@@ -2809,7 +2898,7 @@ A multi-system audit of the recently-built features surfaced several offline cor
 - **Battle-victory loot.** New `CR.Loot` domain: loot tables layered by spawner (zone) and creature (species), independent per-entry drop chance, pure `LootRollService`. `BattleDomainService` rolls + grants on victory and returns `LootAward[]` on the outcome. `M8016` adds `spawner_content_key` to `battle` so the spawner table can roll. Loot `Experience` grants trainer XP, separate from per-creature combat XP. ([Loot System](backend/13-loot-system.md))
 - **World pickups.** New `CR.Pickups` domain: reusable `pickup_definition` (rewards JSON) + per-trainer `pickup_collected` (one-time persistent, revive-on-write upsert). Rewards grant a creature/item/currency/XP/quest set; `Quest` is consumer-routed. ([World Pickups](backend/14-world-pickups.md))
 - **Shared reward core.** `RewardType` + `RewardGrant` + `IRewardGrantService` extracted from `QuestDomainService.GrantRewardAsync`; quests now delegate. No new dependency cycles.
-- Unity client (offline repos/routers, `PickupBehaviour`, DI, migrators, Content Studio authoring) is a follow-on phase.
+- Unity client (offline repos/routers, `PickupBehaviour`, DI, migrators, Crystalline Rift Studio authoring) is a follow-on phase.
 
 ## 2026-06-12
 
@@ -3076,7 +3165,7 @@ The `ContentKeys.cs` constants file has been deleted. It was editor-only scaffol
 
 ## 2026-03-28
 
-### Content deletion — server soft-delete from Content Studio
+### Content deletion — server soft-delete from Crystalline Rift Studio
 
 Unregistering a definition or resolving an "Only Server" sync row can now remove the backend record rather than always pulling it back.
 

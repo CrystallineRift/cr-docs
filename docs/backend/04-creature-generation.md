@@ -32,6 +32,11 @@ public interface ICreatureGenerationService
     Task<GeneratedCreature> CreateFromSpawnerAsync(
         Guid spawnerTemplateId, Guid trainerId, int? seed = null, CancellationToken ct = default);
 
+    // Same, but at a caller-chosen level instead of one drawn from the template's band
+    Task<GeneratedCreature> CreateFromSpawnerAtLevelAsync(
+        Guid spawnerTemplateId, Guid trainerId, int? levelOverride,
+        int? seed = null, CancellationToken ct = default);
+
     // Validate a creation request before committing
     Task<bool> ValidateRequestAsync(CreateCreatureRequest request, CancellationToken ct = default);
 
@@ -184,9 +189,11 @@ This method bridges the Spawner system to the creature generation pipeline:
 1. Validate `spawnerTemplateId` and `trainerId` are non-empty
 2. Fetch `CreatureSpawnerTemplate` — throws `InvalidOperationException` if not found or not active
 3. `ResolveBaseCreatureIdAsync` — resolves the creature UUID with stale-reference fallback (see below)
-4. `DetermineLevelFromTemplate` — picks a random level in `[template.MinLevel, template.MaxLevel]` using `seed` if provided; defaults to level 1 if no range set
+4. `DetermineLevelFromTemplate` — picks a random level in `[template.MinLevel, template.MaxLevel]` using `seed` if provided; defaults to level 1 if no range set. Skipped entirely when a `levelOverride` was passed
 5. `ResolveGrowthProfileIdAsync` — resolves the growth profile UUID with stale-reference fallback (see below)
 6. Builds `CreateCreatureRequest` with `Gender = Unknown`, `FirstNature = default(Nature)`, and delegates to `CreateAsync`
+
+`CreateFromSpawnerAsync` is a one-line delegation to `CreateFromSpawnerAtLevelAsync(…, levelOverride: null, …)`; there is exactly one body, so the forced-level path cannot drift from the wild one. The override replaces **only** step 4 — species, growth profile and ability progression set still come from the template, so an operator granting a level 20 creature for testing gets the creature the world would have produced, aged. It exists for tooling that has to reach a level-gated rule without grinding to it; see [Moderation → Granting a creature from a spawn pool](?page=backend/18-moderation).
 
 ### Stale-UUID Fallback {#staleuuid-fallback}
 
@@ -204,7 +211,7 @@ The fallback keys (`creature_content_key`, `growth_profile_name`) are written to
 
 ### One id per species: `M10022AlignCreatureIdsToAuthored`
 
-The template fallback above only covers `creature_spawner_template`. `generated_creature.base_creature_id` has no content-key fallback, and since `ICreatureRepository` became local-only in Unity, an online capture's server-minted `base_creature_id` is resolved against the local `creature` table alone. The seed migrations M9998/M10000 inserted twelve species under ids of their own; on Postgres those seeds lost to `uix_creature_content_key` (`ON CONFLICT DO NOTHING`) and the server kept the ids the Content Studio push had minted, while every SQLite database (baked floor, player save, online caches) kept the seed ids. Result: those twelve species resolved to nothing in online play — no model in battle, blank portrait — while Cindris/Crabby/Mudcalf (authored before any seed) kept working.
+The template fallback above only covers `creature_spawner_template`. `generated_creature.base_creature_id` has no content-key fallback, and since `ICreatureRepository` became local-only in Unity, an online capture's server-minted `base_creature_id` is resolved against the local `creature` table alone. The seed migrations M9998/M10000 inserted twelve species under ids of their own; on Postgres those seeds lost to `uix_creature_content_key` (`ON CONFLICT DO NOTHING`) and the server kept the ids the Crystalline Rift Studio push had minted, while every SQLite database (baked floor, player save, online caches) kept the seed ids. Result: those twelve species resolved to nothing in online play — no model in battle, blank portrait — while Cindris/Crabby/Mudcalf (authored before any seed) kept working.
 
 `M10022AlignCreatureIdsToAuthored` (Creatures domain) closes the split on every engine. The canonical id of a species is **the `id` on its `CreatureDefinition` asset** (which equals the dev server's id). For each species it first repoints every column that holds a base-creature id — `generated_creature.base_creature_id`, `creature.evolution_creature_id`, `creature_evolution.from/to_base_creature_id`, `creature_spawner_template.base_creature_id` — wherever it names either the row's current (different) id or the retired seed id, then moves `creature.id` onto the authored id. Rows already pointing at a retired seed id are repointed even when the local `creature` row never carried it (the server's case: captures pushed from offline saves under seed ids). Idempotent, `Schema.Table(...).Exists()`-guarded, `LOWER(CAST(... AS TEXT))` on SQLite and plain `=` on Postgres uuid. Covered by `CR.Data.Migrations.Test/CreatureIdAlignmentSqliteTests` (invariant: every species carries its authored id; no retired seed id survives; drifted row + all references converge; re-run is a no-op). The seed ids in M9998/M10000 are therefore transient — a fully migrated database never carries them, and new seeds should use the asset id directly.
 
@@ -442,7 +449,7 @@ shares one set.
 
 ### Authoring
 
-The field round-trips through the Content Studio surfaces:
+The field round-trips through the Crystalline Rift Studio surfaces:
 
 - `POST /api/v1/ability-progression/sets/{id}/entries` — `unlockQuestContentKey` on the request and response
 - `POST /api/v1/ability-progression/sets/sync` — `unlockQuestContentKey` per entry; a changed gate on an

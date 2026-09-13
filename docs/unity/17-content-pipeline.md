@@ -149,7 +149,7 @@ out.
 The source prefab is unpacked completely rather than kept as a variant, so a CR creature never
 inherits from a vendor prefab that a pack reimport can change or delete.
 
-Push the result with `cr_sync_creatures` (the same call Content Studio's per-row Push makes), then
+Push the result with `cr_sync_creatures` (the same call Crystalline Rift Studio's per-row Push makes), then
 re-bake the offline floor:
 
 ```bash
@@ -176,7 +176,7 @@ database and the game agreed on the wrong answer.
 
 | Copy | Used by |
 |---|---|
-| `ContentCreatorSyncHelper` | Content Studio push/pull |
+| `ContentCreatorSyncHelper` | Crystalline Rift Studio push/pull |
 | `AbilityEditorSyncHelper` | Ability authoring |
 | `ServerContentSyncService` | Runtime content sync into SQLite |
 

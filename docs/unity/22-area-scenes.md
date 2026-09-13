@@ -487,7 +487,7 @@ inventory. The keys are numbered rather than biome-named because this database i
 the real game; `demo-` marks the playtest set.
 
 Each NPC has a matching `NpcDefinition` SO (registered on the `ContentDefinitionProvider`, with a
-display key in `localization/npcs.yaml`) so Content Studio syncs it to the server like any other
+display key in `localization/npcs.yaml`) so Crystalline Rift Studio syncs it to the server like any other
 content. Quest accepts are idempotent, so five quest givers still grant a quest once.
 
 ### Where a pair actually stands

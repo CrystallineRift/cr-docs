@@ -287,7 +287,7 @@ Two independent gates enforce this, both checking `MarketManager.IsAvailable`
 - [Creature Market (backend)](../backend/17-creature-market.md) — data model, the escrow trainer,
   the transfer core, `MarketListingView` joins, REST status mapping.
 - [Moderation (backend)](../backend/18-moderation.md) — shadow bans and admin listing removal;
-  the Content Studio LIVE OPS tabs that operate them are in
+  the Crystalline Rift Studio LIVE OPS tabs that operate them are in
   [Content Registry → Live ops tabs](08-content-registry.md).
 - [Merchant Shop UI](18-merchant-shop.md) — the sibling item-shop screen this one's layout and
   gamepad-navigation patterns are drawn from.

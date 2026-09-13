@@ -59,7 +59,7 @@ Migrations `M7200`–`M7202` (dual-engine, soft-delete, idempotent seeds). `rewa
 - `GET /api/v1/pickups/{trainerId}/collected` — every collected instance id for the trainer; fetched once per world load so already-collected pickups never spawn. Ownership-checked (token account must own the trainer, else 404).
 - `POST /api/v1/pickups/{trainerId}/collect` `{ contentKey, instanceId }` — the server-authoritative collect: grants non-quest rewards and marks collected in one place, returns `PickupCollectResult` (`status`: Collected / AlreadyCollected / DefinitionNotFound, `grantedRewards`, `questRewards`, `spawnedCreatureIds`). Ownership-checked. Pinned by `PickupCollectHttpTests` (currency actually credits, second collect grants nothing, IDOR 404).
 - `POST /api/v1/pickups/{trainerId}/collected` `{ instanceId }` — record collection only (idempotent; legacy/low-level).
-- `GET|POST /api/v1/pickups/sync-config` — Content Studio pull/push.
+- `GET|POST /api/v1/pickups/sync-config` — Crystalline Rift Studio pull/push.
 
 ## Offline parity
 
@@ -67,4 +67,4 @@ The pickup definition (content) and the collected store both follow the online/o
 
 ## Follow-ups
 
-- Content Studio authoring (`PickupDefinition` SO + tab + sync write service).
+- Crystalline Rift Studio authoring (`PickupDefinition` SO + tab + sync write service).

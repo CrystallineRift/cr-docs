@@ -384,7 +384,7 @@ Buckets: `Copied` (relabelled `baked` for the portrait tool), `Skipped`, `Missin
 
 ## Sync to the backend
 
-Icon keys ride the existing Content Studio push/pull. `ContentCreatorSyncHelper` and
+Icon keys ride the existing Crystalline Rift Studio push/pull. `ContentCreatorSyncHelper` and
 `AbilityEditorSyncHelper` carry `iconAssetKey` on every DTO in both directions:
 
 - **Push** uses `SyncFieldMerge.PreferLocalUnlessBlank(local, server)` — an authored key wins, a blank
@@ -456,7 +456,7 @@ engine-specific boolean literal for no gain.
 
 :::warning[A later seed is not covered]
 A backfill runs **once per database**. Anything seeded by a migration numbered **above 6022 / 12013**
-lands with `icon_asset_key` null and stays that way, and so does anything Content Studio pushes
+lands with `icon_asset_key` null and stays that way, and so does anything Crystalline Rift Studio pushes
 afterwards without a key. Nothing today is affected — the highest item seed is M6020 and the highest
 creature/ability/condition seed is M12011 — but a new seed migration must set `icon_asset_key` itself
 (`'icons/<type>/' || <key>`, verbatim) or re-register this rule in its own migration. No test guards

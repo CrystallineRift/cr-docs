@@ -318,7 +318,7 @@ See [Introduction](?page=00-introduction) for more on the `content_key` vs UUID 
 ## The CR menu
 
 The menu holds what you reach for while working. Five entries sit at the top:
-**Content Studio**, **Trainer Battle Author**, **Localization Editor**, **Database Manager**,
+**Crystalline Rift Studio**, **Trainer Battle Author**, **Localization Editor**, **Database Manager**,
 **Content Audit**. Everything else is grouped by subject:
 
 - **Build/** — Build Players…, Deploy to Steam Deck…, Bake Floor From Server, Create Standalone Build Profiles
@@ -330,9 +330,9 @@ The menu holds what you reach for while working. Five entries sit at the top:
 ### What was removed, and where it went
 
 Three entries were duplicates. The windows are unchanged and open from
-**Content Studio → Pipeline ▾**: *Publish to Server* (was `CR/Publish Content`), *Build & Deploy
+**Crystalline Rift Studio → Pipeline ▾**: *Publish to Server* (was `CR/Publish Content`), *Build & Deploy
 (S3/MinIO)* (was `CR/Deploy Content`), and *Pipeline Status* (was `CR/CR Studio`) — the drift
-dashboard, which reports on exactly the content Content Studio edits.
+dashboard, which reports on exactly the content Crystalline Rift Studio edits.
 
 Fourteen more were one-shot scaffolding or repairs — things run once when a system is first set
 up, or after a specific breakage. **The code is untouched; only the menu entry is gone**, and

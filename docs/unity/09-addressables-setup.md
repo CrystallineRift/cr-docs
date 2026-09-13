@@ -117,7 +117,7 @@ The Content Creator does **not** automatically mark assets as Addressable — th
 
 ---
 
-## Publish Content Tool — `Window → Content Studio → Pipeline ▾ → Publish to Server`
+## Publish Content Tool — `Window → Crystalline Rift Studio → Pipeline ▾ → Publish to Server`
 
 Before the runtime `IGameAssetLoader` can resolve a key, the key must exist in `game_assets`. There are two paths depending on mode:
 
@@ -137,7 +137,7 @@ After seeding, the log should show `"Getting game asset by key"` → `"Getting g
 
 ---
 
-## Deploy Content Tool — `Window → Content Studio → Pipeline ▾ → Build & Deploy (S3/MinIO)`
+## Deploy Content Tool — `Window → Crystalline Rift Studio → Pipeline ▾ → Build & Deploy (S3/MinIO)`
 
 Wraps the deploy scripts in a GUI. All settings are saved in `EditorPrefs` (not committed to git).
 
@@ -211,7 +211,7 @@ For rapid iteration during development, stay on **Use Asset Database** and skip 
 ```
 1. Create/edit prefab in Assets/CR/Content/<Domain>/
 2. Mark Addressable, set address (e.g. creatures/cindris)
-3. Window → Content Studio → Pipeline ▾ → Publish to Server → Seed Assets to Local SQLite
+3. Window → Crystalline Rift Studio → Pipeline ▾ → Publish to Server → Seed Assets to Local SQLite
 4. Groups window: Play Mode Script = "Use Asset Database (fastest)"
 5. Hit Play — loads directly from project files, no build needed
 ```
@@ -221,7 +221,7 @@ For rapid iteration during development, stay on **Use Asset Database** and skip 
 ```
 1. Groups window: select correct Profile (MinIO or AWS)
 2. Groups window: Build → New Build → Default Build Script
-3. Window → Content Studio → Pipeline ▾ → Build & Deploy (S3/MinIO) → Deploy to MinIO (or S3)
+3. Window → Crystalline Rift Studio → Pipeline ▾ → Build & Deploy (S3/MinIO) → Deploy to MinIO (or S3)
 4. Groups window: Play Mode Script = "Use Existing Build"
 5. Hit Play — downloads bundles from CDN
 ```
@@ -231,8 +231,8 @@ For rapid iteration during development, stay on **Use Asset Database** and skip 
 ```
 1. Designer creates definitions via Window → CR → Content Creator
 2. Artist creates prefabs, marks Addressable, sets address
-3. Window → Content Studio → Pipeline ▾ → Publish to Server → Publish to Server (bumps content_version in DB)
-4. Window → Content Studio → Pipeline ▾ → Build & Deploy (S3/MinIO) → Build Addressables + Deploy (per platform)
+3. Window → Crystalline Rift Studio → Pipeline ▾ → Publish to Server → Publish to Server (bumps content_version in DB)
+4. Window → Crystalline Rift Studio → Pipeline ▾ → Build & Deploy (S3/MinIO) → Build Addressables + Deploy (per platform)
 5. Clients call /api/v1/version-check on startup → content_update_required = true
 6. Background sync fetches new catalog → new bundles downloaded on demand
 ```
@@ -249,7 +249,7 @@ runtime can load definitions by key. `AddressableContentRegistrar` centralizes t
 - **Group** = `CRContent` (get-or-created; falls back to the default group if creation is blocked).
   Referenced art keeps using the `CRArt` convention at `address = assetKey`.
 
-In **Content Studio**:
+In **Crystalline Rift Studio**:
 - Each content row shows a **✓ Addr / + Addr** badge; clicking registers that SO in one step.
 - Each tab's action row shows **Fix Addr (N)** — registers every definition on that tab missing its entry.
 - The header has a global **✦ Fix All Addressables** — registers everything missing across all types.

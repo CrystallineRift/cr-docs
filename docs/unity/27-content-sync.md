@@ -10,7 +10,7 @@ the server while the game runs. Content repositories read it; nothing else.
 
 ```
 Backend content tables (Postgres, source of truth)
-   ▲ Editor publish (Content Studio)      ▼ bake at release · pull at boot
+   ▲ Editor publish (Crystalline Rift Studio)      ▼ bake at release · pull at boot
 StreamingAssets/CR/game-data.bytes  →  persistentDataPath/game-data.bytes
                                             ▼
                           every content repository, in both play modes
@@ -34,7 +34,7 @@ not share.
 | `ContentSyncReport` / `ContentDomainResult` | Per-domain outcome. `MayRecordVersion` is true only when every domain applied. |
 | `ContentSyncPaging` | Page-walk rules: full page means keep going, short page ends it, hard cap stops a runaway. |
 | `ContentSyncSafety` | Guards the destructive half — deletions reconcile only against a provably complete pull *and* a plausible row count. |
-| `BattleMissionEditorSyncHelper` | Content Studio's battle-mission transport (`GET /all`, `PUT`, `DELETE`). Editor-only, and the one content type whose offline copy comes from an exported seed migration rather than from this pull. |
+| `BattleMissionEditorSyncHelper` | Crystalline Rift Studio's battle-mission transport (`GET /all`, `PUT`, `DELETE`). Editor-only, and the one content type whose offline copy comes from an exported seed migration rather than from this pull. |
 | `ISpawnerSyncClient` | The spawner write path, reused by the pull. Optional on the sync service: a caller baking into a scratch file cannot supply one that writes to the right place, so it passes null and the domain is skipped rather than writing into the live database. |
 
 ### Domains, in the order they run
@@ -50,8 +50,27 @@ not share.
 | `ElementalDamage` | `GET /api/v1/elemental-damage/versions` then `?version=` per version | no | n/a — dense grid, overwritten |
 
 **The sync carries the player's bearer token.** Every content route sits behind the API's fallback
-authorization policy, so an unauthenticated `GET /api/v1/abilities` comes back `401` and the domain
-reports Failed. `ServerContentSyncService` takes an optional `ITokenManager` and the installer
+authorization policy — `RequireAuthenticatedUser` — so an unauthenticated `GET /api/v1/abilities`
+comes back `401` and the domain reports Failed.
+
+:::caution A content *read* must never be gated on content:write
+Two of the routes in this table quietly stopped honouring that, and the sync failed those domains on
+every single boot:
+
+- `GET /api/v1/ability-progression/sets` was gated on `RequireContentWrite`. A player token has no
+  write scope, so it answered **403 Not allowed** forever.
+- `GET /api/v1/spawners/content-registry/full` was never mapped on the AIO host at all — that host
+  hand-maps spawner routes instead of calling `MapSpawnerEndpoints` — so it answered **404**. Its
+  sibling `/content-registry` had already been hand-mapped once for the same reason.
+
+Neither broke gameplay, which is why they survived: a failed domain falls back to the baked offline
+floor, and the only symptom is the warning "local content may be behind the server". That is the
+failure mode to watch for — content silently a build behind, not a crash.
+
+The rule: reads the client performs take the fallback policy; `content:write` gates writing. The AIO
+route now delegates to the shared `SpawnerEndpoints` handler rather than carrying its own copy,
+because two implementations of one route on two hosts is how they drifted apart to begin with.
+::: `ServerContentSyncService` takes an optional `ITokenManager` and the installer
 supplies the same one every other HTTP client uses; the Editor's bake-from-server tool constructs
 the service without one.
 
@@ -123,7 +142,7 @@ server-side pool edit was not merely ignored, it was overwritten by the build's 
 path can POST; a regression test fails if anyone re-adds an online binding. The sync pulls
 `GET /api/v1/spawners/content-registry/full` (header, pools and creature templates together, so it
 is one request rather than one per spawner) and writes through that same local client, reusing its
-existing upsert and prune logic. Content Studio's editor push is unaffected — it builds its own
+existing upsert and prune logic. Crystalline Rift Studio's editor push is unaffected — it builds its own
 `HttpClient` and never went through DI.
 
 `SpawnerRecoveryService` used to sync-then-count-local, which online could never satisfy. It now
@@ -235,8 +254,8 @@ Three files in that project are worth knowing by name:
   others will take. The *runtime* read is already routed (`BattleMissionTemplateRoutedSource` —
   server when online, floor when offline), so an edited mission takes effect online without a bake.
   What the runtime pull does **not** do is write the floor. Authored missions reach offline play by
-  being exported from Content Studio as a seed migration and rebaked — see
-  [Battle Extensions → Authoring missions in Content Studio](?page=unity/24-battle-extensions).
+  being exported from Crystalline Rift Studio as a seed migration and rebaked — see
+  [Battle Extensions → Authoring missions in Crystalline Rift Studio](?page=unity/24-battle-extensions).
   That is the standard, not a gap: the offline floor is reviewable content in the repository, never
   whatever happened to be in one machine's local database.
 - Quest templates still overwrite from ScriptableObjects at world init.

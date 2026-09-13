@@ -77,7 +77,7 @@ The Unity-side `SpawnerDefinition` ScriptableObject mirrors the backend `content
 | `spawnCooldownSeconds` | Seconds between spawn cycles (default 300). Synced from server. |
 | `pools[]` | One or more weighted pools, each containing creature templates (see below). |
 
-`SpawnerDefinition` is the **single** source of truth for spawner content — it holds the zone's pools and templates directly. (The older scene-attached `SpawnerZoneConfig` SO has been removed; everything is authored as a `SpawnerDefinition` in the content registry, via the Spawners / Spawn Pools tabs of Content Studio or `Assets → Create → CR → Content → Spawner Definition`.)
+`SpawnerDefinition` is the **single** source of truth for spawner content — it holds the zone's pools and templates directly. (The older scene-attached `SpawnerZoneConfig` SO has been removed; everything is authored as a `SpawnerDefinition` in the content registry, via the Spawners / Spawn Pools tabs of Crystalline Rift Studio or `Assets → Create → CR → Content → Spawner Definition`.)
 
 Each `SpawnerPoolConfig`:
 | Field | Description |
@@ -104,13 +104,13 @@ Two further **optional** fields exist on the sync payload (`SpawnerTemplateSyncD
 | `id` | Caller-chosen template UUID. Trainer teams push a **deterministic** id per slot because the battle handshake resolves an opponent by `creature_spawner_template.id`; wild spawners omit it and keep getting a fresh random id. A value that is not a valid non-empty UUID is refused with the same `409` as an unresolvable content key — falling back to a random id would answer `200` and still break the lookup. |
 | `progressionSetName` | Name of the `AbilityProgressionSet` row, resolved server-side via `IAbilityProgressionSetRepository.GetByNameAsync`. Wins over `abilityProgressionSetId` when both are sent. An unresolvable name refuses the whole sync. |
 
-**How the sync works:** `SpawnerDefinitionSyncBehaviour` writes every `SpawnerDefinition` in the content registry to the **local SQLite** spawner tables at world init, through `ISpawnerSyncClient` — which the runtime container binds to `LocalSpawnerSyncClient`, and only that. The game cannot push spawner content to the server: `SpawnerSyncHttpClient` (`POST /api/v1/spawners/sync-config`) exists for editor tooling and is not resolved through the Zenject graph at all, so a play session can never overwrite a server edit. The server-side push is Content Studio's, via `ContentCreatorSyncHelper.SyncSpawnerFull`, which makes its own direct HTTP call. That endpoint **resolves every creature content key, growth-profile name, progression-set name and explicit template id in the request first**, then upserts the global template spawner by `contentKey`, soft-deletes existing pools/templates, and recreates them from the request.
+**How the sync works:** `SpawnerDefinitionSyncBehaviour` writes every `SpawnerDefinition` in the content registry to the **local SQLite** spawner tables at world init, through `ISpawnerSyncClient` — which the runtime container binds to `LocalSpawnerSyncClient`, and only that. The game cannot push spawner content to the server: `SpawnerSyncHttpClient` (`POST /api/v1/spawners/sync-config`) exists for editor tooling and is not resolved through the Zenject graph at all, so a play session can never overwrite a server edit. The server-side push is Crystalline Rift Studio's, via `ContentCreatorSyncHelper.SyncSpawnerFull`, which makes its own direct HTTP call. That endpoint **resolves every creature content key, growth-profile name, progression-set name and explicit template id in the request first**, then upserts the global template spawner by `contentKey`, soft-deletes existing pools/templates, and recreates them from the request.
 
 > **Templates carrying an explicit `id` are written with an upsert-revive** (`INSERT … ON CONFLICT (id) DO UPDATE …, deleted = false`) rather than a plain insert. They have to be: the recreate step runs *after* every existing template for the spawner was soft-deleted, so re-pushing the same deterministic id lands on the row the sync itself just deleted and a plain insert collides on the primary key. Templates with no `id` keep the plain-insert path unchanged. Every recreated template — both paths — is written with `is_active = true` and populates `creature_content_key` / `growth_profile_name` so the stale-UUID repair path has something to repair from.
 
 > **Postgres used to discard pushed ids.** `BaseCreatureSpawnerTemplateRepository`'s Postgres INSERT omitted the `id` column and let the server default mint one, and the SQLite branch overwrote `template.Id` with `Guid.NewGuid()` unconditionally. Both now honour a caller-supplied id and mint only when it is `Guid.Empty`. Without that, a trainer's team could never be looked up at the id the client asked for.
 
-> **Resolution happens before anything is deleted, and a payload the server cannot fully resolve is refused with `409`** — the response names each missing creature or growth profile, and the database is untouched (not even a spawner row is created for a new content key). This was previously the other way round: unresolved templates were skipped mid-rebuild with a log warning while the call answered `200 success`, so a spawner pushed before its creatures or growth profiles existed came out the far side with empty pools and no error anywhere. Content Studio's push order was also part of that — it sent spawners before growth profiles — and now runs in dependency order. Covered by `SpawnerConfigSyncServiceTests` (8 tests), which assert that a refused sync deletes nothing and creates nothing. `SpawnerWorldBehaviour` no longer syncs anything — it just resolves the spawner by its `_spawnerContentKey` and activates the encounter. The global template is the sole source of truth; the spawn path reads pools directly by `contentKey`.
+> **Resolution happens before anything is deleted, and a payload the server cannot fully resolve is refused with `409`** — the response names each missing creature or growth profile, and the database is untouched (not even a spawner row is created for a new content key). This was previously the other way round: unresolved templates were skipped mid-rebuild with a log warning while the call answered `200 success`, so a spawner pushed before its creatures or growth profiles existed came out the far side with empty pools and no error anywhere. Crystalline Rift Studio's push order was also part of that — it sent spawners before growth profiles — and now runs in dependency order. Covered by `SpawnerConfigSyncServiceTests` (8 tests), which assert that a refused sync deletes nothing and creates nothing. `SpawnerWorldBehaviour` no longer syncs anything — it just resolves the spawner by its `_spawnerContentKey` and activates the encounter. The global template is the sole source of truth; the spawn path reads pools directly by `contentKey`.
 
 Key columns on `creature_spawner_template`:
 - `base_creature_id` — which creature species to generate
@@ -129,10 +129,10 @@ Key columns on `creature_spawner_template`:
 The full spawn flow in `CreatureSpawnDomainService.SpawnCreaturesAsync`:
 
 1. **Validation phase** — fetch the spawner; verify it exists and `is_active = true`. **No capacity or cooldown check** — the spawner is global, read-only content with no per-player counters. (A `BypassValidation` request flag skips even the active check.)
-2. **Pool selection phase** — fetch all active pools for the spawner; compute `totalWeight = SUM(pool.spawn_weight × pool.rarity_multiplier)`; pick a uniform random value in `[0, totalWeight]`; walk the pools accumulating weight until the random value is covered; fall back to the last pool if floating-point rounding overshoots. With per-trainer clones retired, a spawner with no pools of its own falls back to the global template's pools (resolved by `content_key`).
+2. **Pool selection phase** — fetch all active pools for the spawner; if `request.PoolName` is set, keep only the pool with that name (case-insensitive); compute `totalWeight = SUM(pool.spawn_weight × pool.rarity_multiplier)`; pick a uniform random value in `[0, totalWeight]`; walk the pools accumulating weight until the random value is covered; fall back to the last pool if floating-point rounding overshoots. With per-trainer clones retired, a spawner with no pools of its own falls back to the global template's pools (resolved by `content_key`).
 3. **Template selection phase** — fetch all active templates for the selected pool via `GetTemplatesByProbabilityAsync`; normalize by `SUM(spawn_probability)`; same weighted random walk; fall back to last template
 4. **Quantity generation** — use `request.RequestedQuantity` (future: clamp to `[min_quantity, max_quantity]` from the template)
-5. **Creature generation** — call `ICreatureGenerationService.CreateFromSpawnerAsync(template.Id, trainerId, seed)` for each creature; null results (e.g., from a missing trainer ID) are silently skipped
+5. **Creature generation** — call `ICreatureGenerationService.CreateFromSpawnerAtLevelAsync(template.Id, trainerId, request.LevelOverride, seed)` for each creature; null results (e.g., from a missing trainer ID) are silently skipped
 6. **Spawn execution (transactional)** — open a connection, begin a transaction; write one `spawner_spawn_history` row per spawned creature; commit; roll back on failure. The template is global, read-only content, so spawning **never mutates the spawner** (`current_count` / `last_spawn_time` are not touched).
 
 The transaction in step 6 ensures spawn-history rows are written atomically.
@@ -245,7 +245,7 @@ The spawner retains all its pools, templates, and history. Reactivate with `POST
 
 ### Option A: SpawnerDefinition ScriptableObject (recommended for designers)
 
-1. In Unity: `Assets → Create → CR → Content → Spawner Definition` (or create one from the Spawners tab in Content Studio)
+1. In Unity: `Assets → Create → CR → Content → Spawner Definition` (or create one from the Spawners tab in Crystalline Rift Studio)
 2. Set `contentKey` to a unique string (e.g. `"forest-wild-zone"`), fill in pools and templates (the Spawn Pools tab gives a pool/template-focused editor)
 3. Place a `SpawnerWorldBehaviour` in the scene and set its `_spawnerContentKey` to the same key
 4. On next play, `SpawnerDefinitionSyncBehaviour` syncs the definition (`POST /api/v1/spawners/sync-config`) — the backend creates the global template and all pools; `SpawnerWorldBehaviour` resolves it by key and runs encounters
@@ -322,11 +322,11 @@ POST /spawner/{spawnerId}/spawn
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/api/v1/spawners/sync-config` | Upsert a full spawner (pools + templates) from a `SpawnerDefinition` SO, or a trainer's team from a `TrainerBattleDefinition`. Templates may carry an optional `id` (deterministic, preserved verbatim) and `progressionSetName`. |
-| `GET` | `/api/v1/spawners/by-content-key/{contentKey}/config` | Full config (header + pools + creature templates) for one spawner, by `content_key`. Used by Content Studio pull. |
+| `GET` | `/api/v1/spawners/by-content-key/{contentKey}/config` | Full config (header + pools + creature templates) for one spawner, by `content_key`. Used by Crystalline Rift Studio pull. |
 
 Request body mirrors `SpawnerConfigSyncRequest` (contentKey, displayName, maxCapacity, spawnCooldownSeconds, pools[]).
 
-### Content Studio sync (push / pull)
+### Crystalline Rift Studio sync (push / pull)
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -338,7 +338,7 @@ Request body mirrors `SpawnerConfigSyncRequest` (contentKey, displayName, maxCap
 :::caution AIO maps these routes by hand
 `CR.REST.AIO/Program.cs` does not call `MapSpawnerEndpoints` — it declares spawner routes inline, so a
 route can exist in `SpawnerEndpoints.cs` and still 404 against the local dev host. `content-registry`
-was missing there, which meant Content Studio's **Spawners → Pull** always failed against AIO
+was missing there, which meant Crystalline Rift Studio's **Spawners → Pull** always failed against AIO
 regardless of what the database held: a spawner seeded by a migration could never become a
 `SpawnerDefinition` asset in Unity. When adding a spawner route, add it in both places, and verify
 against a running AIO (`curl localhost:8080/swagger/v1/swagger.json`), not just against the source.
@@ -366,10 +366,22 @@ public class SpawnRequest
     public Guid? TrainerId { get; set; }       // required for creature generation
     public int RequestedQuantity { get; set; } = 1;
     public Guid? SpawnSessionId { get; set; }  // optional; auto-generated if null
+    public bool BypassValidation { get; set; } // skip the active check (quest rewards, admin grants)
+    public string? PoolName { get; set; }      // null = roll every reachable pool, as the world does
+    public int? LevelOverride { get; set; }    // null = draw from the selected template's band
 }
 ```
 
 `TrainerId` is optional at the API level but required for creature generation. If `TrainerId` is null, `GenerateCreatureAsync` returns null and the creature is skipped. A spawn request with `TrainerId = null` will return a successful result with zero spawned creatures.
+
+`PoolName` and `LevelOverride` exist for tooling that has to aim a roll rather than take what the
+world gives — today, the admin "grant a creature from a spawn pool" action (see
+[Moderation](?page=backend/18-moderation)). `PoolName` is matched case-insensitively against
+`spawner_pool.name` and narrows the candidates **before** the weighted draw, so a caller who named a
+pool either gets that pool or gets `NoTemplatesAvailable`; it never falls back to a pool nobody asked
+for. `LevelOverride` replaces only the level — species, growth profile and ability progression set
+still come from the drawn template, so an overridden creature is the same creature, only older or
+younger.
 
 ## Error Codes
 
@@ -456,14 +468,14 @@ Nothing enforces this. There is no foreign key from `creature_spawner_template.b
 In August 2026 that gap emptied three spawn zones, and the failure travelled a long way from its
 cause before anyone saw it:
 
-1. The eight newest species were authored through the Content Studio, so Postgres generated their
+1. The eight newest species were authored through the Crystalline Rift Studio, so Postgres generated their
    ids. `M10000SeedRosterCreatures` then seeded the same content keys with its own hard-coded ids,
    lost to the UNIQUE index on `creature.content_key`, and `ON CONFLICT DO NOTHING` discarded the
    rows without a word.
 2. `M10001`/`M10002` wrote area templates pointing at those discarded ids.
 3. `GET /api/v1/spawners/by-content-key/{key}/config` resolves the creature by id to fill
    `creatureContentKey`, so it returned `""` for every affected template.
-4. A Content Studio pull wrote those blanks into the `SpawnerDefinition` assets.
+4. A Crystalline Rift Studio pull wrote those blanks into the `SpawnerDefinition` assets.
 5. The offline spawner sync read the assets, resolved no creature for any template, and soft-deleted
    all 23 it could not match — its normal "this template was removed from the config" behaviour.
 6. Meadow, Cave and Crags ended up with empty pools, so walking into the grass started a battle with
@@ -481,7 +493,7 @@ Three defences now sit along that path:
 against a full migration run, so a new seed that reintroduces a dangling reference fails the build
 rather than emptying a zone in a playtest.
 
-**When you seed a creature with a hard-coded id, check the id is the one the Content Studio assets
+**When you seed a creature with a hard-coded id, check the id is the one the Crystalline Rift Studio assets
 use.** A seed that loses to the UNIQUE index is silent, and everything downstream of it inherits the
 mismatch.
 

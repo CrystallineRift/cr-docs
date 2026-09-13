@@ -105,7 +105,7 @@ the server runs. It samples `is_playing_online` **on every call** and routes:
 
 | Mode    | Stock, prices, buy, sell, stock-from-spawner | Authoring ops (add/remove/set multiplier) |
 |---------|-----------------------------------------------|-------------------------------------------|
-| Online  | `NpcMerchantClientUnityHttp` → `/api/v1/merchants/*` on the **game** server address | `NotSupportedException` — the server owns stock; use Content Studio |
+| Online  | `NpcMerchantClientUnityHttp` → `/api/v1/merchants/*` on the **game** server address | `NotSupportedException` — the server owns stock; use Crystalline Rift Studio |
 | Offline | local `NpcMerchantService` over `playerData.bytes` | local |
 
 Online is **server-authoritative**: there is no local mirror of merchant stock and no fallback
@@ -156,7 +156,7 @@ forward into the real game, and biome names will not survive that.
 The stock spawners are seeded by `M6015SeedAreaMerchantSpawners` and authored as
 `ItemSpawnerDefinition` SOs under `Assets/CR/Content/Defs/ItemSpawners/`; the two must agree by
 content key, which `AreaMerchantSpawnerSqliteTests` reads back through the real roll service.
-Edit a merchant's stock by editing its SO and pushing from Content Studio — the seed is the floor,
+Edit a merchant's stock by editing its SO and pushing from Crystalline Rift Studio — the seed is the floor,
 the SO is the authored truth.
 
 ## Drift the audit catches

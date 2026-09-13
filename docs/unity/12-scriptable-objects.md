@@ -51,7 +51,7 @@ loader can only ever return null. See [UI Icons](29-ui-icons.md).
 
 **Menu:** `CR/Content/Creature Definition`  
 **Instances:** `Assets/CR/Content/Defs/Creatures/`  
-**Backend sync:** Via Content Studio tool → `/api/v1/creatures/base`
+**Backend sync:** Via Crystalline Rift Studio tool → `/api/v1/creatures/base`
 
 Defines a creature species. Base stats here feed directly into the backend's `base_creature` table.
 
@@ -73,6 +73,7 @@ Defines a creature species. Base stats here feed directly into the backend's `ba
 | `baseSpeed` | int | Base Speed stat |
 | `abilityProgressionSetId` | string | GUID of the `AbilityProgressionSetConfig` SO that drives this species' level-up moves. Empty = none |
 | `growthProfileId` | string | GUID of the `GrowthProfileConfig` SO that governs stat scaling per level. Empty = none |
+| `evolutions` | `List<EvolutionRuleEntry>` | Evolution rules in priority order — target species and OR-groups of AND-requirements. Pushed on their own route after the creature; see [Evolution Authoring](./30-evolution-authoring.md) |
 
 ---
 
@@ -80,7 +81,7 @@ Defines a creature species. Base stats here feed directly into the backend's `ba
 
 **Menu:** `CR/Content/NPC Definition`  
 **Instances:** `Assets/CR/Content/Defs/NPCs/`  
-**Backend sync:** Via Content Studio tool → `/api/v1/npcs`
+**Backend sync:** Via Crystalline Rift Studio tool → `/api/v1/npcs`
 
 Defines an NPC template. The `contentKey` here is also the actor `Name` that must be set in the Pixel Crushers Dialogue System database for this NPC (see [Dialogue System Integration](./11-dialogue-integration.md)).
 
@@ -96,7 +97,7 @@ Defines an NPC template. The `contentKey` here is also the actor `Name` that mus
 
 **Menu:** `CR/Content/Item Definition`  
 **Instances:** `Assets/CR/Content/Defs/Items/`  
-**Backend sync:** Via Content Studio tool → `/api/v1/items`
+**Backend sync:** Via Crystalline Rift Studio tool → `/api/v1/items`
 
 Defines an item type including its effect, usage rules, and held-item trigger.
 
@@ -163,7 +164,7 @@ Defines a spawner zone: capacity, timing, and weighted pools of creature templat
 
 **Menu:** `CR/Quest Definition`  
 **Instances:** `Assets/CR/Content/Quests/`  
-**Backend sync:** Content Studio → Quests → **⬆ Push All** → `PUT /api/v1/quests/templates/bulk`. (The inspector's own "Sync to Backend" / "Sync All Quests" buttons were removed — see [One way to reach the server](08-content-registry.md#one-way-to-reach-the-server).)
+**Backend sync:** Crystalline Rift Studio → Quests → **⬆ Push All** → `PUT /api/v1/quests/templates/bulk`. (The inspector's own "Sync to Backend" / "Sync All Quests" buttons were removed — see [One way to reach the server](08-content-registry.md#one-way-to-reach-the-server).)
 
 Defines a quest template. The backend owns instance/progress data; this SO is the designer's source of truth for quest structure and objectives.
 
@@ -209,13 +210,13 @@ Defines a quest template. The backend owns instance/progress data; this SO is th
 
 ## Ability & Progression SOs (Backend-Synced)
 
-These SOs are authored in the Content Studio tool and synced to the backend. They are referenced by GUID (not `content_key`) from other SOs.
+These SOs are authored in the Crystalline Rift Studio tool and synced to the backend. They are referenced by GUID (not `content_key`) from other SOs.
 
 ### AbilityConfig
 
 **Menu:** `CR/Content/Ability Config`  
 **Instances:** `Assets/CR/Content/Abilities/`  
-**Backend sync:** Via Content Studio → `/api/v1/abilities`
+**Backend sync:** Via Crystalline Rift Studio → `/api/v1/abilities`
 
 Defines a single battle ability. `id` is a stable GUID auto-generated on first create — never change it after syncing.
 
@@ -248,7 +249,7 @@ Defines a single battle ability. `id` is a stable GUID auto-generated on first c
 | `hitVfxKey` | string | VFX prefab played at the target on impact |
 | `cameraCueKey` | string | Camera cue / shake / zoom identifier |
 
-> **Migration note:** The previous UUID `assetId` field was dropped in cr-api migration `M1021ReplaceAssetIdsWithKeys` and replaced with the key columns above. Existing data is preserved as NULL keys — populate via Content Studio.
+> **Migration note:** The previous UUID `assetId` field was dropped in cr-api migration `M1021ReplaceAssetIdsWithKeys` and replaced with the key columns above. Existing data is preserved as NULL keys — populate via Crystalline Rift Studio.
 
 **AbilityConditionEntry** (nested):
 
@@ -266,7 +267,7 @@ Defines a single battle ability. `id` is a stable GUID auto-generated on first c
 
 **Menu:** `CR/Content/Status Condition Config`  
 **Instances:** `Assets/CR/Content/Defs/StatusConditions/`  
-**Backend sync:** Via Content Studio → `/api/v1/status-conditions`
+**Backend sync:** Via Crystalline Rift Studio → `/api/v1/status-conditions`
 
 Standalone ScriptableObject form of a status condition. Used when a condition is shared across multiple abilities instead of inlined per-ability via `AbilityConditionEntry`.
 
@@ -295,7 +296,7 @@ Standalone ScriptableObject form of a status condition. Used when a condition is
 
 **Menu:** `CR/Content/Ability Progression Set Config`  
 **Instances:** `Assets/CR/Content/ProgressionSets/`  
-**Backend sync:** Via Content Studio → `/api/v1/ability-progression-sets`
+**Backend sync:** Via Crystalline Rift Studio → `/api/v1/ability-progression-sets`
 
 Maps levels to ability unlocks for a creature species (or a spawner template override). Referenced by `id` (GUID) from `CreatureDefinition.abilityProgressionSetId` and `SpawnerTemplateConfig.abilityProgressionSet`.
 
@@ -329,7 +330,7 @@ an entry that reads as authored and can never unlock. See
 
 **Menu:** `CR/Content/Growth Profile Config`  
 **Instances:** `Assets/CR/Content/GrowthProfiles/`  
-**Backend sync:** Via Content Studio → `/api/v1/growth-profiles`
+**Backend sync:** Via Crystalline Rift Studio → `/api/v1/growth-profiles`
 
 Controls XP rate and per-stat scaling multipliers for a creature. Referenced by `id` (GUID) from `CreatureDefinition.growthProfileId` and `SpawnerTemplateConfig.growthProfileName`.
 
@@ -352,7 +353,7 @@ Controls XP rate and per-stat scaling multipliers for a creature. Referenced by 
 
 **Menu:** `CR/Content/Battle Mission`  
 **Instances:** `Assets/CR/Content/Defs/BattleMissions/`  
-**Backend sync:** Via Content Studio → Battle Missions → `PUT /api/v1/battle-missions/{id}`
+**Backend sync:** Via Crystalline Rift Studio → Battle Missions → `PUT /api/v1/battle-missions/{id}`
 
 One optional in-battle challenge — "burn the same target three times" — and the ability completing
 it unlocks for the rest of the fight. Mirrors cr-api's `battle_mission_template` row exactly; the
@@ -384,7 +385,7 @@ so authored missions reach offline play through **⬇ Export Seed Migration** �
 
 **Menu:** `CR/Content/Elemental Reaction`  
 **Instances:** `Assets/CR/Content/Defs/Reactions/`  
-**Backend sync:** Via Content Studio → Reactions → `PUT /api/v1/elemental-reactions/{id}`
+**Backend sync:** Via Crystalline Rift Studio → Reactions → `PUT /api/v1/elemental-reactions/{id}`
 
 One elemental synergy: a condition already on the target (the *primer*) plus an incoming ability of
 a particular element (the *detonator*) produce an outsized result — "the water conducts the charge".
@@ -420,7 +421,7 @@ authored reactions reach offline play through **⬇ Export Seed Migration** — 
 
 **Menu:** `CR/Content/Elemental Damage Matrix`  
 **Instances:** `Assets/CR/Content/Defs/ElementalDamage/` — one asset per version  
-**Backend sync:** Via Content Studio → Elemental Damage → `PUT /api/v1/elemental-damage/versions/{version}`
+**Backend sync:** Via Crystalline Rift Studio → Elemental Damage → `PUT /api/v1/elemental-damage/versions/{version}`
 
 One version of the type-matchup matrix: what every element does to every other element. Mirrors the
 `elemental_damage` rows carrying that `version` string.
@@ -554,21 +555,21 @@ This asset is authored in the Pixel Crushers **Dialogue Editor** window (`Tools 
 
 ## Summary: What Syncs to the Backend
 
-Every row below pushes the same way: **Content Studio → the owning tab → ⬆ Push All** (or the global ⬆ Push All Content). Inspectors no longer carry their own sync buttons — see [One way to reach the server](08-content-registry.md#one-way-to-reach-the-server).
+Every row below pushes the same way: **Crystalline Rift Studio → the owning tab → ⬆ Push All** (or the global ⬆ Push All Content). Inspectors no longer carry their own sync buttons — see [One way to reach the server](08-content-registry.md#one-way-to-reach-the-server).
 
 | SO | Sync mechanism | Endpoint |
 |----|---------------|----------|
-| `CreatureDefinition` | Content Studio tool | `/api/v1/creatures/base` |
-| `NpcDefinition` | Content Studio tool | `/api/v1/npcs` |
-| `ItemDefinition` | Content Studio tool | `/api/v1/items` |
-| `SpawnerDefinition` | Content Studio tool | `/api/v1/spawners/sync-config` |
-| `QuestDefinition` | Content Studio tool | `/api/v1/quests/templates/bulk` |
-| `AbilityConfig` | Content Studio tool | `/api/v1/abilities` |
-| `AbilityProgressionSetConfig` | Content Studio tool | `/api/v1/ability-progression-sets` |
-| `GrowthProfileConfig` | Content Studio tool | `/api/v1/growth-profiles` |
-| `BattleMissionDefinition` | Content Studio tool | `/api/v1/battle-missions/{id}` (offline copy via exported seed migration) |
-| `ElementalReactionDefinition` | Content Studio tool | `/api/v1/elemental-reactions/{id}` (offline copy via exported seed migration) |
-| `ElementalDamageMatrixConfig` | Content Studio tool | `/api/v1/elemental-damage/versions/{version}` (offline copy via exported seed migration) |
+| `CreatureDefinition` | Crystalline Rift Studio tool | `/api/v1/creatures/base` |
+| `NpcDefinition` | Crystalline Rift Studio tool | `/api/v1/npcs` |
+| `ItemDefinition` | Crystalline Rift Studio tool | `/api/v1/items` |
+| `SpawnerDefinition` | Crystalline Rift Studio tool | `/api/v1/spawners/sync-config` |
+| `QuestDefinition` | Crystalline Rift Studio tool | `/api/v1/quests/templates/bulk` |
+| `AbilityConfig` | Crystalline Rift Studio tool | `/api/v1/abilities` |
+| `AbilityProgressionSetConfig` | Crystalline Rift Studio tool | `/api/v1/ability-progression-sets` |
+| `GrowthProfileConfig` | Crystalline Rift Studio tool | `/api/v1/growth-profiles` |
+| `BattleMissionDefinition` | Crystalline Rift Studio tool | `/api/v1/battle-missions/{id}` (offline copy via exported seed migration) |
+| `ElementalReactionDefinition` | Crystalline Rift Studio tool | `/api/v1/elemental-reactions/{id}` (offline copy via exported seed migration) |
+| `ElementalDamageMatrixConfig` | Crystalline Rift Studio tool | `/api/v1/elemental-damage/versions/{version}` (offline copy via exported seed migration) |
 | `ContentDefinitionProvider` | — | Client-only registry |
 | `BattleAnimationConfig` | — | Client-only |
 | `CreatureAnimationProfile` | — | Client-only |

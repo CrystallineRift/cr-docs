@@ -273,5 +273,10 @@
     "section": "Unity",
     "title": "UI Icons",
     "path": "unity/29-ui-icons"
+  },
+  {
+    "section": "Unity",
+    "title": "Evolution Authoring",
+    "path": "unity/30-evolution-authoring"
   }
 ]
