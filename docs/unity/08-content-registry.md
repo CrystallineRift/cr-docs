@@ -596,18 +596,21 @@ with itself, because "half the game on production" is a state to be told about, 
 (`CR_ContentStudio_*`) and asmdef names kept the old "Content Studio" spelling when the window was
 renamed — changing them would lose every developer's saved server address for nothing visible.
 
-**Keys per environment.** Each environment card also carries a **Service key** and an **Admin key**
-row (`StudioConfigurationPanel.DrawKeys`). They are stored in EditorPrefs under
-`BackendKeyVault.PrefName(kind, environmentName)` — `CR_Studio_ServiceKey__production` and the like —
-so a key lives on this machine only and is never in the repo or a build. Shown masked
-(`EditorAuthStatus.MaskSecret`); **Reveal** shows it for `BackendKeyVault.RevealSeconds` (15) and
-then masks it again on its own, so a screen recording that catches the click does not keep the key
-on screen; **Set… / Change…** edits through a password field and a draft, **Clear** forgets it.
-Saving a key for the environment the editor is on activates it at once
-(`EditorServiceAuth.ServiceKey` / `EditorAdminAuth.AdminKey`, cached tokens dropped); **Use for
-editor** activates the stored pair when switching, and the note says which of the two it found. The
-line under each row (`BackendKeyVault.Describe`) says whether the stored key is the one in use. The
-Auth section still edits the key in use directly and points here for per-environment keys.
+**Key per environment.** Each environment card also carries a **Key** row
+(`StudioConfigurationPanel.DrawKeys`): a personal API key from Studio web (Account → API keys — see
+backend/20-personal-api-keys) or, for CI-style setups, the server's env key. It is stored in EditorPrefs
+under `BackendKeyVault.PrefName(BackendKeyVault.KeyKind, environmentName)` —
+`CR_Studio_ServiceKey__production` and the like — so a key lives on this machine only and is never in
+the repo or a build. Shown masked (`EditorAuthStatus.MaskSecret`); **Reveal** shows it for
+`BackendKeyVault.RevealSeconds` (15) and then masks it again on its own, so a screen recording that
+catches the click does not keep the key on screen; **Set… / Change…** edits through a password field
+and a draft, **Clear** forgets it. Saving a key for the environment the editor is on activates it at
+once — the one key is set as both `EditorServiceAuth.ServiceKey` and `EditorAdminAuth.AdminKey`, since
+the server now grants scopes from the account's roles, and cached tokens are dropped; **Use for
+editor** activates the stored key when switching. A key left in the old admin-only slot from the
+two-row layout is adopted (`BackendKeyVault.Resolve`) so it need not be pasted again. The line under
+the row (`BackendKeyVault.Describe`) says whether the stored key is the one in use. The Auth section
+still edits the key in use directly and points here.
 
 ### Live ops tabs — Players (18) and Marketplace (19)
 
