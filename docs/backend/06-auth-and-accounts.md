@@ -212,6 +212,10 @@ There are **two** keys, each read from configuration and each granting a differe
 | `AdminServiceKey` | `local-dev-admin-service-key` | `admin` | Operator-only routes (`AuthorizationPolicies.RequireAdmin`) — plus everything the other two policies cover |
 | `EditorServiceKey` | `local-dev-editor-service-key` | `content:write` | Content authoring push/pull (`AuthorizationPolicies.RequireContentWrite`) |
 
+A third option now exchanges at the same endpoint: a **personal API key**, owned by an account and
+created/revoked in Studio web rather than shared. See [Personal API Keys](20-personal-api-keys.md)
+for the format, the exchange order, and how scopes are resolved from the owning account's roles.
+
 The admin key is checked **first**, then the editor key. Both comparisons are constant-time (SHA-256 of each key, then `CryptographicOperations.FixedTimeEquals`) so response timing never leaks key contents. A key whose configuration value is **missing or blank disables that exchange entirely** — it never matches, so an unconfigured admin key cannot be unlocked by presenting an empty `serviceKey`. Any key matching neither returns 401.
 
 **`admin` implies `content:write` and `player`.** `AuthorizationPolicies.HasScope` (`AuthorizationPolicies.cs`) passes when the principal's scopes contain either the requested scope *or* `admin`, so a single admin token satisfies `RequireAdmin`, `RequireContentWrite`, and `RequirePlayer`. The reverse is not true: a `content:write` token is forbidden (403) from admin and player routes.

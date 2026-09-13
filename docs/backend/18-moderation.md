@@ -154,6 +154,10 @@ TOKEN=$(curl -s -X POST http://localhost:8080/auth/service-token \
 curl -s "http://localhost:8080/api/v1/admin/players?q=al" -H "Authorization: Bearer $TOKEN"
 ```
 
+A personal API key (Studio web → Account → API keys) exchanges at the same endpoint and is revoked
+the same audited way from **System → Accounts** — see [Personal API Keys](20-personal-api-keys.md).
+
+
 `admin` implies `content:write` and `player`; the reverse is not true, so a Crystalline Rift Studio
 (`content:write`) token gets **403** from every route below. `AdminServiceKey` left blank or unset
 disables the admin exchange entirely — the safe default for a production host.

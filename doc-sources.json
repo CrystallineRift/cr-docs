@@ -1332,6 +1332,20 @@
     },
     "description": "Live-ops moderation: account_moderation/admin_action, shadow bans and the hidden-seller rule, player dossiers, currency/item adjustments, and the /api/v1/admin routes behind RequireAdmin"
   },
+"backend/20-personal-api-keys": {
+    "docPath": "docs/backend/20-personal-api-keys.md",
+    "repos": {
+      "cr-api": [
+        "Auth/CR.Auth.Data.Migration/M0014*.cs",
+        "Auth/CR.Auth.Data/**/AccountApiKey*.cs",
+        "Auth/CR.Auth.Service.REST/Endpoints/AccountApiKeyEndpoints.cs",
+        "Auth/CR.Auth.Service.REST/Endpoints/ServiceTokenEndpoints.cs",
+        "Auth/CR.Auth.Model.REST/ApiKey*.cs"
+      ],
+      "cr-data": []
+    },
+    "description": "Personal API keys: account_api_key table (M0014, global VersionInfo namespace), IAccountApiKeyRepository, /account/keys + /api/v1/admin/accounts/{accountId}/keys routes, personal-key branch of POST /auth/service-token, scopes resolved from roles at exchange time, AdminActionKind.RevokeApiKey. cr-admin-web is not a tracked repo in this file — Studio web lives at src/pages/account/** (Account -> API keys), src/api/hooks/useApiKeys.ts, src/pages/system/ApiKeysPanel.tsx (System -> Accounts panel). Unity: SYSTEM -> Configuration -> environment card -> Key row (see unity/08-content-registry)."
+  },
   "unity/28-creature-market": {
     "docPath": "docs/unity/28-creature-market.md",
     "repos": {
