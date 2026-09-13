@@ -161,14 +161,14 @@ value is even tried as a personal key.
 
 ## Operator walkthrough
 
-1. **Create**, in Studio web: **Account → API keys → Create key…**, give it a name. The plaintext
+1. **Create**, in Studio web: **your account (header) → API keys → Create key…**, give it a name. The plaintext
    is shown exactly once, with a Copy button and "This is the only time it is shown" — copy it now.
 2. **Paste**, in the Unity editor: **Crystalline Rift Studio → SYSTEM → Configuration →** the
    environment's card **→ Key** row. Activating it exchanges the key at `/auth/service-token` for
    both the editor's content-write auth and its admin auth (one key, one row, replacing the old
    two-row Service key / Admin key split) — whichever scopes the owning account's roles grant.
 3. **Revoke** it from either side:
-   - **Studio web → Account → API keys → Revoke** (with confirm) — for a key you own.
+   - **Studio web → your account (click your name in the header) → API keys → Revoke** (with confirm) — for a key you own.
    - **Studio web → System → Accounts →** expand the account **→ API keys panel → Revoke…** (reason
      required) — for any account, as an admin. This is audited (`RevokeApiKey`); a self-revoke is
      not.

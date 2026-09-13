@@ -154,7 +154,7 @@ TOKEN=$(curl -s -X POST http://localhost:8080/auth/service-token \
 curl -s "http://localhost:8080/api/v1/admin/players?q=al" -H "Authorization: Bearer $TOKEN"
 ```
 
-A personal API key (Studio web → Account → API keys) exchanges at the same endpoint and is revoked
+A personal API key (Studio web → your account (click your name in the header) → API keys) exchanges at the same endpoint and is revoked
 the same audited way from **System → Accounts** — see [Personal API Keys](20-personal-api-keys.md).
 
 
