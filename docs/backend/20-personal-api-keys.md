@@ -91,7 +91,7 @@ other Auth SQLite repository.
 
 ## Endpoints
 
-DTOs live in `CR.Auth.Model.REST`, all JSON camelCase, dates ISO-8601 UTC:
+DTOs live in `CR.Auth.Model.REST` (generation and verification in `CR.Auth.Service.REST/Security/ApiKeyFormat.cs`, server-only — the Model project targets netstandard2.1), all JSON camelCase, dates ISO-8601 UTC:
 
 ```
 ApiKeySummary     { id, name, keyPrefix, createdAt, lastUsedAt?, revokedAt? }

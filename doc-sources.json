@@ -1340,7 +1340,9 @@
         "Auth/CR.Auth.Data/**/AccountApiKey*.cs",
         "Auth/CR.Auth.Service.REST/Endpoints/AccountApiKeyEndpoints.cs",
         "Auth/CR.Auth.Service.REST/Endpoints/ServiceTokenEndpoints.cs",
-        "Auth/CR.Auth.Model.REST/ApiKey*.cs"
+        "Auth/CR.Auth.Model.REST/ApiKey*.cs",
+        "Auth/CR.Auth.Service.REST/Security/ApiKeyFormat.cs",
+        "Auth/CR.Auth.Data/Model/AccountApiKeyExtensions.cs"
       ],
       "cr-data": []
     },
