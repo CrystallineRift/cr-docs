@@ -31,7 +31,7 @@ Discord is the primary community platform for Crystalline Rift. Players are alre
 | `id` | UUID primary key |
 | `email` | Unique, used as login identifier (nullable for Discord-only accounts) |
 | `password_hash` | PBKDF2-SHA512 hash (nullable for Discord-only accounts) |
-| `salt` | Per-account random salt (byte array, stored as blob) |
+| `salt` | Per-account random salt, `text` (uppercase hex; see `PasswordSalt`) |
 | `created_at`, `updated_at` | Audit trail |
 | `deleted` | Soft delete |
 
@@ -75,6 +75,51 @@ On the Unity side, `GameAuthRepository.TryGetAccessToken` walks the **token ladd
 token, else run the two calls above from nothing. `SimpleWebClient` retries any 401 once after
 forcing that ladder, so a server that wiped its auth database heals on the next request instead
 of stranding the player with a dead cached token.
+
+## Linking Accounts (merge)
+
+An anonymous device account and an email/password account are two rows in `accounts`. Linking folds
+one into the other. The account that survives is the **target**; it keeps its id, so every token it
+already issued stays valid. The **source** is soft-deleted after every row that carried its account
+id is re-pointed at the target.
+
+```bash
+# From inside the anonymous session: prove you own the Studio credential, and absorb that account.
+curl -X POST https://api.crystallinerift.com/account/link \
+  -H "authorization: Bearer $ANON_TOKEN" -H 'content-type: application/json' \
+  -d '{"provider":"basic","email":"me@example.com","password":"..."}'
+# → {"accountId":"<anon id>","action":"merged","mergedAccountId":"<studio id>","droppedProviderLinks":[]}
+```
+
+`action` is one of:
+
+| action | meaning |
+|---|---|
+| `attached` | The credential belonged to nobody. It now belongs to the caller — this is the registration upgrade an anonymous account uses to gain an email and password. |
+| `noop` | The credential already belonged to the caller. |
+| `merged` | The credential belonged to another account, which has been folded in and soft-deleted. |
+
+A wrong password is `401`. A refusal is `409` with `{"conflicts":[{"domain","table","detail"}]}` —
+today: an account under an active shadow ban, a self-merge, or a merge already running for one of the
+accounts. A service-key token has no account behind it and gets `403`.
+
+Each domain implements `IAccountMergeParticipant` (`CR.Common.Data.Repository`) and re-points its own
+tables on its own connection; Auth's own tables — provider links, link tokens, role grants, sessions
+and credentials — move in one transaction at the end. Seven participants are registered in the server
+host: trainers, npcs, quests, achievements, market, stats and moderation. Spawner has none
+(`M5017DropVestigialOwnerColumns` removed `spawner.account_id`), and the Player participant exists but
+is not registered because `MigrationOrder.All` does not include the Player domain — `players` is a
+client-side (SQLite) table today.
+
+Every merge is recorded in `account_merge` (Auth migration M0012), which doubles as the lock that
+keeps two merges of the same account from running at once, and every step is idempotent so a `failed`
+merge can simply be re-run. The Auth finalize commits before the ledger row is marked completed, so a
+crash in that window leaves a `running` row whose source is already soft-deleted; retrying the same
+pair resumes that row rather than answering `404`.
+
+Operators do the same thing from Studio with `POST /api/v1/admin/accounts/{targetId}/merge` (reason
+required, written to `admin_action` as `MergeAccount`) and read the ledger back with
+`GET /api/v1/admin/accounts/{id}/merges`.
 
 ## Auth Flow — Full Login Walkthrough
 
@@ -298,23 +343,76 @@ All auth-related clients use `GameConfigurationKeys.AuthServerHttpAddress` as th
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/api/v1/auth/register` | Create account + return tokens |
-| `POST` | `/api/v1/auth/login` | Email/password login → access + refresh tokens |
-| `POST` | `/api/v1/auth/refresh` | Exchange refresh token for new access token (rotates refresh token) |
-| `POST` | `/api/v1/auth/logout` | Invalidate refresh token (server-side revocation) |
-| `GET`  | `/api/v1/auth/oauth/discord` | Redirect to Discord OAuth consent screen |
-| `GET`  | `/api/v1/auth/oauth/discord/callback` | Discord OAuth callback — issues CR tokens |
+| `POST` | `/account` | Create an account for a game installation id (anonymous), optionally with email + password. Allows anonymous callers — a fresh install has no token yet |
+| `GET`  | `/account/me` | Who the presented token is for: account id, identity, roles, scopes, expiry. Any authenticated caller; a service-key token gets the accountless `"service"` identity. `401` if the token names an account that has been soft-deleted |
+| `GET`  | `/account/{provider}/{id}` | The account id linked to a provider identity. Allows anonymous callers (pre-token bootstrap) |
+| `POST` | `/account/password` | Change the signed-in account's password (`player` scope). Revokes every other session |
+| `POST` | `/auth/game` | Device login with a game installation id → access + refresh tokens |
+| `POST` | `/auth/basic` | Email/password login → access + refresh tokens. The only login the browser admin app can perform |
+| `POST` | `/auth/oauth` | Exchange a third-party OAuth token for CR tokens |
+| `POST` | `/auth/oauth/link` | Link an OAuth provider identity to the signed-in account |
+| `GET`  | `/auth/oauth/link` | The provider links on the signed-in account |
+| `POST` | `/auth/token/refresh` | Exchange a refresh token for a new access token |
 | `POST` | `/auth/service-token` | Exchange a pre-shared service key for a scoped, account-less token (`admin` or `content:write`) |
+| `POST` | `/account/link` | Attach a credential to the signed-in account, merging its account in if it has one (player) |
+| `POST` | `/api/v1/admin/accounts/{id}/merge` | Fold one account into another; reason required (admin) |
+| `GET`  | `/api/v1/admin/accounts/{id}/merges` | Every merge this account took part in, newest first (admin) |
+
+> These paths are **not** prefixed with `/api/v1`. An earlier revision of this page listed
+> `/api/v1/auth/register`, `/api/v1/auth/login`, `/api/v1/auth/refresh`, `/api/v1/auth/logout` and two Discord
+> redirect routes; none of them has ever been mapped in this codebase. There is no logout route — a session is
+> ended by revoking it (`auth_session.revoked_at`), not by calling an endpoint. Registration is `POST /account`.
+
+## Roles and Admin Scopes
+
+An account carries zero or more **roles** in the `account_role` table (`Auth/CR.Auth.Data.Migration/M0011CreateAccountRoleTable.cs`):
+`admin` and `content_editor` (`CR.Auth.Data.Model.AccountRoles`). Roles are not scopes. On every login and
+token refresh, `ScopeResolver` reads the grants and derives the token's `scope` claim: `player` always, plus
+`content:write` for an editor or admin, plus `admin` for an admin.
+
+Roles are granted and revoked over HTTP by an operator, through `IAccountRoleRepository`:
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET`    | `/api/v1/admin/accounts?search=&limit=&offset=` | A page of accounts with their roles. Sets `X-Total-Count`; the search term is matched literally |
+| `GET`    | `/api/v1/admin/accounts/{accountId}/roles` | The roles on one account |
+| `PUT`    | `/api/v1/admin/accounts/{accountId}/roles/{role}` | Grant a role. Idempotent; body `{"reason"}` required |
+| `DELETE` | `/api/v1/admin/accounts/{accountId}/roles/{role}` | Revoke a role. Body `{"reason"}` required |
+| `POST`   | `/api/v1/admin/accounts/{accountId}/password` | Reset an account's password. Body `{"newPassword","reason"}` |
+
+All five require the `admin` scope. A grant takes effect on the target account's **next** login or refresh, not
+immediately — the current token keeps the scopes it was issued with.
+
+Two refusals stop a deployment locking itself out, both answering `409`: an operator cannot revoke their own
+`admin` role, and the last `admin` grant cannot be revoked by anyone. The last-admin refusal is part of the
+`DELETE` statement itself (a correlated `count(distinct account_id) > 1` in its `WHERE`), and concurrent admin
+revokes are serialized by a transaction-scoped advisory lock on Postgres, so two operators cannot both slip
+past it.
+
+Unlike every other auth table, `account_role` has no `deleted` column: a revoke is a hard `DELETE`, because a
+soft-deleted row would sit on the `(account_id, role)` primary key and make a later re-grant conflict.
+
+Every grant, revoke and password reset is written to the `admin_action` audit log with the operator's reason.
 
 Auth is wired into the ASP.NET pipeline via `builder.AddCrAuth()` (extension method in `CrAuthExtensions.cs`). All non-auth endpoints require a valid bearer token.
 
 ## Security Considerations
 
-- **Tokens are never logged.** `Program.cs` adds `Authorization` to the HTTP logging request headers list, but this is only enabled in development (`app.UseHttpLogging()` inside `if (app.Environment.IsDevelopment())`). In production, token headers are not captured in logs.
+- **Tokens are never logged.** HTTP request logging is registered with `RequestPath`, `ResponseStatusCode` and
+  `Duration` only — no headers and no bodies, so no configuration of it can capture a bearer token. The
+  middleware is additionally only inserted in Development and under `SWAGGER_GEN=1`
+  (`app.UseHttpLogging()` inside `if (app.Environment.IsDevelopment() || isSwaggerGen)`).
 - **Access token lifetime.** Access tokens are short-lived (default 1 hour). Refresh tokens are long-lived (default 30 days).
 - **Refresh token rotation.** Each `POST /api/v1/auth/refresh` call issues a new refresh token and invalidates the old one.
-- **Soft-deleted accounts.** When `deleted = true`, the account still exists in the database but login attempts return 401. Refresh tokens issued before deletion continue to validate until they expire.
-- **Salt storage.** The salt is stored as a binary blob alongside the hash. If the `accounts` table is compromised, the attacker has both the salt and hash — security relies entirely on the PBKDF2 iteration count making brute-force prohibitively slow.
+- **Soft-deleted accounts.** With `deleted = true` the row still exists, but every auth query filters
+  `not deleted`: `POST /auth/basic` answers `404` (the email resolves to no account) and `GET /account/me`
+  answers `401`. Access tokens issued before the deletion stay cryptographically valid until they expire —
+  revoke the account's sessions (`auth_session.revoked_at`) to cut them off immediately.
+- **Salt storage.** The salt is stored as uppercase hex **text** in `accounts.salt`, encoded and decoded by
+  `CR.Auth.Model.REST.PasswordSalt`. Rows written before that codec existed hold a BLOB in that TEXT column
+  and are read back through `hex()`; that is a legacy fallback, not the current format. If the `accounts`
+  table is compromised the attacker has both the salt and the hash — security rests entirely on the PBKDF2
+  iteration count (350,000, SHA-512, 64-byte key) making brute force prohibitively slow.
 
 ## Common Mistakes / Tips
 
