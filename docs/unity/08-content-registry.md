@@ -597,7 +597,7 @@ with itself, because "half the game on production" is a state to be told about, 
 renamed — changing them would lose every developer's saved server address for nothing visible.
 
 **Key per environment.** Each environment card also carries a **Key** row
-(`StudioConfigurationPanel.DrawKeys`): a personal API key from Studio web (Account → API keys — see
+(`StudioConfigurationPanel.DrawKeys`): a personal API key from Studio web (your account (header) → API keys — see
 backend/20-personal-api-keys) or, for CI-style setups, the server's env key. It is stored in EditorPrefs
 under `BackendKeyVault.PrefName(BackendKeyVault.KeyKind, environmentName)` —
 `CR_Studio_ServiceKey__production` and the like — so a key lives on this machine only and is never in
