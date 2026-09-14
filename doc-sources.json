@@ -28,7 +28,10 @@
         "Convenience/CR.REST.AIO/appsettings.json",
         "Convenience/CR.REST.AIO/MigrationOrder.cs",
         "Convenience/CR.REST.AIO/Dockerfile",
-        "Convenience/CR.REST.AIO/Builds/*.cs"
+        "Convenience/CR.REST.AIO/Builds/*.cs",
+        "Game/CR.Game.Data.Migration/M8018AddDownloadPasswordToAppConfig.cs",
+        "Game/CR.Game.Data/Interface/IAppConfigRepository.cs",
+        "Game/CR.Game.Data/Implementation/BaseAppConfigRepository.cs"
       ],
       "cr-data": []
     },
