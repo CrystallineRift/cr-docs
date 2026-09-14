@@ -79,11 +79,20 @@ Stores a single configuration row for the entire application. The singleton patt
 | `id` | TEXT | PK DEFAULT `'singleton'` | Always `'singleton'` — enforces one row |
 | `content_version` | TEXT | | Current published content version string (e.g. `"2026.03.20-1"`) |
 | `min_client_version` | TEXT | | Minimum client build version that can play online (e.g. `"1.2.0"`) |
+| `download_password_hash` | TEXT | NULL | PBKDF2-SHA512 hex hash of the shared game-download password; NULL means anonymous downloads are closed |
+| `download_password_salt` | TEXT | NULL | Salt for the above, in `PasswordSalt`'s text form |
+| `download_password_updated_at` | DATETIME | NULL | When it was last set; cleared with the password |
+| `download_password_updated_by` | TEXT | NULL | Admin actor label that set it; cleared with the password |
 | `deleted` | BOOLEAN | NOT NULL DEFAULT false | Soft delete flag (not used in practice for this table) |
 | `created_at` | DATETIME | NOT NULL | Audit timestamp |
 | `updated_at` | DATETIME | NOT NULL | Audit timestamp |
 
 The row is seeded by migration `M8005CreateAppConfigTable` with empty version strings. The `content_version` field is updated each time `POST /api/v1/content/publish` runs successfully.
+
+The four `download_password_*` columns are added by `M8018AddDownloadPasswordToAppConfig` and belong
+to the game-download flow rather than to content publishing — see
+[Backend Architecture → `POST /api/v1/builds/unlock`](01-architecture.md). They are written only
+through `IAppConfigRepository.SetDownloadPasswordAsync`, and passing a null hash clears all four.
 
 ### `IAppConfigRepository`
 

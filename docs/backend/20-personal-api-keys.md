@@ -184,3 +184,22 @@ a live credential.
   env keys, the scope ladder, and the `POST /auth/service-token` exchange these keys share.
 - [Backend Architecture](01-architecture.md#migration-order-is-one-list) — the global `VersionInfo`
   namespace that made `14` the next free migration number.
+
+## Expiry and the per-account cap
+
+A key used to live until somebody noticed it had leaked, and an account could hold as many as it
+liked. Since M0016:
+
+- **Every new key expires.** `POST /account/keys` accepts `expiresInDays` (1 to 365); omitted, it
+  takes the 90-day default. `account_api_key.expires_at` is null only on keys minted before this
+  existed, which keep working exactly as they did.
+- **An expired key is refused the same way a revoked one is.** The exchange at
+  `POST /auth/service-token` answers a bare 401 either way — which step refused, and why, is not
+  something a caller holding a partial key gets to learn.
+- **Ten live keys per account.** Revoked and expired keys do not count, so revoking one frees a slot.
+  The cap is not about storage: nobody audits a list of thirty keys, and a key an attacker mints
+  among many is not noticed.
+- `expiresAt` is on `ApiKeySummary`, so Studio can show when a key runs out.
+
+Creating a key is also rate limited along with the rest of the account surface, and the exchange
+endpoint is held to 10 requests per minute per IP.

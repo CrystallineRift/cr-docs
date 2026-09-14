@@ -191,7 +191,9 @@ curl -s -X POST http://localhost:5000/api/v1/auth/logout \
   -d '{"refreshToken":"def502003b8f9e..."}'
 ```
 
-Server-side revocation of the refresh token. The access token remains technically valid until it expires (there is no per-access-token revocation list). For most game scenarios this is acceptable — the 1-hour window is short enough.
+Server-side revocation of the refresh token. Access tokens are revocable too: every token carries a
+`jti`, every issued token writes an `auth_session` row, and `OnTokenValidated` checks that row on
+**every** request — so revoking a session takes effect immediately, not when the token expires.
 
 ## Token Lifetime and Sessions
 
@@ -200,6 +202,36 @@ Access tokens are short-lived (default **1 hour**). Refresh tokens are long-live
 The Unity `TokenManager` proactively refreshes before expiry. `IGameSessionRepository` persists the current session (accountId, trainerId, isOnline) to SQLite so it survives app restarts. When Unity starts, `GameSessionManager` reads from this repository to restore the previous session without requiring the player to log in again. If the stored access token is still valid, the player is dropped back into the game immediately.
 
 **Token refresh flow:** Access token expires → Unity `SimpleWebClient` receives 401 → calls `TokenManager.RefreshAccessTokenAsync()` → presents refresh token to `/api/v1/auth/refresh` → stores new access + refresh tokens → retries original request. This is transparent to other Unity systems.
+
+## Token security rules
+
+These are the properties the auth pipeline guarantees. They were hardened on 2026-09-13 after a
+security audit; the "was" notes say what the behaviour used to be, because the old behaviour is what
+any client written before that date assumed.
+
+| Rule | How |
+|---|---|
+| A refresh token is stored only as a hash | `refresh_token_hash` (SHA-256) is the only copy kept; `RefreshTokenFormat` mints it from 32 CSPRNG bytes. *Was: the plaintext token in a column, and a pair of `Guid`s for entropy.* |
+| A refresh token expires | `refresh_token_expires_at`, default 30 days (`RefreshTokenLifetimeDays`). *Was: never.* |
+| Changing a password kills every refresh token on the account | `POST /account/password` revokes the sessions **and** calls `RevokeRefreshTokensForAccountAsync`. *Was: sessions only — so a stolen refresh token survived the password change and minted a new session.* |
+| An admin password reset does the same | `POST /api/v1/admin/accounts/{id}/password`. |
+| A banned account cannot authenticate | The refresh lookup joins `accounts` and requires `not deleted`, and `OnTokenValidated` re-checks the account on every request. *Was: a soft-deleted account kept working until its token expired.* |
+| An access token is never stored | The `token` column holds the `jti`, not the JWT. *Was: the whole signed token, so a database read yielded live sessions.* |
+| The signing key is UTF-8 and at least 256 bits | `JwtAuthentication.SigningKeyBytes` throws below 32 bytes. *Was: decoded as ASCII, which silently replaced every non-ASCII byte with `?`, and no length floor.* |
+| Anonymous auth routes are rate limited | Per client IP: 10/min on `/auth/basic` and `/auth/service-token`, 30/min on `/auth/game`, `/auth/oauth`, `/auth/token/refresh` and `POST /account`. Configurable under `RateLimits`. *Was: unlimited.* |
+| A production host refuses to start with the repo's dev keys | `ProductionSecretsGuard`. |
+| `/auth/basic` reveals nothing about who has an account | An unknown address and a wrong password both return a bare 401. *Was: 404 vs 401 — a free membership oracle.* |
+
+The rate limits partition on the caller's address, which the app reads from `X-Forwarded-For` and
+trusts **only** from the proxy network (`ForwardedHeaders:KnownNetworks`, defaulting to the private
+ranges Docker allocates from). Trusting that header from anywhere would let a caller mint a fresh
+limit bucket per request.
+
+### What this means for clients
+
+A refresh token issued before this change no longer works — M0015 cleared them. The anonymous-first
+client treats "no usable token" as a bootstrap condition rather than an error, so a device
+re-authenticates through `/auth/game` on its own and nobody loses an account.
 
 ## Service Tokens (Crystalline Rift Studio and Live Ops)
 
