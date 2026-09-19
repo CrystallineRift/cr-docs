@@ -881,6 +881,11 @@ builder.Services.AddScoped<ITrainerInventoryDomainService, TrainerInventoryDomai
 builder.Services.AddScoped<IQuestDomainService, QuestDomainService>();
 ```
 
+`IQuestInstanceRepository.DeleteInstanceAsync(instanceId)` soft-deletes an instance and its objective-progress rows.
+The Unity online router calls it for locally mirrored active instances the server no longer lists;
+`UpsertFromServerAsync` revives a deleted row (`deleted = false` on conflict) so a mirror sweep that raced a
+server-side accept heals on the next read.
+
 ## Common Mistakes
 
 - **Registering `QuestDomainService` as Singleton.** It must be `AddScoped` because `IConditionEvaluator` depends on `IStatService`, which is Scoped. A Singleton cannot capture a Scoped service.

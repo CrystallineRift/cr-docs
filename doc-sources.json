@@ -92,7 +92,8 @@
         "Game/CR.Game.Domain.Services/**/*.cs",
         "Game/CR.Game.Model/Spawner/AbilityProgressionSetEntry.cs",
         "Spawner/CR.Spawner.Data.Migration/M5019AddUnlockQuestToAbilityProgressionSetEntry.cs",
-        "Creatures/CR.Creatures.Data.Migration/M10017SeedAbilitySoundKeys.cs"
+        "Creatures/CR.Creatures.Data.Migration/M10017SeedAbilitySoundKeys.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/CreatureBatchEndpoints.cs"
       ],
       "cr-data": []
     },
@@ -373,7 +374,14 @@
         "Assets/CR/Quests/Repository/Implementation/QuestTemplateOnlineOfflineRepository.cs",
         "Assets/CR/Quests/Repository/Implementation/QuestOnlineOfflineRepository.cs",
         "Assets/CR/Npcs/Runtime/TrainerDefeatCache.cs",
-        "Assets/CR/Stats/Repository/StatOnlineOfflineRepository.cs"
+        "Assets/CR/Stats/Repository/StatOnlineOfflineRepository.cs",
+        "Assets/CR/Core/Sync/Logic/SessionFreshness.cs",
+        "Assets/CR/Core/Sync/Logic/PlayerStateFreshness.cs",
+        "Assets/CR/Core/Sync/Logic/InvalidationScopes.cs",
+        "Assets/CR/Core/Sync/Logic/CacheScope.cs",
+        "Assets/CR/Core/Data/Cache/PlayerStateCache.cs",
+        "Assets/CR/Npcs/Runtime/Merchant/Logic/NpcMerchantOnlineOfflineService.cs",
+        "Assets/CR/Npcs/Runtime/Repository/Implementation/NpcOnlineOfflineRepository.cs"
       ]
     },
     "description": "IDomainSync pattern: BattleSync (SOAP bridge via events), TeamSync (world-scoped team cache), InventorySync (world-scoped backpack cache), Zenject bindings; cache-first policy: content (pickup/achievement defs, quest templates) local-first with server on content_key miss, terminal player state (collected pickups, unlocks, completed quests, trainer defeats) local-first with session-once server reconcile, in-progress state server-when-online"
