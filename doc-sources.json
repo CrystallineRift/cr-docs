@@ -377,6 +377,8 @@
         "Assets/CR/Stats/Repository/StatOnlineOfflineRepository.cs",
         "Assets/CR/Core/Sync/Logic/SessionFreshness.cs",
         "Assets/CR/Core/Sync/Logic/PlayerStateFreshness.cs",
+        "Assets/CR/Core/Sync/Logic/PlayerStateCacheExtensions.cs",
+        "Assets/CR/Core/Data/Logic/PagedFetch.cs",
         "Assets/CR/Core/Sync/Logic/InvalidationScopes.cs",
         "Assets/CR/Core/Sync/Logic/CacheScope.cs",
         "Assets/CR/Core/Data/Cache/PlayerStateCache.cs",

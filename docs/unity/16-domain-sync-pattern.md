@@ -147,7 +147,7 @@ dirties whole scopes. Opening a window, switching tabs, entering an area or savi
 | MerchantRestocked | MerchantStock, MerchantMultipliers, MerchantStocked |
 | QuestAccepted / QuestAbandoned / QuestProgressRecorded | ActiveQuests |
 | QuestClaimed | ActiveQuests, Items, Trainer, Creature, CreatureSlots, InventoryList, ItemInventoryList, Stats |
-| ItemUsed / HeldItemChanged | Items, Creature |
+| ItemUsed (successful overworld use only) / HeldItemChanged | Items, Creature |
 | EvolutionCommitted | Creature, ActiveQuests, Stats |
 | CreatureCaptured | CreatureSlots, InventoryList, Stats |
 | CreatureMoved | CreatureSlots |
@@ -161,14 +161,34 @@ dirties whole scopes. Opening a window, switching tabs, entering an area or savi
 MerchantPurchase/Sell/Restocked · `QuestOnlineOfflineRepository` → QuestAccepted/Abandoned/Claimed/ProgressRecorded ·
 `OnlineOfflineItemDomainService` + `HeldItemOnlineOfflineRepository` → ItemUsed/HeldItemChanged ·
 `EvolutionOnlineOfflineRepository` → EvolutionCommitted · `GeneratedCreatureOnlineRepository` → CreatureCaptured/Released ·
-`TrainerCreatureInventoryOnlineRepository` → CreatureMoved · `MarketManager` → MarketListed/ListingCancelled/Purchased ·
+`TrainerCreatureInventoryOnlineRepository` → CreatureMoved · `MarketManager` → MarketListed/ListingCancelled/Purchased (a purchase also reads the bought creature once, so the
+mirror holds it before any cache-only creature read) ·
 `StatOnlineOfflineRepository` and `NpcOnlineOfflineRepository.UseNpcBattleItemAsync` invalidate their own key directly.
 Trainer, inventory-list, item-add and creature-update writes store the server's returned row and need no change.
 
-Content and terminal state keep their earlier rules: `ContentBackFill` (local first, server on a content-key miss)
-and `SessionReconcile` (mirror once per session) for pickup/achievement/quest-template definitions, collected
-pickups, unlocks, completed quests and trainer defeats. Missions and NPC identity are content read through the
-memo variant of the cache and are only reset by `Clear`.
+Content keeps its earlier rule: `ContentBackFill` (local first, server on a content-key miss) for
+pickup/achievement/quest-template definitions. Missions and NPC identity are content read through the memo variant
+of the cache and are only reset by `Clear`.
+
+**Terminal state rides the same cache.** Collected pickups, achievement unlocks, completed quests and trainer
+defeats only ever grow, so the local table can be behind the server but never wrong. Each is mirrored once per
+key per session through `cache.EnsureMirroredAsync(key, reconcile)` (`PlayerStateCacheExtensions.cs`), under the
+scopes `CollectedPickups`, `AchievementUnlocks`, `CompletedQuests` (id = trainerId) and `TrainerDefeats`
+(id = accountId). A caller that arrives mid-reconcile waits for it; a failed reconcile is warned and retried on the
+next call; offline nothing runs; cancellation propagates. No `GameChange` names these scopes
+(`TerminalMirrorsAreNeverInvalidatedByAGameChange`) — the write path mirrors each new row itself — so only
+`Clear` (trainer or account change) reopens them. This replaced the separate `SessionReconcile` gate, which the four
+callers had each owned an instance of.
+
+**A memo outlives a mode switch, but is not read offline.** The memo variant keeps the server's value in the
+cache object. Going online → offline mid-session does not drop it, yet every offline read skips the memo and
+answers from the caller's `fallback` (the local table). Back online, the key is still fresh, so the memo answers
+again without a round trip. Only an invalidate or `Clear` drops it.
+
+**A full fetch is the full list.** The trainer list and the inventory list are cached whole and paged locally, so
+the fetch walks the server page by page until a short page (`PagedFetch.AllAsync`, `CR.Core.Data.Logic`), bounded
+at 1000 rows with a warning if the bound is hit. One page of 100 would have dropped row 101 and served the short
+list as complete for the session.
 
 **Cold vs warm.** A warm Team open costs 0 HTTP calls. Cold (first this session) costs 2: creature slots and
 one `POST /api/v1/trainers/{trainerId}/creatures/by-ids` for every stale creature. Battle close then Team open: 3.

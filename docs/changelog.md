@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-09-20 — Online cache: the follow-up list
+
+- **Unity: terminal-state mirrors ride `PlayerStateCache`.** Collected pickups, achievement unlocks, completed
+  quests and trainer defeats are gated by `cache.EnsureMirroredAsync` under four new scopes. The separate
+  `SessionReconcile` gate is removed; one `Clear` on trainer or account change now reopens everything.
+- **Unity: a full fetch is the full list.** `PagedFetch.AllAsync` walks the trainer list and the inventory list to
+  the short page (bounded at 1000). They used to stop at row 100 and cache the short list as complete.
+- **Unity: an offline memo read answers locally.** After an online → offline switch the memo variant served the
+  server's old answer; offline now always reads the fallback, and the memo answers again once back online.
+- **Unity: smaller fixes.** The by-ids batch client honours a `CancellationToken` between chunks. A market
+  purchase reads the bought creature once so cache-only creature reads do not undercount. `ItemUsed` is raised
+  only for a successful use.
+
 ## 2026-09-10 — Granting a creature from a spawn pool
 
 - **Roll the encounter instead of hunting for it.** `POST
