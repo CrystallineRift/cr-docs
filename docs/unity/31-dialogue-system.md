@@ -473,23 +473,24 @@ project and still drives every NPC that has no CR-authored dialogue — it is th
 until playtesting is done and slated for removal after that (see [Dialogue System
 Integration](?page=unity/11-dialogue-integration)).
 
-- **Package staleness.** The Unity project consumes cr-api's Dialogue assemblies as a file-referenced
-  local package (`Packages/manifest.json` → `cr-api/Convenience/CR.Game.Compat/bin/unity-package`).
-  That package was last rebuilt for an earlier task and predates several later cr-api commits on this
-  branch, including the localization text-source seam (below). A full `build-packages.sh` run and
-  Unity package refresh (the plan's Task 18) has not happened. The id-optional upsert (`id-ignored`/
-  `id-in-use`/`duplicate-id`) already works from the Studio push flow regardless, because that path
-  talks to the server over plain HTTP/JSON, not through the bundled DLL.
-- **Preview pane.** No play-through preview exists in the node editor at HEAD — only a per-node text
-  preview label in the graph itself. A dedicated preview pane was planned but never dispatched.
-- **Localization is a seam only.** `IDialogueTextResolver.Resolve` now receives a `DialogueTextSource`
-  (dialogue content key, node id, option id, source text) instead of a bare string, and
-  `LocalizedDialogueTextResolver` will decorate any resolver with a lookup in a host-supplied
-  `IDialogueStringTable` keyed by `dlg.{contentKey}.{nodeId}[.{optionId}]`. Nothing is translated yet:
-  Unity still binds plain `BraceTextResolver` (token substitution only) in `LocalDevGameInstaller`,
-  and the Unity-side adapter over `LocalizationRepository` is not wired — that lands at the next
-  package publish. See [Localization](?page=unity/06-localization) for the project's actual
-  localization state today.
+- **Package.** The Unity project consumes cr-api's Dialogue assemblies as a file-referenced local
+  package (`Packages/manifest.json` → `cr-api/Convenience/CR.Game.Compat/bin/unity-package`). It was
+  republished from the head of this branch (the plan's Task 18): the baked `game-data.bytes` records
+  schema 14002, and the id-optional upsert, `GetContentKeyByIdAsync` and the localization text-source
+  seam are all in the shipped DLLs. Republish again after any later cr-api change.
+- **Preview pane.** Built: see [Dialogue Authoring → Preview Pane](?page=unity/32-dialogue-authoring#preview-pane).
+- **Localization is wired but empty.** `IDialogueTextResolver.Resolve` receives a `DialogueTextSource`
+  (dialogue content key, node id, option id, source text). `LocalDevGameInstaller` binds
+  `LocalizedDialogueTextResolver` over `BraceTextResolver`, with `LocalizationDialogueStringTable`
+  adapting `LocalizationRepository` as the `IDialogueStringTable`. Every line is looked up under
+  `dlg.{contentKey}.{nodeId}[.{optionId}]` first and falls back to the document's own text, which is
+  what happens for every line today: no localization file holds a `dlg.*` key. Two things to know
+  before adding one. The language is the constant `"en"` (the project has no language setting). And a
+  source-language `dialogues.yaml` entry **overrides** the inline text. A broken table costs a
+  translation, never the conversation. See [Localization](?page=unity/06-localization).
+- **Offline is covered end to end** by `DialogueOfflineEndToEndTests`: the shipped Meadow Guide asset,
+  through `LocalDialogueSyncClient`, the content router with `IsPlayingOnline == false` and
+  `DialogueService`, with a server client that throws on any call.
 - **Known follow-ups**, tracked but not yet done:
   - Server 200-envelope responses elsewhere in the project (not Dialogue's own endpoints, which were
     audited clean) still carry `ErrorMessage = ex.Message` in a handful of other domains' result

@@ -262,16 +262,48 @@ this work (including the later-declared 413/415 responses on the bulk route).
 
 ## The content migration (M14002)
 
-**Planned, not built.** There is no M14002 (or any migration beyond M14001) in
-`CR.Dialogue.Data.Migration` at HEAD of this branch. The plan calls for a content-seed migration that
-inserts the six shipped dialogues (and matching quest rows) so a fresh database ships with the
-authored content already present, the same way other domains seed their launch content — this has not
-been written. Any note elsewhere in this documentation set that assumes M14002 exists is describing
-intent, not the current schema; check `CR.Dialogue.Data.Migration` directly before relying on it. Per
-the ledger for this work, any future M14002 must seed dialogue rows under the SAME ids as the
-corresponding `DialogueDefinition` assets (`content/dialogue-asset-ids.json` in the implementation
-job's working notes) — the repository never re-keys a row, so a mismatched seed id would permanently
-diverge from the asset.
+`M14002_SeedDialoguesAndQuestGiverChanges` (`CR.Dialogue.Data.Migration`) does two things, on
+**Postgres only**. On SQLite it is a no-op: Unity syncs its own authored dialogue and quest assets into
+the local database at boot, and a migration seed there would recreate the seed-versus-asset drift that
+M7012 removed. The only change M14002 makes to the baked `game-data.bytes` is its own `VersionInfo` row.
+
+**1. Seeds the six shipped dialogues under their authored ids.** The documents are embedded resources
+(`Seed/*.json`), inserted through parameterized commands. A row is inserted only when neither its
+`content_key` nor its `id` exists, counting soft-deleted rows. An existing row is left exactly as it
+is: never re-keyed, never overwritten, and a soft-deleted one is **not revived** (someone deleted it
+on purpose, and `content_key` is UNIQUE across deleted rows so an insert beside it is impossible;
+pushing the asset from the Studio revives it). The ids are the `DialogueDefinition` assets' ids,
+pinned by a Unity test, because the repository never re-keys a row.
+
+**2. Moves the ten shipped quests to their new giver, grant mode and payout mode.** This migration
+runs once against a live database and never again, and production's quest rows did not all come from
+the seeds (the welcome quest was pushed from the Studio). So it writes as little as it can:
+
+| What | Rows | Guard |
+|---|---|---|
+| `giver_npc_content_key`, `grant_mode`, `reward_claim_mode` | all ten quests, by `content_key` | none: these ARE the change |
+| `description` | `quest-tidewrack-trials`, `quest-sunbleached` | only where the row still holds the text M7014 seeded |
+| `objective_type` 0 → 1 | `quest-first-battle`, sort order 0 | only where it is still 0 |
+| `target_reference_id` → `demo-questgiver-area-1` | `quest-welcome-to-cr`, sort order 0 | only where it is still `demo-merchant` |
+| `description` | `quest-into-the-dark`, sort order 1 | only where it is still the seeded text |
+| soft delete | `quest-hearthmere-supplies`, sort order 0 | only where the row is still `VisitLocation` / `village` |
+| soft delete | orphans `quest_talk_to_elder`, `quest_welcome_to_cr` | only with no live `quest_instance` |
+
+A description someone fixed through the Studio therefore survives the deploy. No sort order changes:
+objectives are upserted by sort order and progress rows reference an objective's id.
+
+**Every statement that touches no row says so** in the migration output (`[M14002] ...`), with a
+`WARNING` when a quest was not found at all. Read the deploy log after this migration: a miss never
+fails the deploy, because the row may legitimately be absent or edited.
+
+**Quest's tables are another domain's.** `MigrationOrder.All` runs Quest before Dialogue and every
+configuration points both at one database. If the quest tables are nonetheless absent (Dialogue given
+a database of its own), the quest half is skipped with a log line and the dialogues are still seeded:
+a throw there could never be deployed past. A missing `dialogue` table, which is this assembly's own
+M14001, still throws. `Down()` is a no-op on both engines, like M7016.
+
+The Studio push remains the way to make a row equal its asset. M14002 only spares anyone from pushing
+ten quests and six dialogues by hand on deploy day.
 
 ## Related pages
 

@@ -1585,6 +1585,6 @@
       ],
       "cr-data": []
     },
-    "description": "Server dialogue domain: dialogue table (M14001), repository semantics (soft delete + revive, transactional bulk upsert with replay-once-on-race, engine-independent NPC tie-break, SQL npc filter/paging), DialogueValidator's full finding-code list and DialogueLimits, the id-ignored/id-in-use/duplicate-id rule, REST routes and auth, the global error middleware's fixed-message + traceId contract, M14002 content seed not yet built"
+    "description": "Server dialogue domain: dialogue table (M14001), repository semantics (soft delete + revive, transactional bulk upsert with replay-once-on-race, engine-independent NPC tie-break, SQL npc filter/paging), DialogueValidator's full finding-code list and DialogueLimits, the id-ignored/id-in-use/duplicate-id rule, REST routes and auth, the global error middleware's fixed-message + traceId contract, M14002 content seed (six dialogues under authored ids; narrowed, old-value-guarded quest giver/grant/payout sync; Postgres only)"
   }
 }

@@ -223,13 +223,37 @@ The same content push also changed all ten shipped `QuestDefinition` assets' `gi
 
 ## Preview Pane
 
-**Not built.** A brief existed for a preview pane — "run the real runner inside the editor with a
-simulated world (set each referenced quest's state, toggle conditions) and click through the
-conversation" — so an author could answer "what does the player hear when Thin the Meadow is ready
-to turn in and A Second Companion is still available?" without entering play mode. It was never
-dispatched or implemented; there is no preview tab, pure simulated world, or click-through session
-in the Dialogue Editor at HEAD. Today the only way to see how a document actually plays is to enter
-play mode against a real (or offline) trainer session.
+The Dialogue Editor's right-hand side has two tabs: **Inspector** and **Preview**. Preview answers
+"what does the player hear when Thin the Meadow is ready to turn in and A Second Companion is still
+available?" without entering play mode. It runs the REAL `DialogueRunner` on a **copy** of the
+document against a simulated world you control. It never touches a game service, never dirties the
+asset and records no undo step.
+
+**The world (left).** One row per distinct condition the document asks about:
+
+- A **dropdown per quest** for every `quest.state`-shaped condition (one quest-key arg plus one enum
+  arg): `Unavailable` plus only the states this document actually asks about for that quest. Picking
+  a state sets every condition asking about it true and the quest's others false. State names match
+  case-insensitively, like the real evaluator.
+- A **toggle** for every other condition (`quest.objectivePending`, `progress.requirement`,
+  `npc.trainerDefeated`, anything a module adds), labelled with the same summary the graph shows.
+
+Combinators (`all` / `any` / `not`) have no row: the runner evaluates them from their leaves. Every
+change restarts the conversation from the entry.
+
+**The conversation (right).** Lines with **Continue**, choices as buttons, actions as `[type args]`
+rows, and the end with its outcome and reason (a dangling target shows as `Fault` here instead of
+throwing). The node being previewed is highlighted and framed in the graph; your own selection, and
+so the node the Inspector edits, is left alone.
+
+**Apply quest effects** (on by default): `quest.accept` moves that quest to `Active` and `quest.claim`
+to `Completed` in the simulated world, so **Restart** shows what the NPC says next. Every other
+action is only recorded.
+
+The world survives edits: the pane re-binds after every change to the document (a node drag
+included) and carries over the value of every condition that still exists. Preview is refused, with
+the reasons listed, while the document has validator **errors** or the asset could not be loaded;
+warnings do not block it. Placeholders are substituted but text is not translated (see Status).
 
 ## Findings The Node Editor Catches That The Server Does Not
 
@@ -241,7 +265,6 @@ Repeated here for cross-reference: `missing-required-arg` and `unknown-arg` (see
 ## Status
 
 - **Not merged, not deployed, not playtested.**
-- **Preview pane: not built.** See above.
 - **The Content Studio's Dialogues tab has a row-level Delete, but no dedicated inspector.** Unlike
   `QuestDefinition`/`NpcDefinition`/etc., there is no `DialogueDefinitionEditor` custom Inspector —
   selecting a `DialogueDefinition` asset directly in the Project window shows Unity's default
@@ -250,12 +273,13 @@ Repeated here for cross-reference: `missing-required-arg` and `unknown-arg` (see
 - **Pull does not page past 500 rows.** The Studio's dialogue pull reads one page at the server's
   own cap; a dialogue table larger than that would silently lose rows past the first page on Pull
   All.
-- **Localization is a seam only.** See [Dialogue System → Status](?page=unity/31-dialogue-system#status)
-  and [Localization](?page=unity/06-localization) — nothing in the authoring tools writes or reads a
-  translation table yet; the Dialogue Editor is WYSIWYG in the source language only.
-- **M14002 (the six dialogues + ten quest changes as a server seed migration) does not exist.** See
-  [Dialogue Domain](?page=backend/21-dialogue-domain). Until it is written, a fresh Postgres
-  database has none of this content — it must be pushed by hand through the Studio.
+- **Localization is wired but empty.** The game looks every line up in the localization table first
+  (see [Dialogue System → Status](?page=unity/31-dialogue-system#status)) and no `dlg.*` key exists,
+  so the player sees the document's own text. Nothing in the authoring tools writes or reads a
+  translation table yet; the Dialogue Editor and its Preview are source-language only.
+- **The six dialogues and ten quest changes ship as a server migration**, M14002. See
+  [Dialogue Domain](?page=backend/21-dialogue-domain#the-content-migration-m14002). It leaves rows
+  that already exist alone, so an edit made here still reaches the server only through a Studio push.
 
 ## Related Pages
 
