@@ -58,6 +58,22 @@ through `DialogueGraphEditing` and is refused, not partially applied, if it woul
 invariant (e.g. connecting a port that does not exist) — a refusal changes nothing in the document
 or on the asset.
 
+**Arrange.** The toolbar's **Arrange** button lays the whole graph out left to right so that no two
+nodes overlap, as one undo step, then frames it. It uses each node's size *on screen* (a hub with
+twelve cases is several times the height of an End node; a fixed grid overlaps one or wastes the
+other). Columns are conversation depth: a node sits one column right of its deepest predecessor, so
+every forward edge runs left to right and a shared End lands right of everything that reaches it. An
+edge that loops back (to the hub, say) is ignored for placement and simply draws right to left.
+Within a column, nodes keep the order of the ports that lead to them, which keeps edges from
+crossing, and are pulled level with their neighbours where there is room. Nodes the entry cannot
+reach are laid out the same way, below. The algorithm is `DialogueAutoLayout` (pure, tested).
+A node with **no** stored position (a document created in the web Studio has none) is *shown* where
+Arrange would put it rather than piled on the origin; nothing is written until you arrange or drag.
+
+Node positions live in the document (`layout`), so they are pushed and pulled like the rest of it,
+and arranging marks the dialogue as changed in the Studio. They are not *content*: the shipped-asset
+pin test compares documents with positions left out (`DialogueDocumentNormalizer.ContentEqual`).
+
 **Inspector.** Selecting a node opens a field inspector for its type: text and speaker for a Line,
 option list with per-option condition/action editors for a Choice, case list with per-case condition
 editors for a Branch, an action list for an Action node, outcome for an End node.
