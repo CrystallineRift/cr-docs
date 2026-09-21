@@ -222,7 +222,7 @@ Defines a quest template. The backend owns instance/progress data; this SO is th
 
 **Menu:** `CR/Dialogue Definition`
 **Instances:** `Assets/CR/Content/Defs/Dialogues/`
-**Backend sync:** Crystalline Rift Studio → Dialogues tab → Push (`PUT /api/v1/dialogues/bulk`)
+**Backend sync:** Crystalline Rift Studio → Dialogues tab → push/pull one at a time, or "⬆ Push All"/"⬇ Pull All" → `PUT /api/v1/dialogues/bulk` / `GET /api/v1/dialogues`.
 
 The dialogue equivalent of `QuestDefinition` — one asset per authored conversation graph. See
 [Dialogue System](?page=unity/31-dialogue-system) for the document format and runtime, and
@@ -232,7 +232,7 @@ The dialogue equivalent of `QuestDefinition` — one asset per authored conversa
 | Field | Type | Purpose |
 |-------|------|---------|
 | `contentKey` | string | DB key, must match `dialogue.content_key` (e.g. `"dialogue-guide-area-1"`) |
-| `id` | string (GUID) | Stable, authored, minted once (`EnsureId()` on `Reset()`/`OnValidate()`). **Never change it after the first sync** — the local and server `dialogue` rows are both created under this id and neither repository ever re-keys an existing row, unlike `QuestDefinition`'s sync path. |
+| `id` | string (GUID) | Stable, authored, minted once (`EnsureId()` on `Reset()`/`OnValidate()`). **Never change it after the first sync** — the local and server `dialogue` rows are both created under this id and neither repository ever re-keys an existing row. |
 | `dialogueName` | string | Studio list label — author-facing only, never shown to players |
 | `description` | string | Author-facing description |
 | `npcContentKey` | string | `content_key` of the NPC this dialogue is linked to; empty when not tied to any NPC |
@@ -243,27 +243,6 @@ Inspector — there is no dedicated `DialogueDefinitionEditor` custom Inspector 
 [Dialogue Authoring → Status](?page=unity/32-dialogue-authoring#status)), so selecting a
 `DialogueDefinition` directly in the Project window shows Unity's default Inspector with everything
 except `documentJson` visible.
-
----
-
-### DialogueDefinition
-
-**Menu:** `CR/Dialogue Definition`  
-**Instances:** `Assets/CR/Content/Defs/Dialogues/`  
-**Backend sync:** Crystalline Rift Studio → Dialogues tab → push/pull one at a time or "⬆ Push All"/"⬇ Pull All" → `PUT /api/v1/dialogues/bulk` / `GET /api/v1/dialogues`.
-
-The dialogue equivalent of `QuestDefinition` — the designer's source of truth for a CR-authored
-conversation graph. See [Dialogue System](?page=unity/31-dialogue-system) for the document model this
-asset stores and [Dialogue Authoring](?page=unity/32-dialogue-authoring) for the authoring workflow.
-
-| Field | Type | Purpose |
-|-------|------|---------|
-| `contentKey` | string | DB key, must match `dialogue.content_key` (e.g. `"dialogue-guide-area-1"`) |
-| `id` | string (GUID) | Authored content GUID. **Must be stable and non-empty** — minted automatically the moment the asset exists (`OnValidate`/`Reset`); the local dialogue repository inserts under it and, like the server, **never re-keys an existing row**. Changing it after the first sync orphans whichever row was written under the old id. |
-| `dialogueName` | string | Studio list label — not shown to players in-game |
-| `description` | string | Author-facing description |
-| `npcContentKey` | string | The NPC this dialogue is linked to; empty if not tied to an NPC |
-| `documentJson` | string | The full `DialogueDocument` as JSON, up to 256 KB. **`[HideInInspector]`** — an IMGUI text area cannot render past ~16k characters and re-lays the whole string out on every repaint, so it is edited only through the Dialogue Editor's `TryGetDocument`/`SetDocument`, never directly in the generic Inspector. |
 
 Unlike `QuestDefinition`'s sync path (which *does* re-key an existing server row to an authored id —
 see [Quest System → Authored template ids are authoritative](?page=backend/07-quest-system#authored-template-ids-are-authoritative)),
