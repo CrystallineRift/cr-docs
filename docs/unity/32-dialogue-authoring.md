@@ -74,6 +74,26 @@ Node positions live in the document (`layout`), so they are pushed and pulled li
 and arranging marks the dialogue as changed in the Studio. They are not *content*: the shipped-asset
 pin test compares documents with positions left out (`DialogueDocumentNormalizer.ContentEqual`).
 
+**Following a line.** Every connection is drawn in its own colour, behind the nodes, so a line
+crossing a node it has nothing to do with never covers that node's text. Colours follow the
+conversation: a fork (a hub's cases, a choice's options) starts a new colour per port, and a node
+with one output carries on in the colour it was reached by, so "hub case → offer → choice" reads as
+one line and the choice's options then split into their own (`DialogueEdgeColors`). Hover a line and
+the whole conversation it belongs to lights up while everything else steps back: everything that
+can lead to that line from the entry, and everything it can lead on to, but none of its sibling
+branches (`DialogueThreads`). A line that loops back to the hub is never followed, or every
+conversation would be part of every other. Click a line to keep the trace and open the **Thread**
+tab, which writes that conversation out step by step, showing of a hub only the case that leads
+into it and of a choice only the options that stay inside it. Clicking a step selects its node.
+Escape, clicking the empty canvas or the tab's Clear button ends the trace; an edit re-traces it.
+
+**Find.** Cmd/Ctrl+F (or the toolbar's Find) opens a find bar. Every node containing the text is
+marked and the current match is framed; Enter / Shift+Enter, F3 / Shift+F3 or Cmd/Ctrl+G page through
+them in conversation order, wrapping at either end. It searches what you can see or type: ids, spoken
+text, speaker, notes, option text and ids, condition and action types and argument values, the prose
+summaries the nodes show, and an End's outcome. The counter says where the hit is ("3 / 7 · text,
+option"). An edit keeps the cursor on the node it was on if that node still matches. Escape closes.
+
 **Inspector.** Selecting a node opens a field inspector for its type: text and speaker for a Line,
 option list with per-option condition/action editors for a Choice, case list with per-case condition
 editors for a Branch, an action list for an Action node, outcome for an End node.
