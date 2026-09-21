@@ -1026,6 +1026,13 @@
       ],
       "cr-data": [
         "Assets/CR/Quests/Manager/QuestManager.cs",
+        "Assets/CR/Quests/Manager/IQuestService.cs",
+        "Assets/CR/Achievements/IAchievementService.cs",
+        "Assets/CR/Achievements/AchievementService.cs",
+        "Assets/CR/Progression/IProgressionNotifier.cs",
+        "Assets/CR/Core/Notifications/INotificationService.cs",
+        "Assets/CR/Core/Notifications/NotificationService.cs",
+        "Assets/CR/Journal/IJournalService.cs",
         "Assets/CR/UI/Achievements/**/*.cs",
         "Assets/CR/Game/World/Behaviours/LocationTriggerBehaviour.cs"
       ]

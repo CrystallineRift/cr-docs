@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-09-20 — Seams between quests, achievements, journal and toasts
+
+- **Unity: toasts render now.** `AchievementToastPresenter`, the only toast host, had been attached to no scene or
+  prefab since it was written, so no toast ever appeared. The rig is now code-created by a non-lazy binding, the
+  pending queue is capped at 8, and everything flows through `INotificationService`; `WorldToast.Show` forwards to it.
+- **Unity: `IQuestService`** extracted from `QuestManager` (15 injection sites retyped; a reflection test keeps the
+  interface complete).
+- **Unity: `IAchievementService` and `IProgressionNotifier`** own the achievement and ability-unlock events that
+  `QuestManager` used to raise. `QuestManager` reports to them; the two quest-manager events are gone.
+- **Unity: `IJournalService`** gives the Journal tab one snapshot call instead of two server domain services.
+
 ## 2026-09-20 — Online cache: the follow-up list
 
 - **Unity: terminal-state mirrors ride `PlayerStateCache`.** Collected pickups, achievement unlocks, completed
