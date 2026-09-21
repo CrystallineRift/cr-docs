@@ -134,13 +134,16 @@
         "Quests/**/*.cs",
         "Quests/**/*.csproj",
         "Game/CR.Game.Model/Rewards/*.cs",
-        "Game/CR.Game.Domain.Services/Implementation/Reward/*.cs"
+        "Game/CR.Game.Domain.Services/Implementation/Reward/*.cs",
+        "Quests/CR.Quests.Data.Migration/M7017AddGrantAndClaimModeToQuestTemplate.cs",
+        "Quests/CR.Quests.Data.Enums/QuestGrantMode.cs",
+        "Quests/CR.Quests.Data.Enums/QuestRewardClaimMode.cs"
       ],
       "cr-data": [
         "Assets/CR/Quests/**/*.cs"
       ]
     },
-    "description": "Quest system: templates, objectives, rewards, instances, progress events, requirements, condition evaluation"
+    "description": "Quest system: templates, objectives, rewards, instances, progress events, requirements, condition evaluation; grant mode / reward claim mode (M7017), AcceptQuestAsync restarts an abandoned/failed instance, content:write on template PUT/DELETE, objectives upserted by sort_order and the re-parenting risk"
   },
   "backend/08-stats-system": {
     "docPath": "docs/backend/08-stats-system.md",
@@ -175,10 +178,11 @@
       "cr-api": [],
       "cr-data": [
         "Assets/Scripts/Installers/**/*.cs",
-        "Assets/Scripts/**/*Installer*.cs"
+        "Assets/Scripts/**/*Installer*.cs",
+        "Assets/CR/Core/DI/DialogueModuleInstaller.cs"
       ]
     },
-    "description": "Zenject DI patterns, WithId bindings, scene installers"
+    "description": "Zenject DI patterns, WithId bindings, scene installers; DialogueModuleInstaller as the pattern for a domain-owned installer helper with a container-completeness test"
   },
   "unity/03-world-behaviours": {
     "docPath": "docs/unity/03-world-behaviours.md",
@@ -212,10 +216,14 @@
         "Assets/Scripts/**/*NpcMerchantBehaviour*.cs",
         "Assets/CR/Game/World/Behaviours/NpcDialogueBehaviour.cs",
         "Assets/CR/Game/World/Behaviours/NpcInteractionBehaviour.cs",
-        "Assets/CR/Game/World/Behaviours/NpcInteractionIndicator.cs"
+        "Assets/CR/Game/World/Behaviours/NpcInteractionIndicator.cs",
+        "Assets/CR/Game/World/Behaviours/NpcInteractionRouting.cs",
+        "Assets/CR/Game/World/Behaviours/NpcInteractionRoute.cs",
+        "Assets/CR/Game/World/Behaviours/NpcTrainerBarkPolicy.cs",
+        "Assets/CR/Game/World/Behaviours/DialogueBackend.cs"
       ]
     },
-    "description": "Composable NPC interaction: NpcInteractionBehaviour dispatch, NpcBattleRequest, OnBattleRequested event, grant vs battle vs merchant vs dialogue flow"
+    "description": "Composable NPC interaction: NpcInteractionBehaviour dispatch, NpcBattleRequest, OnBattleRequested event, grant vs battle vs merchant vs dialogue flow; two dialogue backends (Plugin/Cr) and NpcInteractionRouting's pure decision table, trainer bark gating on DialogueOutcome.Completed"
   },
   "unity/05-http-clients": {
     "docPath": "docs/unity/05-http-clients.md",
@@ -575,10 +583,13 @@
         "Assets/CR/Core/Data/Logic/ReviewGroup.cs",
         "Assets/CR/Core/Data/Logic/ContentReviewRows.cs",
         "Assets/CR/Core/Data/Logic/FieldChange.cs",
-        "Assets/CR/Core/Data/Logic/FieldDiff.cs"
+        "Assets/CR/Core/Data/Logic/FieldDiff.cs",
+        "Assets/CR/Core/Data/Editor/DialogueScaffoldMenu.cs",
+        "Assets/CR/Core/Data/Editor/DialogueContentAuditMenu.cs",
+        "Assets/CR/Game/World/Editor/DialogueEditorSyncHelper.cs"
       ]
     },
-    "description": "IGameContentRegistry, ScriptableObjectContentRegistry, ServerContentRegistry, MutableContentRegistry, ContentRegistryInitializer, ContentManifestClientUnityHttp, ContentDefinitionProvider, ContentKeys constants, CreatureDefinition/ItemDefinition/NpcDefinition/SpawnerDefinition ScriptableObjects, CreatureContentDef/ItemContentDef/NpcContentDef/SpawnerContentDef POCOs, IGameAssetLoader.LoadAssetByKeyAsync, ContentStudioTool unified EditorWindow (7 tabs replacing ContentCreatorTool and AbilityLibraryTool), custom Inspectors for all definition types, AddressablesCatalogUpdater, LocalizationEditorWindow, ContentAuditTool, ContentPublishTool, AbilityConfig/AbilityProgressionSetConfig/GrowthProfileConfig SOs, AbilityEditorSyncHelper, ability sync clients (HTTP/local/online-offline); Crystalline Rift Studio chrome rebuilt in UI Toolkit (CRStudio.uss shared editor design system, grouped navigation rail with live counts, header count chips + server field + connection pill, status bar; tab bodies remain IMGUI in an IMGUIContainer); ContentDisplayName single naming rule + ContentPicker dropdowns (human names stored as keys, dangling references warned, options from project incl. arenas unioned from spawners/trainers/open scenes); header rebuilt around one StudioWorkSummary pill (the single ranked answer to \"what needs doing\", with the button that resolves it) plus Guide and Advanced switches — Advanced (same pref as the old Debug toggle) holds the server field, raw keys/ids, the all-content sync bar and the recovery actions; ContentSectionCatalog is the one source of the rail's labels, groups and per-section guide sentences; project scans (registry sweep, orphan scan, Addressables lookups, push-state file stats) cached through EditorMemo/EditorMemoPolicy on the IMGUI layout pass instead of running every repaint; Trainer Battles tab; spawner/pool/creature/item reference fields all ContentPicker dropdowns (Fetch-button flows deleted); NpcAuthorChecklist readiness panel on NpcDefinitionEditor; Crystalline Rift Studio's slow work moved off the draw thread into a job system (StudioJobTracker/StudioJobQueue pure logic + StudioJob/StudioIteratorJob/StudioJobRunner stepping on EditorApplication.update within an 8ms budget, yield-a-Task for non-Unity work, StudioProgressBar cr-jobbar strip above the status bar, [Studio]-prefixed console lines on every status transition): per-definition content pushes (plan built without network, one send per tick, cancellable, tab not stamped on a partial run), per-type pulls, and the registry sweep + push comparison (published into a pending slot and adopted only on a Layout pass); NPC placements now scanned across EVERY scene in the project rather than the open ones — NpcSceneScanJob reads scene/prefab YAML on a worker thread (NpcScanFileReader buffered single-pass pre-filter, NpcScenePlacementParser for Component/PrefabInstance/PrefabReference shapes, NpcPrefabClosure fixed point over m_SourcePrefab so variants and nested NPC prefabs count), results cached per file in Library/CRStudioNpcScenes.json under NpcScanCachePolicy with prefab-state and resolved-prefab fingerprints; NpcPlacementIndex/NpcSceneGroup drive a scan strip, per-row 'in Village (2), Meadow' summaries and per-scene grouped placements with Open scene/Select via NpcPlacementNavigator; NpcDefinitionEditor's checklist reads placement from the scan or the open scene and memoises BuildSnapshot; COMBAT → Battle Reactions tab (CreatureReactionProfile rows with ReactionProfileRow digest, Variant button, inline CreatureReactionProfileEditor; local-only, no sync); SYSTEM → Configuration section (StudioConfigurationPanel + BackendEnvironmentsConfig asset: Local/Production environments applied to the editor's server pref, every *_server_http_address in game_config.yaml via GameConfigRewrite, and the Addressables Remote.LoadPath; BackendUrl/BackendEnvironmentMatch/BackendTargetsSummary pure logic; one Key row per environment (personal API key) stored in EditorPrefs via BackendKeyVault, masked with a 15s auto-hiding reveal, activated for both service and admin auth by Use for editor); LIVE OPS group (Players tab 18 + Marketplace tab 19 in Editor/LiveOps/, EditorAdminAuth admin token, StudioJob-backed admin reads/writes, ModerationReasonDialog) — see backend/18-moderation; Review window (ContentReviewWindow, Review button beside Push All): every unpushed asset grouped by type with per-row Diff (FieldDiff over EditorJsonUtility of local vs server-applied clone), Push (PushOne, single-asset job, tab not stamped) and Revert (RevertOne, same apply as Pull All, confirm-gated, not for Trainer Battles); ContentPushLog per-asset stamps (LastPushUtcTicks_asset_<guid>) so ContentPushStatus counts an asset pushed when newer than the later of tab/asset stamps; ReviewRow/ReviewGroup/ContentReviewRows pure logic"
+    "description": "IGameContentRegistry, ScriptableObjectContentRegistry, ServerContentRegistry, MutableContentRegistry, ContentRegistryInitializer, ContentManifestClientUnityHttp, ContentDefinitionProvider, ContentKeys constants, CreatureDefinition/ItemDefinition/NpcDefinition/SpawnerDefinition ScriptableObjects, CreatureContentDef/ItemContentDef/NpcContentDef/SpawnerContentDef POCOs, IGameAssetLoader.LoadAssetByKeyAsync, ContentStudioTool unified EditorWindow (7 tabs replacing ContentCreatorTool and AbilityLibraryTool), custom Inspectors for all definition types, AddressablesCatalogUpdater, LocalizationEditorWindow, ContentAuditTool, ContentPublishTool, AbilityConfig/AbilityProgressionSetConfig/GrowthProfileConfig SOs, AbilityEditorSyncHelper, ability sync clients (HTTP/local/online-offline); Crystalline Rift Studio chrome rebuilt in UI Toolkit (CRStudio.uss shared editor design system, grouped navigation rail with live counts, header count chips + server field + connection pill, status bar; tab bodies remain IMGUI in an IMGUIContainer); ContentDisplayName single naming rule + ContentPicker dropdowns (human names stored as keys, dangling references warned, options from project incl. arenas unioned from spawners/trainers/open scenes); header rebuilt around one StudioWorkSummary pill (the single ranked answer to \"what needs doing\", with the button that resolves it) plus Guide and Advanced switches — Advanced (same pref as the old Debug toggle) holds the server field, raw keys/ids, the all-content sync bar and the recovery actions; ContentSectionCatalog is the one source of the rail's labels, groups and per-section guide sentences; project scans (registry sweep, orphan scan, Addressables lookups, push-state file stats) cached through EditorMemo/EditorMemoPolicy on the IMGUI layout pass instead of running every repaint; Trainer Battles tab; spawner/pool/creature/item reference fields all ContentPicker dropdowns (Fetch-button flows deleted); NpcAuthorChecklist readiness panel on NpcDefinitionEditor; Crystalline Rift Studio's slow work moved off the draw thread into a job system (StudioJobTracker/StudioJobQueue pure logic + StudioJob/StudioIteratorJob/StudioJobRunner stepping on EditorApplication.update within an 8ms budget, yield-a-Task for non-Unity work, StudioProgressBar cr-jobbar strip above the status bar, [Studio]-prefixed console lines on every status transition): per-definition content pushes (plan built without network, one send per tick, cancellable, tab not stamped on a partial run), per-type pulls, and the registry sweep + push comparison (published into a pending slot and adopted only on a Layout pass); NPC placements now scanned across EVERY scene in the project rather than the open ones — NpcSceneScanJob reads scene/prefab YAML on a worker thread (NpcScanFileReader buffered single-pass pre-filter, NpcScenePlacementParser for Component/PrefabInstance/PrefabReference shapes, NpcPrefabClosure fixed point over m_SourcePrefab so variants and nested NPC prefabs count), results cached per file in Library/CRStudioNpcScenes.json under NpcScanCachePolicy with prefab-state and resolved-prefab fingerprints; NpcPlacementIndex/NpcSceneGroup drive a scan strip, per-row 'in Village (2), Meadow' summaries and per-scene grouped placements with Open scene/Select via NpcPlacementNavigator; NpcDefinitionEditor's checklist reads placement from the scan or the open scene and memoises BuildSnapshot; COMBAT → Battle Reactions tab (CreatureReactionProfile rows with ReactionProfileRow digest, Variant button, inline CreatureReactionProfileEditor; local-only, no sync); SYSTEM → Configuration section (StudioConfigurationPanel + BackendEnvironmentsConfig asset: Local/Production environments applied to the editor's server pref, every *_server_http_address in game_config.yaml via GameConfigRewrite, and the Addressables Remote.LoadPath; BackendUrl/BackendEnvironmentMatch/BackendTargetsSummary pure logic; one Key row per environment (personal API key) stored in EditorPrefs via BackendKeyVault, masked with a 15s auto-hiding reveal, activated for both service and admin auth by Use for editor); LIVE OPS group (Players tab 18 + Marketplace tab 19 in Editor/LiveOps/, EditorAdminAuth admin token, StudioJob-backed admin reads/writes, ModerationReasonDialog) — see backend/18-moderation; Review window (ContentReviewWindow, Review button beside Push All): every unpushed asset grouped by type with per-row Diff (FieldDiff over EditorJsonUtility of local vs server-applied clone), Push (PushOne, single-asset job, tab not stamped) and Revert (RevertOne, same apply as Pull All, confirm-gated, not for Trainer Battles); ContentPushLog per-asset stamps (LastPushUtcTicks_asset_<guid>) so ContentPushStatus counts an asset pushed when newer than the later of tab/asset stamps; ReviewRow/ReviewGroup/ContentReviewRows pure logic; Dialogues tab (22) with its audit panel"
   },
   "backend/10-asset-management": {
     "docPath": "docs/backend/10-asset-management.md",
@@ -731,10 +742,11 @@
         "Assets/CR/Core/Data/Repository/LocalDataSources.cs",
         "Assets/CR/UI/Logic/SpeciesInfo.cs",
         "Assets/CR/UI/Logic/StatusBadge.cs",
-        "Assets/CR/Content/Defs/Items/*.asset"
+        "Assets/CR/Content/Defs/Items/*.asset",
+        "Assets/CR/Quests/NpcDisplayNameResolver.cs"
       ]
     },
-    "description": "Player menu UI: 5-tab overlay (Team/Bag/Quests/Journal/System) wired to real domain data — PlayerTeamView squad sheet, BagScreenHandler backpack with BagItemPolicy filtering, QuestJournalView active/completed quests, JournalView achievements + stat records, CR.UI.Logic pure rules, input wiring via UICoordinator"
+    "description": "Player menu UI: 5-tab overlay (Team/Bag/Quests/Journal/System) wired to real domain data — PlayerTeamView squad sheet, BagScreenHandler backpack with BagItemPolicy filtering, QuestJournalView active/completed quests, JournalView achievements + stat records, CR.UI.Logic pure rules, input wiring via UICoordinator; Quests tab 'Return to {giver}' status for a ReturnToGiver quest awaiting the player"
   },
   "backend/09-battle-persistence": {
     "docPath": "docs/backend/09-battle-persistence.md",
@@ -838,7 +850,7 @@
         "Assets/CR/Core/DI/LocalDevGameInstaller.cs"
       ]
     },
-    "description": "Dialogue System abstraction: IDialogueHandler interface, PixelCrushersDialogueHandler MonoBehaviour, QuestDialogueBridge, NpcDialogueBehaviour interact-driven conversation start (replaces ProximitySelector use-key), conversation dropdown in QuestObjectiveDefinition editor, abort-detection flag pattern"
+    "description": "LEGACY: Dialogue System abstraction: IDialogueHandler interface, PixelCrushersDialogueHandler MonoBehaviour, QuestDialogueBridge, NpcDialogueBehaviour interact-driven conversation start (replaces ProximitySelector use-key), conversation dropdown in QuestObjectiveDefinition editor, abort-detection flag pattern; conversationTitle/conversationId fields removed from QuestObjectiveDefinition, superseded by the CR dialogue system (unity/31, unity/32) for new content"
   },
   "unity/12-scriptable-objects": {
     "docPath": "docs/unity/12-scriptable-objects.md",
@@ -873,10 +885,12 @@
         "Assets/CR/Core/Data/Editor/ItemDefinitionEditor.cs",
         "Assets/CR/Core/Data/Editor/StatusConditionConfigEditor.cs",
         "Assets/CR/Content/Defs/Items/*.asset",
-        "Assets/CR/Content/Defs/StatusConditions/*.asset"
+        "Assets/CR/Content/Defs/StatusConditions/*.asset",
+        "Assets/CR/Core/Data/Registry/Definitions/DialogueDefinition.cs",
+        "Assets/CR/Content/Defs/Dialogues/*.asset"
       ]
     },
-    "description": "All ScriptableObject types: what each does, every field, which sync to the backend and via which endpoint, ContentDefinitionProvider registry wiring, BattleCameraProfile cinematic-camera feel SO, CreatureReactionProfile shared body-reaction SO (animation+cry+feedback per beat, baseProfile inheritance/override for evolutions, Resolve() flatten; referenced by CreatureDefinition.reactionProfile; offensive VFX comes from AbilityConfig), Dialogue Database note, ElementalReactionDefinition (primer condition + detonator element -> multiplier/applied condition, snake_case content key, seed-migration export) and ElementalDamageMatrixConfig (one asset per matrix version, 100 completed cells, isActive mirrors battle_system_version)"
+    "description": "All ScriptableObject types: what each does, every field, which sync to the backend and via which endpoint, ContentDefinitionProvider registry wiring, BattleCameraProfile cinematic-camera feel SO, CreatureReactionProfile shared body-reaction SO (animation+cry+feedback per beat, baseProfile inheritance/override for evolutions, Resolve() flatten; referenced by CreatureDefinition.reactionProfile; offensive VFX comes from AbilityConfig), Dialogue Database note, ElementalReactionDefinition (primer condition + detonator element -> multiplier/applied condition, snake_case content key, seed-migration export) and ElementalDamageMatrixConfig (one asset per matrix version, 100 completed cells, isActive mirrors battle_system_version); DialogueDefinition SO (id rule, hidden documentJson), QuestDefinition gains grantMode/rewardClaimMode and loses conversationTitle/conversationId, ContentDefinitionProvider.quests/dialogues corrected"
   },
   "unity/13-battle-bag-ui": {
     "docPath": "docs/unity/13-battle-bag-ui.md",
@@ -939,10 +953,12 @@
         "Assets/CR/Core/Session/GameSessionManager.cs",
         "Assets/CR/Core/Session/IGameSessionService.cs",
         "Assets/CR/Quests/QuestRewardDispatcher.cs",
-        "Assets/CR/UI/Battle/BattleBagPanelHandler.cs"
+        "Assets/CR/UI/Battle/BattleBagPanelHandler.cs",
+        "Assets/CR/Quests/QuestAutoGranter.cs",
+        "Assets/CR/Quests/Manager/IQuestService.cs"
       ]
     },
-    "description": "Designer-facing event + variable wiring: EventWiringManifest, VariableWiringManifest, IEventSourceRegistry, BattleEventsAdapter, TrainerSessionAdapter, QuestRewardAdapter, capture/exp/level events, editor window, codegen for IL2CPP, how to add new events and data payloads"
+    "description": "Designer-facing event + variable wiring: EventWiringManifest, VariableWiringManifest, IEventSourceRegistry, BattleEventsAdapter, TrainerSessionAdapter, QuestRewardAdapter, capture/exp/level events, editor window, codegen for IL2CPP, how to add new events and data payloads; IQuestService.OnRewardsClaimed/OnSessionReady and why a long-lived NonLazy consumer subscribes to the event instead of awaiting WhenReady once"
   },
   "unity/17-content-pipeline": {
     "docPath": "docs/unity/17-content-pipeline.md",
@@ -1255,7 +1271,8 @@
         "Assets/CR/Game/Battle/Logic/BattleMissionSeedMigrationGenerator.cs",
         "Assets/CR/Core/Data/Editor/BattleMissionSeedMigrationExporter.cs",
         "Assets/CR/Game/Battle/Missions/BattleMissionTemplateRoutedSource.cs",
-        "Assets/CR/Core/DI/LocalDevGameInstaller.cs"
+        "Assets/CR/Core/DI/LocalDevGameInstaller.cs",
+        "Assets/CR/Game/World/Behaviours/DialogueWorldBehaviour.cs"
       ]
     },
     "description": "Runtime content pull-through cache: ServerContentSyncService fetch+paging, ContentSyncWriter SQL rules (no id rewrites, lowercase GUIDs, named-column upserts, derived junction ids, per-domain transactions), ContentSyncReport version-recording rule, deletion safety, and the dotnet round-trip tests."
@@ -1352,7 +1369,7 @@
     },
     "description": "Live-ops moderation: account_moderation/admin_action, shadow bans and the hidden-seller rule, player dossiers, currency/item adjustments, and the /api/v1/admin routes behind RequireAdmin"
   },
-"backend/20-personal-api-keys": {
+  "backend/20-personal-api-keys": {
     "docPath": "docs/backend/20-personal-api-keys.md",
     "repos": {
       "cr-api": [
@@ -1496,5 +1513,78 @@
       ]
     },
     "description": "Authoring evolution rules on CreatureDefinition, the inspector section and its validation, Crystalline Rift Studio push/pull/revert/diff, the seed migration export (M13003) and floor rebake, runtime rule sync"
+  },
+  "unity/31-dialogue-system": {
+    "docPath": "docs/unity/31-dialogue-system.md",
+    "repos": {
+      "cr-api": [
+        "Dialogue/CR.Dialogue.Model/**/*.cs",
+        "Dialogue/CR.Dialogue.Runtime/**/*.cs"
+      ],
+      "cr-data": [
+        "Assets/CR/Dialogue/Service/**/*.cs",
+        "Assets/CR/Dialogue/Repository/**/*.cs",
+        "Assets/CR/UI/Dialogue/**/*.cs",
+        "Assets/CR/Quests/Dialogue/**/*.cs",
+        "Assets/CR/Progress/Dialogue/**/*.cs",
+        "Assets/CR/Npcs/Dialogue/**/*.cs",
+        "Assets/CR/Core/DI/DialogueModuleInstaller.cs",
+        "Assets/CR/Game/World/Behaviours/DialogueWorldBehaviour.cs",
+        "Assets/CR/Game/World/Behaviours/NpcDialogueBehaviour.cs",
+        "Assets/CR/Game/World/Behaviours/NpcInteractionBehaviour.cs",
+        "Assets/CR/Game/World/Behaviours/NpcInteractionRouting.cs",
+        "Assets/CR/Game/World/Behaviours/NpcTrainerBarkPolicy.cs",
+        "Assets/CR/Game/World/Behaviours/DialogueBackend.cs",
+        "Assets/CR/Game/World/Behaviours/NpcInteractionRoute.cs",
+        "Assets/CR/Tests/Editor/DialogueCoreLayeringTests.cs"
+      ]
+    },
+    "description": "The CR dialogue system: document model (nodes/options/cases/conditions/actions), the module vocabulary (quest/progress/npc), the dialogue-core-knows-nothing-about-quests layering test, DialogueRunner safety rules and DialogueEndReason, DialogueService start results/ends-exactly-once/cannot-wedge, DialogueScreenPresenter and the isMenuOpen gate, the id rule, the online/offline router, boot-time sync, NPC routing and trainer bark gating"
+  },
+  "unity/32-dialogue-authoring": {
+    "docPath": "docs/unity/32-dialogue-authoring.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [
+        "Assets/CR/Dialogue/Editing/**/*.cs",
+        "Assets/CR/Dialogue/Editor/**/*.cs",
+        "Assets/CR/Core/Data/Editor/ContentStudioTool.cs",
+        "Assets/CR/Core/Data/Editor/DialogueAuditFacts.cs",
+        "Assets/CR/Core/Data/Editor/DialogueScaffoldMenu.cs",
+        "Assets/CR/Core/Data/Editor/DialogueContentAuditMenu.cs",
+        "Assets/CR/Core/Data/Editor/QuestDefinitionEditor.cs",
+        "Assets/CR/Core/Data/Logic/DialogueContentAudit.cs",
+        "Assets/CR/Quests/QuestAutoGranter.cs",
+        "Assets/CR/Quests/QuestRewardDispatcher.cs",
+        "Assets/CR/Quests/NpcDisplayNameResolver.cs",
+        "Assets/CR/Quests/Manager/Logic/QuestAutoGrantPolicy.cs",
+        "Assets/CR/Quests/Manager/Logic/QuestRewardClaimPolicy.cs",
+        "Assets/CR/Game/World/Editor/DialogueEditorSyncHelper.cs",
+        "Assets/CR/Game/World/Editor/DialogueDefinitionMapper.cs",
+        "Assets/CR/Tests/Editor/DialogueContentAuditTests.cs",
+        "Assets/CR/Tests/Editor/DialogueContentAuditRealAssetTests.cs",
+        "Assets/CR/Content/Defs/Dialogues/*.asset",
+        "Assets/CR/Content/Defs/Quests/*.asset"
+      ]
+    },
+    "description": "Dialogue authoring workflow: Studio Dialogues tab, the guide-NPC scaffold menu, the GraphView node editor (typed condition/action editors, findings the server can't see, the changed-outside-editor guard, undo), DialogueContentAudit's 12 rules and where they run, push/pull/review, the six shipped dialogues and the guide graph's branch order, authoring rules that bite (auto-grant/claim, sort-order upsert danger), preview pane not built"
+  },
+  "backend/21-dialogue-domain": {
+    "docPath": "docs/backend/21-dialogue-domain.md",
+    "repos": {
+      "cr-api": [
+        "Dialogue/CR.Dialogue.Data/**/*.cs",
+        "Dialogue/CR.Dialogue.Data.Postgres/**/*.cs",
+        "Dialogue/CR.Dialogue.Data.Sqlite/**/*.cs",
+        "Dialogue/CR.Dialogue.Data.Migration/**/*.cs",
+        "Dialogue/CR.Dialogue.Domain.Services/**/*.cs",
+        "Dialogue/CR.Dialogue.Model/**/*.cs",
+        "Dialogue/CR.Dialogue.Model.REST/**/*.cs",
+        "Dialogue/CR.Dialogue.Service.REST/**/*.cs",
+        "Common/CR.Common.Data.Postgres/Server/PostgresGlobalErrorMiddleware.cs"
+      ],
+      "cr-data": []
+    },
+    "description": "Server dialogue domain: dialogue table (M14001), repository semantics (soft delete + revive, transactional bulk upsert with replay-once-on-race, engine-independent NPC tie-break, SQL npc filter/paging), DialogueValidator's full finding-code list and DialogueLimits, the id-ignored/id-in-use/duplicate-id rule, REST routes and auth, the global error middleware's fixed-message + traceId contract, M14002 content seed not yet built"
   }
 }

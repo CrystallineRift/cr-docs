@@ -479,6 +479,16 @@ Data comes from `QuestManager.RefreshActiveQuestsAsync`, `GetCompletedQuestsAsyn
 `GetTemplateAsync` (templates cached per render). See `docs/backend/07-quest-system.md` §"Reading
 Quests from Unity" for why the completed and template reads are answered locally in both modes.
 
+**"Return to {giver}."** `QuestActionPolicy.Decide` now also takes the template's `claimMode`
+(`(int)template.RewardClaimMode`) and `hasGiver` (`!string.IsNullOrWhiteSpace(template.GiverNpcContentKey)`).
+When a completed instance is `ReturnToGiver` and the template has a giver, the card's status label
+replaces its usual "Completed" text with `"Return to {giver}"` (`INpcDisplayNameResolver.Resolve`,
+authored `NpcDefinition.displayNameKey` first, then the online registry, then the raw content key) and
+switches to a distinct "claimable" style. See [Quest System → Grant mode and reward claim
+mode](?page=backend/07-quest-system#grant-mode-and-reward-claim-mode) for when this state is reached
+instead of an automatic claim, and [Dialogue System](?page=unity/31-dialogue-system) for the
+`quest.claim` dialogue action that can also resolve it.
+
 ## Journal tab (`JournalView`)
 
 Constructor: `(IAchievementDomainService, IStatService, ILogger<JournalView>, IGameAssetLoader?)`

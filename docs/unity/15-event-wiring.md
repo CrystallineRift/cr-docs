@@ -225,11 +225,52 @@ The generated class uses plain `+= handler` subscriptions — no reflection. Re-
 | `OnQuestCompleted` | `QuestInstance` |
 | `OnQuestAbandoned` | `Guid` |
 | `OnObjectiveUpdated` | `QuestObjectiveProgress` |
+| `OnRewardsClaimed` | `QuestInstance` |
+
+`OnRewardsClaimed` fires every time `ClaimRewardsAsync` succeeds, regardless of who triggered it —
+`QuestRewardDispatcher`'s own auto-claim, the Quests tab's Claim button, or the dialogue
+`quest.claim` action handler (see [The CR Dialogue System](?page=unity/31-dialogue-system)). It is
+the one choke point every claim path passes through, so `QuestAutoGranter` subscribes to it once to
+re-sweep for a follow-up `AutoWhenAvailable` quest a claim may have just unlocked, instead of hooking
+every individual caller.
+
+**Why long-lived consumers use `OnSessionReady`, never await `WhenReady` once.**
+`IQuestService.WhenReady` is a NEW `Task` for every trainer session (`BeginSession` resets it on every
+trainer switch) — awaiting it once at container-build time serves only the FIRST trainer's session and
+silently never fires again for any later one. `IQuestService.OnSessionReady` is the corresponding
+event: raised every time a session becomes ready (once `WhenReady` completes), so a singleton that
+lives as long as the container — `QuestAutoGranter` is the example — subscribes to `OnSessionReady`
+once and reacts correctly on every trainer switch, not just the first.
 
 ### Quest rewards (`QuestRewardAdapter`)
 | Event | Payload |
 |---|---|
 | `RewardsDispatched` | `QuestRewardsDispatchedData` (Quest + flat reward list) |
+
+### `IQuestService.OnRewardsClaimed` / `OnSessionReady`
+
+Two more `QuestManager`/`IQuestService` events, not yet wired into a SOAP adapter, used directly by
+game code that needs to react every time something happens rather than once:
+
+| Event | Payload | Fires |
+|---|---|---|
+| `OnRewardsClaimed` | `QuestInstance` | Every claim, through every path: the dispatcher's own auto-claim, the Quests tab's Claim button, and a dialogue `quest.claim` action (see [Dialogue System](?page=unity/31-dialogue-system)) — all three ultimately call `IQuestService.ClaimRewardsAsync`, so this one event covers them all. |
+| `OnSessionReady` | none | Once per trainer session becomes ready — i.e. every time `QuestWorldBehaviour.InitializeAsync` finishes seeding the manager, not just the first one in the process. |
+
+**Why a long-lived consumer subscribes to `OnSessionReady` instead of awaiting `QuestManager.WhenReady`
+once.** `WhenReady` is a `Task` — awaiting it resolves exactly once, for whichever session was current
+at the moment of the `await`. A `NonLazy` singleton constructed once at container build time (e.g.
+`QuestAutoGranter`, which needs to re-sweep the trainer's available quests on *every* trainer switch,
+not just the first) that awaited `WhenReady` in its constructor would only ever see the first
+session's readiness; every later trainer selected in the same process would silently never trigger it
+again, because the `Task` it captured had already completed. `OnSessionReady` is an event, not a
+`Task` — a subscriber set up once at construction time gets a callback for every session, forever.
+
+The same distinction bit `QuestManager.WhenReady` itself once, for a different consumer
+(`QuestGranterBehaviour`, which does still correctly re-await it per call) — see [Quest System →
+Reading Quests from Unity](?page=backend/07-quest-system) for `QuestSessionReadyGate`, the fix for
+`WhenReady` going stale across a trainer switch. `OnSessionReady`/`OnRewardsClaimed` sidestep the
+whole "did I await at the wrong time" class of bug for a listener that needs to react every time.
 
 ### Capture / progression (`BattleEventsAdapter`)
 | Event | Payload |
