@@ -1,5 +1,27 @@
 # Localization
 
+> **Status, checked 2026-09-21. Read this before relying on the rest of the page.** The page below
+> describes the intended design. What the code actually does today:
+>
+> | Part | State |
+> |---|---|
+> | Loader: per-domain YAML under `Resources/configuration/localization/`, language from the file suffix (`npcs.fr.yaml` → `fr`), English when there is none | **Works** |
+> | `TryGetText(language, key, out text)` | **Works** |
+> | `TryGetText(key, out text)` (no language) | **A stub.** It returns the literal text "Open LocalizationRepository.cs and implement this. Line 86". Do not call it. |
+> | `GameConfiguration.DisplayLanguage` / `display_language` | **Does not exist.** There is no language setting anywhere; callers pass `"en"`. |
+> | Files present | `abilities`, `creatures`, `items`, `npcs`, `statuses` (English only) |
+> | Runtime readers | **One:** `NpcDisplayNameResolver` (the giver's name in "Return to {giver}"). Nothing renders creature, item, ability or status text from these files yet. |
+> | `quests.yaml` | **Removed (2026-09-21).** Nothing ever read it. Quest names, descriptions and objective text are authored on the `QuestDefinition`, pushed to the server and rendered from the quest template. The `quest_*` keys used as examples below are illustrations of the naming convention only. |
+>
+> **Dialogue text** does not use hand-named keys at all. A dialogue document keeps its
+> source-language text (so authoring in the Dialogue Editor stays WYSIWYG), and a translation is
+> looked up by a key DERIVED from where the line lives: `dlg.{dialogueContentKey}.{nodeId}` for a
+> line, `dlg.{dialogueContentKey}.{nodeId}.{optionId}` for a choice option
+> (`CR.Dialogue.Runtime.DialogueTextSource.Key`, `LocalizedDialogueTextResolver`). No translation
+> falls back to the authored text. Node and option ids survive rewording, so nobody maintains a key
+> list by hand and nothing drifts. If quest text is localized later it should follow the same model
+> (`quest.{contentKey}.name`, source text on the template as the fallback), not a parallel YAML list.
+
 All user-facing strings in CR — quest names, objective text, ability names, creature descriptions, item tooltips, status effect names — live in YAML files loaded at runtime by `LocalizationRepository`. The database `name`/`description` columns are retained as canonical fallbacks for server-side tooling, but the client always renders from localization files.
 
 ## Why This Approach?
