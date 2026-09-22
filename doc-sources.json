@@ -1563,11 +1563,14 @@
         "Assets/CR/Game/World/Editor/DialogueDefinitionMapper.cs",
         "Assets/CR/Tests/Editor/DialogueContentAuditTests.cs",
         "Assets/CR/Tests/Editor/DialogueContentAuditRealAssetTests.cs",
+        "Assets/CR/Core/Data/Logic/ContentParking.cs",
         "Assets/CR/Content/Defs/Dialogues/*.asset",
-        "Assets/CR/Content/Defs/Quests/*.asset"
+        "Assets/CR/Content/Defs/Quests/*.asset",
+        "Assets/CR/Content/Defs/_Parked/Dialogues/*.asset",
+        "Assets/CR/Content/Defs/_Parked/Quests/*.asset"
       ]
     },
-    "description": "Dialogue authoring workflow: Studio Dialogues tab, the guide-NPC scaffold menu, the GraphView node editor (typed condition/action editors, findings the server can't see, the changed-outside-editor guard, undo), DialogueContentAudit's 12 rules and where they run, push/pull/review, the six shipped dialogues and the guide graph's branch order, authoring rules that bite (auto-grant/claim, sort-order upsert danger), preview pane not built"
+    "description": "Dialogue authoring workflow: Studio Dialogues tab, the guide-NPC scaffold menu, the GraphView node editor (typed condition/action editors, findings the server can't see, the changed-outside-editor guard, undo), DialogueContentAudit's 12 rules and where they run, push/pull/review, the shipped dialogues (active vs parked under Defs/_Parked, ContentParking), the Meadow Merchant as the main story's Act 1, the guide graph's branch order, authoring rules that bite (auto-grant/claim, sort-order upsert danger), preview pane"
   },
   "backend/21-dialogue-domain": {
     "docPath": "docs/backend/21-dialogue-domain.md",

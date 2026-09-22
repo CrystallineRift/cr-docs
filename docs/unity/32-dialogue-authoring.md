@@ -212,28 +212,40 @@ checkmark that hides the problem.
 **Review** — the tab's per-row Diff/Push/Revert flow used by every other content type ([Content
 Registry → Review window](?page=unity/08-content-registry)) applies to dialogues the same way.
 
-## The Six Shipped Dialogues
+## The Shipped Dialogues: Active And Parked
 
-Under `Assets/CR/Content/Defs/Dialogues/`, ids minted once at creation and never touched again:
+Seven dialogue assets exist, ids minted once at creation and never touched again. Only ONE is
+active. The rest are **parked**: moved under `Assets/CR/Content/Defs/_Parked/Dialogues/` (same
+GUID, same id, still editable) and removed from `ContentDefinitionProvider.dialogues`. Offline
+content is exactly the provider's lists, so a parked dialogue does not exist in the game. The
+checklist in `CR/docs/2026-09-22-npc-quest-checklist.html` adds them back one kind at a time,
+each with its quest, an end-to-end test and a playtest.
 
-| contentKey | NPC | Nodes | Role |
-|---|---|---|---|
-| `dialogue-guide-area-1` | `demo-questgiver-area-1` | 30 | Meadow Guide — the only guide with every state: offer, ready-to-turn-in, in-progress, completed, idle, plus the welcome talk-objective. |
-| `dialogue-guide-area-2` | `demo-questgiver-area-2` | 8 | Cave Guide. |
-| `dialogue-guide-area-3` | `demo-questgiver-area-3` | 14 | Shore Guide. |
-| `dialogue-guide-area-4` | `demo-questgiver-area-4` | 8 | Crags Guide. |
-| `dialogue-guide-area-5` | `demo-questgiver-area-5` | 3 | Dunes Guide — has nothing to offer yet; idle-only. |
-| `npc-trainer-meadow-scout-bark` | `npc-trainer-meadow-scout` | 2 | Pre-battle bark; the battle starts when the conversation completes (see [Dialogue System → Trainer bark gates the battle](?page=unity/31-dialogue-system#trainer-bark-gates-the-battle-on-completed)). |
+| contentKey | NPC | Nodes | State | Role |
+|---|---|---|---|---|
+| `dialogue-merchant-area-1` | `demo-merchant-area-1` | 27 | **active** | The Meadow Merchant, the main story's Act 1 (below). |
+| `dialogue-guide-area-1` | `demo-questgiver-area-1` | 30 | parked | Meadow Guide — every state: offer, ready-to-turn-in, in-progress, completed, idle. |
+| `dialogue-guide-area-2` | `demo-questgiver-area-2` | 8 | parked | Cave Guide. |
+| `dialogue-guide-area-3` | `demo-questgiver-area-3` | 14 | parked | Shore Guide. |
+| `dialogue-guide-area-4` | `demo-questgiver-area-4` | 8 | parked | Crags Guide. |
+| `dialogue-guide-area-5` | `demo-questgiver-area-5` | 3 | parked | Dunes Guide — has nothing to offer yet; idle-only. |
+| `npc-trainer-meadow-scout-bark` | `npc-trainer-meadow-scout` | 2 | parked | Pre-battle bark; the battle starts when the conversation completes (see [Dialogue System → Trainer bark gates the battle](?page=unity/31-dialogue-system#trainer-bark-gates-the-battle-on-completed)). Without it the trainer just battles. |
 
-Each follows the scaffold's branch order above. The Meadow Guide's hub, for example, checks
+Quests are parked the same way (`Defs/_Parked/Quests/`). Active: `quest-welcome-to-cr`,
+`quest-first-battle`, `quest-runaway-cargo`, all given by the merchant. Parked: the other eight.
+
+Parking is invisible to the drift tools on purpose: `ContentParking.IsParked(path)`
+(`Assets/CR/Core/Data/Logic/ContentParking.cs`) is checked by the Studio's unregistered-asset
+scan, the Content Audit's `orphan_asset` rule and the provider inspector's orphan warning, so a
+parked asset is never reported as a definition that forgot to register. To add one back: move the
+file out of `_Parked` (Project window drag keeps the GUID) and register it in the provider. The
+tests for parked dialogues keep running (`ShippedDialogueAssets` finds an asset in either folder),
+so an add-back starts green.
+
+Each dialogue follows the scaffold's branch order above. The Meadow Guide's hub, for example, checks
 `Thin the Meadow`/`A Second Companion`/`Supplies for Hearthmere` readiness before their offers,
-the welcome talk-objective before the welcome offer, and falls to an idle line only when nothing
-else matches — the same first-match-wins order [Dialogue System](?page=unity/31-dialogue-system)
-describes for the runner in general.
-
-The same content push also changed all ten shipped `QuestDefinition` assets' `giverNpcContentKey`/
-`grantMode`/`rewardClaimMode` to match this dialogue set — see
-[Quest System](?page=backend/07-quest-system) for the full table.
+and falls to an idle line only when nothing else matches — the same first-match-wins order
+[Dialogue System](?page=unity/31-dialogue-system) describes for the runner in general.
 
 ## Authoring Rules That Bite
 
@@ -319,19 +331,33 @@ sentence says what pressing Interact does for this NPC's type with and without a
 No prefab or scene change is ever needed: the game adds the dialogue behaviour to any NPC that lacks
 it and matches dialogues by content key.
 
-## The Shipped Dialogues
+## The Meadow Merchant: The Main Story's Act 1
 
-Five area guides (`dialogue-guide-area-1..5`, one per quest giver), the Meadow scout's trainer bark
-(`npc-trainer-meadow-scout-bark`), and the demo script on the Meadow Merchant
-(`dialogue-merchant-area-1`, NPC `demo-merchant-area-1`). The merchant document is the reference
-for a giver who is also a shop: before First Battle he is trapped in his wagon; once *Runaway Cargo*
-(`quest-runaway-cargo`, capture three creatures, offered by and returned to him) is available he
-offers it; while it is active the hub gives **repeat the job**, **shop** (`npc.openShop`) and
-**turn in**, where `quest.objectiveCount` picks the line for 0, 1 or 2 captures and
-`quest.state ReadyToTurnIn` the payout; after the payout he still sells. A pending "speak to the
-Hearthmere trader" objective (*Supplies for Hearthmere* targets this NPC) is recorded first through
-`quest.recordTalk`, as the audit requires of any NPC that has a dialogue. The Unity assets are the
-source; the server gets them through a Studio push (M14002 seeds only the first six).
+The demo script is the main story, and its Act 1 is three quests on one NPC, the Meadow Merchant
+(`dialogue-merchant-area-1`, NPC `demo-merchant-area-1`, placed six metres in front of the Meadow
+spawn point). The document is the reference for a giver who is also a shop:
+
+1. **Welcome** (`quest-welcome-to-cr`, auto-granted, auto-paid). The hub's first case is
+   `quest.objectivePending` on it: he begs for help from inside the wagon, the player asks how
+   ("I don't have a soulbeast"), and that option's `quest.recordTalk` completes the talk objective.
+   "Here, catch." The rewards land as the conversation ends: the starter creature
+   (`welcome-npc-reward-spawner`) and two `item_heal_potion_30`.
+2. **First Battle** (`quest-first-battle`, auto-granted once Welcome completes, auto-paid). Until it
+   is done the hub falls to `trapped`: "get that soulbeast away from my wagon". Winning one wild
+   battle pays xp, gold and three `capture_crystal_standard`, the binding gems he hands over as he
+   climbs out.
+3. **Runaway Cargo** (`quest-runaway-cargo`, requires First Battle, offered by and returned to him).
+   `quest.state Available` reaches the offer; while Active or ReadyToTurnIn the hub gives **repeat
+   the job**, **shop** (`npc.openShop`) and **turn in**, where `quest.objectiveCount` picks the line
+   for 0, 1 or 2 captures and `quest.state ReadyToTurnIn` the payout; after the payout (`done`) he
+   still sells.
+
+*Supplies for Hearthmere* (parked) targets this NPC with a talk objective; its `quest.recordTalk`
+case returns to the hub when that quest is added back (checklist step 3), since the audit refuses
+a dialogue that names a quest the provider does not hold. The Unity assets are the source; the
+server gets the merchant dialogue, Runaway Cargo and the two retargeted quests through a Studio
+push (M14002 still seeds the six parked dialogues and the old givers; it is rewritten to the final
+set at the end of the checklist, before deploy).
 
 ## Findings The Node Editor Catches That The Server Does Not
 
@@ -355,9 +381,14 @@ Repeated here for cross-reference: `missing-required-arg` and `unknown-arg` (see
   (see [Dialogue System → Status](?page=unity/31-dialogue-system#status)) and no `dlg.*` key exists,
   so the player sees the document's own text. Nothing in the authoring tools writes or reads a
   translation table yet; the Dialogue Editor and its Preview are source-language only.
-- **The six dialogues and ten quest changes ship as a server migration**, M14002. See
-  [Dialogue Domain](?page=backend/21-dialogue-domain#the-content-migration-m14002). It leaves rows
-  that already exist alone, so an edit made here still reaches the server only through a Studio push.
+- **The server migration M14002 is behind the Unity content.** It still seeds the six parked
+  dialogues and gives the ten quests their pre-parking givers (Welcome and First Battle now belong
+  to the merchant in Unity). See
+  [Dialogue Domain](?page=backend/21-dialogue-domain#the-content-migration-m14002). It is rewritten
+  to the final set once the checklist is done; until then the server is only reached by Studio push.
+- **Content is parked down to the demo opening** (one dialogue, three quests) while each NPC and
+  quest kind is verified one at a time. See
+  [The Shipped Dialogues: Active And Parked](#the-shipped-dialogues-active-and-parked).
 
 ## Related Pages
 

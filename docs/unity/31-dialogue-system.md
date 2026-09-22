@@ -494,6 +494,11 @@ Integration](?page=unity/11-dialogue-integration)).
   schema 14002, and the id-optional upsert, `GetContentKeyByIdAsync` and the localization text-source
   seam are all in the shipped DLLs. Republish again after any later cr-api change.
 - **Preview pane.** Built: see [Dialogue Authoring → Preview Pane](?page=unity/32-dialogue-authoring#preview-pane).
+- **Only the Meadow Merchant talks right now.** The five guide dialogues and the scout bark are
+  parked (moved under `Defs/_Parked/`, out of the provider) so each NPC and quest kind can be
+  verified one at a time; a placed guide with no dialogue takes the silent, `DialogueBackend.None`
+  path and a trainer with no bark battles at once. See
+  [Dialogue Authoring → Active And Parked](?page=unity/32-dialogue-authoring#the-shipped-dialogues-active-and-parked).
 - **Localization is wired but empty.** `IDialogueTextResolver.Resolve` receives a `DialogueTextSource`
   (dialogue content key, node id, option id, source text). `LocalDevGameInstaller` binds
   `LocalizedDialogueTextResolver` over `BraceTextResolver`, with `LocalizationDialogueStringTable`

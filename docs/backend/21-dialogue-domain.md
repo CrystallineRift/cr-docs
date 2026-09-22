@@ -305,6 +305,15 @@ M14001, still throws. `Down()` is a no-op on both engines, like M7016.
 The Studio push remains the way to make a row equal its asset. M14002 only spares anyone from pushing
 ten quests and six dialogues by hand on deploy day.
 
+**M14002 is currently behind the Unity content, on purpose.** On 2026-09-22 the Unity side was
+parked down to the demo script's opening: one active dialogue (`dialogue-merchant-area-1`) and three
+active quests, with *Welcome* and *First Battle* re-given to `demo-merchant-area-1` (the welcome talk
+objective now targets the merchant, not `demo-questgiver-area-1` as the table above still says).
+The six dialogues M14002 seeds are parked in Unity, not deleted. The migration is not deployed and
+is rewritten to the final content set once every NPC and quest kind has been added back and
+verified (`CR/docs/2026-09-22-npc-quest-checklist.html`); see
+[Dialogue Authoring → Active And Parked](?page=unity/32-dialogue-authoring#the-shipped-dialogues-active-and-parked).
+
 ## Related pages
 
 - [The CR Dialogue System](?page=unity/31-dialogue-system) — the client-side runner, service, UI and
