@@ -74,6 +74,14 @@ Node positions live in the document (`layout`), so they are pushed and pulled li
 and arranging marks the dialogue as changed in the Studio. They are not *content*: the shipped-asset
 pin test compares documents with positions left out (`DialogueDocumentNormalizer.ContentEqual`).
 
+**Node width and wrapping.** Nodes have a fixed width (280px by default) and their text and port
+labels wrap to it, so a long line makes a taller node, never a wider one. Drag the strip on a node's
+right edge to change its width; the text re-wraps as you drag, and letting go stores the width in the
+document (one undo step, clamped to 160..900px). Double-click the strip to go back to the default.
+The width is kept through moves, duplicates and Arrange, which spaces its columns for it. Like
+positions, the width lives in the document's `layout` (`DialogueNodeLayout.Width`, omitted when
+unset) and travels with a push or pull.
+
 **Following a line.** Every connection is drawn in its own colour, behind the nodes, so a line
 crossing a node it has nothing to do with never covers that node's text. Colours follow the
 conversation: a fork (a hub's cases, a choice's options) starts a new colour per port, and a node
