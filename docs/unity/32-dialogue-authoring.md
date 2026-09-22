@@ -302,6 +302,23 @@ included) and carries over the value of every condition that still exists. Previ
 the reasons listed, while the document has validator **errors** or the asset could not be loaded;
 warnings do not block it. Placeholders are substituted but text is not translated (see Status).
 
+## Giving An NPC A Conversation (Studio → NPCs)
+
+Every NPC row says `· <type>` and, once a dialogue is linked to its content key, `· talks`. Expanding
+an NPC shows a **Conversation** block: **Talks: <name>** with **Open in Dialogue Editor**, or
+**No conversation** with **Create conversation**, which creates a `DialogueDefinition` already
+linked to that NPC (`dialogue-<npc key>`), registers it, and opens the editor. Under it, one
+sentence says what pressing Interact does for this NPC's type with and without a dialogue:
+
+| Type | Without a dialogue | With one |
+|---|---|---|
+| Merchant | Opens the shop straight away. | Talks first; the shop opens only through an option carrying `npc.openShop`, after the conversation ends. |
+| Trainer | Starts the battle. | The dialogue is the bark: it must end Completed for the battle to start. |
+| QuestGiver / Npc | Nothing (unless the prefab still has a plugin conversation). | Starts the conversation; its quests are offered and turned in from it. |
+
+No prefab or scene change is ever needed: the game adds the dialogue behaviour to any NPC that lacks
+it and matches dialogues by content key.
+
 ## The Shipped Dialogues
 
 Five area guides (`dialogue-guide-area-1..5`, one per quest giver), the Meadow scout's trainer bark
