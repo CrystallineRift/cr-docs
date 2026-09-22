@@ -90,10 +90,13 @@ one line and the choice's options then split into their own (`DialogueEdgeColors
 the whole conversation it belongs to lights up while everything else steps back: everything that
 can lead to that line from the entry, and everything it can lead on to, but none of its sibling
 branches (`DialogueThreads`). A line that loops back to the hub is never followed, or every
-conversation would be part of every other. Click a line to keep the trace and open the **Thread**
+conversation would be part of every other. Clicking a **node** does the same through that node: everything that
+can lead to it and everything it can lead on to (a hub lights the whole dialogue, an End every line
+that reaches it); the Thread tab is refreshed but not switched to. Click a line to keep the trace and open the **Thread**
 tab, which writes that conversation out step by step, showing of a hub only the case that leads
 into it and of a choice only the options that stay inside it. Clicking a step selects its node.
-Escape, clicking the empty canvas or the tab's Clear button ends the trace; an edit re-traces it.
+Clicking any lit node or line again, Escape, clicking the empty canvas or the tab's Clear button ends
+the trace and nothing is dimmed; an edit re-traces it.
 
 **Find.** Cmd/Ctrl+F (or the toolbar's Find) opens a find bar. Every node containing the text is
 marked and the current match is framed; Enter / Shift+Enter, F3 / Shift+F3 or Cmd/Ctrl+G page through
