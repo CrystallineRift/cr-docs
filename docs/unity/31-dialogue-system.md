@@ -173,6 +173,7 @@ Every type string that exists today, its module, its args, and where it is decla
 |---|---|---|---|
 | `quest.state` | condition | `quest` (QuestKey, required), `is` (Enum: `Available`/`Active`/`ReadyToTurnIn`/`Completed`, required), `giver` (NpcKey, optional — default is the NPC being talked to; explicit empty string means "any giver") | True when the quest is in the given state. `Available` also checks the `giver` filter against the template's `GiverNpcContentKey`. |
 | `quest.objectivePending` | condition | `quest` (QuestKey, required), `npc` (NpcKey, optional — default is the NPC being talked to) | True when the quest has an active, incomplete `TalkToNpc` objective whose target matches the NPC (or the objective's target is a wildcard). |
+| `quest.objectiveCount` | condition | `quest` (QuestKey, required), `objective` (Int, optional — the objective's sort order, default 0), `min` / `max` (Int, optional — open bound when left out) | True when the quest is in progress and that objective's progress count is within `min..max`. Lets a giver say "one down, two to go" per count. Not for "all done": that is `quest.state ReadyToTurnIn`. A quest not in progress is false. |
 | `quest.accept` | action | `quest` (QuestKey, required) | Resolves the content key to a template and calls `IQuestService.AcceptQuestAsync`. An unknown key throws (the runner turns that into `End(Declined)` + a warning). |
 | `quest.claim` | action | `quest` (QuestKey, required) | Finds the quest's `Completed && !RewardsClaimed` instance and calls `IQuestService.ClaimRewardsAsync`. None found throws the same way. |
 | `quest.recordTalk` | action | `npc` (NpcKey, optional — default is the context NPC) | Calls `IQuestService.OnNpcInteracted(npc)` — see [How a talk is recorded](#how-a-talktonpc-talk-is-recorded), below. |
@@ -195,6 +196,7 @@ Implementation: `Assets/CR/Progress/Dialogue/ProgressRequirementConditionEvaluat
 | Type | Kind | Args | What it does |
 |---|---|---|---|
 | `npc.trainerDefeated` | condition | `npc` (NpcKey, required) | `ITrainerDefeatLookup.IsDefeated(npc)` — true if the current account has already beaten that trainer NPC. |
+| `npc.openShop` | action | `npc` (NpcKey, optional — default is the NPC being talked to) | Asks for that merchant's shop to open **after the conversation ends** (a screen cannot open over the panel). Recorded on `INpcDialogueRequests`; `NpcInteractionBehaviour` honours it once the conversation's status is `Ended`. |
 
 Implementation: `Assets/CR/Npcs/Dialogue/NpcTrainerDefeatedConditionEvaluator.cs`.
 
@@ -431,6 +433,19 @@ content key, else `DialogueBackend.Plugin` if a `DialogueSystemTrigger` is confi
 never latched at init time. NPC init is asynchronous and can lose the race to the player pressing
 Interact; latching the backend once turned either failure mode (init not finished yet, or a
 dialogue-lookup exception) into an NPC that silently had nothing to say for the rest of the session.
+
+### Merchants talk first, and every NPC can have a dialogue
+
+Route order is gift > trainer > market > merchant > conversation, with one twist: a merchant **with a
+CR dialogue** routes to the conversation, and the conversation offers the shop itself through
+`npc.openShop` (the demo's Meadow Merchant: repeat the job, shop, or turn in). A merchant without a
+dialogue still opens its shop on the first press. While such a merchant's conversation is running,
+a press is ignored rather than opening the shop over it.
+
+Whether an NPC has a conversation is data (a dialogue row for its content key), not a prefab
+decision: `NpcInteractionBehaviour.Init` adds an injected `NpcDialogueBehaviour` to any NPC whose
+prefab lacks one, before `NpcWorldBehaviour` sweeps its sub-initializables at world init. The
+merchant prefab is one such, so no prefab or scene edit is needed to give a merchant a dialogue.
 
 ### A conversation is tied to the NPC's lifetime
 

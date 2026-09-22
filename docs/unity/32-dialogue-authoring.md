@@ -302,6 +302,20 @@ included) and carries over the value of every condition that still exists. Previ
 the reasons listed, while the document has validator **errors** or the asset could not be loaded;
 warnings do not block it. Placeholders are substituted but text is not translated (see Status).
 
+## The Shipped Dialogues
+
+Five area guides (`dialogue-guide-area-1..5`, one per quest giver), the Meadow scout's trainer bark
+(`npc-trainer-meadow-scout-bark`), and the demo script on the Meadow Merchant
+(`dialogue-merchant-area-1`, NPC `demo-merchant-area-1`). The merchant document is the reference
+for a giver who is also a shop: before First Battle he is trapped in his wagon; once *Runaway Cargo*
+(`quest-runaway-cargo`, capture three creatures, offered by and returned to him) is available he
+offers it; while it is active the hub gives **repeat the job**, **shop** (`npc.openShop`) and
+**turn in**, where `quest.objectiveCount` picks the line for 0, 1 or 2 captures and
+`quest.state ReadyToTurnIn` the payout; after the payout he still sells. A pending "speak to the
+Hearthmere trader" objective (*Supplies for Hearthmere* targets this NPC) is recorded first through
+`quest.recordTalk`, as the audit requires of any NPC that has a dialogue. The Unity assets are the
+source; the server gets them through a Studio push (M14002 seeds only the first six).
+
 ## Findings The Node Editor Catches That The Server Does Not
 
 Repeated here for cross-reference: `missing-required-arg` and `unknown-arg` (see
