@@ -327,9 +327,12 @@ Other load-bearing details:
   portraits (no portrait field on `NpcDefinition`) and the design's Plus Jakarta Sans face (no
   font asset in the project); the default font renders.
 - **Sizes come from panel HEIGHT, never raw px in USS.** The shared PanelSettings scales pixels
-  against screen WIDTH, so every font size, the badge diameters and the option buttons' padding are
-  computed from `_root.resolvedStyle.height` in `ApplyLayout` (on every `GeometryChangedEvent`, and
-  again after option buttons are built), not authored as fixed px values.
+  against screen WIDTH (reference 1200x800, match 0), so every font size, the badge diameters, and
+  the corner radii and paddings of the speaker pill, option buttons and Continue are computed from
+  `_root.resolvedStyle.height` in `ApplyLayout` (on every `GeometryChangedEvent`, and again after
+  option buttons are built), not authored as fixed px values. A px radius in USS stays put while the
+  height-derived text shrinks on a 16:9 or wider screen, which is how the pill first rendered as an
+  ellipse. Only the card's own 16px corners and the hairline borders remain px.
 - **One persistent Continue button**, built once and never rebuilt — only its visibility and the
   panel's text change per step. Rebuilding it every step is exactly what would let a held Submit
   double-advance (old and new button both live for one frame). Option buttons ARE rebuilt every
