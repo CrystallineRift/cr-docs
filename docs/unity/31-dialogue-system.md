@@ -316,9 +316,20 @@ conversation would un-gate movement if the presenter did not re-assert the flag 
 
 Other load-bearing details:
 
+- **The look follows the Stitch design "Cinematic Bottom-Bar Dialogue System"** (2026-09-23):
+  a floating slate card (`rgba(2,6,23,0.84)`, hairline white border, 16px corners, 96% wide) capped
+  at 42% of screen height; a teal speaker pill (rose for a player line, `dialogue--player`) over a
+  bold white line; choices in a right-hand column, each a button with a lettered teal badge (A, B,
+  …) and an arrow overlaid as absolutely positioned children so `Button.text` stays the option line;
+  and a low console strip with an "A CONFIRM" hint on the left and the Continue control on the
+  right. The text's ScrollView hides its bar (a visible bar rewrapped a two-line text 2px taller
+  and never went away); oversize text still scrolls by wheel or drag. Not in yet: speaker
+  portraits (no portrait field on `NpcDefinition`) and the design's Plus Jakarta Sans face (no
+  font asset in the project); the default font renders.
 - **Sizes come from panel HEIGHT, never raw px in USS.** The shared PanelSettings scales pixels
-  against screen WIDTH, so a `Label`'s font size is computed from `_root.resolvedStyle.height` on
-  every `GeometryChangedEvent`, not authored as a fixed px value.
+  against screen WIDTH, so every font size, the badge diameters and the option buttons' padding are
+  computed from `_root.resolvedStyle.height` in `ApplyLayout` (on every `GeometryChangedEvent`, and
+  again after option buttons are built), not authored as fixed px values.
 - **One persistent Continue button**, built once and never rebuilt — only its visibility and the
   panel's text change per step. Rebuilding it every step is exactly what would let a held Submit
   double-advance (old and new button both live for one frame). Option buttons ARE rebuilt every
