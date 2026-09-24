@@ -322,10 +322,13 @@ Other load-bearing details:
   bold white line; choices in a right-hand column, each a button with a lettered teal badge (A, B,
   …) and an arrow overlaid as absolutely positioned children so `Button.text` stays the option line;
   and a low console strip with an "A CONFIRM" hint on the left and the Continue control on the
-  right. The text's ScrollView hides its bar (a visible bar rewrapped a two-line text 2px taller
-  and never went away); oversize text still scrolls by wheel or drag. Not in yet: speaker
-  portraits (no portrait field on `NpcDefinition`) and the design's Plus Jakarta Sans face (no
-  font asset in the project); the default font renders.
+  right. A portrait plate sits left of the text (slate, teal glow border) showing the speaker's
+  initials (`DialoguePanelPolicy.Initials`) until `NpcDefinition` carries art; three static pulse
+  bars follow the pill as in the design. The typeface is the design's own Plus Jakarta Sans
+  (`Assets/CR/UI/Fonts/PlusJakartaSans/`, SIL OFL 1.1, Bold for lines and choices, ExtraBold for
+  the pill, badges and console), set through `-unity-font-definition` in the USS. The text's
+  ScrollView hides its bar (a visible bar rewrapped a two-line text 2px taller and never went
+  away); oversize text still scrolls by wheel or drag.
 - **Sizes come from panel HEIGHT, never raw px in USS.** The shared PanelSettings scales pixels
   against screen WIDTH (reference 1200x800, match 0), so every font size, the badge diameters, and
   the corner radii and paddings of the speaker pill, option buttons and Continue are computed from
