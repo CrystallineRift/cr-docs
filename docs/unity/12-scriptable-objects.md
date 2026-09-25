@@ -22,10 +22,16 @@ The single asset that registers all content definitions with the runtime. Assign
 | `items` | `ItemDefinition[]` | All item types |
 | `npcs` | `NpcDefinition[]` | All NPC templates |
 | `spawners` | `SpawnerDefinition[]` | All spawner zones |
+| `quests` | `QuestDefinition[]` | All quest templates — synced into local SQLite at world init |
+| `dialogues` | `DialogueDefinition[]` | All CR dialogue documents — synced into local SQLite at world init; see [Dialogue System](?page=unity/31-dialogue-system) |
 
 **Every new content SO must be added to this provider** or the runtime registry will not find it.
 
-> **Note:** `QuestDefinition`, `AbilityConfig`, `AbilityProgressionSetConfig`, and `GrowthProfileConfig` are **not** in `ContentDefinitionProvider` — they are looked up directly via `AssetDatabase.FindAssets` in editor tooling, or referenced by GUID from other SOs.
+> **Note:** `AbilityConfig`, `AbilityProgressionSetConfig`, and `GrowthProfileConfig` are **not** in
+> `ContentDefinitionProvider` — they are looked up directly via `AssetDatabase.FindAssets` in editor
+> tooling, or referenced by GUID from other SOs. `QuestDefinition` and `DialogueDefinition` ARE in the
+> provider (`quests`/`dialogues` fields) — both are content synced into the local SQLite tables at
+> world init, unlike the ability/growth SOs.
 
 ---
 
@@ -163,7 +169,7 @@ Defines a spawner zone: capacity, timing, and weighted pools of creature templat
 ### QuestDefinition
 
 **Menu:** `CR/Quest Definition`  
-**Instances:** `Assets/CR/Content/Quests/`  
+**Instances:** `Assets/CR/Content/Defs/Quests/`  
 **Backend sync:** Crystalline Rift Studio → Quests → **⬆ Push All** → `PUT /api/v1/quests/templates/bulk`. (The inspector's own "Sync to Backend" / "Sync All Quests" buttons were removed — see [One way to reach the server](08-content-registry.md#one-way-to-reach-the-server).)
 
 Defines a quest template. The backend owns instance/progress data; this SO is the designer's source of truth for quest structure and objectives.
@@ -177,6 +183,8 @@ Defines a quest template. The backend owns instance/progress data; this SO is th
 | `isRepeatable` | bool | Whether the quest can be completed more than once |
 | `maxRepeatCount` | int | Max repeats (ignored when `isRepeatable` is false) |
 | `sortOrder` | int | Display ordering in quest lists |
+| `grantMode` | `QuestGrantMode` | `OfferedByGiver` (default) or `AutoWhenAvailable` — see [Quest System → Grant mode and reward claim mode](?page=backend/07-quest-system#grant-mode-and-reward-claim-mode) |
+| `rewardClaimMode` | `QuestRewardClaimMode` | `AutoOnCompletion` (default) or `ReturnToGiver` |
 | `objectives` | `List<QuestObjectiveDefinition>` | Ordered objectives — see below |
 | `rewards` | `List<QuestRewardDefinition>` | Rewards on completion |
 
@@ -189,11 +197,13 @@ Defines a quest template. The backend owns instance/progress data; this SO is th
 | `targetCount` | int | Yes | How many times the action must occur |
 | `targetReferenceId` | string | Yes | UUID/content_key of the target entity (NPC, creature, item) |
 | `isOptional` | bool | Yes | If true, quest can complete without this objective |
-| `sortOrder` | int | Yes | Display ordering |
-| `conversationTitle` | string | **No** | _(TalkToNpc only)_ Dialogue System conversation title — set via editor dropdown |
-| `conversationId` | int | **No** | _(TalkToNpc only)_ Dialogue System conversation ID — auto-populated from title |
+| `sortOrder` | int | Yes | Display ordering — **also the upsert match key server-side**: see [Quest System → Objectives are upserted by sort order](?page=backend/07-quest-system#objectives-are-upserted-by-sort-order) before reordering an existing quest's objectives |
 
-`conversationTitle` and `conversationId` are **game-client-only** and are never included in the backend sync payload.
+> **`conversationTitle`/`conversationId` are gone.** The Dialogue System conversation binding these
+> two game-client-only fields used to provide has been removed from `QuestObjectiveDefinition`
+> entirely — see [Dialogue System Integration](?page=unity/11-dialogue-integration) (now documented
+> as the legacy path) and [Dialogue System](?page=unity/31-dialogue-system) for the CR dialogue
+> system that replaces it for new content.
 
 **QuestObjectiveType values:** `DefeatCreature`, `DefeatAnyCreature`, `DealDamageOfType`, `DealDamage`, `HealAmount`, `WinBattles`, `CaptureCreature`, `CaptureAnyCreature`, `ReachCreatureLevel`, `VisitLocation`, `TalkToNpc`, `CollectItem`, `CompleteQuest`
 
@@ -207,6 +217,37 @@ Defines a quest template. The backend owns instance/progress data; this SO is th
 | `metadata` | string | Optional JSON metadata |
 
 ---
+
+### DialogueDefinition
+
+**Menu:** `CR/Dialogue Definition`
+**Instances:** `Assets/CR/Content/Defs/Dialogues/`
+**Backend sync:** Crystalline Rift Studio → Dialogues tab → push/pull one at a time, or "⬆ Push All"/"⬇ Pull All" → `PUT /api/v1/dialogues/bulk` / `GET /api/v1/dialogues`.
+
+The dialogue equivalent of `QuestDefinition` — one asset per authored conversation graph. See
+[Dialogue System](?page=unity/31-dialogue-system) for the document format and runtime, and
+[Dialogue Authoring](?page=unity/32-dialogue-authoring) for the node editor that reads and writes
+`documentJson`.
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `contentKey` | string | DB key, must match `dialogue.content_key` (e.g. `"dialogue-guide-area-1"`) |
+| `id` | string (GUID) | Stable, authored, minted once (`EnsureId()` on `Reset()`/`OnValidate()`). **Never change it after the first sync** — the local and server `dialogue` rows are both created under this id and neither repository ever re-keys an existing row. |
+| `dialogueName` | string | Studio list label — author-facing only, never shown to players |
+| `description` | string | Author-facing description |
+| `npcContentKey` | string | `content_key` of the NPC this dialogue is linked to; empty when not tied to any NPC |
+| `documentJson` | string | The full `DialogueDocument`, serialized, up to 256 KB. **`[HideInInspector]`** — an IMGUI text area cannot render past ~16k characters and re-lays the whole string out on every repaint, which is also a way to truncate an authored graph by clicking into it. Read/write it through `TryGetDocument`/`SetDocument`, never directly; the Dialogue Editor window is the supported authoring surface. |
+
+`documentJson` is a hidden field precisely so nobody is tempted to hand-edit it in the default
+Inspector — there is no dedicated `DialogueDefinitionEditor` custom Inspector for this type yet (see
+[Dialogue Authoring → Status](?page=unity/32-dialogue-authoring#status)), so selecting a
+`DialogueDefinition` directly in the Project window shows Unity's default Inspector with everything
+except `documentJson` visible.
+
+Unlike `QuestDefinition`'s sync path (which *does* re-key an existing server row to an authored id —
+see [Quest System → Authored template ids are authoritative](?page=backend/07-quest-system#authored-template-ids-are-authoritative)),
+a dialogue's id is a one-shot: honored only on the row's first insert, then fixed forever on both the
+client and server sides.
 
 ## Ability & Progression SOs (Backend-Synced)
 

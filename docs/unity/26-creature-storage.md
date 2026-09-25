@@ -215,9 +215,9 @@ Claiming a quest whose reward is an `Ability` grants the move server-side —
 `QuestClaimResult.AbilityUnlockedCreatureIds`. Nothing in the world otherwise announces it: the move
 just appears in a menu the player may not open for an hour.
 
-So `QuestManager.ClaimRewardsAsync` re-broadcasts it as `OnAbilitiesUnlocked(IReadOnlyList<Guid>)`,
-and `AchievementToastPresenter` (which hosts every toast source, despite the name) shows
-**"New ability learned!"**. One toast per claim, not per creature — a quest that unlocks a move for a
+So `QuestManager.ClaimRewardsAsync` reports it to `IProgressionNotifier.ReportAbilitiesUnlocked`,
+which raises `AbilitiesUnlocked(IReadOnlyList<Guid>)`; `AbilityUnlockToastAdapter` turns that into
+**"New ability learned!"** through `INotificationService`. One toast per claim, not per creature — a quest that unlocks a move for a
 whole team would otherwise queue six identical toasts. *Which* creature learned *what* is the Data
 File's job.
 

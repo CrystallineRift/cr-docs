@@ -258,7 +258,12 @@ Three files in that project are worth knowing by name:
   [Battle Extensions → Authoring missions in Crystalline Rift Studio](?page=unity/24-battle-extensions).
   That is the standard, not a gap: the offline floor is reviewable content in the repository, never
   whatever happened to be in one machine's local database.
-- Quest templates still overwrite from ScriptableObjects at world init.
+- Quest templates still overwrite from ScriptableObjects at world init. Dialogue documents follow
+  the exact same pattern — `LocalDialogueSyncClient` writes every `DialogueDefinition` in
+  `ContentDefinitionProvider.dialogues` into the local `dialogue` table at BOOT (not world init; see
+  [The CR Dialogue System → Boot-time sync of authored
+  dialogues](?page=unity/31-dialogue-system#boot-time-sync-of-authored-dialogues) for why). Neither
+  domain is part of the `ServerContentSyncService` domain list above.
 - The version gate is not wired. Before it can be, the recorded version must move *into*
   `game-data.bytes` — `GameDataAdopter` replaces that file wholesale while the version sits in
   player prefs, which would pin a client to floor content while it believed itself current.

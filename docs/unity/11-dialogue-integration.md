@@ -1,4 +1,13 @@
-# Dialogue System Integration
+# Dialogue System Integration (Legacy)
+
+> **This page documents the LEGACY Pixel Crushers integration.** As of `feature/cr-dialogue`, CR has
+> its own dialogue system — a typed document format authored in a node editor and run by an
+> engine-free interpreter — documented at [Dialogue System](?page=unity/31-dialogue-system) and
+> [Dialogue Authoring](?page=unity/32-dialogue-authoring). The Pixel Crushers plugin described on
+> this page is still fully wired in the project and still drives every NPC that has **no**
+> CR-authored dialogue (`NpcDialogueBehaviour.Backend == DialogueBackend.Plugin`); it is planned for
+> removal once the CR system has been playtested, not before. New dialogue content should use the CR
+> system, not this one.
 
 The Pixel Crushers Dialogue System plugin handles all NPC dialogue data and presentation. CR code never references `DialogueManager` directly — all access goes through `IDialogueHandler`, which decouples game logic from the plugin and makes systems independently testable.
 
@@ -109,28 +118,14 @@ directly: `QuestDialogueBridge` records the interaction when the conversation
 *completes*, so recording at trigger time would double-count (and would count
 aborted conversations).
 
-## TalkToNpc Quest Objectives with Conversation Binding
+## TalkToNpc Quest Objectives
 
-`QuestObjectiveDefinition` has two game-client-only fields that bind a TalkToNpc objective to a specific Dialogue System conversation:
-
-| Field | Type | Purpose |
-|-------|------|---------|
-| `conversationTitle` | `string` | Human-readable title, for editor display |
-| `conversationId` | `int` (default -1) | Numeric ID, used at runtime |
-
-**These fields are NOT sent to the backend.** `BuildQuestPayload` in `QuestDefinitionEditor` uses an explicit anonymous object that does not include them.
-
-### Setting Up a TalkToNpc Objective (Editor)
-
-1. Open a `QuestDefinition` asset.
-2. In **Objectives**, add an objective with `Objective Type = TalkToNpc`.
-3. Select the **Target NPC** (must match backend `content_key`).
-4. Enter **Play mode** (required — the Dialogue System database is only available at runtime).
-5. The **Conversation** dropdown populates with all conversations in the database.
-6. Select the conversation that should complete this objective.
-7. Exit Play mode. `conversationTitle` and `conversationId` are serialized and persist.
-
-> The **↺** refresh button re-queries the database if the dropdown is stale.
+> **Removed.** `QuestObjectiveDefinition` no longer has `conversationTitle`/`conversationId` fields —
+> they were the game-client-only binding this section used to document, and they are gone as of the
+> CR dialogue work (`QuestDefinition.cs` has no such fields at HEAD). A `TalkToNpc` objective on the
+> Plugin backend is now matched purely by the NPC's `content_key` (`targetReferenceId`), the same way
+> it always was for the CR backend. If you are looking at an old prefab or a stale editor screenshot
+> that still shows a Conversation dropdown on a quest objective, it is out of date.
 
 ### Runtime Flow
 
@@ -168,3 +163,11 @@ The UUID is the quest template's `id` column from the backend database.
 ## Smoke Test
 
 `DialogueHandlerTest` (`Assets/CR/Dialogue/Tests/`) is a MonoBehaviour that can be added to any scene GameObject. In Play mode it logs all lookup results and subscribes to the three events to confirm they fire correctly. Set the inspector fields to actor IDs/names and conversation titles that exist in your database.
+
+## Related Pages
+
+- [Dialogue System](?page=unity/31-dialogue-system) — the CR dialogue system that replaces this
+  integration for new content, including the routing rule that decides which NPC uses which backend.
+- [Dialogue Authoring](?page=unity/32-dialogue-authoring) — the designer workflow for CR dialogues.
+- [NPC Interaction](?page=unity/04-npc-interaction) — `NpcDialogueBehaviour.Backend` and the shared
+  Interact dispatch both backends go through.

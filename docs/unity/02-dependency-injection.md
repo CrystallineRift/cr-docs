@@ -230,6 +230,28 @@ Without `NonLazy()`, `GameInitializer` would only be created when something reso
 
 Note: `GameInitializer`'s `[Inject]` method subscribes in the injection call, not in `OnEnable`. This is intentional — `OnEnable` runs before `[Inject]` on a `FromNewComponentOnNewGameObject` object, so subscribing in `OnEnable` would crash with `NullReferenceException` because the injected `_sessionManager` would not be set yet.
 
+## Domain-owned installer helpers: `DialogueModuleInstaller`
+
+Not every binding lives directly in `LocalDevGameInstaller.InstallBindings()`. The CR dialogue system
+(see [Dialogue System](?page=unity/31-dialogue-system)) needs one binding per condition
+evaluator/action handler across three domains (quest, progress, NPC) plus the vocabulary built from
+all of them — enough bindings that hand-copying them into a container-completeness test would drift
+from the real installer. `CR.DI.DialogueModuleInstaller.InstallDialogueModules(DiContainer container)`
+(`Assets/CR/Core/DI/DialogueModuleInstaller.cs`) holds every one of those bindings in one static
+method, called from inside `LocalDevGameInstaller.InstallBindings()`, and a registry-completeness
+container test (`DialogueModuleRegistryContainerTests`) calls the *exact same method* to build its
+own container — so a passing test proves something about the real installer, not a hand-maintained
+copy of it. Every evaluator/handler/module is bound as a same-contract, different-concrete-type
+multi-binding (`container.Bind<IDialogueConditionEvaluator>().To<SomeEvaluator>().AsSingle()`, one
+call per class) — this reads as several separate bindings under one interface, not the ID-keyed
+same-concrete-type case the `AsSingle`/`AsCached` guidance above is about, so it resolves fine as a
+Zenject multi-binding without `AsCached`.
+
+This is the pattern to follow for a future domain that needs many small, same-contract bindings
+grouped by owner: a static `Install*` method next to the domain's own code, called from
+`LocalDevGameInstaller`, with a container test that calls the same method — never a second,
+hand-copied binding list.
+
 ## Zenject Tips
 
 - Use `AsSingle()` for stateful services (domain services, managers) — one instance shared by all consumers

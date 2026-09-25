@@ -105,6 +105,11 @@
     "path": "backend/20-personal-api-keys"
   },
   {
+    "section": "Backend",
+    "title": "The Dialogue Domain (Server)",
+    "path": "backend/21-dialogue-domain"
+  },
+  {
     "section": "Introduction",
     "title": "Changelog",
     "path": "changelog"
@@ -186,7 +191,7 @@
   },
   {
     "section": "Unity",
-    "title": "Dialogue System Integration",
+    "title": "Dialogue System Integration (Legacy)",
     "path": "unity/11-dialogue-integration"
   },
   {
@@ -283,5 +288,15 @@
     "section": "Unity",
     "title": "Evolution Authoring",
     "path": "unity/30-evolution-authoring"
+  },
+  {
+    "section": "Unity",
+    "title": "The CR Dialogue System",
+    "path": "unity/31-dialogue-system"
+  },
+  {
+    "section": "Unity",
+    "title": "Dialogue Authoring",
+    "path": "unity/32-dialogue-authoring"
   }
 ]

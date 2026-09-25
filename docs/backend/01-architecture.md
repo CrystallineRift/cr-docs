@@ -492,6 +492,26 @@ dotnet run
 
 The `PostgresGlobalErrorMiddleware` catches unhandled exceptions and maps them to appropriate HTTP status codes, preventing raw exception details from leaking to clients.
 
+#### Unhandled-error response contract
+
+The body is a closed set of two fields, pinned by a test, and never contains exception text:
+
+```json
+{ "message": "An unexpected error occurred.", "traceId": "0HN7..." }
+```
+
+| Cause | Status | `message` |
+|-------|--------|-----------|
+| Postgres unique violation (`23505`) | 409 | `That already exists.` |
+| `KeyNotFoundException` | 404 | `Not found.` |
+| `BadHttpRequestException` (malformed or oversized body) | the 4xx the server chose | `The request could not be processed.` |
+| anything else | 500 | `An unexpected error occurred.` |
+
+- The full exception goes only to the server log. The log line records the same `traceId`, so a bug report that quotes it joins straight to the stack trace. Clients should show or copy `traceId`, and must never branch on the `message` wording.
+- A client that disconnects mid-request is not logged as an error and gets no body.
+- If the response has already started, the original exception is logged and rethrown.
+- Endpoints that want to tell the caller something specific (validation findings, a domain refusal) must return their own 4xx result; they must not rely on an exception's message reaching the client.
+
 In development mode, Swagger UI is served at `/swagger` for exploring all endpoints.
 
 ### Connection strings in logs

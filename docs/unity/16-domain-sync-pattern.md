@@ -118,41 +118,84 @@ from `game_config.yaml`. It was bound in DI and had no callers, so nothing ever 
 ever worked. When adding a client, verify the route answers and the config key resolves.
 :::
 
-### Cache first: the server answers a miss, not every call
+### Cache first: the server answers once per key per session, then invalidation decides
 
-"Reads prefer the server" is the rule for live player state. It is the wrong rule for the two other
-kinds of data a router serves, and treating everything as live state is how Play Online ended up
-fetching the pickup table, the achievement list and the quest journal on every interaction. Each
-router now classifies what it holds:
+Player state online is read through `IPlayerStateCache` (`Assets/CR/Core/Sync/Logic/PlayerStateFreshness.cs`
+over `SessionFreshness<CacheKey>`). Per key it keeps a fresh flag, a version and the in-flight fetch:
 
-| Kind | Examples | Online read policy |
-|---|---|---|
-| **Content** | pickup definitions, achievement definitions, quest templates | Local first. On a `content_key` miss, ask the server once, write the result into local, return the local row. Remember server misses for the session so an unknown key does not re-query. |
-| **Terminal player state** | collected pickups, achievement unlocks, completed quests, trainer defeats | Local first. Reconcile with the server **once per trainer (or account) per session**, mirroring anything the server knows that local lacks. Later reads are local only; writes still go local-then-server. |
-| **In-progress player state** | active / available quests, quest instances, objective progress, stats | Server when online (the server is authoritative while the state is still moving), fall back to local on failure, cache the response locally. |
+| State | Read |
+|---|---|
+| Offline | local, freshness untouched |
+| Fresh | local, no round trip |
+| Stale, fetch in flight | wait for it, then local |
+| Stale | server once, written through, marked fresh — unless an invalidate landed during the fetch, in which case nothing is stored and the key stays stale (`RemoteStale`) |
+| Server unreachable | local, warn once, key stays stale so the next read retries |
 
-The routers that implement this: `PickupDefinitionOnlineOfflineRepository`,
-`AchievementDefinitionOnlineOfflineRepository` (content, with a whole-list back-fill when local is
-empty); `PickupCollectedRegistry`, `AchievementUnlockedOnlineOfflineRepository`,
-`QuestOnlineOfflineRepository.GetCompletedQuestsAsync`, `TrainerDefeatCache` (terminal state,
-session-once reconcile); `QuestTemplateOnlineOfflineRepository` (content, via
-`GET /api/v1/quests/templates/by-content-key/{key}`).
+Freshness is explicit. A null local read is an answer, never a miss — the old `try { cache } catch { server }`
+pattern never reached the server because Dapper returns null instead of throwing.
 
-Two things make the mirror safe. Every local write the reconcile performs is idempotent — `INSERT OR
-IGNORE`, `ON CONFLICT DO UPDATE`, or an upsert keyed on `content_key` — so replaying a server list is
-a no-op the second time. And a failed reconcile removes the trainer from the "done" set, so the next
-read retries instead of trusting a half-mirrored session.
+Keys are `CacheScope:id` (`CacheKey.cs`, `CacheScope.cs`). Invalidation is table-driven
+(`InvalidationScopes.For(GameChange)`, tested row by row in `InvalidationScopesTests`): a game change
+dirties whole scopes. Opening a window, switching tabs, entering an area or saving location never invalidates.
 
-Trainer defeats are the model for the write side: `BattleResult.DefeatedNpcContentKey` carries the
-beaten NPC out of `BattleCoordinator`, and `TrainerDefeatCache` records it locally on
-`BattleEvents.BattleClosed` — the battle service (server or local) already persisted the defeat, so
-no battle close triggers a network read.
+| Change | Scopes |
+|---|---|
+| BattleClosed | Creature, CreatureSlots, Items, Trainer, ActiveQuests, Stats, NpcTeam, NpcItems |
+| TeamHealed | Creature |
+| PickupCollected | Items, Trainer, Creature, CreatureSlots, InventoryList, ItemInventoryList, ActiveQuests, Stats |
+| MerchantPurchase / MerchantSell | Items, Trainer, MerchantStock, Stats |
+| MerchantRestocked | MerchantStock, MerchantMultipliers, MerchantStocked |
+| QuestAccepted / QuestAbandoned / QuestProgressRecorded | ActiveQuests |
+| QuestClaimed | ActiveQuests, Items, Trainer, Creature, CreatureSlots, InventoryList, ItemInventoryList, Stats |
+| ItemUsed (successful overworld use only) / HeldItemChanged | Items, Creature |
+| EvolutionCommitted | Creature, ActiveQuests, Stats |
+| CreatureCaptured | CreatureSlots, InventoryList, Stats |
+| CreatureMoved | CreatureSlots |
+| CreatureReleased | Creature, CreatureSlots |
+| MarketListed / MarketListingCancelled | Creature, CreatureSlots, InventoryList |
+| MarketPurchased | Creature, CreatureSlots, InventoryList, Trainer |
 
-The local halves are bound by id in `LocalDevGameInstaller`: `LocalDataSources.Pickup.DefinitionOffline`
-and `LocalDataSources.Quest.TemplateOffline` point at GameData (content), while
-`ITrainerDefeatRepository` points at PlayerData. PlayerData gets the `trainer_defeat` table because
-`DatabaseMigrationRunner.MigrateDomain` runs every domain migration against every
-`MigratableSources` entry.
+**Call-site inventory.** Every online write raises its change; a new online write that is not in this list is a bug.
+`PlayerStateCache` itself subscribes `BattleEvents.BattleClosed` and clears everything on trainer/account change.
+`PlayerWhiteoutHandler` → TeamHealed · `PickupBehaviour` → PickupCollected · `NpcMerchantOnlineOfflineService` →
+MerchantPurchase/Sell/Restocked · `QuestOnlineOfflineRepository` → QuestAccepted/Abandoned/Claimed/ProgressRecorded ·
+`OnlineOfflineItemDomainService` + `HeldItemOnlineOfflineRepository` → ItemUsed/HeldItemChanged ·
+`EvolutionOnlineOfflineRepository` → EvolutionCommitted · `GeneratedCreatureOnlineRepository` → CreatureCaptured/Released ·
+`TrainerCreatureInventoryOnlineRepository` → CreatureMoved · `MarketManager` → MarketListed/ListingCancelled/Purchased (a purchase also reads the bought creature once, so the
+mirror holds it before any cache-only creature read) ·
+`StatOnlineOfflineRepository` and `NpcOnlineOfflineRepository.UseNpcBattleItemAsync` invalidate their own key directly.
+Trainer, inventory-list, item-add and creature-update writes store the server's returned row and need no change.
+
+Content keeps its earlier rule: `ContentBackFill` (local first, server on a content-key miss) for
+pickup/achievement/quest-template definitions. Missions and NPC identity are content read through the memo variant
+of the cache and are only reset by `Clear`.
+
+**Terminal state rides the same cache.** Collected pickups, achievement unlocks, completed quests and trainer
+defeats only ever grow, so the local table can be behind the server but never wrong. Each is mirrored once per
+key per session through `cache.EnsureMirroredAsync(key, reconcile)` (`PlayerStateCacheExtensions.cs`), under the
+scopes `CollectedPickups`, `AchievementUnlocks`, `CompletedQuests` (id = trainerId) and `TrainerDefeats`
+(id = accountId). A caller that arrives mid-reconcile waits for it; a failed reconcile is warned and retried on the
+next call; offline nothing runs; cancellation propagates. No `GameChange` names these scopes
+(`TerminalMirrorsAreNeverInvalidatedByAGameChange`) — the write path mirrors each new row itself — so only
+`Clear` (trainer or account change) reopens them. This replaced the separate `SessionReconcile` gate, which the four
+callers had each owned an instance of.
+
+**A memo outlives a mode switch, but is not read offline.** The memo variant keeps the server's value in the
+cache object. Going online → offline mid-session does not drop it, yet every offline read skips the memo and
+answers from the caller's `fallback` (the local table). Back online, the key is still fresh, so the memo answers
+again without a round trip. Only an invalidate or `Clear` drops it.
+
+**A full fetch is the full list.** The trainer list and the inventory list are cached whole and paged locally, so
+the fetch walks the server page by page until a short page (`PagedFetch.AllAsync`, `CR.Core.Data.Logic`), bounded
+at 1000 rows with a warning if the bound is hit. One page of 100 would have dropped row 101 and served the short
+list as complete for the session.
+
+**Cold vs warm.** A warm Team open costs 0 HTTP calls. Cold (first this session) costs 2: creature slots and
+one `POST /api/v1/trainers/{trainerId}/creatures/by-ids` for every stale creature. Battle close then Team open: 3.
+
+**Proof in the log.** `[PlayerStateCache] remote {key}` is written at Info for every round trip and
+`[PlayerStateCache] invalidate {change}` for every event. Open Team, Bag and Storage twice each while online: the
+second opens log zero `remote` lines.
 
 ### The routing decision is one tested class
 

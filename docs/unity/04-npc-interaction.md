@@ -256,6 +256,40 @@ Setup: add `DialogueSystemTrigger` (On Use, conversation assigned) + `NpcDialogu
 See [Dialogue Integration](?page=unity/11-dialogue-integration) for the conversation/quest
 bridge details.
 
+### Two dialogue backends and the routing table
+
+`NpcDialogueBehaviour` can drive a conversation through either of two backends
+(`DialogueBackend`): the legacy Pixel Crushers `DialogueSystemTrigger` (`Plugin`), or a CR-authored
+dialogue document (`Cr`, see [Dialogue System](?page=unity/31-dialogue-system)). `Backend` is
+**computed** on every access — `Cr` if a CR dialogue was found for this NPC's content key during
+`InitializeAsync`, else `Plugin` if a trigger is configured, else `None` — never cached at init time,
+because a player can press Interact before async NPC init has finished.
+
+The full dispatch flow above (grant → battle → market/merchant → dialogue) is still current, but the
+"dialogue" and "battle" branches now fan out further once a CR backend is involved.
+`NpcInteractionRouting.Decide` (`Assets/CR/Game/World/Behaviours/NpcInteractionRouting.cs`) is the
+pure decision table `NpcInteractionBehaviour` actually calls:
+
+| Route | When |
+|---|---|
+| `GiveCreature` | Always wins if a creature is pending. |
+| `IgnoredConversationBusy` | Backend is `Cr` and a conversation for this NPC is already running/starting — the press is swallowed and nothing is recorded. |
+| `TrainerBarkCr` / `TrainerBarkPlugin` | Can battle and a bark conversation is configured — the bark plays first; the battle starts only if it resolves to `Completed` (or the NPC turns out to have no bark at all). |
+| `TrainerBattleNow` | Can battle, no bark to play. |
+| `Market` / `Merchant` | As before. |
+| `DialogueCr` / `DialoguePlugin` / `DialoguePluginBlocked` | Plain conversation, routed by backend; `DialoguePluginBlocked` is a configured Plugin trigger with no resolvable player transform. |
+| `None` | Nothing to do — the press still counts as a TalkToNpc interaction. |
+
+`NpcInteractionRouting.RecordsTalkProgress(route)` says whether `NpcInteractionBehaviour` itself
+records the TalkToNpc interaction for a press: every conversation route answers `false` (the
+conversation, or the CR `quest.recordTalk` action inside it, is what records it instead — see
+[Dialogue System → How a talk is recorded](?page=unity/31-dialogue-system)); every other route,
+including `None`, answers `true`.
+
+A CR conversation is started off the NPC's own `destroyCancellationToken`, so it can never outlive
+the GameObject that started it — `DialogueService` lives in the persistent Core scene and would
+otherwise carry on a conversation for an NPC that no longer exists.
+
 ## Adding a New Sub-Behaviour Type
 
 To add a new sub-behaviour (see `NpcMerchantBehaviour` for an `INpcSubInitializable`
@@ -369,3 +403,4 @@ the same physical button.
 - [HTTP Clients](?page=unity/05-http-clients) — `INpcClient` / `NpcClientUnityHttp` that carries the requests
 - [Dependency Injection](?page=unity/02-dependency-injection) — how sub-behaviour dependencies are registered and injected
 - [Battle System](?page=unity/07-battle-system) — `BattleCoordinator`, `BattleSession`, full NPC trainer battle flow
+- [Dialogue System](?page=unity/31-dialogue-system) — the CR dialogue backend, its NPC routing table in full, and how a trainer bark gates a battle

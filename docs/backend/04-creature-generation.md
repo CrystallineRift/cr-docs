@@ -651,3 +651,10 @@ should not be used to derive it — see the level-source-of-truth note.
 - [NPC System](?page=backend/02-npc-system) — calls `CreateAsync` for starter creature creation
 - [Starter Creature Flow](?page=backend/05-starter-creature-flow) — end-to-end walkthrough showing where creature generation fits
 - [Backend Architecture](?page=backend/01-architecture) — DI wiring, module structure
+
+## Batch read
+
+`POST /api/v1/trainers/{trainerId}/creatures/by-ids` (`CR.Game.Service.BFF/Endpoints/CreatureBatchEndpoints.cs`)
+takes `{ "ids": [...] }` (1–200) and returns the generated creatures the trainer currently owns. The trainer must
+belong to the token's account (404 otherwise); ids the trainer does not own are omitted silently. Team and storage
+reads only — a listed creature belongs to the market escrow trainer and is absent here by design.

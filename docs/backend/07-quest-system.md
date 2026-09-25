@@ -35,6 +35,8 @@ erDiagram
         string giver_npc_content_key
         boolean is_repeatable
         int sort_order
+        int grant_mode
+        int reward_claim_mode
     }
     quest_objective_template {
         uuid id PK
@@ -87,6 +89,49 @@ erDiagram
 ```
 
 For full column descriptions see the table breakdowns in the sections below.
+
+## Grant mode and reward claim mode
+
+`M7017AddGrantAndClaimModeToQuestTemplate` adds two columns to `quest_template`:
+`grant_mode INT NOT NULL DEFAULT 0` and `reward_claim_mode INT NOT NULL DEFAULT 0`. Both engines get
+a plain `ALTER TABLE ... ADD COLUMN`; SQLite's `Down()` cannot drop a column pre-3.35 and leaves the
+columns in place on rollback (harmless — every row already means "0" for both).
+
+```csharp
+public enum QuestGrantMode
+{
+    OfferedByGiver = 0,     // the giver NPC offers it in dialogue; the trainer must accept
+    AutoWhenAvailable = 1,  // auto-grants the moment its requirements are satisfied, no offer needed
+}
+
+public enum QuestRewardClaimMode
+{
+    AutoOnCompletion = 0,   // rewards are claimed automatically once the quest's criteria are met
+    ReturnToGiver = 1,      // the trainer must return to the giver NPC to claim them
+}
+```
+
+The default (`0`/`0`) is exactly the behavior every quest had before this migration — `OfferedByGiver`
+and `AutoOnCompletion` — so no existing content changed meaning when the columns were added.
+
+Both modes are read by the client, not enforced server-side beyond the columns existing:
+
+- **`AutoWhenAvailable`** — the Unity client's `QuestAutoGranter` sweeps the trainer's available
+  quests on every session-ready signal and after every reward claim, and accepts every
+  `AutoWhenAvailable` template that isn't already active for the trainer and isn't repeatable (a
+  repeatable auto-grant quest would have nothing capping how many times it re-grants, so the sweep
+  skips repeatable candidates outright — never grants them at all). See
+  [Dialogue Authoring](?page=unity/32-dialogue-authoring) for the authoring-side warning this implies.
+- **`ReturnToGiver`** — `QuestRewardDispatcher` claims a completed quest's rewards immediately
+  *unless* the template is `ReturnToGiver` **and** names a `giver_npc_content_key`; a `ReturnToGiver`
+  quest with no giver claims immediately too, same as `AutoOnCompletion` — a reward is never left
+  permanently stranded waiting on a "return to" that can never happen. When it does wait, the reward
+  is collected later either through the Quests tab's Claim button or a dialogue `quest.claim` action
+  (see [Dialogue System](?page=unity/31-dialogue-system)).
+
+`giver_npc_content_key` is authoritative for *both* modes: `AutoWhenAvailable` ignores it (nothing
+about auto-granting a quest touches its giver), but `ReturnToGiver` reads it to decide whether there
+is anywhere to return to.
 
 ## The shipped quest chain
 
@@ -503,6 +548,16 @@ re-accepts when no instance is currently in progress. This matters because scene
 stacked one instance per boot, and a single progress event then completed every copy in one
 serial claim burst (seen live: 38 stacked "Welcome To CR" instances ≈ a 10-second freeze).
 
+**Accepting again also restarts an abandoned or failed instance**, rather than just handing the same
+dead instance back. A non-repeatable template's one allowed instance can be one the player walked
+away from (`Abandoned`) — it is still listed as available (only `InProgress` and `Completed`
+instances hide a quest from the available list), so returning it untouched made the quest
+un-takeable forever: offered, accepted once, abandoned, and never again. `RestartInstanceAsync`
+zeroes every objective's progress first and sets the instance status to `InProgress` last, so an
+interruption mid-restart leaves it `Abandoned` (and still restartable) rather than `InProgress` with
+stale progress on it. This also means an `AutoWhenAvailable` quest is, in effect, not abandonable —
+the client's auto-grant sweep re-accepts it on its next pass, restarting it from zero.
+
 **Completed** — `RecordProgressEventAsync` increments matching progress rows, then checks whether every non-optional objective has `is_completed = true`. If so, the instance status transitions to `Completed` automatically.
 
 **Claimed** — `ClaimRewardsAsync` sets `rewards_claimed = true` and increments the `quests_completed` lifetime stat. Double-claim throws.
@@ -730,6 +785,12 @@ On the Unity client, `QuestManager.ClaimRewardsAsync` deserializes this result a
 
 Used by the Unity editor Crystalline Rift Studio to push `QuestDefinition` ScriptableObjects to the server. Each entry is matched by `content_key` and the template row plus all its objectives, rewards, and requirements are replaced atomically.
 
+`PUT /api/v1/quests/templates/bulk` and `DELETE /api/v1/quests/templates/by-content-key/{contentKey}`
+are the only two quest endpoints gated behind `AuthorizationPolicies.RequireContentWrite` — every
+other quest route (accept, progress, claim, abandon, the reads) stays on the ordinary player-token
+policy. This is the exact same content-write gate the dialogue endpoints use (see
+[Dialogue Server Domain](?page=backend/21-dialogue-domain)).
+
 ```json
 PUT /api/v1/quests/templates/bulk
 [
@@ -787,13 +848,48 @@ The handler uses `IQuestTemplateRepository.UpsertTemplateWithChildrenAsync`, whi
 1. Looks up the existing template by `content_key`.
 2. If found: UPDATEs the template row and preserves its original `id` and `created_at`.
 3. If not found: INSERTs a new template row with a generated `id`.
-4. Soft-deletes all existing objective rows for this template (`deleted = 1`).
-5. INSERTs fresh objective rows (new `id` per row).
-6. Soft-deletes all existing reward rows for this template.
-7. INSERTs fresh reward rows.
-8. If `requirements` was supplied: soft-deletes existing requirement rows, then INSERTs fresh ones.
+4. **Objectives: upserted by `sort_order`, not by a stable id** — see "Objectives are upserted by
+   sort order" below.
+5. Rewards: upserted by `(reward_type, reference_id)` — an existing reward row whose type+reference
+   pair is not in the incoming payload is soft-deleted; every incoming reward is INSERTed or UPDATEd
+   in place by that same pair.
+6. If `requirements` was supplied: soft-deletes existing requirement rows, then INSERTs fresh ones.
 
 A `400 Bad Request` is returned if the request body is empty or any entry has a blank `contentKey`.
+
+### Objectives are upserted by sort order
+
+`BaseQuestTemplateRepository.UpsertTemplateWithChildrenAsync` (`Quests/CR.Quests.Data/Implementation/BaseQuestTemplateRepository.cs`)
+matches an incoming objective to an *existing* `quest_objective_template` row by comparing
+**`sort_order` values**, not any stable identifier:
+
+```csharp
+// simplified
+var match = existingObjectives.FirstOrDefault(e => e.SortOrder == incoming.SortOrder);
+if (match != null) { /* UPDATE match's row in place, keeping match.Id and match.CreatedAt */ }
+else               { /* INSERT a new row with a fresh id */ }
+
+// any existing row whose sort_order is NOT present in the incoming payload is soft-deleted
+```
+
+This is deliberate — objectives have no other authored identifier a push could match on — but it has
+a sharp edge: **`quest_objective_progress` rows reference an objective by its database id, and that
+id follows whichever existing row's `sort_order` an incoming objective happens to match, not the
+objective's content.** If a `QuestDefinition`'s objectives are reordered so that a *surviving*
+objective's `sort_order` now equals a *different, previously-existing* objective's old `sort_order`,
+the push updates that other objective's row in place with the surviving objective's new
+type/description/target — silently re-parenting every `quest_objective_progress` row already pointed
+at it. A player's in-progress count for one objective can, without any error anywhere, become the
+progress count for a completely different objective (free completion, or lost progress, depending on
+direction).
+
+This was caught in review on the shipped `quest-hearthmere-supplies` quest ("Supplies for Hearthmere"):
+its surviving trader-talk objective was accidentally authored at `sort_order = 0` (a location-visit
+objective's former slot) instead of its own `sort_order = 1`, and was fixed by restoring the original
+sort order before the push landed. **Never renumber a surviving objective's `sort_order` on a template
+that already has live instances** — add new objectives at the end, or accept that reordering existing
+ones needs a data migration, not just a Studio push. See
+[Dialogue Authoring](?page=unity/32-dialogue-authoring) for the same warning from the authoring side.
 
 ## Reward Claiming
 
@@ -881,6 +977,11 @@ builder.Services.AddScoped<ITrainerInventoryDomainService, TrainerInventoryDomai
 builder.Services.AddScoped<IQuestDomainService, QuestDomainService>();
 ```
 
+`IQuestInstanceRepository.DeleteInstanceAsync(instanceId)` soft-deletes an instance and its objective-progress rows.
+The Unity online router calls it for locally mirrored active instances the server no longer lists;
+`UpsertFromServerAsync` revives a deleted row (`deleted = false` on conflict) so a mirror sweep that raced a
+server-side accept heals on the next read.
+
 ## Common Mistakes
 
 - **Registering `QuestDomainService` as Singleton.** It must be `AddScoped` because `IConditionEvaluator` depends on `IStatService`, which is Scoped. A Singleton cannot capture a Scoped service.
@@ -897,3 +998,6 @@ builder.Services.AddScoped<IQuestDomainService, QuestDomainService>();
 - [NPC System](?page=backend/02-npc-system) — NPCs are the quest givers; `giver_npc_content_key` links templates to NPC content keys
 - [Backend Architecture](?page=backend/01-architecture) — DI registration patterns, dual-DB, keyed/non-keyed repos
 - [Auth and Accounts](?page=backend/06-auth-and-accounts) — `account_id` and `trainer_id` scoping used on all quest endpoints
+- [Dialogue System](?page=unity/31-dialogue-system) — the `quest.accept`/`quest.claim`/`quest.state`/`quest.objectivePending` dialogue vocabulary that reads and writes grant mode and reward claim mode
+- [Dialogue Authoring](?page=unity/32-dialogue-authoring) — the audit rules that check a dialogue's `quest.*` actions agree with a quest's grant/claim mode
+- [Dialogue Server Domain](?page=backend/21-dialogue-domain) — the sibling content domain that shares the `RequireContentWrite` auth pattern
