@@ -136,8 +136,8 @@
         "Game/CR.Game.Model/Rewards/*.cs",
         "Game/CR.Game.Domain.Services/Implementation/Reward/*.cs",
         "Quests/CR.Quests.Data.Migration/M7017AddGrantAndClaimModeToQuestTemplate.cs",
-        "Quests/CR.Quests.Data.Enums/QuestGrantMode.cs",
-        "Quests/CR.Quests.Data.Enums/QuestRewardClaimMode.cs"
+        "Quests/CR.Quests.Data/Enums/QuestGrantMode.cs",
+        "Quests/CR.Quests.Data/Enums/QuestRewardClaimMode.cs"
       ],
       "cr-data": [
         "Assets/CR/Quests/**/*.cs"
