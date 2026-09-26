@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-09-26 — Smaller, top-centred notices
+
+- **Unity: toasts sit centred on the top edge.** `ToastCorner.TopCenter` replaces `TopRight`; achievements, quest
+  grants, ability unlocks and warnings use it, pickups keep bottom-left. The card is ~25% smaller (icon 36px,
+  message 13px, padding 8/12).
+- **Unity: the arrival banner hangs from the top.** `AreaBannerLayout` band moved from 20% down / 15% tall to
+  4% down / 9% tall; everything inside still derives from the band height.
+
 ## 2026-09-20 — Seams between quests, achievements, journal and toasts
 
 - **Unity: toasts render now.** `AchievementToastPresenter`, the only toast host, had been attached to no scene or
