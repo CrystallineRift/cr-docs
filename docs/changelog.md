@@ -1,5 +1,64 @@
 # Changelog
 
+## 2026-09-26 — Defeat objectives: trainers and lists
+
+- **cr-api: four `QuestObjectiveType` values** — `DefeatCreaturesFromList` (9), `DefeatTrainer` (40),
+  `DefeatAnyTrainer` (41), `DefeatTrainersFromList` (42). M7018 adds `quest_objective_template.target_reference_ids`
+  and `quest_objective_progress.counted_reference_ids` (nullable JSON text, both engines). List objectives count
+  each listed target once, against the list as it is now; restart clears the counted set. Only the "any" event of a
+  family writes its lifetime stat and achievement trigger (fixes the old double count on `DefeatCreature` +
+  `DefeatAnyCreature`; captures likewise; inflated totals not backfilled). `trainers_defeated_total` is new.
+  `PUT /templates/bulk` takes `targetReferenceIds` per objective (`null` keeps, `[]` clears, count clamped to the list).
+- **Unity: trainer wins reach quests.** `IQuestService.OnTrainerDefeated` sends the specific, list and "any" trainer
+  events from `BattleCoordinator`; a known-species creature defeat also sends the list event. `QuestObjectiveDefinition`
+  gains `targetReferenceIds`, synced to the local floor and pushed by the editor; the quest inspector has a trainer
+  picker, a per-target list with **Fill from area**, and validation that blocks bad pushes. The journal and tracker
+  word the four types. Offline floor rebaked.
+- **Admin web:** the four types in the objective type dropdown, a comma-separated list cell for `targetReferenceIds`,
+  and the GET → PUT copy preserves the list.
+
+## 2026-09-26 — Fix: defeating a creature advances "defeat any creature" quests
+
+- **Unity: "First Battle" completes again.** The defeated wild creature is soft-deleted by the battle domain
+  before `BattleCoordinator` looked it up after the faint, so the lookup returned null and the defeat was never
+  reported. `DefeatedOpponentReporter` now learns each opponent's species at identify time and always reports the
+  defeat (`DefeatAnyCreature` even without a species).
+
+## 2026-09-26 — Global UI theme, window frames follow UI Scale, quest tracker restyle
+
+- **Unity: one global theme for every runtime UI.** `Assets/CR/UI/Theme/CrTheme.tss` (default theme + `CrTheme.uss`)
+  is the theme on both runtime PanelSettings. ~230 role-named tokens (paper / glass / hud / accent / status plus
+  screen families), font / radius / spacing scales, and shared `.cr-window`, `.cr-window--paper|--glass`,
+  `.cr-scrim`, `.cr-hud-card` classes. 19 player-facing stylesheets now use `var(--cr-…)` (1,239 uses; 69 one-off
+  literals left). `CrThemeTests` fails on any undefined token. See unity/33-ui-theme.
+- **Unity: window frames scale with UI Scale.** `ScaledWindow` (UxmlElement) reads `--cr-window-width/height/centered`
+  from USS and multiplies by the UI Scale (capped 98%): player menu, Bag, Market, Shop, battle Bag, dialogue.
+- **Unity: quest tracker restyled** as up to three stacked cards — title with a right-aligned count, short lines,
+  dark card with a coloured left accent; title 1.6% of panel height.
+
+## 2026-09-26 — UI scale setting, smaller quest tracker
+
+- **Unity: System → Graphics → UI Scale (70–150%).** `UiScaleApplier` multiplies `PanelSettings.scale` on every
+  runtime panel (Core menus/HUD and the shared overlay panel), persisted as `GameConfigurationKeys.UiScale`,
+  applied on slider release; authored scales are restored on quit so Editor assets never keep it. The "Display"
+  card is now "Graphics".
+- **Unity: height-derived layouts honour the scale.** Quest tracker, arrival banner, evolution card and dialogue
+  panel measure through `UIDocument.EffectivePanelHeight` (height × panel scale) so the setting isn't cancelled.
+- **Unity: quest tracker ~25% smaller** — title font 1.9% of panel height (was 2.5%).
+- **Unity: Battle HUD fits at large scales.** Every command list is a ScrollView capped to the height left under
+  the opponent card (`BattleCommandListLayout`), and the focused row scrolls into view for gamepad.
+- **Unity: menus hold together at large scales.** Team dashboard rows wrap; Storage wraps the Data File under the
+  grid and scrolls; the storage swap and target picker modals cap at 92% × 90%.
+
+## 2026-09-26 — Quest tracker, quest toasts with headings
+
+- **Unity: HUD quest tracker.** `QuestTrackerPresenter` (code-created, overworld only) shows the tracked quest's
+  title, the next objective with its count, and "n of m done" on the middle-right; `QuestTrackerSelector` picks
+  and words it, `QuestTrackerLayout` sizes it from panel height. Off switch: System → Display → Quest Tracker
+  (`GameConfigurationKeys.QuestTrackerHidden`).
+- **Unity: quest toasts match the achievement card.** `ToastRequest.Title` lets a request carry its heading;
+  "New Quest" / "Quest Complete" sit over the quest name, and the toast card has a minimum height.
+
 ## 2026-09-26 — Smaller, top-centred notices
 
 - **Unity: toasts sit centred on the top edge.** `ToastCorner.TopCenter` replaces `TopRight`; achievements, quest

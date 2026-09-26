@@ -70,7 +70,7 @@ world, so cached content would be stale more often than not.
 | `bag-tab` | `BagScreenHandler.RenderInto(bagContent, trainerId)` |
 | `quests-tab` | `QuestJournalView.RenderAsync(questsContent)` |
 | `journal-tab` | `JournalView.RenderAsync(journalContent, accountId, trainerId)` |
-| `options-tab` | Static; settings are wired once in `Start` |
+| `options-tab` | Static; settings are wired once in `Start` (`WireCombatSpeedSetting`, `WireControlsSettings`, `WireDisplaySettings`) |
 
 ### BagScreenHandler resolution
 
@@ -463,6 +463,61 @@ into a `BagItemFacts` (kind + `HeldByCreature` / `UsableOverworld` / `TargetsOwn
 > Previously `FilterItems` returned every item regardless of the selected tab, and the Equip buttons
 > were gated on a hardcoded `isEquipment = false` so they could never appear. `UseItemAsync` was also
 > called with `trainerId` in the `accountId` slot; it now passes `IGameSessionService.CurrentAccountId`.
+
+## System tab settings
+
+Three cards, wired once in `Start`. Every setting persists through `IGameDataRepository` (the
+encrypted prefs store) under a `GameConfigurationKeys` constant and is pushed live to its consumer.
+
+| Card | Control | Key | Consumer |
+|------|---------|-----|----------|
+| Controls | look sensitivity slider, invert X / Y toggles | `LookSensitivity`, `LookInvertX`, `LookInvertY` | `CameraLookSettings.ApplySettings` |
+| Graphics | **UI Scale** slider (`ui-scale-slider`, 70–150%) | `UiScale` | `UiScaleApplier.SetScale` |
+| Graphics | **Quest Tracker** toggle (`quest-tracker-toggle`) | `QuestTrackerHidden` | `QuestTrackerPresenter.SetShown` |
+| Game | Combat Speed dropdown | `BattlePacingScale` | `BattlePresentationSequencer` at battle start |
+
+The tracker key stores the **hidden** flag, not "shown": the tracker is on by default and
+`TryGet<bool>` cannot tell "never written" from `false`, so an absent key has to mean the default.
+The checkbox shows the positive. The rest of the Game card (volume, notifications, reduced motion,
+language) is still decorative.
+
+### UI scale
+
+One multiplier for every runtime UI Toolkit panel. `UiScaleApplier` (`Assets/CR/UI/Common/`,
+code-created NonLazy by `LocalDevGameInstaller`) sets `PanelSettings.scale = authored × setting` on
+the Core scene's `Panel Settings` (menus, HUD), the shared `Evolution/EvolutionPanelSettings`
+(code-created overlays: toasts, arrival banner, evolution, dialogue, quest tracker), and any other
+PanelSettings in memory, re-checked on every scene load. `scale` multiplies in every scale mode, so
+the ScaleWithScreenSize and ConstantPhysicalSize panels both follow it, and anchors hold: the panel's
+own space shrinks by the same factor, so anything placed by percentage or from an edge stays put.
+
+- **Value rules** — `CR.UI.Logic.UiScale`: 0.7–1.5, applied snapped to 0.05; unset/0/NaN → 1.0
+  (`TryGet<float>` can't tell unset from 0). The slider moves freely so a gamepad nudge smaller than a
+  step accumulates.
+- **When it applies** — the label follows the thumb live, but the scale is applied on pointer
+  release (or 300ms after the last gamepad/keyboard change): applying mid-drag rescales this very
+  menu and slides the slider out from under the pointer.
+- **Assets are restored** — PanelSettings are assets, so each panel's authored scale is remembered
+  on first touch and written back on destroy / `Application.quitting` (which includes leaving Play
+  mode). The Editor never keeps a player's scale.
+- **Window frames** — the panel scale grows content, but a frame sized as a percentage of the screen would
+  stay put around it. Frames are `CR.UI.Common.ScaledWindow` elements with the theme's `.cr-window` class: their
+  screen share comes from USS (`--cr-window-width/height/centered`, defaults 0.94 × 0.92 centred) × UI Scale,
+  capped at 98% — player menu, Bag, Market, Shop, both battle-Bag panels and the dialogue panel. See
+  [UI theme](33-ui-theme.md).
+- **Height-derived layouts** — the quest tracker, arrival banner, evolution card and dialogue panel
+  size themselves from the panel's height, which the scale shrinks. They measure through
+  `UIDocument.EffectivePanelHeight(h)` (= `h × panelSettings.scale`, `UiScale.EffectiveHeight`) so the
+  setting isn't cancelled out. **Any new height-derived layout must do the same.**
+- **Fixed-px menus at high scale** — on a Steam Deck (1280×800) the Core panel is 800×500 at 150%.
+  The Team dashboard's top row and synergy row wrap (`.squad-panel` 260px basis decides when); the
+  Storage tab wraps the Data File under the box grid and scrolls the columns in a code-created
+  `storage-scroll` ScrollView (the swap overlay and messages stay on the host so they remain pinned
+  to the tab); the storage swap and target picker modals cap at 92% × 90%. The Battle HUD's command
+  lists fit themselves to the space under the opponent card and scroll (see
+  [Battle system → command list fitting](07-battle-system.md)).
+- **Tests** — `UiScaleTests` (`CR.UI.Logic.Tests`), `UiScaleApplierTests` (Assembly-CSharp-Editor;
+  snapshots and restores every in-memory PanelSettings so a failure can't leave an asset scaled).
 
 ## Quests tab (`QuestJournalView`)
 

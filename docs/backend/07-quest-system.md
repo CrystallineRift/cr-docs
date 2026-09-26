@@ -44,6 +44,7 @@ erDiagram
         int objective_type
         int target_count
         string target_reference_id
+        text target_reference_ids
         boolean is_optional
     }
     quest_reward_template {
@@ -77,6 +78,7 @@ erDiagram
         uuid quest_instance_id FK
         uuid objective_template_id FK
         int current_count
+        text counted_reference_ids
         boolean is_completed
     }
 
@@ -593,10 +595,27 @@ When `is_repeatable = true`, a trainer can accept the same template again after 
 | `DealDamage` | 6 | Deal any amount of damage |
 | `HealAmount` | 7 | Heal any amount |
 | `ReachCreatureLevel` | 8 | Raise a creature to a specific level |
+| `DefeatCreaturesFromList` | 9 | Defeat N DISTINCT species from `target_reference_ids` (each listed species counts once; `target_count` defaults to the list length, "all of them") |
 | `VisitLocation` | 10 | Travel to a named location |
 | `TalkToNpc` | 11 | Interact with a specific NPC |
 | `CollectItem` | 20 | Collect a specific item |
 | `CompleteQuest` | 30 | Complete another quest (used for chain objectives) |
+| `DefeatTrainer` | 40 | Win against a specific trainer (`target_reference_id` = trainer battle content key; rematches count, a blank target means any trainer) |
+| `DefeatAnyTrainer` | 41 | Win any trainer battle |
+| `DefeatTrainersFromList` | 42 | Defeat N DISTINCT trainers from `target_reference_ids` |
+
+**List objectives (9, 42)** store their targets as a JSON array in `quest_objective_template.target_reference_ids`
+and the targets already counted in `quest_objective_progress.counted_reference_ids` (M7018, both engines,
+nullable TEXT so every older seed still inserts). Both are exposed as `List<string>` on the models
+(`TargetReferenceIds` / `CountedReferenceIds`) over an internal JSON-backed property; `QuestObjectiveTargets`
+parses NULL, blank or malformed JSON as an empty list and never throws. On each event the service adds the key to
+the counted set only if it is in the list (trimmed, case-insensitive), then sets `current_count` to the size of
+the overlap between the counted set and the list AS IT IS NOW, capped at `target_count`: an author editing the
+list mid-quest never strands progress, and the same target twice never advances. `evt.Amount` is ignored for list
+types (one defeat is one target). Restarting an instance clears the counted set. Concurrent list events for one
+objective race the read-modify-write; the next event recomputes the count from the list. On
+`PUT /templates/bulk`, an objective's `targetReferenceIds` is optional: `null` keeps the stored list, `[]` clears
+it, and a list type's `targetCount` is clamped to `1..list.Count`.
 
 ### `QuestRequirementType`
 
@@ -658,13 +677,19 @@ public class QuestProgressEvent
 
 ### Stat Side-Effects of `RecordProgressEventAsync`
 
-Every progress event also increments a lifetime stat regardless of whether any quest objective matched:
+Every progress event also increments a lifetime stat regardless of whether any quest objective matched. The
+client sends the specific, the list and the "any" event for one defeat or capture, so **only the "any" event of a
+family writes the stat** (and fires the achievement trigger, see `AchievementTriggerMapper`); before 2026-09-26
+`DefeatCreature` + `DefeatAnyCreature` each wrote it, double-counting every wild defeat with a known species.
+Totals inflated that way are not backfilled.
 
 | ObjectiveType | Stat written | Operator |
 |---------------|-------------|---------|
 | `WinBattles` | `battles_won` | Increment |
-| `DefeatCreature`, `DefeatAnyCreature` | `creatures_defeated_total` | Increment |
-| `CaptureCreature`, `CaptureAnyCreature` | `creatures_captured_total` | Increment |
+| `DefeatAnyCreature` | `creatures_defeated_total` | Increment |
+| `DefeatAnyTrainer` | `trainers_defeated_total` | Increment |
+| `DefeatCreature`, `DefeatCreaturesFromList`, `DefeatTrainer`, `DefeatTrainersFromList`, `CaptureCreature` | none (the family's "any" event writes it) | — |
+| `CaptureAnyCreature` | `creatures_captured_total` | Increment |
 | `DealDamage`, `DealDamageOfType` | `damage_dealt_total` | Increment |
 | `HealAmount` | `damage_healed_total` | Increment |
 | `CollectItem` | `items_collected_total` | Increment |
@@ -956,6 +981,42 @@ When pushing quest templates via `PUT /api/v1/quests/templates/bulk`, set `refer
 
 The endpoint no longer attempts a GUID parse — any non-blank string is stored as-is.
 
+## Quest tracker (Unity HUD)
+
+One card on the middle-right of the overworld screen: the tracked quest's title, one line about
+what to do next, and how far along it is. Added 2026-09-26.
+
+- **Shell:** `Assets/CR/UI/Quests/QuestTrackerPresenter.cs`, code-created by a non-lazy binding in
+  `LocalDevGameInstaller` (the arrival-banner pattern), one `UIDocument` on the shared
+  `EvolutionPanelSettings` at sorting order 30 (below the dialogue panel at 40 and toasts at 60),
+  `PickingMode.Ignore` throughout. Registers with `IUICoordinator` inside `Init` and shows only in
+  `UIContext.Overworld`; hides while the shared `isMenuOpen` flag is up (player menu, shop, market,
+  conversation) and when the System tab's **Quest Tracker** toggle is off.
+- **Data:** every `IQuestService` event (`OnSessionReady`, accepted, granted, objective updated,
+  completed, abandoned, rewards claimed) only marks the card stale; `Update` rebuilds on the main
+  thread from `ActiveQuests`, fetching each template once per session through `GetTemplateAsync`.
+- **Choice and wording** are pure (`Assets/CR/UI/Logic/QuestTracker*.cs`, `CR.UI.Logic`, no cr-api
+  references, so the presenter flattens instances to `QuestTrackerCandidate` primitives):
+  `QuestTrackerSelector.Choose` picks the in-progress quest with the lowest authored `SortOrder`
+  (newest accepted on a tie — the journal's order); if none, a completed quest still waiting for its
+  turn-in ("Return to *giver*", "Ready to claim"); otherwise no card. The objective line is the first
+  incomplete required objective in sort order — optional ones only once every required one is done —
+  with "(current/target)" when the objective counts; the status line is "n of m done" over the
+  required objectives, "In progress" for a single one, or "Ready to turn in". Objectives without an
+  authored description use `QuestJournalView.DescribeObjectiveType`, the journal's wording.
+- **Cards:** up to `QuestTrackerSelector.MaxCards` (3) stacked on the right, 24% down — in-progress quests in
+  journal order, then quests awaiting turn-in (`ChooseMany`; `Choose` = the first). Each card: title with a
+  right-aligned count (required objectives done/total, or a lone objective's own `cur/target`), then short lines
+  — the next objective, or "Ready to turn in" / "Return to {giver}" (green) plus any open optional objective.
+  Dark card with a teal left accent, gold when ready (`quest-tracker--ready`), colours from the global theme.
+- **Sizing:** `QuestTrackerLayout.For(panelHeight)` — every measurement is a ratio of one title font that is
+  1.6% of the panel height (11–36px; ~13px on the 800px reference, 17px at 1080p), card width 16× that. The
+  height passed in is `UIDocument.EffectivePanelHeight(...)` so the player's **UI Scale** grows the cards
+  instead of cancelling out.
+- **Tests:** `QuestTrackerSelectorTests`, `QuestTrackerLayoutTests` (`CR.UI.Logic.Tests`);
+  `QuestStatusValuesTests` pins the mirrored `QuestStatus` ints against the real enum and
+  `QuestTrackerResourcesTests` the Resources names (Assembly-CSharp-Editor).
+
 ## DI Registration
 
 `QuestDomainService` must be registered as **Scoped**, not Singleton. It depends on `IConditionEvaluator` (which depends on `IStatService`), `IItemDomainService`, `ITrainerInventoryDomainService`, and `ICreatureSpawnDomainService` — all of which are Scoped:
@@ -986,7 +1047,16 @@ server-side accept heals on the next read.
 
 - **Registering `QuestDomainService` as Singleton.** It must be `AddScoped` because `IConditionEvaluator` depends on `IStatService`, which is Scoped. A Singleton cannot capture a Scoped service.
 - **Forgetting both keyed and non-keyed repository registrations in Program.cs.** The domain service resolves non-keyed. REST endpoints that use `[FromKeyedServices]` resolve keyed. Both registrations must exist. Looking at the actual `Program.cs`, quest repositories are registered as non-keyed singletons only — if you add keyed registrations for the quest repositories, also keep the non-keyed ones.
+- **A list objective that never advances.** `DefeatCreaturesFromList` / `DefeatTrainersFromList` match by
+  membership in `target_reference_ids`; an empty list can never complete, which is why the Unity quest editor
+  refuses to push one. Sending the same listed key again is a no-op by design (distinct counting).
 - **Firing `DefeatCreature` instead of `DefeatAnyCreature`.** `DefeatCreature` matches objectives where `target_reference_id` equals the event's `ReferenceId`. `DefeatAnyCreature` matches all defeat-type objectives regardless of `ReferenceId`. Sending the wrong type means progress is never recorded.
+- **Looking up a defeated wild creature after the faint.** The battle domain soft-deletes an uncaptured
+  wild creature in the same call that returns the killing blow, so a `GetCreature` made afterwards returns
+  null. Unity's `BattleCoordinator` used to do exactly that and silently skipped `OnCreatureDefeated` —
+  "First Battle" (Defeat any creature) never completed; only `WinBattles` fired. Now
+  `DefeatedOpponentReporter` remembers each opponent's species when it is identified and always reports
+  the defeat; `QuestManager.OnCreatureDefeated(null)` still sends `DefeatAnyCreature`.
 - **Setting `stat_key` on a `HasItem` requirement.** The `HasItem` evaluator reads `reference_id` for the item UUID — `stat_key` is ignored. Putting the item ID in `stat_key` will cause the check to always fail silently.
 - **Calling `ClaimRewardsAsync` twice.** The method throws if `rewards_claimed` is already true. The game layer must guard against double-claim. Retrying a failed claim request should first check the instance's current `rewards_claimed` state.
 - **Forgetting `giver_npc_content_key` in the migration.** If the template has no `giver_npc_content_key`, it will not appear when the NPC's quest list is queried with `npcContentKey`. Set it to match the NPC's `content_key` exactly, or leave it NULL for world quests.

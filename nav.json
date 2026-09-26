@@ -298,5 +298,10 @@
     "section": "Unity",
     "title": "Dialogue Authoring",
     "path": "unity/32-dialogue-authoring"
+  },
+  {
+    "section": "Unity",
+    "title": "UI Theme (global styling)",
+    "path": "unity/33-ui-theme"
   }
 ]
