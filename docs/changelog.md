@@ -9,6 +9,8 @@
 - **Unity: height-derived layouts honour the scale.** Quest tracker, arrival banner, evolution card and dialogue
   panel measure through `UIDocument.EffectivePanelHeight` (height × panel scale) so the setting isn't cancelled.
 - **Unity: quest tracker ~25% smaller** — title font 1.9% of panel height (was 2.5%).
+- **Unity: Battle HUD fits at large scales.** Every command list is a ScrollView capped to the height left under
+  the opponent card (`BattleCommandListLayout`), and the focused row scrolls into view for gamepad.
 - **Unity: menus hold together at large scales.** Team dashboard rows wrap; Storage wraps the Data File under the
   grid and scrolls; the storage swap and target picker modals cap at 92% × 90%.
 

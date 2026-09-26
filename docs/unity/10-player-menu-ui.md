@@ -508,8 +508,9 @@ own space shrinks by the same factor, so anything placed by percentage or from a
   The Team dashboard's top row and synergy row wrap (`.squad-panel` 260px basis decides when); the
   Storage tab wraps the Data File under the box grid and scrolls the columns in a code-created
   `storage-scroll` ScrollView (the swap overlay and messages stay on the host so they remain pinned
-  to the tab); the storage swap and target picker modals cap at 92% × 90%. BattleHUD's command list
-  keeps its 232px `max-height` — check it in battle at 150%.
+  to the tab); the storage swap and target picker modals cap at 92% × 90%. The Battle HUD's command
+  lists fit themselves to the space under the opponent card and scroll (see
+  [Battle system → command list fitting](07-battle-system.md)).
 - **Tests** — `UiScaleTests` (`CR.UI.Logic.Tests`), `UiScaleApplierTests` (Assembly-CSharp-Editor;
   snapshots and restores every in-memory PanelSettings so a failure can't leave an asset scaled).
 

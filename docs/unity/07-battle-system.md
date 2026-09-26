@@ -529,6 +529,15 @@ The `game.bytes` file is keyed as `LocalDataSources.GameOfflineRepository` and r
 - `BattleBagPanelHandler.cs` — MonoBehaviour; manages the in-battle Items/Bag panel. Reads pre-cached data from `TeamSync.Team` and `InventorySync.Inventory` — no async fetch on `Open()`.
 - `Resources/BattleHUD.uxml` — layout: opponent panel (top-right), player panel (bottom-left), battle log, action menu (Battle / Items / Run), ability panel
 - `Resources/BattleHUD.uss` — styles; root has `picking-mode="Ignore"` so clicks pass through to the 3D world
+
+**Command list fitting (UI scale):** the ability, bag, swap and item-target lists are all `ScrollView`s. On any
+resize of `hud-root`, `top-area` or the synergy chip, `BattleHUD.ApplyListHeights` sets each list's `max-height` to
+what is left after the top area (opponent card), the bottom padding, the command card's padding/border, the Back
+row (46px) and the synergy chip — `CR.UI.Logic.BattleCommandListLayout.MaxListHeight`, never below one row (60px);
+the bag keeps its authored 232px cap on tall screens. So at a large UI scale on a short screen the list scrolls
+instead of stacking the card up into the opponent card. A `FocusInEvent` handler `ScrollTo`s the focused row so
+gamepad navigation stays in view. Measured in play mode at 150% (800×587 panel, 6 swap rows): list capped to
+288px, 31px clear of the opponent card; at 100% the same list shows in full.
 - `UI/Battle/BattleBagPanel.uxml` — bag panel layout (item list, party slots, confirm/cancel)
 
 **Setup:**
