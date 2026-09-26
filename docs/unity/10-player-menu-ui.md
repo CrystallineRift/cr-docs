@@ -500,6 +500,11 @@ own space shrinks by the same factor, so anything placed by percentage or from a
 - **Assets are restored** — PanelSettings are assets, so each panel's authored scale is remembered
   on first touch and written back on destroy / `Application.quitting` (which includes leaving Play
   mode). The Editor never keeps a player's scale.
+- **Window frames** — the panel scale grows content, but a frame sized as a percentage of the screen would
+  stay put around it. Frames are `CR.UI.Common.ScaledWindow` elements with the theme's `.cr-window` class: their
+  screen share comes from USS (`--cr-window-width/height/centered`, defaults 0.94 × 0.92 centred) × UI Scale,
+  capped at 98% — player menu, Bag, Market, Shop, both battle-Bag panels and the dialogue panel. See
+  [UI theme](33-ui-theme.md).
 - **Height-derived layouts** — the quest tracker, arrival banner, evolution card and dialogue panel
   size themselves from the panel's height, which the scale shrinks. They measure through
   `UIDocument.EffectivePanelHeight(h)` (= `h × panelSettings.scale`, `UiScale.EffectiveHeight`) so the

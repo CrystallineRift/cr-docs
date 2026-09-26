@@ -979,14 +979,15 @@ what to do next, and how far along it is. Added 2026-09-26.
   with "(current/target)" when the objective counts; the status line is "n of m done" over the
   required objectives, "In progress" for a single one, or "Ready to turn in". Objectives without an
   authored description use `QuestJournalView.DescribeObjectiveType`, the journal's wording.
-- **Sizing:** `QuestTrackerLayout.For(panelHeight)` — every measurement is a ratio of one title
-  font that is 1.9% of the panel height (11–40px; ~15px on the 800px reference, down from 2.5% after
-  the first playtest), applied on `GeometryChangedEvent`. The height passed in is
-  `UIDocument.EffectivePanelHeight(...)` — measured height × panel scale — so the player's
-  **UI Scale** setting grows the card instead of cancelling out (see
-  [Player menu → UI scale](../unity/10-player-menu-ui.md#ui-scale)); the USS
-  (`Assets/CR/UI/Resources/QuestTracker.uss`) carries only colour and arrangement. A quest whose
-  work is done switches the accent to the reward colour (`quest-tracker--ready`).
+- **Cards:** up to `QuestTrackerSelector.MaxCards` (3) stacked on the right, 24% down — in-progress quests in
+  journal order, then quests awaiting turn-in (`ChooseMany`; `Choose` = the first). Each card: title with a
+  right-aligned count (required objectives done/total, or a lone objective's own `cur/target`), then short lines
+  — the next objective, or "Ready to turn in" / "Return to {giver}" (green) plus any open optional objective.
+  Dark card with a teal left accent, gold when ready (`quest-tracker--ready`), colours from the global theme.
+- **Sizing:** `QuestTrackerLayout.For(panelHeight)` — every measurement is a ratio of one title font that is
+  1.6% of the panel height (11–36px; ~13px on the 800px reference, 17px at 1080p), card width 16× that. The
+  height passed in is `UIDocument.EffectivePanelHeight(...)` so the player's **UI Scale** grows the cards
+  instead of cancelling out.
 - **Tests:** `QuestTrackerSelectorTests`, `QuestTrackerLayoutTests` (`CR.UI.Logic.Tests`);
   `QuestStatusValuesTests` pins the mirrored `QuestStatus` ints against the real enum and
   `QuestTrackerResourcesTests` the Resources names (Assembly-CSharp-Editor).

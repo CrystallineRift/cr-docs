@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-09-26 — Global UI theme, window frames follow UI Scale, quest tracker restyle
+
+- **Unity: one global theme for every runtime UI.** `Assets/CR/UI/Theme/CrTheme.tss` (default theme + `CrTheme.uss`)
+  is the theme on both runtime PanelSettings. ~230 role-named tokens (paper / glass / hud / accent / status plus
+  screen families), font / radius / spacing scales, and shared `.cr-window`, `.cr-window--paper|--glass`,
+  `.cr-scrim`, `.cr-hud-card` classes. 19 player-facing stylesheets now use `var(--cr-…)` (1,239 uses; 69 one-off
+  literals left). `CrThemeTests` fails on any undefined token. See unity/33-ui-theme.
+- **Unity: window frames scale with UI Scale.** `ScaledWindow` (UxmlElement) reads `--cr-window-width/height/centered`
+  from USS and multiplies by the UI Scale (capped 98%): player menu, Bag, Market, Shop, battle Bag, dialogue.
+- **Unity: quest tracker restyled** as up to three stacked cards — title with a right-aligned count, short lines,
+  dark card with a coloured left accent; title 1.6% of panel height.
+
 ## 2026-09-26 — UI scale setting, smaller quest tracker
 
 - **Unity: System → Graphics → UI Scale (70–150%).** `UiScaleApplier` multiplies `PanelSettings.scale` on every
