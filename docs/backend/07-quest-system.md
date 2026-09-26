@@ -980,7 +980,11 @@ what to do next, and how far along it is. Added 2026-09-26.
   required objectives, "In progress" for a single one, or "Ready to turn in". Objectives without an
   authored description use `QuestJournalView.DescribeObjectiveType`, the journal's wording.
 - **Sizing:** `QuestTrackerLayout.For(panelHeight)` — every measurement is a ratio of one title
-  font that is 2.5% of the panel height (11–40px), applied on `GeometryChangedEvent`; the USS
+  font that is 1.9% of the panel height (11–40px; ~15px on the 800px reference, down from 2.5% after
+  the first playtest), applied on `GeometryChangedEvent`. The height passed in is
+  `UIDocument.EffectivePanelHeight(...)` — measured height × panel scale — so the player's
+  **UI Scale** setting grows the card instead of cancelling out (see
+  [Player menu → UI scale](../unity/10-player-menu-ui.md#ui-scale)); the USS
   (`Assets/CR/UI/Resources/QuestTracker.uss`) carries only colour and arrangement. A quest whose
   work is done switches the accent to the reward colour (`quest-tracker--ready`).
 - **Tests:** `QuestTrackerSelectorTests`, `QuestTrackerLayoutTests` (`CR.UI.Logic.Tests`);
