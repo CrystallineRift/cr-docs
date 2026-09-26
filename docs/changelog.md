@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-09-26 — Fix: defeating a creature advances "defeat any creature" quests
+
+- **Unity: "First Battle" completes again.** The defeated wild creature is soft-deleted by the battle domain
+  before `BattleCoordinator` looked it up after the faint, so the lookup returned null and the defeat was never
+  reported. `DefeatedOpponentReporter` now learns each opponent's species at identify time and always reports the
+  defeat (`DefeatAnyCreature` even without a species).
+
 ## 2026-09-26 — Global UI theme, window frames follow UI Scale, quest tracker restyle
 
 - **Unity: one global theme for every runtime UI.** `Assets/CR/UI/Theme/CrTheme.tss` (default theme + `CrTheme.uss`)

@@ -1023,6 +1023,12 @@ server-side accept heals on the next read.
 - **Registering `QuestDomainService` as Singleton.** It must be `AddScoped` because `IConditionEvaluator` depends on `IStatService`, which is Scoped. A Singleton cannot capture a Scoped service.
 - **Forgetting both keyed and non-keyed repository registrations in Program.cs.** The domain service resolves non-keyed. REST endpoints that use `[FromKeyedServices]` resolve keyed. Both registrations must exist. Looking at the actual `Program.cs`, quest repositories are registered as non-keyed singletons only — if you add keyed registrations for the quest repositories, also keep the non-keyed ones.
 - **Firing `DefeatCreature` instead of `DefeatAnyCreature`.** `DefeatCreature` matches objectives where `target_reference_id` equals the event's `ReferenceId`. `DefeatAnyCreature` matches all defeat-type objectives regardless of `ReferenceId`. Sending the wrong type means progress is never recorded.
+- **Looking up a defeated wild creature after the faint.** The battle domain soft-deletes an uncaptured
+  wild creature in the same call that returns the killing blow, so a `GetCreature` made afterwards returns
+  null. Unity's `BattleCoordinator` used to do exactly that and silently skipped `OnCreatureDefeated` —
+  "First Battle" (Defeat any creature) never completed; only `WinBattles` fired. Now
+  `DefeatedOpponentReporter` remembers each opponent's species when it is identified and always reports
+  the defeat; `QuestManager.OnCreatureDefeated(null)` still sends `DefeatAnyCreature`.
 - **Setting `stat_key` on a `HasItem` requirement.** The `HasItem` evaluator reads `reference_id` for the item UUID — `stat_key` is ignored. Putting the item ID in `stat_key` will cause the check to always fail silently.
 - **Calling `ClaimRewardsAsync` twice.** The method throws if `rewards_claimed` is already true. The game layer must guard against double-claim. Retrying a failed claim request should first check the instance's current `rewards_claimed` state.
 - **Forgetting `giver_npc_content_key` in the migration.** If the template has no `giver_npc_content_key`, it will not appear when the NPC's quest list is queried with `npcContentKey`. Set it to match the NPC's `content_key` exactly, or leave it NULL for world quests.
