@@ -70,7 +70,7 @@ world, so cached content would be stale more often than not.
 | `bag-tab` | `BagScreenHandler.RenderInto(bagContent, trainerId)` |
 | `quests-tab` | `QuestJournalView.RenderAsync(questsContent)` |
 | `journal-tab` | `JournalView.RenderAsync(journalContent, accountId, trainerId)` |
-| `options-tab` | Static; settings are wired once in `Start` |
+| `options-tab` | Static; settings are wired once in `Start` (`WireCombatSpeedSetting`, `WireControlsSettings`, `WireDisplaySettings`) |
 
 ### BagScreenHandler resolution
 
@@ -463,6 +463,22 @@ into a `BagItemFacts` (kind + `HeldByCreature` / `UsableOverworld` / `TargetsOwn
 > Previously `FilterItems` returned every item regardless of the selected tab, and the Equip buttons
 > were gated on a hardcoded `isEquipment = false` so they could never appear. `UseItemAsync` was also
 > called with `trainerId` in the `accountId` slot; it now passes `IGameSessionService.CurrentAccountId`.
+
+## System tab settings
+
+Three cards, wired once in `Start`. Every setting persists through `IGameDataRepository` (the
+encrypted prefs store) under a `GameConfigurationKeys` constant and is pushed live to its consumer.
+
+| Card | Control | Key | Consumer |
+|------|---------|-----|----------|
+| Controls | look sensitivity slider, invert X / Y toggles | `LookSensitivity`, `LookInvertX`, `LookInvertY` | `CameraLookSettings.ApplySettings` |
+| Display | **Quest Tracker** toggle (`quest-tracker-toggle`) | `QuestTrackerHidden` | `QuestTrackerPresenter.SetShown` |
+| Game | Combat Speed dropdown | `BattlePacingScale` | `BattlePresentationSequencer` at battle start |
+
+The tracker key stores the **hidden** flag, not "shown": the tracker is on by default and
+`TryGet<bool>` cannot tell "never written" from `false`, so an absent key has to mean the default.
+The checkbox shows the positive. The rest of the Game card (volume, notifications, reduced motion,
+language) is still decorative.
 
 ## Quests tab (`QuestJournalView`)
 

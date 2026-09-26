@@ -140,6 +140,11 @@
         "Quests/CR.Quests.Data/Enums/QuestRewardClaimMode.cs"
       ],
       "cr-data": [
+        "Assets/CR/UI/Resources/QuestTracker.uxml",
+        "Assets/CR/UI/Resources/QuestTracker.uss",
+        "Assets/CR/UI/Logic/Tests/QuestTracker*.cs",
+        "Assets/CR/UI/Logic/QuestTracker*.cs",
+        "Assets/CR/UI/Quests/QuestTrackerPresenter.cs",
         "Assets/CR/Quests/**/*.cs"
       ]
     },
@@ -721,6 +726,7 @@
         "Items/CR.Items.Data.Migration/M6022BackfillItemIconAssetKey.cs"
       ],
       "cr-data": [
+        "Assets/CR/Core/Data/Repository/GameConfigurationKeys.cs",
         "Assets/CR/UI/PlayerMenuWindow.cs",
         "Assets/CR/UI/PlayerTeamView.cs",
         "Assets/CR/UI/BagScreenHandler.cs",
@@ -1041,6 +1047,8 @@
         "Quests/CR.Quests.Domain.Services/Implementation/AchievementTriggerMapper.cs"
       ],
       "cr-data": [
+        "Assets/CR/Core/Notifications/Adapters/QuestGrantToastAdapter.cs",
+        "Assets/CR/Core/Notifications/ToastRequest.cs",
         "Assets/CR/Quests/Manager/QuestManager.cs",
         "Assets/CR/Quests/Manager/IQuestService.cs",
         "Assets/CR/Achievements/IAchievementService.cs",

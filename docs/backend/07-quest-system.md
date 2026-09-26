@@ -956,6 +956,37 @@ When pushing quest templates via `PUT /api/v1/quests/templates/bulk`, set `refer
 
 The endpoint no longer attempts a GUID parse — any non-blank string is stored as-is.
 
+## Quest tracker (Unity HUD)
+
+One card on the middle-right of the overworld screen: the tracked quest's title, one line about
+what to do next, and how far along it is. Added 2026-09-26.
+
+- **Shell:** `Assets/CR/UI/Quests/QuestTrackerPresenter.cs`, code-created by a non-lazy binding in
+  `LocalDevGameInstaller` (the arrival-banner pattern), one `UIDocument` on the shared
+  `EvolutionPanelSettings` at sorting order 30 (below the dialogue panel at 40 and toasts at 60),
+  `PickingMode.Ignore` throughout. Registers with `IUICoordinator` inside `Init` and shows only in
+  `UIContext.Overworld`; hides while the shared `isMenuOpen` flag is up (player menu, shop, market,
+  conversation) and when the System tab's **Quest Tracker** toggle is off.
+- **Data:** every `IQuestService` event (`OnSessionReady`, accepted, granted, objective updated,
+  completed, abandoned, rewards claimed) only marks the card stale; `Update` rebuilds on the main
+  thread from `ActiveQuests`, fetching each template once per session through `GetTemplateAsync`.
+- **Choice and wording** are pure (`Assets/CR/UI/Logic/QuestTracker*.cs`, `CR.UI.Logic`, no cr-api
+  references, so the presenter flattens instances to `QuestTrackerCandidate` primitives):
+  `QuestTrackerSelector.Choose` picks the in-progress quest with the lowest authored `SortOrder`
+  (newest accepted on a tie — the journal's order); if none, a completed quest still waiting for its
+  turn-in ("Return to *giver*", "Ready to claim"); otherwise no card. The objective line is the first
+  incomplete required objective in sort order — optional ones only once every required one is done —
+  with "(current/target)" when the objective counts; the status line is "n of m done" over the
+  required objectives, "In progress" for a single one, or "Ready to turn in". Objectives without an
+  authored description use `QuestJournalView.DescribeObjectiveType`, the journal's wording.
+- **Sizing:** `QuestTrackerLayout.For(panelHeight)` — every measurement is a ratio of one title
+  font that is 2.5% of the panel height (11–40px), applied on `GeometryChangedEvent`; the USS
+  (`Assets/CR/UI/Resources/QuestTracker.uss`) carries only colour and arrangement. A quest whose
+  work is done switches the accent to the reward colour (`quest-tracker--ready`).
+- **Tests:** `QuestTrackerSelectorTests`, `QuestTrackerLayoutTests` (`CR.UI.Logic.Tests`);
+  `QuestStatusValuesTests` pins the mirrored `QuestStatus` ints against the real enum and
+  `QuestTrackerResourcesTests` the Resources names (Assembly-CSharp-Editor).
+
 ## DI Registration
 
 `QuestDomainService` must be registered as **Scoped**, not Singleton. It depends on `IConditionEvaluator` (which depends on `IStatService`), `IItemDomainService`, `ITrainerInventoryDomainService`, and `ICreatureSpawnDomainService` — all of which are Scoped:

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-09-26 — Quest tracker, quest toasts with headings
+
+- **Unity: HUD quest tracker.** `QuestTrackerPresenter` (code-created, overworld only) shows the tracked quest's
+  title, the next objective with its count, and "n of m done" on the middle-right; `QuestTrackerSelector` picks
+  and words it, `QuestTrackerLayout` sizes it from panel height. Off switch: System → Display → Quest Tracker
+  (`GameConfigurationKeys.QuestTrackerHidden`).
+- **Unity: quest toasts match the achievement card.** `ToastRequest.Title` lets a request carry its heading;
+  "New Quest" / "Quest Complete" sit over the quest name, and the toast card has a minimum height.
+
 ## 2026-09-26 — Smaller, top-centred notices
 
 - **Unity: toasts sit centred on the top edge.** `ToastCorner.TopCenter` replaces `TopRight`; achievements, quest
