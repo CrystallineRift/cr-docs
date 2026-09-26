@@ -183,7 +183,7 @@ evaluator the server runs.
   rediscovering it: `AreaBannerLayout.For(bandHeight * 0.78)` drives font size, padding and the
   rule, with the band itself a percentage of screen height (`70%` top, `19%` tall) applied on
   `GeometryChangedEvent`. The prompt below it is sized from the same font at `0.42`, the eyebrow at
-  `0.44`. The band is taller than the arrival banner's 15% and the card is sized from a *fraction*
+  `0.44`. The band is taller than the arrival banner's 9% and the card is sized from a *fraction*
   of it because this card carries a line the banner does not: measured with the banner's own
   figures, the card came to 103px inside a 105px band — it fitted, but a longer species name would
   have overflowed. Feeding the taller band straight back into the layout would simply grow the type

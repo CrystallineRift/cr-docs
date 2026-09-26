@@ -345,7 +345,8 @@ deferred initialization path, when they actually walk into it.
 
 ### Sizing is computed, not authored
 
-The banner sits in a band **20% down the screen**, **15% of screen height** tall, and every
+The banner sits in a band **4% down the screen**, **9% of screen height** tall (20% / 15% until
+2026-09-26, when the playtest read it as a title card rather than a caption), and every
 measurement inside it — font size, padding, the rule's width and thickness — is derived from that
 band by `AreaBannerLayout`. Both fractions live there and are applied from the presenter, so the
 stylesheet carries no numbers to drift out of step.
