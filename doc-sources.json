@@ -136,10 +136,21 @@
         "Game/CR.Game.Model/Rewards/*.cs",
         "Game/CR.Game.Domain.Services/Implementation/Reward/*.cs",
         "Quests/CR.Quests.Data.Migration/M7017AddGrantAndClaimModeToQuestTemplate.cs",
+        "Quests/CR.Quests.Data.Migration/M7018AddObjectiveTargetLists.cs",
         "Quests/CR.Quests.Data/Enums/QuestGrantMode.cs",
-        "Quests/CR.Quests.Data/Enums/QuestRewardClaimMode.cs"
+        "Quests/CR.Quests.Data/Enums/QuestRewardClaimMode.cs",
+        "Quests/CR.Quests.Data/Model/QuestObjectiveTargets.cs"
       ],
       "cr-data": [
+        "Assets/CR/Core/Data/Logic/QuestObjectiveValidation.cs",
+        "Assets/CR/Core/Data/Logic/AreaSceneContentScan.cs",
+        "Assets/CR/Core/Data/Logic/QuestAreaTargetFiller.cs",
+        "Assets/CR/Core/Data/Editor/QuestAreaTargetFillerEditor.cs",
+        "Assets/CR/UI/Resources/QuestTracker.uxml",
+        "Assets/CR/UI/Resources/QuestTracker.uss",
+        "Assets/CR/UI/Logic/Tests/QuestTracker*.cs",
+        "Assets/CR/UI/Logic/QuestTracker*.cs",
+        "Assets/CR/UI/Quests/QuestTrackerPresenter.cs",
         "Assets/CR/Quests/**/*.cs"
       ]
     },
@@ -320,6 +331,9 @@
         "Assets/CR/Game/Battle/Logic/Tests/IsolatedDispatchTests.cs",
         "Assets/CR/Game/Battle/DTOs/WildBattleStateDtos.cs",
         "Assets/CR/UI/Battle/BattleHUD.cs",
+        "Assets/CR/UI/Resources/BattleHUD.uxml",
+        "Assets/CR/UI/Resources/BattleHUD.uss",
+        "Assets/CR/UI/Logic/BattleCommandListLayout.cs",
         "Assets/CR/Game/World/Behaviours/NpcInteractionBehaviour.cs",
         "Assets/CR/Game/World/Behaviours/SpawnerEncounterBehaviour.cs",
         "Assets/CR/Game/World/Behaviours/SpawnerWorldBehaviour.cs",
@@ -721,6 +735,7 @@
         "Items/CR.Items.Data.Migration/M6022BackfillItemIconAssetKey.cs"
       ],
       "cr-data": [
+        "Assets/CR/Core/Data/Repository/GameConfigurationKeys.cs",
         "Assets/CR/UI/PlayerMenuWindow.cs",
         "Assets/CR/UI/PlayerTeamView.cs",
         "Assets/CR/UI/BagScreenHandler.cs",
@@ -736,6 +751,10 @@
         "Assets/CR/UI/Common/CreatureTargetPicker.cs",
         "Assets/CR/UI/Common/UiFocusRecovery.cs",
         "Assets/CR/UI/Common/UiIcon.cs",
+        "Assets/CR/UI/Common/UiScaleApplier.cs",
+        "Assets/CR/UI/Common/UIDocumentUiScaleExtensions.cs",
+        "Assets/CR/Tests/Editor/UiScaleApplierTests.cs",
+        "Assets/CR/UI/PlayerStorageView.cs",
         "Assets/CR/UI/Resources/CreatureTargetPicker.uss",
         "Assets/CR/Core/Data/Client/Interface/ICreatureStatusClient.cs",
         "Assets/CR/Core/Data/Client/Implementation/CreatureStatus*.cs",
@@ -1041,6 +1060,8 @@
         "Quests/CR.Quests.Domain.Services/Implementation/AchievementTriggerMapper.cs"
       ],
       "cr-data": [
+        "Assets/CR/Core/Notifications/Adapters/QuestGrantToastAdapter.cs",
+        "Assets/CR/Core/Notifications/ToastRequest.cs",
         "Assets/CR/Quests/Manager/QuestManager.cs",
         "Assets/CR/Quests/Manager/IQuestService.cs",
         "Assets/CR/Achievements/IAchievementService.cs",
@@ -1589,5 +1610,21 @@
       "cr-data": []
     },
     "description": "Server dialogue domain: dialogue table (M14001), repository semantics (soft delete + revive, transactional bulk upsert with replay-once-on-race, engine-independent NPC tie-break, SQL npc filter/paging), DialogueValidator's full finding-code list and DialogueLimits, the id-ignored/id-in-use/duplicate-id rule, REST routes and auth, the global error middleware's fixed-message + traceId contract, M14002 content seed (six dialogues under authored ids; narrowed, old-value-guarded quest giver/grant/payout sync; Postgres only)"
+  },
+  "unity/33-ui-theme": {
+    "docPath": "docs/unity/33-ui-theme.md",
+    "repos": {
+      "cr-data": [
+        "Assets/CR/UI/Theme/CrTheme.uss",
+        "Assets/CR/UI/Theme/CrTheme.tss",
+        "Assets/CR/UI/Common/ScaledWindow.cs",
+        "Assets/CR/UI/Common/UiScaleApplier.cs",
+        "Assets/CR/UI/Common/MessageDialog.cs",
+        "Assets/CR/Tests/Editor/CrThemeTests.cs",
+        "Assets/CR/UI/Panel Settings.asset",
+        "Assets/CR/Resources/Evolution/EvolutionPanelSettings.asset"
+      ]
+    },
+    "description": "Global UI theme: CrTheme.tss on both runtime PanelSettings, CrTheme.uss design tokens (paper/glass/hud/accent/status colours, font/radius/spacing scales), shared .cr-window/.cr-scrim/.cr-hud-card classes, ScaledWindow USS-driven frame sizing under UI Scale, CrThemeTests guard"
   }
 }

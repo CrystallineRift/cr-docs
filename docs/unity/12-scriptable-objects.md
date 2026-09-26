@@ -195,7 +195,8 @@ Defines a quest template. The backend owns instance/progress data; this SO is th
 | `objectiveType` | `QuestObjectiveType` | Yes | Type of gameplay action tracked |
 | `description` | string | Yes | Player-facing objective text |
 | `targetCount` | int | Yes | How many times the action must occur |
-| `targetReferenceId` | string | Yes | UUID/content_key of the target entity (NPC, creature, item) |
+| `targetReferenceId` | string | Yes | UUID/content_key of the target entity (NPC, creature, item, trainer battle) |
+| `targetReferenceIds` | `List<string>` | Yes | List objectives only (`DefeatCreaturesFromList`, `DefeatTrainersFromList`): the content keys to count, each once. The inspector's **Fill from area** writes an area scene's spawner species or trainer NPCs as a snapshot; **All (N)** sets the count to the list length |
 | `isOptional` | bool | Yes | If true, quest can complete without this objective |
 | `sortOrder` | int | Yes | Display ordering — **also the upsert match key server-side**: see [Quest System → Objectives are upserted by sort order](?page=backend/07-quest-system#objectives-are-upserted-by-sort-order) before reordering an existing quest's objectives |
 
@@ -205,7 +206,12 @@ Defines a quest template. The backend owns instance/progress data; this SO is th
 > as the legacy path) and [Dialogue System](?page=unity/31-dialogue-system) for the CR dialogue
 > system that replaces it for new content.
 
-**QuestObjectiveType values:** `DefeatCreature`, `DefeatAnyCreature`, `DealDamageOfType`, `DealDamage`, `HealAmount`, `WinBattles`, `CaptureCreature`, `CaptureAnyCreature`, `ReachCreatureLevel`, `VisitLocation`, `TalkToNpc`, `CollectItem`, `CompleteQuest`
+**QuestObjectiveType values:** `DefeatCreature`, `DefeatAnyCreature`, `DefeatCreaturesFromList`, `DealDamageOfType`, `DealDamage`, `HealAmount`, `WinBattles`, `CaptureCreature`, `CaptureAnyCreature`, `ReachCreatureLevel`, `VisitLocation`, `TalkToNpc`, `CollectItem`, `CompleteQuest`, `DefeatTrainer`, `DefeatAnyTrainer`, `DefeatTrainersFromList`
+
+**The quest editor refuses to push** (red HelpBox, `QuestObjectiveValidation`, pure and tested) a list type with an
+empty list, a count under 1, a list count over the list, or a `DefeatTrainer` asking for more than one win of a
+trainer whose `allowRematch` is off. A blank target on `DefeatCreature` / `DefeatTrainer` means "any" and is only a
+warning.
 
 **QuestRewardDefinition** (nested, serializable):
 

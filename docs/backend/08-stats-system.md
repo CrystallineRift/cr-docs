@@ -280,8 +280,9 @@ Defined in `CR.Stats.Data.Constants.StatKey`. Use these constants rather than in
 | `BattlesLost` | `"battles_lost"` | Increment | Battle system (future) |
 | `DamageDealtTotal` | `"damage_dealt_total"` | Increment | `QuestDomainService` on `DealDamage` / `DealDamageOfType` events |
 | `DamageHealedTotal` | `"damage_healed_total"` | Increment | `QuestDomainService` on `HealAmount` events |
-| `CreaturesCapturedTotal` | `"creatures_captured_total"` | Increment | `QuestDomainService` on `CaptureCreature` / `CaptureAnyCreature` events |
-| `CreaturesDefeatedTotal` | `"creatures_defeated_total"` | Increment | `QuestDomainService` on `DefeatCreature` / `DefeatAnyCreature` events |
+| `CreaturesCapturedTotal` | `"creatures_captured_total"` | Increment | `QuestDomainService` on `CaptureAnyCreature` events only (one write per capture; the specific event no longer writes it) |
+| `CreaturesDefeatedTotal` | `"creatures_defeated_total"` | Increment | `QuestDomainService` on `DefeatAnyCreature` events only (one write per defeat) |
+| `TrainersDefeatedTotal` | `"trainers_defeated_total"` | Increment | `QuestDomainService` on `DefeatAnyTrainer` events |
 | `ItemsCollectedTotal` | `"items_collected_total"` | Increment | `QuestDomainService` on `CollectItem` events |
 | `QuestsCompleted` | `"quests_completed"` | Increment | `QuestDomainService.ClaimRewardsAsync` |
 | `HighestCreatureLevel` | `"highest_creature_level"` | Max | `QuestDomainService` on `ReachCreatureLevel` events |
