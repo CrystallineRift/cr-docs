@@ -136,10 +136,16 @@
         "Game/CR.Game.Model/Rewards/*.cs",
         "Game/CR.Game.Domain.Services/Implementation/Reward/*.cs",
         "Quests/CR.Quests.Data.Migration/M7017AddGrantAndClaimModeToQuestTemplate.cs",
+        "Quests/CR.Quests.Data.Migration/M7018AddObjectiveTargetLists.cs",
         "Quests/CR.Quests.Data/Enums/QuestGrantMode.cs",
-        "Quests/CR.Quests.Data/Enums/QuestRewardClaimMode.cs"
+        "Quests/CR.Quests.Data/Enums/QuestRewardClaimMode.cs",
+        "Quests/CR.Quests.Data/Model/QuestObjectiveTargets.cs"
       ],
       "cr-data": [
+        "Assets/CR/Core/Data/Logic/QuestObjectiveValidation.cs",
+        "Assets/CR/Core/Data/Logic/AreaSceneContentScan.cs",
+        "Assets/CR/Core/Data/Logic/QuestAreaTargetFiller.cs",
+        "Assets/CR/Core/Data/Editor/QuestAreaTargetFillerEditor.cs",
         "Assets/CR/UI/Resources/QuestTracker.uxml",
         "Assets/CR/UI/Resources/QuestTracker.uss",
         "Assets/CR/UI/Logic/Tests/QuestTracker*.cs",

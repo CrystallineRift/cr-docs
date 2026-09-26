@@ -44,6 +44,7 @@ erDiagram
         int objective_type
         int target_count
         string target_reference_id
+        text target_reference_ids
         boolean is_optional
     }
     quest_reward_template {
@@ -77,6 +78,7 @@ erDiagram
         uuid quest_instance_id FK
         uuid objective_template_id FK
         int current_count
+        text counted_reference_ids
         boolean is_completed
     }
 
@@ -593,10 +595,27 @@ When `is_repeatable = true`, a trainer can accept the same template again after 
 | `DealDamage` | 6 | Deal any amount of damage |
 | `HealAmount` | 7 | Heal any amount |
 | `ReachCreatureLevel` | 8 | Raise a creature to a specific level |
+| `DefeatCreaturesFromList` | 9 | Defeat N DISTINCT species from `target_reference_ids` (each listed species counts once; `target_count` defaults to the list length, "all of them") |
 | `VisitLocation` | 10 | Travel to a named location |
 | `TalkToNpc` | 11 | Interact with a specific NPC |
 | `CollectItem` | 20 | Collect a specific item |
 | `CompleteQuest` | 30 | Complete another quest (used for chain objectives) |
+| `DefeatTrainer` | 40 | Win against a specific trainer (`target_reference_id` = trainer battle content key; rematches count, a blank target means any trainer) |
+| `DefeatAnyTrainer` | 41 | Win any trainer battle |
+| `DefeatTrainersFromList` | 42 | Defeat N DISTINCT trainers from `target_reference_ids` |
+
+**List objectives (9, 42)** store their targets as a JSON array in `quest_objective_template.target_reference_ids`
+and the targets already counted in `quest_objective_progress.counted_reference_ids` (M7018, both engines,
+nullable TEXT so every older seed still inserts). Both are exposed as `List<string>` on the models
+(`TargetReferenceIds` / `CountedReferenceIds`) over an internal JSON-backed property; `QuestObjectiveTargets`
+parses NULL, blank or malformed JSON as an empty list and never throws. On each event the service adds the key to
+the counted set only if it is in the list (trimmed, case-insensitive), then sets `current_count` to the size of
+the overlap between the counted set and the list AS IT IS NOW, capped at `target_count`: an author editing the
+list mid-quest never strands progress, and the same target twice never advances. `evt.Amount` is ignored for list
+types (one defeat is one target). Restarting an instance clears the counted set. Concurrent list events for one
+objective race the read-modify-write; the next event recomputes the count from the list. On
+`PUT /templates/bulk`, an objective's `targetReferenceIds` is optional: `null` keeps the stored list, `[]` clears
+it, and a list type's `targetCount` is clamped to `1..list.Count`.
 
 ### `QuestRequirementType`
 
@@ -658,13 +677,19 @@ public class QuestProgressEvent
 
 ### Stat Side-Effects of `RecordProgressEventAsync`
 
-Every progress event also increments a lifetime stat regardless of whether any quest objective matched:
+Every progress event also increments a lifetime stat regardless of whether any quest objective matched. The
+client sends the specific, the list and the "any" event for one defeat or capture, so **only the "any" event of a
+family writes the stat** (and fires the achievement trigger, see `AchievementTriggerMapper`); before 2026-09-26
+`DefeatCreature` + `DefeatAnyCreature` each wrote it, double-counting every wild defeat with a known species.
+Totals inflated that way are not backfilled.
 
 | ObjectiveType | Stat written | Operator |
 |---------------|-------------|---------|
 | `WinBattles` | `battles_won` | Increment |
-| `DefeatCreature`, `DefeatAnyCreature` | `creatures_defeated_total` | Increment |
-| `CaptureCreature`, `CaptureAnyCreature` | `creatures_captured_total` | Increment |
+| `DefeatAnyCreature` | `creatures_defeated_total` | Increment |
+| `DefeatAnyTrainer` | `trainers_defeated_total` | Increment |
+| `DefeatCreature`, `DefeatCreaturesFromList`, `DefeatTrainer`, `DefeatTrainersFromList`, `CaptureCreature` | none (the family's "any" event writes it) | — |
+| `CaptureAnyCreature` | `creatures_captured_total` | Increment |
 | `DealDamage`, `DealDamageOfType` | `damage_dealt_total` | Increment |
 | `HealAmount` | `damage_healed_total` | Increment |
 | `CollectItem` | `items_collected_total` | Increment |
@@ -1022,6 +1047,9 @@ server-side accept heals on the next read.
 
 - **Registering `QuestDomainService` as Singleton.** It must be `AddScoped` because `IConditionEvaluator` depends on `IStatService`, which is Scoped. A Singleton cannot capture a Scoped service.
 - **Forgetting both keyed and non-keyed repository registrations in Program.cs.** The domain service resolves non-keyed. REST endpoints that use `[FromKeyedServices]` resolve keyed. Both registrations must exist. Looking at the actual `Program.cs`, quest repositories are registered as non-keyed singletons only — if you add keyed registrations for the quest repositories, also keep the non-keyed ones.
+- **A list objective that never advances.** `DefeatCreaturesFromList` / `DefeatTrainersFromList` match by
+  membership in `target_reference_ids`; an empty list can never complete, which is why the Unity quest editor
+  refuses to push one. Sending the same listed key again is a no-op by design (distinct counting).
 - **Firing `DefeatCreature` instead of `DefeatAnyCreature`.** `DefeatCreature` matches objectives where `target_reference_id` equals the event's `ReferenceId`. `DefeatAnyCreature` matches all defeat-type objectives regardless of `ReferenceId`. Sending the wrong type means progress is never recorded.
 - **Looking up a defeated wild creature after the faint.** The battle domain soft-deletes an uncaptured
   wild creature in the same call that returns the killing blow, so a `GetCreature` made afterwards returns

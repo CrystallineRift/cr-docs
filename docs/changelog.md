@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-09-26 — Defeat objectives: trainers and lists
+
+- **cr-api: four `QuestObjectiveType` values** — `DefeatCreaturesFromList` (9), `DefeatTrainer` (40),
+  `DefeatAnyTrainer` (41), `DefeatTrainersFromList` (42). M7018 adds `quest_objective_template.target_reference_ids`
+  and `quest_objective_progress.counted_reference_ids` (nullable JSON text, both engines). List objectives count
+  each listed target once, against the list as it is now; restart clears the counted set. Only the "any" event of a
+  family writes its lifetime stat and achievement trigger (fixes the old double count on `DefeatCreature` +
+  `DefeatAnyCreature`; captures likewise; inflated totals not backfilled). `trainers_defeated_total` is new.
+  `PUT /templates/bulk` takes `targetReferenceIds` per objective (`null` keeps, `[]` clears, count clamped to the list).
+- **Unity: trainer wins reach quests.** `IQuestService.OnTrainerDefeated` sends the specific, list and "any" trainer
+  events from `BattleCoordinator`; a known-species creature defeat also sends the list event. `QuestObjectiveDefinition`
+  gains `targetReferenceIds`, synced to the local floor and pushed by the editor; the quest inspector has a trainer
+  picker, a per-target list with **Fill from area**, and validation that blocks bad pushes. The journal and tracker
+  word the four types. Offline floor rebaked.
+- **Admin web:** the four types in the objective type dropdown, a comma-separated list cell for `targetReferenceIds`,
+  and the GET → PUT copy preserves the list.
+
 ## 2026-09-26 — Fix: defeating a creature advances "defeat any creature" quests
 
 - **Unity: "First Battle" completes again.** The defeated wild creature is soft-deleted by the battle domain
