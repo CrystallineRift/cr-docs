@@ -61,3 +61,10 @@ existing saves gain the column with the 500 default.
 - `TrainerRepositoryTests` (Docker/Postgres): default-500, credit/debit, over-debit rejected.
 - `NpcMerchantServiceTests`: exact debit, insufficient-funds fast-fail (no inventory movement), debit-race rollback, sell credit.
 - `QuestDomainServiceTests`: Currency reward credits and does not touch the item-grant path.
+
+## Merchant atomicity (A2, 2026-09-27)
+
+Purchase: debit (guarded) → take the merchant's stock by guarded decrement inside the same transaction
+(`INpcInventoryRepository.TryTakeMerchantStockInTransactionAsync`, quantity and the limited-stock counter together) → add to the bag.
+A lost stock take rolls back, refunding the debit ("This item is out of stock."). Sell: take the sold units from the bag entry by
+guarded decrement **before** crediting; twenty parallel sales of the last unit credit once.

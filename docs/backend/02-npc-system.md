@@ -754,3 +754,17 @@ GET /api/v1/merchants/ffee9012-.../price/buy/cccccccc-...
 ```
 
 Returns 404 if the NPC or item does not exist.
+
+## Server authority hardening (A2, 2026-09-27)
+
+- **Gift ledger** — `npc_gift_grant` (M16002, `UNIQUE(trainer_id, npc_content_key)`, revive-on-write), `INpcGiftLedger`.
+  `give-creature` records the gift first and transfers only when that insert won: one creature per NPC per trainer, ever.
+  A repeat or parallel give answers **409** `{ "error": "already_received" }`; a Trainer/Merchant or unregistered NPC answers 404.
+- **Server-owned teams** (`ensure-creature-team`): a slot naming a `SpawnerTemplateId` is accepted only when the template is an
+  active template of the NPC's own `{contentKey}-team` spawner (species and level from the template; the body's `Level` is ignored).
+  A species-only slot is a one-time gift: accepted only for a gift giver (not Trainer/Merchant) whose gift is unspent, only when
+  the team is empty, and only one per request. Refused slots are skipped and logged at Warning — the response's `teamCount`
+  is the truth, so shipped clients simply show "nothing to give".
+- **Giver type.** On the server it is the content-registry type (`INpcContentRegistryReader`) — an invented NPC key gives
+  nothing, so **every gift NPC must be pushed to the registry** (Studio → NPCs). Offline, where Unity does not sync the
+  registry, the NPC row's own type decides; the ledger applies in both modes.

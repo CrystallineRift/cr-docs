@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-09-27 — Server authority A2: hardening the shipped client survives (hotfix)
+
+- **cr-api:** quest claim-before-pay and completion CAS; accept checks requirements (409 `requirements_not_met`) and
+  `GrantQuestAsync` for server grants; pickup placement registry (M16001) with `Pickups:PlacementCheck` Off/Observe/Enforce
+  (default Observe) and Content routes; NPC gift ledger (M16002) and server-owned NPC teams; `POST /creature/generated` mints
+  from spawner-template bounds; capture bound to the caller's live wild battle with an ownership CAS; item use consume-first
+  with refund and bound targets; merchant guarded stock/sell writes; battle end CAS, KO-once and owed swap (M16003); heal only
+  after a whiteout. **Deploy gates:** every gift NPC in the production NPC registry; every trainer NPC's `{key}-team` pushed.
+- **Unity:** offline binds the capture CAS, guarded bag writes and gift ledger; Studio → Item Spawners → World pickup
+  placements (scan/push) + CLI; floor rebaked (16003).
+
 ## 2026-09-27 — Achievements, Unity-only lane: Achievements tab replaces Journal (real data, no server model yet)
 
 - **Unity: Achievements tab** replaces the Journal tab in the player menu — a WoW-style rail (Summary,

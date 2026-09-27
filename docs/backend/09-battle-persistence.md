@@ -1044,3 +1044,18 @@ Pure logic tests — `BattleResolver.Resolve()` called directly with `ResolvedCo
 - [Backend Architecture](?page=backend/01-architecture) — DDD layering, repository pattern
 - [NPC System](?page=backend/02-npc-system) — NPC trainer team seeding feeds creature states at battle start
 - [Content Registry](?page=unity/08-content-registry) — content keys identify creature species in battle state
+
+## Server authority hardening (A2, 2026-09-27)
+
+- **M16003**: `battle.owed_swap_trainer_id`, `battle.owed_swap_refusals`, and `battle_ko_credit (battle_id, creature_id)` UNIQUE.
+- **End CAS.** Every battle end goes through `TryEndBattleAsync` (Active→Ended, clears any owed swap). A request that loses it
+  gets the "already ended" 409 and pays nothing.
+- **KO-once.** KO XP, battle loot and the trainer-XP win award need a real >0→0 HP transition *and* the first
+  `TryCreditKnockOutAsync` for that creature in that battle. Re-attacking a creature already at 0 HP pays nothing.
+- **Owed swap.** A KO with backups left sets `owed_swap_trainer_id`. Until that trainer Switches, anything else it submits is
+  refused with a rejected-switch outcome (`ActionType = Switch`, `SwitchRejected`, `NeedsSwap`, same trainer, new round key);
+  the third refusal ends the battle as its loss. Shipped clients already turn `NeedsSwap` into a forced Switch.
+- **Duplicate submit.** The round input insert is `ON CONFLICT DO NOTHING`; a losing duplicate is a 409, not a 500.
+- **No self-battle.** `StartBattleAsync(t, t, …)` throws (a trainer battle heals trainer 2's team).
+- **Heal.** `POST /api/v1/trainers/{trainerId}/team/heal` heals only after a whiteout — no active battle and every team creature
+  at 0 HP (an empty team counts) — via `ITeamHealService`; otherwise **409** `{ "error": "heal_not_allowed", "reason": "in_battle" | "not_whited_out" }`.

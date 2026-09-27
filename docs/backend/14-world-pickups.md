@@ -68,3 +68,19 @@ The pickup definition (content) and the collected store both follow the online/o
 ## Follow-ups
 
 - Crystalline Rift Studio authoring (`PickupDefinition` SO + tab + sync write service).
+
+## Placement registry (A2, 2026-09-27)
+
+`pickup_placement` (M16001) lists every authored pickup: `instance_id` (UNIQUE — the scene-serialized
+`PickupBehaviour._pickupInstanceId`), `pickup_content_key`, `area_key`. A collect is checked against it **before** the claim:
+
+| `Pickups:PlacementCheck` (env `Pickups__PlacementCheck`) | Unknown (instance, key) pair |
+|---|---|
+| `Off` | not checked (offline play — the service is built without a policy) |
+| `Observe` (default) | paid, and logged at Warning `Pickup placement miss (Observe — paid anyway)` |
+| `Enforce` | refused: status `PlacementNotFound` (3); nothing granted or marked |
+
+Routes (content-write): `GET /api/v1/pickups/placements`, `PUT /api/v1/pickups/placements/bulk` (`{ "placements": [...] }` —
+additive upsert that revives; never removes; refuses unknown pickup definitions and duplicate instance ids).
+Pushed from Content Studio → Item Spawners → *World pickup placements* (Scan areas / Push placements) or the CLI
+`cr_pickup_placements_scan` / `cr_pickup_placements_push`. Switch to Enforce only after a week of Observe with no misses.

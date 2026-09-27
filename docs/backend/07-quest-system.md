@@ -1080,3 +1080,17 @@ server-side accept heals on the next read.
 - [Dialogue System](?page=unity/31-dialogue-system) — the `quest.accept`/`quest.claim`/`quest.state`/`quest.objectivePending` dialogue vocabulary that reads and writes grant mode and reward claim mode
 - [Dialogue Authoring](?page=unity/32-dialogue-authoring) — the audit rules that check a dialogue's `quest.*` actions agree with a quest's grant/claim mode
 - [Dialogue Server Domain](?page=backend/21-dialogue-domain) — the sibling content domain that shares the `RequireContentWrite` auth pattern
+
+## Server authority hardening (A2, 2026-09-27)
+
+- **Claim-before-pay.** `ClaimRewardsAsync` spends the claim with one conditional UPDATE
+  (`IQuestInstanceRepository.TryClaimRewardsAsync`: `rewards_claimed` false→true on a live Completed row) *before* granting
+  anything. Of any number of parallel claims exactly one pays; the rest get the usual 400 "already been claimed".
+  A grant that fails after the claim loses that reward (logged) — never pays twice.
+- **Completion CAS.** Completing an instance is `TryCompleteInstanceAsync` (InProgress→Completed); only the event whose
+  UPDATE won lists the quest in `CompletedQuests`.
+- **Accept checks requirements.** `AcceptQuestAsync` evaluates the template's requirements for a new or restarted instance
+  and throws `QuestRequirementsNotMetException` → `POST /api/v1/quests/{templateId}/accept` answers **409**
+  `{ "error": "requirements_not_met" }`. Re-accepting a quest already held returns it without a check.
+- **Server grants.** `IQuestDomainService.GrantQuestAsync(accountId, trainerId, templateKey, reason, ct)` creates (or returns)
+  an instance without the requirement check. It has no route; server features (location discovery quests) call it.

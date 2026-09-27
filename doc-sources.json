@@ -93,7 +93,9 @@
         "Game/CR.Game.Model/Spawner/AbilityProgressionSetEntry.cs",
         "Spawner/CR.Spawner.Data.Migration/M5019AddUnlockQuestToAbilityProgressionSetEntry.cs",
         "Creatures/CR.Creatures.Data.Migration/M10017SeedAbilitySoundKeys.cs",
-        "Game/CR.Game.Service.BFF/Endpoints/CreatureBatchEndpoints.cs"
+        "Game/CR.Game.Service.BFF/Endpoints/CreatureBatchEndpoints.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/WildCreatureEndpoints.cs",
+        "Spawner/CR.Spawner.Data/Implementation/BaseCreatureSpawnerTemplateRepository.cs"
       ],
       "cr-data": []
     },
@@ -695,7 +697,8 @@
         "Game/CR.Game.Model/Npcs/PurchaseResult.cs",
         "Game/CR.Game.Model/Npcs/SellResult.cs",
         "Npcs/CR.Npcs.Domain.Services/Implementation/NpcMerchantService.cs",
-        "Quests/CR.Quests.Domain.Services/Implementation/QuestDomainService.cs"
+        "Quests/CR.Quests.Domain.Services/Implementation/QuestDomainService.cs",
+        "Npcs/CR.Npcs.Data/Implementation/BaseNpcInventoryRepository.cs"
       ],
       "cr-data": [
         "Assets/CR/Core/Data/Repository/Implementation/TrainerRepositories/TrainerOnlineOfflineRepository.cs",
@@ -853,7 +856,10 @@
         "Convenience/CR.Data.Migrations.Test/ElementalReactionTableSeedSqliteTests.cs",
         "Convenience/CR.Data.Migrations.Test/ReactionReachabilitySqliteTests.cs",
         "Convenience/CR.Api.IntegrationTests/ElementalReactionHttpTests.cs",
-        "Convenience/CR.Api.IntegrationTests/ElementalDamageHttpTests.cs"
+        "Convenience/CR.Api.IntegrationTests/ElementalDamageHttpTests.cs",
+        "Game/CR.Game.Data.Migration/M16003AddBattleKnockOutAndOwedSwap.cs",
+        "Game/CR.Game.Model/Battle/BattleRecord.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Creature/TeamHealService.cs"
       ],
       "cr-data": [
         "Assets/CR/Game/Battle/BattleHttpDomainAdapter.cs",
@@ -954,7 +960,8 @@
         "Items/CR.Items.Data.Migration/M6007SeedCaptureCrystals.cs",
         "Game/CR.Game.Model/Items/BaseItem.cs",
         "Game/CR.Game.Domain.Services/Implementation/Item/CaptureChanceCalculator.cs",
-        "Game/CR.Game.Domain.Services/Implementation/Item/CaptureAttemptService.cs"
+        "Game/CR.Game.Domain.Services/Implementation/Item/CaptureAttemptService.cs",
+        "Creatures/CR.Creatures.Data/Interface/ICreatureCaptureClaim.cs"
       ],
       "cr-data": [
         "Assets/CR/Game/Battle/Events/BattleEvents.cs",
@@ -963,7 +970,8 @@
         "Assets/CR/Core/Data/Repository/GameConfigurationKeys.cs",
         "Assets/CR/Game/Battle/Offline/OfflineItemUseService.cs",
         "Assets/CR/UI/Battle/BattleBagPanelHandler.cs",
-        "Assets/CR/UI/Battle/BattleHUD.cs"
+        "Assets/CR/UI/Battle/BattleHUD.cs",
+        "Assets/CR/Core/DI/ServerAuthorityBindingsExtensions.cs"
       ]
     },
     "description": "Capture crystal tiers (Shard/Standard/Fine/Radiant), capture formula, capture_modifier property, Backend IItemEffectHandler wiring, BattleEvents.RaiseCreatureCaptured, USS visual indicators; shared CaptureChanceCalculator + OfflineItemUseService capture mirror + opponent-id resolution from battle record"
@@ -1055,7 +1063,12 @@
         "Pickups/**/*.cs",
         "Game/CR.Game.Service.BFF/Endpoints/PickupEndpoints.cs"
       ],
-      "cr-data": []
+      "cr-data": [
+        "Assets/CR/Core/Data/Logic/PickupPlacementScan.cs",
+        "Assets/CR/Core/Data/Editor/Pickups/*.cs",
+        "Assets/CR/Game/World/Editor/PickupPlacementEditorSyncHelper.cs",
+        "Assets/CR/Core/Data/Editor/ContentStudioTool.PickupPlacements.cs"
+      ]
     },
     "description": "World pickups: pickup_definition (rewards JSON) + pickup_collected (per-trainer, revive-on-write upsert), one-time persistent grants, consumer-routed Quest rewards, M7200-M7202"
   },
@@ -1307,7 +1320,9 @@
         "Assets/CR/Core/Data/Editor/BattleMissionSeedMigrationExporter.cs",
         "Assets/CR/Game/Battle/Missions/BattleMissionTemplateRoutedSource.cs",
         "Assets/CR/Core/DI/LocalDevGameInstaller.cs",
-        "Assets/CR/Game/World/Behaviours/DialogueWorldBehaviour.cs"
+        "Assets/CR/Game/World/Behaviours/DialogueWorldBehaviour.cs",
+        "Assets/CR/Core/Data/Editor/Pickups/*.cs",
+        "Assets/CR/Core/Data/Editor/Build/PickupPlacementPipelineCommands.cs"
       ]
     },
     "description": "Runtime content pull-through cache: ServerContentSyncService fetch+paging, ContentSyncWriter SQL rules (no id rewrites, lowercase GUIDs, named-column upserts, derived junction ids, per-domain transactions), ContentSyncReport version-recording rule, deletion safety, and the dotnet round-trip tests."
@@ -1454,7 +1469,8 @@
         "Convenience/CR.Api.IntegrationTests/CreatureStatusEndpointsHttpTests.cs",
         "Items/CR.Items.Data.Migration/M6022BackfillItemIconAssetKey.cs",
         "Creatures/CR.Creatures.Data.Migration/M12013BackfillContentIconAssetKey.cs",
-        "Convenience/CR.Data.Migrations.Test/IconAssetKeyRoundTripSqliteTests.cs"
+        "Convenience/CR.Data.Migrations.Test/IconAssetKeyRoundTripSqliteTests.cs",
+        "Trainers/CR.Trainers.Data/Interface/IItemEntryGuardedWrites.cs"
       ],
       "cr-data": [
         "Assets/CR/Game/Battle/Offline/OfflineItemUseService.cs",

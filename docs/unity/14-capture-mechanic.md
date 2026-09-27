@@ -252,3 +252,10 @@ empty-target path is only a fallback.
 - [Item System](backend/09-item-system.md)
 - [Trainer Progression](?page=backend/22-trainer-progression) — capture XP and first-of-species bonus
 - [Trainer Progression in Unity](?page=unity/34-trainer-progression) — offline capture bindings
+
+## Capture CAS (A2, 2026-09-27)
+
+`CaptureAttemptService` claims the creature with `ICreatureCaptureClaim.TryClaimFromWildAsync` (wild → trainer, only while still
+wild) **before** placing it; a lost claim is a failure with no XP, and a failed placement returns the creature to the wild.
+Offline binds the claim to the player-data `GeneratedCreatureRepository` (`ServerAuthorityBindingsExtensions`). Online, the server
+also requires the throw to target the active wild creature of the caller's own live wild battle.

@@ -270,3 +270,12 @@ Three files in that project are worth knowing by name:
 - `TargetType` has no real enum in cr-api; it is a bare string whose only spec is an XML comment.
   The client whitelists against that comment.
 - A first-run bulk pull has no progress indication.
+
+## World pickup placements (A2, 2026-09-27)
+
+Content Studio → **Item Spawners** starts with *World pickup placements*: **Scan areas** reads every `PickupBehaviour` in
+`Assets/CR/Scenes/Areas` straight from the scene YAML (`PickupPlacementScan` — prefab-instance overrides, falling back to the
+prefab's own values) and validates the list as the server will (duplicate ids, missing keys); **Push placements** sends it to
+`PUT /api/v1/pickups/placements/bulk` on the configured server and reads the list back. Pushing only adds. CLI:
+`cr_pickup_placements_scan`, `cr_pickup_placements_push`. There is no catalog asset and no floor copy — offline play does not
+check placements.
