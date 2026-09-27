@@ -23,8 +23,8 @@
 - **Admin web:** World Locations (read / rename only — a Studio push replaces the list), Trainer Level Curve and Trainer XP Rules editors; dossier level and Grant XP.
 - **Follow-up fixes (2026-09-27):** a trainer-modifier outage no longer fails a capture throw (rolls with none);
   a location discovery's "locations visited" count no longer depends on its XP grant, and a failed count rolls
-  the discovery flag back so the next visit counts it once; `trainer_level` converges down as well as up on
-  read (admin take-back racing a level-up); `low_level_factor` / `multiplier` reject NaN and infinities; rule
+  the discovery flag back so the next visit counts it once; an admin XP take-back always sets
+  `trainer_level` from its own post-increment total (a read only ever repairs it up); `low_level_factor` / `multiplier` reject NaN and infinities; rule
   awards that grant 0 return null; server-owned stat keys match trimmed and the player stat write routes
   refuse padded keys (400); the admin XP take-back refusal says the total can't go below 0; the Studio
   location scan reports duplicate catalog rows instead of dropping them silently.
