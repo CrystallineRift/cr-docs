@@ -15,6 +15,19 @@ Achievements do **not** keep a parallel counter. Progress is read from the **Sta
 
 Referenced achievements (`trigger_reference_key` set, e.g. "collect item X") are restricted to `threshold == 1` in this version, because no per-reference Stat counter exists — referenced + count achievements are deferred.
 
+### Quest categories and areas (contract from sub-project 3)
+
+| Item | Value |
+|---|---|
+| Counter keys | `quests_completed_cat_{bonus\|main_story\|exploration\|battle\|talent}` in `trainer_stat` |
+| Written by | The authority only: `LifetimeStatProjector` on `QuestCompleted`, once per won completion CAS, next to `quests_completed` (server online, the same DLL offline) |
+| Semantics | Completions, not claims. A ReturnToGiver quest counts when its objectives complete, and a repeatable quest counts once per completion |
+| Outcome facts | `Facts[Category]` (slug), `Facts[AreaKey]` (the quest's `area_key`, when set), from the server's template row |
+| Evaluation | No per-service call: the dispatcher evaluates achievements once per drained call |
+
+See [Quest System → Quest categories and area key](07-quest-system.md#quest-categories-and-area-key) for the
+column, write and backfill contract.
+
 ## Evaluation
 
 `IAchievementDomainService.EvaluateAsync(accountId, trainerId, triggerType, referenceKey?, ct)` (in `CR.Achievements.Domain.Services`, defined in `CR.Achievements.Data` to keep it cycle-free):

@@ -301,6 +301,24 @@ no code writes it. Every key in this table is server-owned — see the stat-writ
 [Progress Dispatcher](?page=backend/23-progress-dispatcher); the player write routes refuse them, and Unity's stat
 router writes nothing while online.
 
+### Per-category quest completions
+
+`StatKey.QuestsCompletedInCategoryKey(slug)` gives `quests_completed_cat_{slug}` (prefix
+`StatKey.QuestsCompletedCategoryPrefix = "quests_completed_cat_"`, with its own `cat_` token so the family never
+includes `quests_completed` itself). The slugs are `bonus`, `main_story`, `exploration`, `battle` and `talent`
+(`QuestCategoryExtensions.ToSlug`).
+
+| Key | Sole writer | When |
+|---|---|---|
+| `quests_completed_cat_{slug}` | `LifetimeStatProjector` | `QuestCompleted` outcome, at the completion CAS, only when the outcome's category fact is one of the five slugs (source `quest_complete`) |
+
+Like every stat since #1 A1, these keys are not client-writable. Invariant: the five counters sum to the
+`quests_completed` increments made after the release (an undefined stored category on a hand-edited row is the
+one exception — see [Quest System](07-quest-system.md#quest-categories-and-area-key)). The Journal's Records
+list shows them right after "Quests Completed" as "{Category} quests completed" (`StatKeyFormatter`), because
+they sort alphabetically next to it — see the Records ordering note on
+[Player Menu UI](?page=unity/10-player-menu-ui#achievements-tab-achievementsview).
+
 ## `source` Field Values
 
 The `source` column on `stat_event` identifies which system produced the write. Standardised values:

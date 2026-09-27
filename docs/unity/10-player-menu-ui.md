@@ -549,6 +549,12 @@ mode](?page=backend/07-quest-system#grant-mode-and-reward-claim-mode) for when t
 instead of an automatic claim, and [Dialogue System](?page=unity/31-dialogue-system) for the
 `quest.claim` dialogue action that can also resolve it.
 
+Both sections render **category groups** (`QuestJournalGrouping`) in display order: Main Story, Exploration, Battle, Bonus,
+Talent. Empty groups are hidden, and a header reads "Main Story · 2" (`quest-group-header` + `quest-category--{slug}`).
+The category comes from the prefetched template, and a missing template groups as Bonus. Colours come from the tokens
+`--cr-quest-cat-{main,exploration,battle,bonus,talent}` in `CrTheme.uss`. See [Quest System → Quest categories and area
+key](?page=backend/07-quest-system#quest-categories-and-area-key).
+
 ## Achievements tab (`AchievementsView`)
 
 Constructor: `(IAchievementCatalogReader, IAchievementBoardReader, IStatService, ILogger<AchievementsView>, IGameAssetLoader?)`
@@ -584,6 +590,15 @@ from raw stats.
 `IStatService.GetAllAsync` directly — the trainer's lifetime stat totals, alphabetically, with
 `StatRecordPolicy` filtering out bookkeeping keys like `creature_level_{guid:N}`.
 
+**Records ordering (quest categories).** `RenderStatisticsAsync` has no curated stat order — every
+player-facing key is sorted by `OrderBy(Key, Ordinal)` (there is no `JournalView` or `KnownStatOrder`
+in this codebase; the old Journal Records section was folded into this method). The five
+`quests_completed_cat_*` counters land right after `quests_completed` only because they share its
+string prefix, and their own relative order is alphabetical by slug — `battle`, `bonus`, `exploration`,
+`main_story`, `talent` — not the player's display order. Each still reads correctly, because
+`StatKeyFormatter` (see [Pure logic](#pure-logic-cruilogic) below) formats every `quests_completed_cat_*`
+key as "{Category} quests completed" regardless of position.
+
 Once the Achievements v2 server phase ships the real category/criteria/points model and the
 `GET …/achievements/board` route, `IAchievementCatalogReader`/`IAchievementBoardReader` rebind to a
 GameData-backed catalog reader and the real online/offline board router — the tab's view code does not
@@ -605,9 +620,15 @@ The rules that are easy to get wrong are kept out of the MonoBehaviours, in the 
 | `QuestProgressCalculator` (+ `QuestObjectiveLine`, `QuestProgressSummary`) | Objective roll-up; optional objectives never hold the bar back; zero targets never divide by zero |
 | `QuestActionPolicy` (+ `QuestActionAvailability`) | Claim requires `Completed && !RewardsClaimed` |
 | `AchievementBoardProjection` (+ `AchievementBoardView`, `AchievementRailRow`, `AchievementSummaryBar`, `AchievementRecentEntry`, `AchievementRow`, `AchievementCriterionRow`, `AchievementSearchResult`) | Catalog + board → rail/bars/recent/rows/search; `Hidden` visibility; criteria always come from the board |
-| `StatKeyFormatter` | `battles_won` → "Battles Won", with HP/XP/NPC acronyms preserved |
+| `StatKeyFormatter` | `battles_won` → "Battles Won", with HP/XP/NPC acronyms preserved; `quests_completed_cat_{slug}` → "{Category} quests completed" |
 | `StatRecordPolicy` | Which stat keys are player-facing |
+| `QuestCategoryDisplay` | Mirrors `QuestCategory` as ints, with labels, ranks, slugs and USS modifiers (undefined → Bonus), pinned against the DLL by `QuestCategoryValuesTests` |
+| `QuestJournalGrouping` (+ `QuestJournalGroup<T>`) | Groups the Quests tab by category in display order, dropping empty groups |
 | `ContextScreenRegistry` (+ `UIContext`, `IContextAwareScreen`) | Screen registration and context dispatch behind `UICoordinator` — see below |
+
+`QuestTrackerCandidate.Category` and `QuestTrackerCard.CategoryLabel` / `CategoryModifier` carry the HUD tracker's category
+label; both are optional trailing constructor parameters (default Bonus / `""` / `""`) so existing positional callers still
+compile.
 
 **Engine-free, not cr-api-free.** The assembly keeps `noEngineReferences: true` — nothing here
 touches a Unity type — but the targeting rules do consume the shipped cr-api model directly:

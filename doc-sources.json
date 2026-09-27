@@ -142,7 +142,12 @@
         "Quests/CR.Quests.Data.Migration/M7018AddObjectiveTargetLists.cs",
         "Quests/CR.Quests.Data/Enums/QuestGrantMode.cs",
         "Quests/CR.Quests.Data/Enums/QuestRewardClaimMode.cs",
-        "Quests/CR.Quests.Data/Model/QuestObjectiveTargets.cs"
+        "Quests/CR.Quests.Data/Model/QuestObjectiveTargets.cs",
+        "Quests/CR.Quests.Data.Migration/M17001AddCategoryToQuestTemplate.cs",
+        "Quests/CR.Quests.Data.Migration/M17002BackfillQuestCategories.cs",
+        "Quests/CR.Quests.Data.Migration/M17003AddAreaKeyToQuestTemplate.cs",
+        "Quests/CR.Quests.Data/Enums/QuestCategory.cs",
+        "Quests/CR.Quests.Data/Extensions/QuestCategoryExtensions.cs"
       ],
       "cr-data": [
         "Assets/CR/Core/Data/Logic/QuestObjectiveValidation.cs",
@@ -154,7 +159,8 @@
         "Assets/CR/UI/Logic/Tests/QuestTracker*.cs",
         "Assets/CR/UI/Logic/QuestTracker*.cs",
         "Assets/CR/UI/Quests/QuestTrackerPresenter.cs",
-        "Assets/CR/Quests/**/*.cs"
+        "Assets/CR/Quests/**/*.cs",
+        "Assets/CR/Core/Data/Logic/QuestAreaKeys.cs"
       ]
     },
     "description": "Quest system: templates, objectives, rewards, instances, progress events, requirements, condition evaluation; grant mode / reward claim mode (M7017), AcceptQuestAsync restarts an abandoned/failed instance, content:write on template PUT/DELETE, objectives upserted by sort_order and the re-parenting risk"
@@ -774,7 +780,10 @@
         "Assets/CR/UI/Logic/StatusBadge.cs",
         "Assets/CR/Content/Defs/Items/*.asset",
         "Assets/CR/Quests/NpcDisplayNameResolver.cs",
-        "Assets/CR/UI/WorldMap/WorldMapTab.cs"
+        "Assets/CR/UI/WorldMap/WorldMapTab.cs",
+        "Assets/CR/UI/Logic/QuestCategory*.cs",
+        "Assets/CR/UI/Logic/QuestJournalGroup*.cs",
+        "Assets/CR/UI/Theme/CrTheme.uss"
       ]
     },
     "description": "Player menu UI: 8-tab overlay (Team/Bag/Storage/Quests/Map/Talents/Achievements/System) wired to real domain data — PlayerTeamView squad sheet, BagScreenHandler backpack with BagItemPolicy filtering, QuestJournalView active/completed quests, AchievementsView rail (Summary/categories/Statistics) over AchievementBoardProjection, CR.UI.Logic pure rules, input wiring via UICoordinator; Quests tab 'Return to {giver}' status for a ReturnToGiver quest awaiting the player"
@@ -921,7 +930,8 @@
         "Assets/CR/Content/Defs/Items/*.asset",
         "Assets/CR/Content/Defs/StatusConditions/*.asset",
         "Assets/CR/Core/Data/Registry/Definitions/DialogueDefinition.cs",
-        "Assets/CR/Content/Defs/Dialogues/*.asset"
+        "Assets/CR/Content/Defs/Dialogues/*.asset",
+        "Assets/CR/Core/Data/Editor/QuestDefinitionEditor.cs"
       ]
     },
     "description": "All ScriptableObject types: what each does, every field, which sync to the backend and via which endpoint, ContentDefinitionProvider registry wiring, BattleCameraProfile cinematic-camera feel SO, CreatureReactionProfile shared body-reaction SO (animation+cry+feedback per beat, baseProfile inheritance/override for evolutions, Resolve() flatten; referenced by CreatureDefinition.reactionProfile; offensive VFX comes from AbilityConfig), Dialogue Database note, ElementalReactionDefinition (primer condition + detonator element -> multiplier/applied condition, snake_case content key, seed-migration export) and ElementalDamageMatrixConfig (one asset per matrix version, 100 completed cells, isActive mirrors battle_system_version); DialogueDefinition SO (id rule, hidden documentJson), QuestDefinition gains grantMode/rewardClaimMode and loses conversationTitle/conversationId, ContentDefinitionProvider.quests/dialogues corrected"
@@ -1080,7 +1090,8 @@
         "Achievements/**/*.cs",
         "Quests/CR.Quests.Domain.Services/Interface/QuestProgressResult.cs",
         "Quests/CR.Quests.Domain.Services/Interface/QuestClaimResult.cs",
-        "Quests/CR.Quests.Domain.Services/Implementation/TriggerAchievementStep.cs"
+        "Quests/CR.Quests.Domain.Services/Implementation/TriggerAchievementStep.cs",
+        "Quests/CR.Quests.Domain.Services/Extensions/ProgressOutcomeQuestFactsExtensions.cs"
       ],
       "cr-data": [
         "Assets/CR/Core/Notifications/Adapters/QuestGrantToastAdapter.cs",

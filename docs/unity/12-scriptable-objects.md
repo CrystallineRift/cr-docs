@@ -187,6 +187,12 @@ Defines a quest template. The backend owns instance/progress data; this SO is th
 | `rewardClaimMode` | `QuestRewardClaimMode` | `AutoOnCompletion` (default) or `ReturnToGiver` |
 | `objectives` | `List<QuestObjectiveDefinition>` | Ordered objectives — see below |
 | `rewards` | `List<QuestRewardDefinition>` | Rewards on completion |
+| `category` | `QuestCategory` | Journal group and per-category completion counter (Bonus by default). Enum dropdown from the DLL. Never gates anything. |
+| `areaKey` | `string` | Area this quest belongs to, picked in the inspector's **Area** popup from the World Location Catalog's area keys (blank = none). Unknown keys draw red and fail the `quest-area-unknown` audit. |
+
+Studio push sends `category` as an int and a blank area as `""` (clears). Pull only assigns the fields the server sent
+(`int? category`, `string? areaKey`), and the offline copy (`LocalQuestTemplateSyncClient`) stores a blank area as null.
+See [Quest System → Quest categories and area key](?page=backend/07-quest-system#quest-categories-and-area-key).
 
 **QuestObjectiveDefinition** (nested, serializable):
 

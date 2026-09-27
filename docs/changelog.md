@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-09-27 — Quest categories
+
+- **cr-api:** `quest_template.category` (M17001, `QuestCategory`: Bonus 0, Main Story 1, Exploration 2, Battle 3, Talent 4)
+  and `quest_template.area_key` (M17003). M17002 backfills the shipped quests (Act 1 → Main Story). On the bulk upsert, a null
+  category or area keeps what is stored, an undefined category is 400, and `areaKey` is trimmed ("" clears; over 64 → 400).
+  `QuestCompleted` carries the category slug and area key, and the progress dispatcher's `LifetimeStatProjector` writes
+  `quests_completed_cat_{slug}` next to `quests_completed` at completion (never at claim). Metadata only: nothing gates on it.
+- **Unity:** the Quests tab is grouped by category, tracker cards show a category label, and Records lists "{Category} quests
+  completed". Studio has a Category field, an Area popup (World Location Catalog area keys), a Quests-tab category filter
+  and the `quest-area-unknown` audit. The floor is rebaked. **Deploy:** push the three Act 1 quests from Studio (they carry
+  Main Story + Meadow).
+- **Admin web:** the quest editor has a Category select and Area key field, plus a Category list column.
+
 ## 2026-09-27 — Server authority, phase B: server-derived progress
 
 - **cr-api: one progress dispatcher.** `IProgressOutcomeSink` → `ProgressDispatcher` (Quests) is now the only

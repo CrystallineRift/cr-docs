@@ -135,6 +135,61 @@ Both modes are read by the client, not enforced server-side beyond the columns e
 about auto-granting a quest touches its giver), but `ReturnToGiver` reads it to decide whether there
 is anywhere to return to.
 
+## Quest categories and area key
+
+Every quest has a **category** and an optional **area key**. Both are metadata only: no gate, grant,
+requirement, reward or talent unlock reads them. Spec: `cr-api-unity/docs/superpowers/specs/2026-09-27-quest-categories-design.md`.
+
+| Int | `QuestCategory` | Slug | Meaning |
+|---|---|---|---|
+| 0 | `Bonus` (default) | `bonus` | Side or optional content. Anything unauthored or legacy reads as Bonus, never as Main Story. |
+| 1 | `MainStory` | `main_story` | The main story line. |
+| 2 | `Exploration` | `exploration` | Reach places, find things. |
+| 3 | `Battle` | `battle` | Win battles, defeat creatures or trainers. |
+| 4 | `Talent` | `talent` | Unlocks or advances the talent tree, or teaches or shows a talent. |
+
+The ints and slugs are permanent (`QuestCategoryValuesTests`). The player's display order is Main Story,
+Exploration, Battle, Bonus, Talent. It lives in the clients (`QuestCategoryDisplay`, admin-web
+`QUEST_CATEGORY_OPTIONS`), never in the ints.
+
+**Columns.** `quest_template.category INTEGER NOT NULL DEFAULT 0` (M17001) and `quest_template.area_key VARCHAR(64) NULL`
+(M17003). There is no CHECK constraint and no index. `area_key` holds an `AreaDefinition.areaKey` (`Meadow`, `Cave`, …), the same
+key space as `world_location.area_key`. It is stored trimmed and compared case-insensitively. Both migrations guard `ADD COLUMN`
+with `Column(...).Exists()` because SQLite's `Down()` keeps the column.
+
+**Write rule (`PUT /api/v1/quests/templates/bulk`).** `category` and `areaKey` are nullable on the wire.
+- `null` keeps what is stored. A new row gets Bonus / no area. This lets an older Studio or admin-web build push without resetting anything.
+- An undefined category returns 400 `Undefined category {n} on template '{key}'.`
+- `areaKey` is trimmed. `""` clears it, and more than 64 characters returns 400.
+- The reads (`GET /templates`, `…/by-content-key/{k}`) return `category` as an **int** and `areaKey` as a string or null.
+
+**Backfill (M17002).** It runs `UPDATE … SET category = n WHERE content_key = … AND category = 0`, so it is idempotent and never overwrites. On SQLite it is a no-op, because quest seeds skip SQLite and the SOs carry the same values.
+
+| content_key | Category |
+|---|---|
+| `quest-welcome-to-cr`, `quest-first-battle`, `quest-runaway-cargo` (Meadow Merchant Act 1) | Main Story |
+| `quest-road-to-shore`, `quest-into-the-dark`, `quest-windbitten-climb`, `quest-sunbleached` | Exploration |
+| `quest-meadow-hunt`, `quest-tidewrack-trials` | Battle |
+| `quest-first-capture`, `quest-hearthmere-supplies` | Bonus |
+
+There is no counter backfill for quests claimed before this release (the game is not live).
+
+**Completion outcome.** The completion CAS emits `QuestCompleted` (#1 phase B). It carries
+`Facts[Category]` (the slug) and, when set, `Facts[AreaKey]`, both read from the **server's** template row
+(`ProgressOutcomeQuestFactsExtensions.WithQuestTemplateFacts`). A deleted template, or a stored category that
+is not one of the five, adds no category fact — that completion still counts in `quests_completed`, just not
+in any `quests_completed_cat_*` counter. The `LifetimeStatProjector` then writes `quests_completed` +1 and,
+when the category fact is present, `quests_completed_cat_{slug}` +1 (`stat_event.source = "quest_complete"`),
+once per won CAS, never at claim. See [Stats](08-stats-system.md) and [Achievements](15-achievements.md).
+
+**Authoring.** Categories are set on the `QuestDefinition` SO (Category dropdown, and an Area popup over the World Location
+Catalog's area keys) and pushed by Crystalline Rift Studio. The Studio Quests tab filters by category. Admin web edits both (Category
+select, free-text Area key). The Content Audit window reports `quest-area-unknown` for an area key no catalog location
+uses.
+
+**Supersedes checklist step 0b's `quest_kind`.** Main Story means "main", and every other category is a side quest. Only
+`quest_line` / `line_step` remain planned.
+
 ## The shipped quest chain
 
 Eight quests (M7014) follow the habitat level ladder, so "where do I go next" is answered by a quest
@@ -409,6 +464,10 @@ Read surface used by the player menu's **Quests** tab (`Assets/CR/UI/Quests/Ques
 | `GetCompletedQuestsAsync(ct)` | `IQuestRepository.GetCompletedQuestsAsync` | Completed instances. |
 | `GetTemplateAsync(templateId, ct)` | `IQuestRepository.GetQuestTemplateAsync` | Name, description, objective texts, rewards. |
 | `AbandonQuestAsync` / `ClaimRewardsAsync` | as before | Unchanged lifecycle calls. |
+
+The Quests tab groups both sections (Active and Completed) by category in display order and hides empty groups. Each header
+reads, for example, "Main Story · 2", and each group keeps the section's own order. The HUD tracker shows the category as a small
+label above each card's title (`quest-tracker__category`). The tracker's order is unchanged (authored `SortOrder`).
 
 `QuestManager` also exposes `AccountId`, `TrainerId`, and `HasSession` so a UI can decline to load
 before world init has run rather than throwing out of `AssertSession`.
