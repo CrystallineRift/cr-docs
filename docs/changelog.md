@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-09-27 — Achievements, Unity-only lane: Achievements tab replaces Journal (real data, no server model yet)
+
+- **Unity: Achievements tab** replaces the Journal tab in the player menu — a WoW-style rail (Summary,
+  categories, Statistics) with points shield, per-category progress bars, a recent-unlocks list, criteria
+  checklists and search, over a new pure projection (`AchievementBoardProjection`, replaces
+  `AchievementProgressCalculator`). The Records list is now the Statistics rail entry, reading
+  `IStatService` directly. `IJournalService`/`JournalService`/`JournalSnapshot`/`JournalView` are retired.
+- **Real data, not fabricated demo content.** `AchievementCatalogReader` and `AchievementBoardReader` are
+  adapters over the EXISTING `IAchievementService` (the same `GetAllDefinitionsAsync`/`GetUnlockedAsync`
+  calls the old Journal tab made) and `IStatService` — no new server route, no server change. Every
+  achievement is filed under one "General" category with one criterion built from its legacy
+  threshold/stat, and points are always 0, because the `achievement_category`/`achievement_criterion`
+  tables and the `points` column don't exist until the Achievements v2 server phase (Phase A) ships. The
+  board shows the trainer's real unlocks and real per-criterion progress today.
+- Toast points and the real server-authoritative board/catalog land with the Achievements v2 server phase;
+  this lane's two reader interfaces rebind to the real implementations with no view code change.
+
 ## 2026-09-27 — Talents, Unity-only lane: authoring + tab (fake data, no server yet)
 
 - **Unity: Talents tab** in the player menu (after Map). Tree selector, tier grid, detail pane with

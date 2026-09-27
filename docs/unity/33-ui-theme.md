@@ -81,6 +81,7 @@ introduced, grouped by the family that owns them:
 | `--cr-battle-*`, `--cr-condition-*`, `--cr-mission-*` | Battle HUD cards, status-condition badges, mission accents |
 | `--cr-dialogue-*`, `--cr-hud-*` | Dialogue panel; toasts + quest tracker share the hud family |
 | `--cr-map-*` | Player menu Map tab: canvas paper, node faces/outline/unknown/current, route lines, quest badge, six region tints (`--cr-map-region-<style>`) |
+| `--cr-achievement-*` | Player menu Achievements tab: points shield, earned/locked row backgrounds, progress bar fill/track, rail selection, criterion complete/muted text |
 
 About 70 literal colours remain, on purpose: single-use translucent washes (USS `var()` cannot go
 inside `rgba()`), a few deliberately brighter `:focus` states, and the legacy `CharacterSelect.uss` /

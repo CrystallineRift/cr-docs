@@ -69,14 +69,23 @@ including why there is no recount for existing players.
 - Toasts go through `INotificationService` (`Assets/CR/Core/Notifications/`). `AchievementToastPresenter` is only the renderer: one queue (capped at 8 pending, oldest dropped), one UIDocument, one dismiss timer, passive (`PickingMode.Ignore`, no input gating). It is **code-created** by a non-lazy binding in `LocalDevGameInstaller` (it prefers a scene-placed instance if one exists); until 2026-09-20 it was attached to no scene at all, so no toast ever rendered. Three small adapters translate domain events into toasts: `AchievementUnlockToastAdapter` (`IAchievementService.Unlocked`), `QuestGrantToastAdapter` (`IQuestService.OnQuestGranted`, the "New quest" toast — see `docs/backend/07-quest-system.md#new-quest-toast-and-dedup`) and `AbilityUnlockToastAdapter` (`IProgressionNotifier.AbilitiesUnlocked`, the "New ability learned!" toast — one per claim, not per creature; see `docs/unity/26-creature-storage.md`). The static `WorldToast.Show` (pickups, shop, market, evolution) forwards into the same service.
 - **The kind decides the chrome** (`ToastChrome.For(ToastKind)`, pure, `Assets/CR/Core/Notifications/ToastChrome.cs`, since 2026-09-23). Only `Achievement` carries the "Achievement Unlocked" heading; every other kind shows its message alone, so a pickup no longer reads as an achievement. `Info` (what `WorldToast` raises: "Picked up 3 x Heal Potion") flashes bottom-left for 2.2 s; everything else sits **centred on the top edge** for 3.5 s (top-right until 2026-09-26; the card is also ~25% smaller since then, `left: 50%` + `translate: -50% 0` keeps it centred whatever the message measures). A request may carry its own heading (`ToastRequest.Title`, since 2026-09-26): the quest adapters send "New Quest" / "Quest Complete" over the quest name so a quest toast is the same two-line card as an achievement, and the card has a `min-height` so a one-line pickup matches too. One template (`AchievementToast.uxml`): the presenter fills or hides the `title` label, toggles `achievement-toast--bottom-left`, and adds `achievement-toast--shown` a frame after insertion so the 0.15 s opacity transition plays both ways.
 - `LocationTriggerBehaviour` is a scene-placed passive trigger (modeled on `PickupBehaviour`) that calls `QuestManager.OnLocationVisited(contentKey)` — the first consumer of that previously-unused helper — driving `LocationVisited` achievements.
-- The player menu's **Journal** tab (`Assets/CR/UI/Journal/JournalView.cs`) is the trophy list. It reads one
-  `IJournalService.LoadAsync` snapshot (achievement definitions and unlocks through `IAchievementService`, lifetime stats through `IStatService`); formerly `IAchievementDomainService.GetAllDefinitionsAsync` plus `GetUnlockedForTrainerAsync`
-  (player state) and joins them in app code — never across the two physical databases. Progress per
-  row is the trainer's value of the stat the trigger maps to, resolved through the **same**
-  `AchievementStatKeyMapper` the unlock check uses, so the bar cannot disagree with the evaluation.
-  The unlock *record* is authoritative for the badge: lowering or raising a `threshold` by a content
-  edit never re-locks an already-earned achievement. `Hidden` definitions stay off the list until
-  earned. The same tab's **Records** section lists the trainer's raw lifetime `StatKey` totals.
+- The player menu's **Achievements** tab (`Assets/CR/UI/Achievements/AchievementsView.cs`, replaces the
+  old Journal tab) is a WoW-style rail (Summary, categories, Statistics) over
+  `AchievementBoardProjection`. It reads two Unity-only seam interfaces — `IAchievementCatalogReader`
+  and `IAchievementBoardReader` — which are **real adapters over the services above**, not fakes:
+  `AchievementCatalogReader` wraps `IAchievementService.GetAllDefinitionsAsync` (the same read the old
+  Journal tab made), and `AchievementBoardReader` wraps `IAchievementService.GetUnlockedAsync` plus
+  `IStatService.GetAllAsync`. Since `achievement_category`/`achievement_criterion`/`points` don't exist
+  yet (see Counting model v1/v2 below — this is the Unity-only lane, ahead of the server phase), every
+  achievement is filed under one shared "General" category, given 0 points, and given exactly one
+  criterion built from its legacy `threshold`/`TriggerType` (`AchievementStatKeyMapper` for the stat,
+  `StatKeyFormatter` for the label). The board's per-criterion progress and `UnlockedAt` are real,
+  read the same way the evaluation check reads them, so the bar cannot disagree with an unlock; the
+  unlock *record* is authoritative, not the stat, and `Hidden` definitions stay off every list and bar
+  until earned. Once the server phase (categories, criteria, points, the board route) ships, both
+  interfaces rebind to a GameData-backed catalog reader and the real online/offline board router with
+  no tab code change. The rail's **Statistics** entry (folds in the old Journal Records section) reads
+  `IStatService.GetAllAsync` directly for the trainer's raw lifetime `StatKey` totals.
 - Crystalline Rift Studio authoring for achievement definitions is still deferred.
 
 ## Migration ranges

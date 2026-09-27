@@ -6,9 +6,11 @@ The player menu is a 7-tab overlay opened from the overworld via the `ToggleMenu
 the whole out-of-combat UI: the player's squad, their bag, their quest log, their record, and the
 game's settings — all without leaving the world scene.
 
-Tabs: **Team | Bag | Storage | Quests | Map | Journal | System**
+Tabs: **Team | Bag | Storage | Quests | Map | Talents | Achievements | System**
 
-Every tab reads real data from domain services. Nothing on Team, Bag, Storage, Quests, or Journal is mocked.
+Every tab reads real data from domain services. Nothing on Team, Bag, Storage, Quests, Talents, or
+Achievements is mocked or hand-authored — see the Achievements tab section below for how its two seam
+readers are real adapters over existing services, not fakes, pending the Achievements v2 server phase.
 
 ## Files
 
@@ -24,10 +26,11 @@ Every tab reads real data from domain services. Nothing on Team, Bag, Storage, Q
 | `Assets/CR/UI/PlayerStorageView.cs` | Storage tab — box grid, Data File panel, team swap modal. Its rules live in the engine-free `CR.UI.Storage.Logic` asmdef; see [Creature Storage](26-creature-storage.md) |
 | `Assets/CR/UI/Quests/QuestJournalView.cs` | Quests tab — active + completed quests, objectives, rewards |
 | `Assets/CR/UI/WorldMap/WorldMapTab.cs` | Map tab — stylised world map, discoveries, current area, quest markers. See [World Map](35-world-map.md) |
-| `Assets/CR/UI/Journal/JournalView.cs` | Journal tab — achievements + lifetime stat records |
+| `Assets/CR/UI/Achievements/AchievementsView.cs` | Achievements tab — rail (Summary/categories/Statistics), criteria checklists, search |
 | `Assets/CR/UI/Logic/` | Engine-free rules (`CR.UI.Logic` asmdef) shared by the above, unit tested |
 | `Assets/CR/UI/Resources/PlayerMenuWindow.uxml` | Layout — 7 tabs |
-| `Assets/CR/UI/Resources/PlayerMenuWindow.uss` | Stylesheet — window chrome, Team, Storage, Quests, Journal |
+| `Assets/CR/UI/Resources/PlayerMenuWindow.uss` | Stylesheet — window chrome, Team, Storage, Quests |
+| `Assets/CR/UI/Resources/AchievementsView.uss` | Stylesheet — Achievements tab (`--cr-achievement-*` tokens) |
 | `Assets/CR/UI/Resources/BagScreen.uxml` / `Assets/CR/UI/BagScreen.uss` | Bag layout + stylesheet |
 
 ## PlayerMenuWindow
@@ -53,9 +56,9 @@ Injected dependencies:
 | `ICreatureInventoryService`, `ICreatureDomainService`, `IGrowthProfileDomainService`, `IAbilityDomainService`, `ITrainerDomainService`, `IStatService` | `PlayerTeamView` |
 | `ICreatureInventoryService`, `ICreatureDomainService`, `IGrowthProfileDomainService` | `PlayerStorageView` |
 | `QuestManager` | `QuestJournalView` |
-| `IAchievementDomainService`, `IStatService` | `JournalView` |
+| `IAchievementCatalogReader`, `IAchievementBoardReader`, `IStatService` | `AchievementsView` |
 | `IWorldMapLayoutSource`, `IWorldMapDiscoveryReader`, `AreaLoader` (all optional) | `WorldMapTab` |
-| `IGameAssetLoader` (optional) | Icon loading in Team / Bag / Journal, always through `UiIcon.Apply` |
+| `IGameAssetLoader` (optional) | Icon loading in Team / Bag / Achievements, always through `UiIcon.Apply` |
 | `ICreatureStatusClient` | `BagScreenHandler` — the target picker's status badges and cure-item rules |
 | `IGameSessionService` | `CurrentTrainerId` / `CurrentAccountId` for every tab |
 | `IGameDataRepository` | System tab settings persistence |
@@ -71,7 +74,7 @@ world, so cached content would be stale more often than not.
 | `team-tab` | `PlayerTeamView.RenderAsync(trainerId, teamContent, accountId)` |
 | `bag-tab` | `BagScreenHandler.RenderInto(bagContent, trainerId)` |
 | `quests-tab` | `QuestJournalView.RenderAsync(questsContent)` |
-| `journal-tab` | `JournalView.RenderAsync(journalContent, accountId, trainerId)` |
+| `achievements-tab` | `AchievementsView.RenderAsync(achievementsContent, trainerId, accountId)` |
 | `options-tab` | Static; settings are wired once in `Start` (`WireCombatSpeedSetting`, `WireControlsSettings`, `WireDisplaySettings`) |
 
 ### BagScreenHandler resolution
@@ -111,7 +114,7 @@ level); it is never used to recompute the level itself.
 > Removed in this pass: the invented "SOLAR / VERDANT / STORM CLASS" labels and fake ability tags,
 > the "TACTICAL FOCUS 94 % / SYNERGY BOND 88 %" bars, the whole "Squad Synergy — 82 %, A+ GRADE"
 > panel, and the mock Achievements / Evolution Log / Friends sidebar views. Achievements moved to the
-> Journal tab with real unlock data; the other two were dropped rather than shown as meaningless
+> Achievements tab with real unlock data; the other two were dropped rather than shown as meaningless
 > numbers.
 
 ### Reordering the team
@@ -546,24 +549,45 @@ mode](?page=backend/07-quest-system#grant-mode-and-reward-claim-mode) for when t
 instead of an automatic claim, and [Dialogue System](?page=unity/31-dialogue-system) for the
 `quest.claim` dialogue action that can also resolve it.
 
-## Journal tab (`JournalView`)
+## Achievements tab (`AchievementsView`)
 
-Constructor: `(IAchievementDomainService, IStatService, ILogger<JournalView>, IGameAssetLoader?)`
+Constructor: `(IAchievementCatalogReader, IAchievementBoardReader, IStatService, ILogger<AchievementsView>, IGameAssetLoader?)`
 
-A segmented **Achievements / Records** toggle.
+Replaces the old Journal tab (WoW-style rail instead of a two-section toggle): a left rail (Summary, the
+authored categories, Statistics at the bottom), a Summary page (recent unlocks, per-category progress
+bars, a points shield), category pages with an earned-first achievement list, a criteria checklist per
+row, and a case-insensitive search across name/description.
 
-- **Achievements** — every authored definition with the trainer's live progress. Sorted earned-first,
-  then closest-to-earning, so the list always leads with something meaningful, and headed by an
-  "n of m earned" tally. `Hidden` definitions are omitted until unlocked.
-- **Records** — the trainer's lifetime stat totals, headline keys first
-  (`battles_won`, `battles_lost`, captures, defeats, highest level, quests, NPCs, locations, items,
-  damage, heals, trainer level, trainer XP) and anything the Stats domain adds later after them,
-  alphabetically, with no code change. Generated `creature_level_{guid:N}` keys are filtered out by
-  `StatRecordPolicy` — they are bookkeeping for achievement evaluation, and a full storage box would
-  bury the real records under dozens of them.
+**Real data today, pending the Achievements v2 server phase.** `IAchievementCatalogReader` and
+`IAchievementBoardReader` are two Unity-only seam interfaces (same role `IWorldMapDiscoveryReader`/
+`ITalentProgressReader` play pre-server elsewhere in this menu), but — unlike those — both bindings are
+REAL adapters, not fakes:
 
-See `docs/backend/15-achievements.md` for how progress is computed and why the unlock record, not the
-stat, decides the badge.
+- `AchievementCatalogReader` wraps the existing `IAchievementService.GetAllDefinitionsAsync` — the same
+  authored achievements the old `JournalView` read directly. Every definition is filed under one shared
+  "General" category, given 0 points, and given exactly one criterion built from its legacy
+  `Threshold`/`TriggerType` (via `AchievementStatKeyMapper` + `StatKeyFormatter` for the label) — because
+  the `achievement_category`/`achievement_criterion` tables and the `points` column don't exist until
+  the Achievements v2 server phase (Phase A, see `docs/backend/15-achievements.md`) ships.
+- `AchievementBoardReader` wraps the existing `IAchievementService.GetUnlockedAsync` and
+  `IStatService.GetAllAsync` — both already readable with no server change — so the board shows this
+  trainer's REAL unlocks and REAL per-criterion progress. `AchievementBoardRead.TotalPoints` stays 0
+  because achievement points don't exist as a column yet.
+
+`AchievementBoardProjection` (replaces `AchievementProgressCalculator`) turns the catalog + board into
+everything the tab renders: rail counts, per-category bars (hidden achievements never count toward a
+bar, earned or not — Feats-of-Strength-style categories get no bar at all), the 5 most recent unlocks,
+and search results. An achievement's criteria progress always comes from the board, never recomputed
+from raw stats.
+
+**Statistics** (the rail's bottom entry, folds in the old Journal Records section) reads
+`IStatService.GetAllAsync` directly — the trainer's lifetime stat totals, alphabetically, with
+`StatRecordPolicy` filtering out bookkeeping keys like `creature_level_{guid:N}`.
+
+Once the Achievements v2 server phase ships the real category/criteria/points model and the
+`GET …/achievements/board` route, `IAchievementCatalogReader`/`IAchievementBoardReader` rebind to a
+GameData-backed catalog reader and the real online/offline board router — the tab's view code does not
+change. See `docs/backend/15-achievements.md`.
 
 ## Pure logic (`CR.UI.Logic`)
 
@@ -580,7 +604,7 @@ The rules that are easy to get wrong are kept out of the MonoBehaviours, in the 
 | `FocusRecoveryPolicy` | When a stranded screen should re-anchor focus |
 | `QuestProgressCalculator` (+ `QuestObjectiveLine`, `QuestProgressSummary`) | Objective roll-up; optional objectives never hold the bar back; zero targets never divide by zero |
 | `QuestActionPolicy` (+ `QuestActionAvailability`) | Claim requires `Completed && !RewardsClaimed` |
-| `AchievementProgressCalculator` (+ `AchievementProgress`) | Progress toward a threshold; unlock record beats the stat; `Hidden` visibility |
+| `AchievementBoardProjection` (+ `AchievementBoardView`, `AchievementRailRow`, `AchievementSummaryBar`, `AchievementRecentEntry`, `AchievementRow`, `AchievementCriterionRow`, `AchievementSearchResult`) | Catalog + board → rail/bars/recent/rows/search; `Hidden` visibility; criteria always come from the board |
 | `StatKeyFormatter` | `battles_won` → "Battles Won", with HP/XP/NPC acronyms preserved |
 | `StatRecordPolicy` | Which stat keys are player-facing |
 | `ContextScreenRegistry` (+ `UIContext`, `IContextAwareScreen`) | Screen registration and context dispatch behind `UICoordinator` — see below |

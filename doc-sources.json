@@ -747,7 +747,8 @@
         "Assets/CR/UI/BagScreenHandler.cs",
         "Assets/CR/UI/BagScreen.uss",
         "Assets/CR/UI/Quests/**/*.cs",
-        "Assets/CR/UI/Journal/**/*.cs",
+        "Assets/CR/UI/Achievements/**/*.cs",
+        "Assets/CR/UI/Resources/AchievementsView.uss",
         "Assets/CR/UI/Logic/**/*.cs",
         "Assets/CR/UI/PlayerInputGate.cs",
         "Assets/CR/UI/Input/**/*.cs",
@@ -772,7 +773,7 @@
         "Assets/CR/UI/WorldMap/WorldMapTab.cs"
       ]
     },
-    "description": "Player menu UI: 5-tab overlay (Team/Bag/Quests/Journal/System) wired to real domain data — PlayerTeamView squad sheet, BagScreenHandler backpack with BagItemPolicy filtering, QuestJournalView active/completed quests, JournalView achievements + stat records, CR.UI.Logic pure rules, input wiring via UICoordinator; Quests tab 'Return to {giver}' status for a ReturnToGiver quest awaiting the player"
+    "description": "Player menu UI: 8-tab overlay (Team/Bag/Storage/Quests/Map/Talents/Achievements/System) wired to real domain data — PlayerTeamView squad sheet, BagScreenHandler backpack with BagItemPolicy filtering, QuestJournalView active/completed quests, AchievementsView rail (Summary/categories/Statistics) over AchievementBoardProjection, CR.UI.Logic pure rules, input wiring via UICoordinator; Quests tab 'Return to {giver}' status for a ReturnToGiver quest awaiting the player"
   },
   "backend/09-battle-persistence": {
     "docPath": "docs/backend/09-battle-persistence.md",
@@ -1074,15 +1075,20 @@
         "Assets/CR/Quests/Manager/IQuestService.cs",
         "Assets/CR/Achievements/IAchievementService.cs",
         "Assets/CR/Achievements/AchievementService.cs",
+        "Assets/CR/Achievements/IAchievementCatalogReader.cs",
+        "Assets/CR/Achievements/AchievementCatalogReader.cs",
+        "Assets/CR/Achievements/IAchievementBoardReader.cs",
+        "Assets/CR/Achievements/AchievementBoardReader.cs",
         "Assets/CR/Progression/IProgressionNotifier.cs",
         "Assets/CR/Core/Notifications/INotificationService.cs",
         "Assets/CR/Core/Notifications/NotificationService.cs",
-        "Assets/CR/Journal/IJournalService.cs",
         "Assets/CR/UI/Achievements/**/*.cs",
+        "Assets/CR/UI/Logic/Achievement*.cs",
+        "Assets/CR/Core/Data/Logic/Achievement*Read.cs",
         "Assets/CR/Game/World/Behaviours/LocationTriggerBehaviour.cs"
       ]
     },
-    "description": "Achievements: achievement_definition + achievement_reward (child) content + achievement_unlocked (per-trainer, did-I-win-the-insert upsert), Stats-driven threshold eval rides the quest funnel via optional IAchievementDomainService, QuestProgressResult.NewlyUnlocked, M7300-M7303 + M9993 content bump; Unity toast + LocationTriggerBehaviour"
+    "description": "Achievements: achievement_definition + achievement_reward (child) content + achievement_unlocked (per-trainer, did-I-win-the-insert upsert), Stats-driven threshold eval rides the quest funnel via optional IAchievementDomainService, QuestProgressResult.NewlyUnlocked, M7300-M7303 + M9993 content bump; Unity toast + LocationTriggerBehaviour + the Achievements tab's Unity-only lane (AchievementCatalogReader/AchievementBoardReader adapters over the existing service, AchievementBoardProjection, pending the Achievements v2 server phase)"
   },
   "unity/19-account-mode-startup": {
     "docPath": "docs/unity/19-account-mode-startup.md",
@@ -1631,10 +1637,11 @@
         "Assets/CR/Tests/Editor/CrThemeTests.cs",
         "Assets/CR/UI/Panel Settings.asset",
         "Assets/CR/Resources/Evolution/EvolutionPanelSettings.asset",
-        "Assets/CR/UI/Resources/WorldMapTab.uss"
+        "Assets/CR/UI/Resources/WorldMapTab.uss",
+        "Assets/CR/UI/Resources/AchievementsView.uss"
       ]
     },
-    "description": "Global UI theme: CrTheme.tss on both runtime PanelSettings, CrTheme.uss design tokens (paper/glass/hud/accent/status colours, font/radius/spacing scales), shared .cr-window/.cr-scrim/.cr-hud-card classes, ScaledWindow USS-driven frame sizing under UI Scale, CrThemeTests guard"
+    "description": "Global UI theme: CrTheme.tss on both runtime PanelSettings, CrTheme.uss design tokens (paper/glass/hud/accent/status colours, font/radius/spacing scales, --cr-achievement-* points shield/row/bar/criterion tokens), shared .cr-window/.cr-scrim/.cr-hud-card classes, ScaledWindow USS-driven frame sizing under UI Scale, CrThemeTests guard"
   },
   "backend/22-trainer-progression": {
     "docPath": "docs/backend/22-trainer-progression.md",
