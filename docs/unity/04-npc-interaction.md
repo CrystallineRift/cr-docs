@@ -395,6 +395,14 @@ not currently conflict, but anything that starts consuming `Attack` will collide
 the same physical button.
 :::
 
+## Talk progress is an intent
+
+A press that counts as talking (see `NpcInteractionRouting.RecordsTalkProgress`; conversation routes — including
+a plugin trainer bark — leave it to the conversation) calls `QuestManager.TalkToNpcAsync(contentKey)`, which goes
+through `NpcTalkOnlineOfflineService`: online the talk route, offline the DLL `NpcTalkService`. The Pixel
+Crushers bridge sends the actor's `content_key` field only — an actor without one sends nothing (a Warning names
+the fix). The server counts one talk per NPC per quest; the client never counts it.
+
 ## Related Pages
 
 - [World Behaviours](?page=unity/03-world-behaviours) — `INpcSubInitializable`, `NpcWorldBehaviour` identity pattern, composable component setup

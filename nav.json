@@ -115,6 +115,11 @@
     "path": "backend/22-trainer-progression"
   },
   {
+    "section": "Backend",
+    "title": "Progress Dispatcher (server-derived progress)",
+    "path": "backend/23-progress-dispatcher"
+  },
+  {
     "section": "Introduction",
     "title": "Changelog",
     "path": "changelog"

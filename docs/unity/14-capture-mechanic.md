@@ -259,3 +259,10 @@ empty-target path is only a fallback.
 wild) **before** placing it; a lost claim is a failure with no XP, and a failed placement returns the creature to the wild.
 Offline binds the claim to the player-data `GeneratedCreatureRepository` (`ServerAuthorityBindingsExtensions`). Online, the server
 also requires the throw to target the active wild creature of the caller's own live wild battle.
+
+## Capture progress (server-authority phase B)
+
+`CaptureAttemptService` emits `CreatureCaptured` (species content key) after the ownership transfer and the
+capture XP; the item-use response carries it in `ItemUseResult.Progress`, and `OnlineOfflineItemDomainService`
+applies it through `QuestManager.ApplyServerProgress` in both modes. The battle bag no longer reports captures,
+and a capture ends the battle **without** counting as a battle win (`BattleEndReason.Capture`).

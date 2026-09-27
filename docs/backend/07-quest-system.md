@@ -593,7 +593,7 @@ When `is_repeatable = true`, a trainer can accept the same template again after 
 | `CaptureCreature` | 4 | Capture a specific creature (matched by `target_reference_id`) |
 | `CaptureAnyCreature` | 5 | Capture any creature; `target_reference_id` is ignored |
 | `DealDamage` | 6 | Deal any amount of damage |
-| `HealAmount` | 7 | Heal any amount |
+| `HealAmount` | 7 | **Retired** (phase B): nothing produces heals; the template route and Studio refuse it |
 | `ReachCreatureLevel` | 8 | Raise a creature to a specific level |
 | `DefeatCreaturesFromList` | 9 | Defeat N DISTINCT species from `target_reference_ids` (each listed species counts once; `target_count` defaults to the list length, "all of them") |
 | `VisitLocation` | 10 | Travel to a named location |
@@ -675,34 +675,17 @@ public class QuestProgressEvent
 }
 ```
 
-### Stat Side-Effects of `RecordProgressEventAsync`
+### `RecordProgressEventAsync` is a compat translator (server-authority phase B)
 
-Every progress event also increments a lifetime stat regardless of whether any quest objective matched. The
-client sends the specific, the list and the "any" event for one defeat or capture, so **only the "any" event of a
-family writes the stat** (and fires the achievement trigger, see `AchievementTriggerMapper`); before 2026-09-26
-`DefeatCreature` + `DefeatAnyCreature` each wrote it, double-counting every wild defeat with a known species.
-Totals inflated that way are not backfilled.
-
-| ObjectiveType | Stat written | Operator |
-|---------------|-------------|---------|
-| `WinBattles` | `battles_won` | Increment |
-| `DefeatAnyCreature` | `creatures_defeated_total` | Increment |
-| `DefeatAnyTrainer` | `trainers_defeated_total` | Increment |
-| `DefeatCreature`, `DefeatCreaturesFromList`, `DefeatTrainer`, `DefeatTrainersFromList`, `CaptureCreature` | none (the family's "any" event writes it) | — |
-| `CaptureAnyCreature` | `creatures_captured_total` | Increment |
-| `DealDamage`, `DealDamageOfType` | `damage_dealt_total` | Increment |
-| `HealAmount` | `damage_healed_total` | Increment |
-| `CollectItem` | `items_collected_total` | Increment |
-| `ReachCreatureLevel` | `creature_level_{referenceId}` (content key) AND `highest_creature_level` | Max |
-| `VisitLocation` | `locations_visited_total` — only when `ITrainerProgressionService` isn't wired (see below) | Increment |
-
-Since trainer progression (2026-09-26), a `VisitLocation` event's `locations_visited_total` increment
-is delegated to `TrainerProgressionService.AwardAsync` when Talents is wired: it writes the stat only
-for a genuine, first-time discovery of an *authored* `world_location` — a repeat visit or an
-unauthored `referenceId` no longer counts (previously every event counted, inflating both the stat
-and the `explorer` achievement; that inflation is not backfilled — see
-[Trainer Progression](?page=backend/22-trainer-progression)). With `ITrainerProgressionService` absent,
-`QuestDomainService` falls back to the old raw per-event increment shown in the table.
+Progress is derived by the server from outcomes it produced — see [Progress Dispatcher](?page=backend/23-progress-dispatcher).
+`POST /api/v1/quests/progress` survives only for shipped clients: `WinBattles`, `DefeatAnyCreature` and
+`DefeatAnyTrainer` become one outcome each through the dispatcher; the specific and list defeat events count
+nothing (the "any" event carries the deed); `VisitLocation` awards discovery XP and emits `LocationEntered`;
+`TalkToNpc` is forwarded to the talk intent (`NpcTalkService`). Every other type is **400 `server_derived`** —
+captures, collected items, item use and quest completion are produced server-side. `quests_completed` is counted
+when the quest **completes** (the completion compare-and-set), not when its rewards are claimed; a claim carries
+no achievement unlocks. Talk and visit objectives count **distinct** keys per quest instance, and a targeted
+talk/visit objective must have Count 1.
 
 Quest-scoped progress resets with each instance. Lifetime stats never reset.
 
@@ -1073,6 +1056,7 @@ server-side accept heals on the next read.
 
 ## Related Pages
 
+- [Progress Dispatcher](?page=backend/23-progress-dispatcher)
 - [Stats and Lifetime Tracking](?page=backend/08-stats-system) — the Stats domain that `RecordProgressEventAsync` writes to as a side-effect
 - [NPC System](?page=backend/02-npc-system) — NPCs are the quest givers; `giver_npc_content_key` links templates to NPC content keys
 - [Backend Architecture](?page=backend/01-architecture) — DI registration patterns, dual-DB, keyed/non-keyed repos

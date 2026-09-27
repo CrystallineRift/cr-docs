@@ -84,3 +84,9 @@ Routes (content-write): `GET /api/v1/pickups/placements`, `PUT /api/v1/pickups/p
 additive upsert that revives; never removes; refuses unknown pickup definitions and duplicate instance ids).
 Pushed from Content Studio → Item Spawners → *World pickup placements* (Scan areas / Push placements) or the CLI
 `cr_pickup_placements_scan` / `cr_pickup_placements_push`. Switch to Enforce only after a week of Observe with no misses.
+
+## Progress from a collect (server-authority phase B)
+
+After the claim wins, `PickupDomainService` emits one `ItemCollected` (quantity, `Via = Pickup`) per granted
+Item reward through the progress dispatcher and returns `PickupCollectResult.Progress`. Currency and creature
+rewards are not "collecting". The client no longer reports collected items; it applies the returned report.

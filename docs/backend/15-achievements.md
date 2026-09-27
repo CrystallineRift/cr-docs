@@ -26,14 +26,17 @@ Referenced achievements (`trigger_reference_key` set, e.g. "collect item X") are
 
 The "did-I-win-the-insert" semantics (`changes()` after a guarded `INSERT OR IGNORE`/revive on SQLite; `ON CONFLICT … WHERE deleted = true RETURNING true` on Postgres) are what make re-evaluation safe — `IRewardGrantService.GrantAsync` is not itself idempotent, so rewards must be tied to the single call that actually transitioned the row.
 
-## Quest-funnel integration
+## Where evaluation runs
 
-Achievement evaluation rides the quest progress funnel — the same typed round-trip the client already uses — rather than adding a parallel path:
-
-- `QuestDomainService` takes an **optional, nullable** `IAchievementDomainService` (mirroring how it consumes `IRewardGrantService` from `CR.Game.Model`, and how `BattleDomainService` takes an optional loot service). Quests builds and runs with the dependency absent.
-- After `RecordProgressEventAsync` writes the lifetime stat (`UpdateLifetimeStatsAsync`), it maps the `QuestObjectiveType` to an `AchievementTriggerType`, calls `EvaluateAsync`, and accumulates the result on `QuestProgressResult.NewlyUnlocked`. `ClaimRewardsAsync` evaluates `QuestCompleted` after writing the `QuestsCompleted` stat and surfaces unlocks on `QuestClaimResult.NewlyUnlocked`.
-
-Because evaluation runs inside the domain service, **online and offline behave identically**: online the server evaluates and returns `NewlyUnlocked` in the `/progress` response; offline the same `QuestDomainService` runs against local SQLite and returns the same payload.
+Achievements are evaluated **once per root call of the progress dispatcher**, after its outcome queue drains
+(see [Progress Dispatcher](?page=backend/23-progress-dispatcher)). Phase B's `TriggerAchievementStep` calls
+`EvaluateAsync` once per distinct (trigger, subject) in the drained batch — `BattleWon`, `CreatureCaptured`,
+`CreatureDefeated`, `ItemCollected`, `QuestCompleted` (at completion, not claim), `LocationEntered` →
+`LocationVisited`, a **first** talk → `NpcTalkedTo`. Unlocks travel as `AchievementUnlockNotice`s in
+`ProgressReport.NewlyUnlocked` (and in the compat route's `QuestProgressResult.NewlyUnlocked`); a claim carries
+none. Domain services never call the evaluator themselves; sub-project #4 replaces the step with its
+evaluate-all-unearned evaluator. The client never posts an unlock (the route is retired; the Unity router
+refuses an online client-evaluated unlock).
 
 ## Online / offline & content sync
 

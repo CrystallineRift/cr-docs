@@ -278,22 +278,28 @@ Defined in `CR.Stats.Data.Constants.StatKey`. Use these constants rather than in
 
 | Constant | String Value | Operator | Written By |
 |----------|-------------|---------|-----------|
-| `BattlesWon` | `"battles_won"` | Increment | `QuestDomainService` on `WinBattles` event |
-| `BattlesLost` | `"battles_lost"` | Increment | Battle system (future) |
-| `DamageDealtTotal` | `"damage_dealt_total"` | Increment | `QuestDomainService` on `DealDamage` / `DealDamageOfType` events |
-| `DamageHealedTotal` | `"damage_healed_total"` | Increment | `QuestDomainService` on `HealAmount` events |
-| `CreaturesCapturedTotal` | `"creatures_captured_total"` | Increment | `QuestDomainService` on `CaptureAnyCreature` events only (one write per capture; the specific event no longer writes it) |
-| `CreaturesDefeatedTotal` | `"creatures_defeated_total"` | Increment | `QuestDomainService` on `DefeatAnyCreature` events only (one write per defeat) |
-| `TrainersDefeatedTotal` | `"trainers_defeated_total"` | Increment | `QuestDomainService` on `DefeatAnyTrainer` events |
-| `ItemsCollectedTotal` | `"items_collected_total"` | Increment | `QuestDomainService` on `CollectItem` events |
-| `QuestsCompleted` | `"quests_completed"` | Increment | `QuestDomainService.ClaimRewardsAsync` |
-| `HighestCreatureLevel` | `"highest_creature_level"` | Max | `QuestDomainService` on `ReachCreatureLevel` events |
-| `TrainerLevel` | `"trainer_level"` | Set | Trainer domain on level-up — derived from `trainer_xp` on the level curve; the stored value is a monotonic high-water mark repaired by `TrainerProgressionService.GetProgressAsync` (see [Trainer Progression](?page=backend/22-trainer-progression)) |
-| `CreatureLevelKey(id)` | `"creature_level_{id:N}"` | Max | `QuestDomainService` on `ReachCreatureLevel` events |
-| `StatKey.LocationDiscoveredKey(key)` | `"location_discovered_{key}"` | Increment | `TrainerProgressionService.AwardAsync` — first-time gate, per authored world location (1 = discovered, trainer XP granted) |
-| `StatKey.SpeciesCapturedKey(baseCreatureId)` | `"species_captured_{id:N}"` | Increment | `TrainerProgressionService.AwardAsync` — first-time gate, per species (1 = first capture, first-of-species XP) |
+| `BattlesWon` | `"battles_won"` | Increment | `LifetimeStatProjector` on `BattleWon` |
+| `BattlesLost` | `"battles_lost"` | Increment | `LifetimeStatProjector` on `BattleLost` (produced from C2) |
+| `DamageDealtTotal` | `"damage_dealt_total"` | Increment | none until C2 |
+| `CreaturesCapturedTotal` | `"creatures_captured_total"` | Increment | `LifetimeStatProjector` on `CreatureCaptured` (the server's capture) |
+| `CreaturesDefeatedTotal` | `"creatures_defeated_total"` | Increment | `LifetimeStatProjector` on `CreatureDefeated` |
+| `TrainersDefeatedTotal` | `"trainers_defeated_total"` | Increment | `LifetimeStatProjector` on `TrainerDefeated` |
+| `ItemsCollectedTotal` | `"items_collected_total"` | Increment (+quantity) | `LifetimeStatProjector` on `ItemCollected` (pickups; loot from C2) |
+| `QuestsCompleted` | `"quests_completed"` | Increment | `LifetimeStatProjector` on `QuestCompleted` — at completion, not claim |
+| `QuestCompletedKey(key)` | `"quest_completed_{key}"` | Increment | `LifetimeStatProjector` on `QuestCompleted` (key trimmed, lower-case) |
+| `NpcsTalkedToTotal` | `"npcs_talked_to_total"` | Increment | `LifetimeStatProjector` on the **first** talk to each NPC (distinct NPCs) |
+| `NpcMetKey(key)` | `"npc_met_{key}"` | Increment | `NpcTalkService` — per-NPC talk counter; 1 = first talk |
+| `LocationsVisitedTotal` | `"locations_visited_total"` | Increment | `TrainerProgressionService.AwardAsync` on a first authored discovery (moves to the projector with sub-project #2) |
+| `HighestCreatureLevel` | `"highest_creature_level"` | Max | none until C2 |
+| `TrainerLevel` | `"trainer_level"` | Set/Max | `TrainerProgressionService` (see [Trainer Progression](?page=backend/22-trainer-progression)) |
+| `CreatureLevelKey(id)` | `"creature_level_{id:N}"` | Max | none until C2 |
+| `StatKey.LocationDiscoveredKey(key)` | `"location_discovered_{key}"` | Increment | `TrainerProgressionService.AwardAsync` — first-time gate per authored location |
+| `StatKey.SpeciesCapturedKey(baseCreatureId)` | `"species_captured_{id:N}"` | Increment | `TrainerProgressionService.AwardAsync` — first-time gate per species |
 
-`CreatureLevelKey` is a helper method that formats the creature UUID using `{id:N}` (no hyphens) to keep the key short and consistent. `location_discovered_{key}` and `species_captured_{id:N}` are written only by `TrainerProgressionService.AwardAsync` — see [Trainer Progression](?page=backend/22-trainer-progression) — as the first-time gate for location and capture XP.
+`damage_healed_total` is **retired** (phase B): nothing produces heals server-side, so the constant is gone and
+no code writes it. Every key in this table is server-owned — see the stat-writer registry on
+[Progress Dispatcher](?page=backend/23-progress-dispatcher); the player write routes refuse them, and Unity's stat
+router writes nothing while online.
 
 ## `source` Field Values
 

@@ -768,3 +768,12 @@ Returns 404 if the NPC or item does not exist.
 - **Giver type.** On the server it is the content-registry type (`INpcContentRegistryReader`) — an invented NPC key gives
   nothing, so **every gift NPC must be pushed to the registry** (Studio → NPCs). Offline, where Unity does not sync the
   registry, the NPC row's own type decides; the ledger applies in both modes.
+
+## Talk intent (server-authority phase B)
+
+`POST /api/v1/trainers/{trainerId}/npcs/{npcKey}/talk` (player token, the trainer must be a player trainer of
+the account, rate limit `cr-player-intent`) is how the client says "the player talked to this NPC".
+`NpcTalkService` checks the key against the NPC content registry (unknown → 404 `unknown_npc`, nothing counted),
+increments `npc_met_{key}` (1 = first talk) and emits `NpcTalked` through the progress dispatcher; the response is
+an `NpcTalkResult` with the `ProgressReport`. Offline Unity runs the same service with the registry check off.
+Every talkable NPC must be pushed to the registry before a server deploy.

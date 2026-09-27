@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-09-27 — Server authority, phase B: server-derived progress
+
+- **cr-api: one progress dispatcher.** `IProgressOutcomeSink` → `ProgressDispatcher` (Quests) is now the only
+  path from an outcome to lifetime stats, quest objectives, quest completion and achievements. Producers:
+  capture, pickup collect, item use, quest completion, and the new talk intent. Achievements evaluate once per
+  root call. M16004 `quest_objective_counted_ref` (back-filled) makes talk/visit/list counting distinct and every
+  objective counter atomic.
+- **Talk intent:** `POST /api/v1/trainers/{trainerId}/npcs/{npcKey}/talk` (unknown NPC → 404). `npcs_talked_to_total`
+  now counts **distinct** NPCs. `quests_completed` counts at **completion**, not claim; new `quest_completed_{key}`.
+- **Compat route:** `/api/v1/quests/progress` refuses `CaptureCreature`, `CaptureAnyCreature`, `CollectItem` (and the
+  types A1 refused) with 400 `server_derived`; its specific/list defeat events count nothing.
+- **Retired:** `damage_healed_total` and `HealAmount` objectives (nothing produces heals).
+- **Unity:** capture, collect, heal, damage and level reporters deleted; talk is an intent; every item-use, pickup
+  and talk response is applied through `QuestManager.ApplyServerProgress`; a capture is not a battle win; the stat
+  router writes nothing online; no client-posted achievement unlocks; claim in-flight guard. Floor 16004.
+- **Deploy:** push the NPC registry (Content Studio) **before** the API deploy — a talk to an unregistered NPC is
+  a 404 online. No new environment variables. Old clients keep playing (their capture/collect reports are refused
+  and logged; the server counts from its own producers).
+
 ## 2026-09-27 — Server authority A2: hardening the shipped client survives (hotfix)
 
 - **cr-api:** quest claim-before-pay and completion CAS; accept checks requirements (409 `requirements_not_met`) and

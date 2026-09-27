@@ -52,7 +52,8 @@
         "Assets/CR/Npcs/Runtime/Repository/Implementation/NpcOnlineOfflineRepository.cs",
         "Assets/CR/Npcs/Runtime/Http/NpcClientUnityHttp.cs",
         "Assets/CR/Game/World/Behaviours/NpcTrainerBehaviour.cs",
-        "Assets/CR/Npcs/Runtime/Http/INpcClient.cs"
+        "Assets/CR/Npcs/Runtime/Http/INpcClient.cs",
+        "Assets/CR/Npcs/Talk/*.cs"
       ]
     },
     "description": "NPC CRUD, team management, domain service, REST endpoints, NpcCreatureSlotSpec; NPC content globalization via ContentWorldId sentinel and M2010GlobalizeNpcContent; battle_trainer_id minting (M2012) + NPC battle-item use endpoint (use-battle-item)"
@@ -1079,7 +1080,7 @@
         "Achievements/**/*.cs",
         "Quests/CR.Quests.Domain.Services/Interface/QuestProgressResult.cs",
         "Quests/CR.Quests.Domain.Services/Interface/QuestClaimResult.cs",
-        "Quests/CR.Quests.Domain.Services/Implementation/AchievementTriggerMapper.cs"
+        "Quests/CR.Quests.Domain.Services/Implementation/TriggerAchievementStep.cs"
       ],
       "cr-data": [
         "Assets/CR/Core/Notifications/Adapters/QuestGrantToastAdapter.cs",
@@ -1678,6 +1679,34 @@
       "cr-data": []
     },
     "description": "Trainer progression Phase 1: Talents domain (world_location, trainer_level_requirement, trainer_xp_rule, M15001-M15004), the XP funnel and sources, derived level readers, trainerProgress on results, routes, admin XP grant, floor seed, TalentDatabase connection string (falls back to StatDatabase)"
+  },
+  "backend/23-progress-dispatcher": {
+    "docPath": "docs/backend/23-progress-dispatcher.md",
+    "repos": {
+      "cr-api": [
+        "Game/CR.Game.Model/Progression/Progress*.cs",
+        "Game/CR.Game.Model/Progression/IProgressOutcome*.cs",
+        "Game/CR.Game.Model/Achievements/*.cs",
+        "Game/CR.Game.Model/Npcs/*Talk*.cs",
+        "Quests/CR.Quests.Domain.Services/Implementation/ProgressDispatcher.cs",
+        "Quests/CR.Quests.Domain.Services/Implementation/LifetimeStatProjector.cs",
+        "Quests/CR.Quests.Domain.Services/Implementation/QuestObjectiveProjector.cs",
+        "Quests/CR.Quests.Domain.Services/Implementation/ProgressOutcomeObjectiveMap.cs",
+        "Quests/CR.Quests.Domain.Services/Implementation/TriggerAchievementStep.cs",
+        "Quests/CR.Quests.Domain.Services/Implementation/QuestProgressCompat.cs",
+        "Quests/CR.Quests.Data.Migration/M16004CreateQuestObjectiveCountedRef.cs",
+        "Npcs/CR.Npcs.Domain.Services/Implementation/NpcTalkService.cs",
+        "Npcs/CR.Npcs.Service.REST/Endpoints/NpcTalkEndpoints.cs",
+        "Stats/CR.Stats.Domain.Services.Test/StatWriterRegistryTests.cs"
+      ],
+      "cr-data": [
+        "Assets/CR/Core/DI/ProgressBindings.cs",
+        "Assets/CR/Npcs/Talk/*.cs",
+        "Assets/CR/Quests/Manager/QuestManager.cs",
+        "Assets/CR/Game/Battle/OnlineOfflineItemDomainService.cs"
+      ]
+    },
+    "description": "Server-authority phase B: the progress dispatcher (outcomes → lifetime stats, quest objectives, completion, achievements), producers, counted-ref table M16004, talk intent, compat /quests/progress, the stat-writer registry, Unity ApplyServerProgress"
   },
   "unity/34-trainer-progression": {
     "docPath": "docs/unity/34-trainer-progression.md",
