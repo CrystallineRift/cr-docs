@@ -11,7 +11,7 @@
 ## Authoring (Crystalline Rift Studio → WORLD → Trainer Progression)
 
 1. Place a `LocationTriggerBehaviour` in an area scene and set `_locationContentKey`.
-2. **Scan areas** (`cr_world_locations_scan`) — merges every area's trigger keys into `Assets/CR/Content/Defs/Progression/WorldLocations.asset`. Entries no scene holds are kept and reported; delete the row to retire one.
+2. **Scan areas** (`cr_world_locations_scan`) — merges every area's trigger keys into `Assets/CR/Content/Defs/Progression/WorldLocations.asset`. Entries no scene holds are kept and reported; delete the row to retire one. A key in two scenes keeps its first area and is reported; a key held by two catalog rows keeps the first row, and the dropped row is reported by key and id in the Studio status line / CLI result.
 3. **Push locations** (`cr_world_locations_push`) — PUT the whole catalog with replace; reports id divergence.
 4. **Export floor seed** (`cr_talent_content_export_seed`) — writes the Talents seed migration into cr-api (curve + rules read from the server). `cr_talent_content_seed_status` says current/stale. Needs a Studio content key for the target server (Local or Production) — the exporter and the push both go through the same authenticated content-write path as any other Studio push.
 5. Rebake: `cr-api/Convenience/CR.Game.Compat/build-packages.sh` (or `cr_rebake_floor`).

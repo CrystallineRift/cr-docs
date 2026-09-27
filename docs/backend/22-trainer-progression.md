@@ -17,9 +17,9 @@ level from 2 grants a talent point (spent from Phase 2). Spec: `cr-api-unity/doc
 - `trainer_level_requirement(level UNIQUE, required_xp)` — cumulative XP per level; seed `40·(L−1)² + 60·(L−1)` (L2 100, L5 880, L10 3,780, L20 15,580, L30 35,380). Cap = highest live level.
 - `trainer_xp_rule(source_key UNIQUE, base_xp, multiplier, low_level_threshold?, low_level_factor?)` — `source_key` is a rule-driven `TrainerXpSource` name. Amount = `round(base × units × multiplier)`, × factor when `trainerLevel − opponentLevel ≥ threshold`.
 - `world_location(content_key UNIQUE, name, area_key)` — only these keys earn discovery XP.
-- XP lives in the `trainer_xp` stat; `trainer_level` is a monotonic high-water mark (repaired by `GetProgressAsync`). First-time checks are per-key stats: `location_discovered_{key}`, `species_captured_{baseCreatureId:N}` (`IStatService.IncrementAsync` returns the value after; 1 = first).
+- XP lives in the `trainer_xp` stat; `trainer_level` is a display/achievement high-water mark that `GetProgressAsync` converges to the derived level on every read — up with `MaxAsync`, and down with `SetAsync` when it reads above what the XP supports (an admin take-back raced by a play grant's late level-up `MaxAsync`, or a curve edit). First-time checks are per-key stats: `location_discovered_{key}`, `species_captured_{baseCreatureId:N}` (`IStatService.IncrementAsync` returns the value after; 1 = first).
 - Seeds are insert-if-absent: re-running never overwrites an admin edit.
-- These four keys — `trainer_xp`, `trainer_level`, `location_discovered_{key}`, `species_captured_{id:N}` — are **server-owned**: the player-facing stat write routes (`POST /api/v1/stats/increment|max|set`) refuse them with `403 Forbidden` (`ServerOwnedStatKeys.Contains`, matched by exact name or prefix). Only server-side code writes them, through the progression funnel or the admin XP grant — never a client stat call. See [Stats and Lifetime Tracking](?page=backend/08-stats-system).
+- These four keys — `trainer_xp`, `trainer_level`, `location_discovered_{key}`, `species_captured_{id:N}` — are **server-owned**: the player-facing stat write routes (`POST /api/v1/stats/increment|max|set`) refuse them with `403 Forbidden` (`ServerOwnedStatKeys.Contains`, matched trimmed and case-insensitively by exact name or prefix). The write routes also refuse any key with leading or trailing whitespace (`400`), since a padded key would be stored as its own row nobody reads. Only server-side code writes them, through the progression funnel or the admin XP grant — never a client stat call. See [Stats and Lifetime Tracking](?page=backend/08-stats-system).
 
 ## Sources
 
@@ -35,7 +35,9 @@ XP never fails the owning operation:
 
 - Source awards go through `SafeAwardAsync` and the `TrainerProgressTracker` bracket, which log and return null on failure. After the owning operation has committed (capture ownership, battle → Ended, pickup claim) they run with `CancellationToken.None`, so a client disconnect can neither lose the award nor turn a committed operation into an error. Cancellation *before* the commit still propagates.
 - Reward XP: `RewardGrantService` catches a non-cancellation failure from `GrantXpAsync`, logs it and pays the amount as a raw `trainer_xp` increment instead, so a quest claim, pickup reward list or achievement reward is never aborted half-paid (a retried claim would re-pay its items). This pays the XP exactly once because `GrantXpAsync` does everything that can throw *before* its `trainer_xp` increment.
-- The `trainer_level` write after the increment is best-effort and uncancellable: if it fails the grant still returns (logged as an error) and `GetProgressAsync` repairs the high-water mark on the next read. An admin grant that lowers the level and whose `trainer_level` write fails leaves the stored stat high until the next admin grant — the derived level readers use is right.
+- The `trainer_level` write after the increment is best-effort and uncancellable: if it fails the grant still returns (logged as an error) and `GetProgressAsync` repairs the high-water mark on the next read. An admin grant that lowers the level and whose `trainer_level` write fails (or is overtaken by a racing level-up) leaves the stored stat high only until the next progress read, which sets it back down — the derived level readers use is right throughout.
+- On the rule path (`AwardAsync`), "nothing granted" is always `null` — whether the rule, the low-level guard or the trainer's modifiers brought the amount to 0. `GrantXpAsync` (the raw funnel) always returns a snapshot.
+- A capture whose trainer-modifier read fails (not a cancellation) logs a warning and rolls with no modifiers; the throw is never failed by a modifier outage. The capture log line carries the battle id.
 Level readers derive: `ConditionEvaluator` evaluates `TrainerLevel` from `trainer_xp` via `LevelForXpAsync`.
 
 ## Results on the wire
@@ -73,6 +75,12 @@ location or triggered an unauthored key had an inflated total. **There is no rec
   this release counts as a first discovery on their first revisit: +25 XP (the `LocationDiscovered`
   rule) and +1 to `locations_visited_total`, once per place.
 
+The count is written right after the discovery flag, **before and independent of** the XP grant, and
+everything after the flag commits ignores request cancellation: a failed or missing `LocationDiscovered`
+rule never drops a genuine discovery's count (the award returns null). If the count write itself fails, the
+flag is rolled back (`-1`, logged) so the next visit is still a first visit and counts it — exactly once per
+authored key.
+
 If `ITrainerProgressionService` isn't
 wired at all, `QuestDomainService` falls back to the old raw per-event increment.
 
@@ -104,5 +112,5 @@ Studio catalog; an admin tweak is a stopgap until the next push.
   live.** The first-time marker (`location_discovered_{key}` / `species_captured_{id:N}`) is written
   by `AwardAsync` **before** the XP grant, as the gate that makes the award at-most-once. If the rule
   is missing (or removed) when a player crosses that first-time moment, the marker is still written,
-  the grant silently no-ops, and that player's discovery/first-capture bonus is gone for good — there
+  the grant silently no-ops (a location discovery still counts toward `locations_visited_total`), and that player's discovery/first-capture bonus is gone for good — there
   is no second chance, because the marker already reads as "already awarded."

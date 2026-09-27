@@ -369,8 +369,9 @@ token that carries no usable account claim.
 
 The three write routes (`increment`, `max`, `set`) additionally refuse **server-owned** keys with
 `403 Forbidden`, checked before the ownership lookup: `trainer_xp`, `trainer_level`, and any
-`location_discovered_*` / `species_captured_*` key (`ServerOwnedStatKeys.Contains`, exact match or
-prefix). These four feed trainer progression's level derivation and its first-time XP gates — see
+`location_discovered_*` / `species_captured_*` key (`ServerOwnedStatKeys.Contains`, trimmed,
+case-insensitive, exact match or prefix). Before that, a key with leading or trailing whitespace is
+refused with `400` — it would be stored as its own row that no reader looks up. These four feed trainer progression's level derivation and its first-time XP gates — see
 [Trainer Progression](?page=backend/22-trainer-progression) — and only server-side code (the
 progression funnel, the admin XP grant) may write them; a player client has no legitimate reason to
 call these routes with those keys.
