@@ -290,8 +290,8 @@ Defined in `CR.Stats.Data.Constants.StatKey`. Use these constants rather than in
 | `HighestCreatureLevel` | `"highest_creature_level"` | Max | `QuestDomainService` on `ReachCreatureLevel` events |
 | `TrainerLevel` | `"trainer_level"` | Set | Trainer domain on level-up — derived from `trainer_xp` on the level curve; the stored value is a monotonic high-water mark repaired by `TrainerProgressionService.GetProgressAsync` (see [Trainer Progression](?page=backend/22-trainer-progression)) |
 | `CreatureLevelKey(id)` | `"creature_level_{id:N}"` | Max | `QuestDomainService` on `ReachCreatureLevel` events |
-| `location_discovered_{key}` | `StatKey.LocationDiscoveredKey(key)` — per authored world location; 1 = discovered (trainer XP granted) |
-| `species_captured_{id:N}` | `StatKey.SpeciesCapturedKey(baseCreatureId)` — per species; 1 = first capture (first-of-species XP) |
+| `StatKey.LocationDiscoveredKey(key)` | `"location_discovered_{key}"` | Increment | `TrainerProgressionService.AwardAsync` — first-time gate, per authored world location (1 = discovered, trainer XP granted) |
+| `StatKey.SpeciesCapturedKey(baseCreatureId)` | `"species_captured_{id:N}"` | Increment | `TrainerProgressionService.AwardAsync` — first-time gate, per species (1 = first capture, first-of-species XP) |
 
 `CreatureLevelKey` is a helper method that formats the creature UUID using `{id:N}` (no hyphens) to keep the key short and consistent. `location_discovered_{key}` and `species_captured_{id:N}` are written only by `TrainerProgressionService.AwardAsync` — see [Trainer Progression](?page=backend/22-trainer-progression) — as the first-time gate for location and capture XP.
 
