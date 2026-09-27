@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-09-26 — Trainer progression, Phase 1: trainer level
+
+- **cr-api: trainer XP and levels.** New `Talents` domain (M15001 `world_location`, M15002 `trainer_level_requirement` seeded L1–30,
+  M15003 `trainer_xp_rule`, M15004 floor seed). `ITrainerProgressionService` (in `CR.Game.Model/Progression`) grants XP for rewards,
+  wild/trainer wins, captures (+ first of species), authored location discoveries and pickups; level derives from `trainer_xp`
+  (`TrainerLevel` requirements included). `IStatService.IncrementAsync` returns the value after. Results carry `trainerProgress`.
+  One `CaptureAttemptService` for online and offline capture (place before claim — a full storage fails the throw instead of
+  leaving the creature owned-but-unlisted). New routes: `GET /api/v1/trainers/{id}/progression`, world locations / level curve /
+  XP rules content routes, admin `POST /api/v1/admin/trainers/{id}/xp`. `POST /quests/progress` is now ownership-checked. The
+  player-facing stat write routes (`POST /api/v1/stats/increment|max|set`) now refuse server-owned keys — `trainer_xp`,
+  `trainer_level`, `location_discovered_*`, `species_captured_*` — with 403. The "locations visited" lifetime stat (and the
+  `explorer` achievement) now counts only genuine first-time discoveries of an *authored* location; existing players get a
+  one-time recount on their next new-location visit, no backfill. **Deploy: add `ConnectionStrings__TalentDatabase` to
+  `/opt/cr/.env`, and push world locations to Production, before or with this deploy** — otherwise location XP, `explorer`,
+  and the Journal's "locations visited" count all stay frozen with no error.
+- **Unity:** offline XP through the same DLL; level-up toast; XP bar on the team screen; Crystalline Rift Studio → Trainer Progression
+  (scan location triggers, push, export floor seed) and CLI commands; floor rebaked.
+- **Admin web:** World Locations, Trainer Level Curve and Trainer XP Rules editors; dossier level and Grant XP.
+
 ## 2026-09-26 — Defeat objectives: trainers and lists
 
 - **cr-api: four `QuestObjectiveType` values** — `DefeatCreaturesFromList` (9), `DefeatTrainer` (40),

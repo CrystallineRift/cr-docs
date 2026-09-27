@@ -76,15 +76,12 @@ Items with `effect_type = 11` (CaptureCreature) use this modifier.
    - Target must be the opposing wild creature
    - Item must not be a held item
 
-2. **Capture Attempt** (`CaptureCreatureHandler.ApplyAsync`)
+2. **Capture Attempt** (`CaptureCreatureHandler.ApplyAsync` → shared `CaptureAttemptService.AttemptAsync`)
    - Loads wild creature's current HP from battle state
    - Calculates capture chance using the formula above
    - Rolls against the chance
-   - On success: reassigns creature ownership, then places it via
-     `ICreatureInventoryService.AddToTeamOrStorageAsync` — team if a slot is free
-     (next free slot, max 6), storage otherwise. `InventoryAddResult.AddedToTeam`
-     reports where it went. The offline mirror (`OfflineItemUseService`) uses the
-     same method, so online and offline placement behave identically.
+   - On success: places the creature **before** claiming ownership, then claims it, then awards
+     capture XP. See the shared implementation below.
 
 ### REST Endpoint
 
@@ -214,16 +211,22 @@ The `BattleCoordinator` then ends the battle with reason `"capture"`.
 
 ## Offline Support
 
-Offline (local SQLite) battles roll **identical odds** to the server:
+Offline (local SQLite) battles roll **identical odds** to the server, because both modes run **one**
+implementation, `CaptureAttemptService` (`CR.Game.Domain.Services`, shipped to Unity in the DLL
+package): wild + not fainted → chance
+`clamp((max−cur)/max × crystal × trainerMultiplier, 0.05, 0.95)` → roll → place on team/storage (a
+full storage fails the capture and the crystal is not consumed) → claim ownership
+(`CurrentTrainerId`, `FirstCaughtByTrainerId`, `CaptureDate`) → capture XP (+ first-of-species). The
+server's `CaptureCreatureHandler` resolves the wild target from the battle record and delegates to
+it; Unity's `OfflineItemUseService`
+(`Assets/CR/Game/Battle/Offline/OfflineItemUseService.cs`) delegates the same way — there is no
+separate offline capture logic to drift out of sync. `ItemUseResult.TrainerProgress` carries the XP
+result (see [Trainer Progression](?page=backend/22-trainer-progression) /
+[Trainer Progression in Unity](?page=unity/34-trainer-progression)).
 
-- The pure formula lives in `CR.Game.Domain.Services/Implementation/Item/CaptureChanceCalculator.cs`
-  (shipped to Unity in the DLL package) and is used by both the server
-  `CaptureCreatureHandler` and the Unity `OfflineItemUseService`
-  (`Assets/CR/Game/Battle/Offline/OfflineItemUseService.cs`).
-- The offline `CaptureCreature` case mirrors the server handler: wild-battle /
-  opponent / fainted validations, ownership reassignment
-  (`CurrentTrainerId`, `FirstCaughtByTrainerId`, `CaptureDate`), and
-  `ICreatureInventoryService.AddToStorageAsync`.
+Placing **before** claiming ownership matters: a capture whose storage is full leaves the creature
+still wild rather than owned-but-unlisted, so the throw can be retried cleanly instead of stranding
+the creature.
 
 ### Opponent target resolution
 
@@ -247,3 +250,5 @@ empty-target path is only a fallback.
 - [Battle System](unity/07-battle-system.md)
 - [Battle Bag Panel](unity/13-battle-bag-ui.md)
 - [Item System](backend/09-item-system.md)
+- [Trainer Progression](?page=backend/22-trainer-progression) — capture XP and first-of-species bonus
+- [Trainer Progression in Unity](?page=unity/34-trainer-progression) — offline capture bindings

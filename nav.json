@@ -110,6 +110,11 @@
     "path": "backend/21-dialogue-domain"
   },
   {
+    "section": "Backend",
+    "title": "Trainer Progression (Phase 1: Trainer Level)",
+    "path": "backend/22-trainer-progression"
+  },
+  {
     "section": "Introduction",
     "title": "Changelog",
     "path": "changelog"
@@ -303,5 +308,10 @@
     "section": "Unity",
     "title": "UI Theme (global styling)",
     "path": "unity/33-ui-theme"
+  },
+  {
+    "section": "Unity",
+    "title": "Trainer Progression in Unity",
+    "path": "unity/34-trainer-progression"
   }
 ]

@@ -21,8 +21,9 @@ added to `Convenience/CR.Data.Migrations` (the baked offline floor), so no `acco
 ever ships inside `game-data.bytes`.
 
 `AdminActionKind`: `ShadowBan`, `LiftShadowBan`, `RemoveListing`, `AdjustCurrency`, `GrantItem`,
-`RemoveItem`, `Note` (unused in v1), `GrantExperience`, `GrantCreature`. Members are appended, never
-renumbered — the integer is persisted in `admin_action.kind`, so reordering rewrites history.
+`RemoveItem`, `Note` (unused in v1), `GrantExperience`, `GrantCreature`, … `GrantTrainerXp` (16).
+Members are appended, never renumbered — the integer is persisted in `admin_action.kind`, so
+reordering rewrites history.
 
 ## Repositories
 
@@ -66,7 +67,7 @@ worse than no action at all, which is why `admin_action.reason` is `NOT NULL`.
 | Method | Rules |
 |---|---|
 | `SearchPlayersAsync(term, limit)` | Straight delegation to `IPlayerSearchRepository`, limit clamped. |
-| `GetPlayerDossierAsync(accountId)` | One read for the whole picture: account + provider links, moderation state (a *clear default* when the account has never been moderated — the absence of a row is not an error), every trainer with team / creature storage / backpack / item storage / active listings, and the last 20 `admin_action` rows. Listings come from the **operator** browse (`IMarketService.AdminBrowseListingsAsync(Active, accountId, …)`), which filters to `Active` in SQL and includes the listings a shadow ban hides from players — the seller-facing read clamps at 100 rows and would have silently truncated a busy account. `null` when the account does not exist. |
+| `GetPlayerDossierAsync(accountId)` | One read for the whole picture: account + provider links, moderation state (a *clear default* when the account has never been moderated — the absence of a row is not an error), every trainer with team / creature storage / backpack / item storage / active listings, and the last 20 `admin_action` rows. Listings come from the **operator** browse (`IMarketService.AdminBrowseListingsAsync(Active, accountId, …)`), which filters to `Active` in SQL and includes the listings a shadow ban hides from players — the seller-facing read clamps at 100 rows and would have silently truncated a busy account. `null` when the account does not exist. Each `TrainerDossier.progress` carries that trainer's `TrainerProgress` (level, XP, XP into/for next level) — null when it cannot be read, never a failed dossier. |
 | `SetShadowBanAsync(accountId, reason, expiresAtUtc, actor)` | An `expiresAtUtc` already in the past → `InvalidArgument`, because a ban nothing would ever enforce must not be recorded as one the operator will believe is in force. Unknown account → `NotFound`. Idempotent: re-banning updates reason/expiry on the same row rather than creating a second one, and records a second audit entry. Metadata `{"expiresAt":…}`. |
 | `LiftShadowBanAsync(accountId, reason, actor)` | `NotFound` when the account does not exist — saying `NotBanned` would read as confirmation that the operator looked at the right player. Otherwise `NotBanned` for an account with no row, an unflagged row, **or a ban that already lapsed** — an expired ban needs no lifting. |
 | `RemoveListingAsync(listingId, reason, actor)` | Delegates to `IMarketService.AdminRemoveListingAsync`, which owns both the creature transfer and its audit row, and maps `MarketOperationReason` → `ModerationReason`. Exactly **one** `admin_action` row is written, by Market, not two. |
@@ -181,6 +182,7 @@ sets it (and `AdminActorName`) through its environment or secret store, never in
 | POST | `/trainers/{trainerId}/items` | `ItemChangeRequest { itemId, quantity, reason }` | `TrainerDossier` (refreshed) | 400, 404, 409 `StorageFull` |
 | DELETE | `/trainers/{trainerId}/items` | `ItemChangeRequest` | `TrainerDossier` (refreshed) | 400, 404, 409 `InsufficientQuantity` |
 | POST | `/creatures/{generatedCreatureId}/experience` | `GrantExperienceRequest { amount, reason }` | `GrantExperienceResponse` (below) | 400 `InvalidReason`/`InvalidQuantity`, 404 |
+| POST | `/trainers/{trainerId}/xp` | `{ amount, reason }` — trainer XP through the progression funnel as `TrainerXpSource.Admin` (no talent modifiers; negative takes XP back, never below 0; `trainer_level` is set, the one non-monotonic write) | `TrainerProgressResult` | 400 `InvalidReason`/`InvalidQuantity`, 404; audit `GrantTrainerXp` (16) |
 | POST | `/trainers/{trainerId}/creatures/from-spawner` | `GrantCreatureFromSpawnerRequest { spawnerContentKey, poolName?, level?, reason }` | `GrantCreatureFromSpawnerResponse` (below) | 400 `InvalidReason`/`InvalidQuantity`, 404, 409 `NoSpawnCandidate`/`StorageFull` |
 | GET | `/market/listings?state=&sellerAccountId=&offset=&limit=` | | `MarketListingView[]` — hidden rows **included**, `sellerShadowBanned` set | |
 | DELETE | `/market/listings/{id}` | `ReasonRequest` | `MarketListingView` (post-removal, `state = Cancelled`) | 400, 404, 409 `AlreadySold`/`StorageFull` |

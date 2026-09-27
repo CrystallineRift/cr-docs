@@ -694,6 +694,15 @@ Totals inflated that way are not backfilled.
 | `HealAmount` | `damage_healed_total` | Increment |
 | `CollectItem` | `items_collected_total` | Increment |
 | `ReachCreatureLevel` | `creature_level_{referenceId}` (content key) AND `highest_creature_level` | Max |
+| `VisitLocation` | `locations_visited_total` — only when `ITrainerProgressionService` isn't wired (see below) | Increment |
+
+Since trainer progression (2026-09-26), a `VisitLocation` event's `locations_visited_total` increment
+is delegated to `TrainerProgressionService.AwardAsync` when Talents is wired: it writes the stat only
+for a genuine, first-time discovery of an *authored* `world_location` — a repeat visit or an
+unauthored `referenceId` no longer counts (previously every event counted, inflating both the stat
+and the `explorer` achievement; that inflation is not backfilled — see
+[Trainer Progression](?page=backend/22-trainer-progression)). With `ITrainerProgressionService` absent,
+`QuestDomainService` falls back to the old raw per-event increment shown in the table.
 
 Quest-scoped progress resets with each instance. Lifetime stats never reset.
 

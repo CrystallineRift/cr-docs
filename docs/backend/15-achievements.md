@@ -55,6 +55,14 @@ Seeded by `M7303SeedAchievements` (idempotent, dual-engine):
 | `explorer` | LocationVisited | 3 | Experience 200 |
 | `questing_begins` | QuestCompleted | 1 | Item (heal potion) |
 
+Since trainer progression (2026-09-26) wired the Talents domain, `explorer`'s mapped stat
+(`locations_visited_total`) is written by `TrainerProgressionService.AwardAsync`, not by
+`QuestDomainService` directly — only for a genuine, first-time discovery of an *authored*
+`world_location`. A repeat visit or an unauthored reference key no longer moves it, whereas every
+`VisitLocation` event used to count. See [Trainer Progression — Effect on "locations visited"
+counting](?page=backend/22-trainer-progression#effect-on-locations-visited-counting) for the detail,
+including the one-time recount existing players see.
+
 ## Unity client
 
 - `IAchievementService` (`Assets/CR/Achievements/`) owns achievements on the client: `Unlocked`, the definition and unlock reads, and `ReportUnlocks`. Unlocks still ARRIVE on quest results (`QuestProgressResult.NewlyUnlocked` and the claim result), so `QuestManager` is the reporter: it calls `ReportUnlocks` where it used to raise its own `OnAchievementUnlocked` event (removed). Anything interested in achievements depends on `IAchievementService`, not on the quest service. A subscriber that throws is logged and does not stop the other subscribers or the claim.

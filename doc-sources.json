@@ -945,7 +945,8 @@
         "Items/CR.Items.Data.Migration/M6006AddCaptureModifierToItem.cs",
         "Items/CR.Items.Data.Migration/M6007SeedCaptureCrystals.cs",
         "Game/CR.Game.Model/Items/BaseItem.cs",
-        "Game/CR.Game.Domain.Services/Implementation/Item/CaptureChanceCalculator.cs"
+        "Game/CR.Game.Domain.Services/Implementation/Item/CaptureChanceCalculator.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Item/CaptureAttemptService.cs"
       ],
       "cr-data": [
         "Assets/CR/Game/Battle/Events/BattleEvents.cs",
@@ -1626,5 +1627,40 @@
       ]
     },
     "description": "Global UI theme: CrTheme.tss on both runtime PanelSettings, CrTheme.uss design tokens (paper/glass/hud/accent/status colours, font/radius/spacing scales), shared .cr-window/.cr-scrim/.cr-hud-card classes, ScaledWindow USS-driven frame sizing under UI Scale, CrThemeTests guard"
+  },
+  "backend/22-trainer-progression": {
+    "docPath": "docs/backend/22-trainer-progression.md",
+    "repos": {
+      "cr-api": [
+        "Talents/**/*.cs",
+        "Talents/**/*.csproj",
+        "Game/CR.Game.Model/Progression/**/*.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Item/CaptureAttemptService.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Reward/RewardGrantService.cs",
+        "Quests/CR.Quests.Domain.Services/Implementation/ConditionEvaluator.cs",
+        "Convenience/CR.Api.IntegrationTests/TrainerProgressionHttpTests.cs"
+      ],
+      "cr-data": []
+    },
+    "description": "Trainer progression Phase 1: Talents domain (world_location, trainer_level_requirement, trainer_xp_rule, M15001-M15004), the XP funnel and sources, derived level readers, trainerProgress on results, routes, admin XP grant, floor seed, TalentDatabase connection string"
+  },
+  "unity/34-trainer-progression": {
+    "docPath": "docs/unity/34-trainer-progression.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [
+        "Assets/CR/Progression/**/*.cs",
+        "Assets/CR/Core/Notifications/Adapters/TrainerLevelUpToastAdapter.cs",
+        "Assets/CR/Core/Data/Editor/TrainerProgression/**/*.cs",
+        "Assets/CR/Core/Data/Editor/ContentStudioTool.TrainerProgression.cs",
+        "Assets/CR/Core/Data/Editor/Build/TrainerProgressionPipelineCommands.cs",
+        "Assets/CR/Core/Data/Logic/WorldLocation*.cs",
+        "Assets/CR/Core/Data/Logic/TalentContentSeedMigrationGenerator.cs",
+        "Assets/CR/Core/Data/Registry/Definitions/WorldLocationCatalog.cs",
+        "Assets/CR/Game/World/Editor/TrainerProgressionEditorSyncHelper.cs",
+        "Assets/CR/UI/PlayerTeamView.cs"
+      ]
+    },
+    "description": "Unity trainer progression: DLL bindings, trainerProgress reporting + level-up toast, TrainerProgress cache scope and reader, XP bar, Studio Trainer Progression tab (scan/push/export), CLI commands"
   }
 }

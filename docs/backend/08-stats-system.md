@@ -111,8 +111,8 @@ Task<long> GetAsync(Guid accountId, Guid trainerId, string statKey, Cancellation
 // Read all stats for a trainer as a flat dictionary
 Task<IReadOnlyDictionary<string, long>> GetAllAsync(Guid accountId, Guid trainerId, CancellationToken ct);
 
-// Add `amount` to current value; creates the row if it doesn't exist
-Task IncrementAsync(Guid accountId, Guid trainerId, string statKey, long amount, string source, CancellationToken ct);
+// Add `amount` to current value; creates the row if it doesn't exist; returns the value AFTER the increment
+Task<long> IncrementAsync(Guid accountId, Guid trainerId, string statKey, long amount, string source, CancellationToken ct);
 
 // Update only if `value` > current; creates the row if it doesn't exist
 Task MaxAsync(Guid accountId, Guid trainerId, string statKey, long value, string source, CancellationToken ct);
@@ -132,7 +132,7 @@ public class StatService : IStatService
     private readonly IStatRepository _repository;
     private readonly ILogger<StatService> _logger;
 
-    public Task IncrementAsync(Guid accountId, Guid trainerId, string statKey,
+    public Task<long> IncrementAsync(Guid accountId, Guid trainerId, string statKey,
         long amount, string source, CancellationToken ct = default)
     {
         _logger.LogDebug("IncrementAsync: trainerId={TrainerId} stat={Stat} amount={Amount}",
@@ -144,6 +144,8 @@ public class StatService : IStatService
 ```
 
 Every write method is transactional: the `trainer_stat` upsert and the `stat_event` insert run inside the same database transaction.
+
+- `IncrementAsync` returns the stat's value **after** the increment (Postgres `RETURNING`, SQLite re-select in the same transaction). Trainer progression relies on it: a level-up is detected by comparing the level before and after one increment, and a first-time award fires when a per-key counter comes back as exactly 1.
 
 ## How to Record a Stat from Unity
 
@@ -286,10 +288,12 @@ Defined in `CR.Stats.Data.Constants.StatKey`. Use these constants rather than in
 | `ItemsCollectedTotal` | `"items_collected_total"` | Increment | `QuestDomainService` on `CollectItem` events |
 | `QuestsCompleted` | `"quests_completed"` | Increment | `QuestDomainService.ClaimRewardsAsync` |
 | `HighestCreatureLevel` | `"highest_creature_level"` | Max | `QuestDomainService` on `ReachCreatureLevel` events |
-| `TrainerLevel` | `"trainer_level"` | Set | Trainer domain on level-up |
+| `TrainerLevel` | `"trainer_level"` | Set | Trainer domain on level-up — derived from `trainer_xp` on the level curve; the stored value is a monotonic high-water mark repaired by `TrainerProgressionService.GetProgressAsync` (see [Trainer Progression](?page=backend/22-trainer-progression)) |
 | `CreatureLevelKey(id)` | `"creature_level_{id:N}"` | Max | `QuestDomainService` on `ReachCreatureLevel` events |
+| `location_discovered_{key}` | `StatKey.LocationDiscoveredKey(key)` — per authored world location; 1 = discovered (trainer XP granted) |
+| `species_captured_{id:N}` | `StatKey.SpeciesCapturedKey(baseCreatureId)` — per species; 1 = first capture (first-of-species XP) |
 
-`CreatureLevelKey` is a helper method that formats the creature UUID using `{id:N}` (no hyphens) to keep the key short and consistent.
+`CreatureLevelKey` is a helper method that formats the creature UUID using `{id:N}` (no hyphens) to keep the key short and consistent. `location_discovered_{key}` and `species_captured_{id:N}` are written only by `TrainerProgressionService.AwardAsync` — see [Trainer Progression](?page=backend/22-trainer-progression) — as the first-time gate for location and capture XP.
 
 ## `source` Field Values
 
@@ -362,6 +366,14 @@ and writes. A write's body still carries an `accountId` field for wire compatibi
 client, but it is never read — the account written is always the token's, so a forged body value
 cannot write another account's counters. Either group answers `401 Unauthorized`, not a 500, for a
 token that carries no usable account claim.
+
+The three write routes (`increment`, `max`, `set`) additionally refuse **server-owned** keys with
+`403 Forbidden`, checked before the ownership lookup: `trainer_xp`, `trainer_level`, and any
+`location_discovered_*` / `species_captured_*` key (`ServerOwnedStatKeys.Contains`, exact match or
+prefix). These four feed trainer progression's level derivation and its first-time XP gates — see
+[Trainer Progression](?page=backend/22-trainer-progression) — and only server-side code (the
+progression funnel, the admin XP grant) may write them; a player client has no legitimate reason to
+call these routes with those keys.
 
 ## DI Registration
 
