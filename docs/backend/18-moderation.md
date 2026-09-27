@@ -5,8 +5,9 @@ mutation audited in the same transaction that applies it. `CR.Moderation.*` owns
 (`account_moderation`, `admin_action`) and composes the Auth, Trainer, Creature, Item and Market
 domains through their repository/service interfaces — it never touches their tables directly.
 
-The operator UI is Crystalline Rift Studio's **LIVE OPS** rail group (Players and Marketplace tabs, plus the
-admin-key row in the Auth tab); this page is the server contract it talks to.
+The operator UI is Crystalline Rift Studio's **LIVE OPS** rail group (Players and Marketplace tabs; the key
+they use is saved per environment in SYSTEM → Server & Keys, whose *LIVE OPS — can Studio get an admin
+token?* check verifies it); this page is the server contract it talks to.
 
 ## Data model
 

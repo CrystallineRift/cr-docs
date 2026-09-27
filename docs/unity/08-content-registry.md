@@ -537,7 +537,7 @@ Window → CR → Crystalline Rift Studio
 | 17 | COMBAT | Elemental Damage | `AssetDatabase.FindAssets("t:ElementalDamageMatrixConfig")` | `ElementalDamageEditorSyncHelper.PushMatrix` |
 | 11 | COMBAT | Battle Tuning | `AssetDatabase.FindAssets("t:DamageCurveDefinition")` | `AbilityEditorSyncHelper.SyncDamageCurve` |
 | 9 | SYSTEM | Registry | the `ContentDefinitionProvider` asset | status overview — see below; pushes everything |
-| 14 | SYSTEM | Auth | `EditorServiceAuth` / `EditorAdminAuth` key boxes | mints service tokens; no content |
+| 20 | SYSTEM | Server & Keys | `BackendEnvironments.asset`, `game_config.yaml`, Addressables profile, per-environment keys | switches targets, saves keys, runs connection checks; no content |
 | 18 | LIVE OPS | Players | `GET /api/v1/admin/players?q=` + `/players/{accountId}` | `AdminPlayerEditorSyncHelper` (writes, not pushes) |
 | 19 | LIVE OPS | Marketplace | `GET /api/v1/admin/market/listings` | `AdminMarketEditorSyncHelper.RemoveListing` |
 
@@ -560,9 +560,11 @@ points at. See *Live ops tabs* below.
 - **Status Conditions tab (8)** — server-browser with no local SO; `↻ Fetch from Server` loads all conditions; `+ New Condition` / `✎ Edit` open an inline form with name, applyToUser, probability, duration, and a per-condition stat changes sub-list; `Delete` soft-deletes on server. Backed by `AbilityEditorSyncHelper.FetchAllStatusConditions/CreateStatusCondition/UpdateStatusCondition/DeleteStatusCondition` and new `POST /PUT /DELETE /api/v1/status-conditions` endpoints.
 - **Dialogues tab (22)** — `DialogueDefinition` assets in `Assets/CR/Content/Defs/Dialogues/`, plus an inline audit panel that runs `DialogueContentAudit` over the whole project (same audit as the `CR/Dialogue/Run content audit` menu and the EditMode gate — one implementation, three call sites). Each row shows a readiness chip (Valid / N warnings / N errors) from the real `DialogueValidator` plus the editor's own arg-shape checks. `+ New Dialogue` seeds a minimal valid graph; row **Delete** removes the asset and soft-deletes the server row. Opens the dedicated `DialogueEditorWindow` (GraphView) for editing, not the generic inspector. See [Dialogue System](?page=unity/31-dialogue-system) and [Dialogue Authoring](?page=unity/32-dialogue-authoring) for the full picture — not merged/playtested yet.
 
-### Configuration section — which backend everything points at
+### Server & Keys section — which server, with which key
 
-Under **SYSTEM**, before Registry and Auth. Three things name a backend and nothing forces them to
+Under **SYSTEM**, before Registry (internal section key `configuration`, tab 20). It replaced the
+separate **Auth** and **Configuration** sections on 2026-09-27: they asked one question — which
+server, with which key? — in two places, with two key editors that could disagree. Three things name a backend and nothing forces them to
 agree: the editor's own server address (EditorPrefs, this machine only — the same value the header's
 *Server* field edits), the game's `game_config.yaml` (fourteen `*_server_http_address` lines that
 all mean one host), and the Addressables profile's `Remote.LoadPath` (where a build fetches content).
@@ -598,21 +600,42 @@ with itself, because "half the game on production" is a state to be told about, 
 (`CR_ContentStudio_*`) and asmdef names kept the old "Content Studio" spelling when the window was
 renamed — changing them would lose every developer's saved server address for nothing visible.
 
-**Key per environment.** Each environment card also carries a **Key** row
-(`StudioConfigurationPanel.DrawKeys`): a personal API key from Studio web (your account (header) → API keys — see
-backend/20-personal-api-keys) or, for CI-style setups, the server's env key. It is stored in EditorPrefs
-under `BackendKeyVault.PrefName(BackendKeyVault.KeyKind, environmentName)` —
-`CR_Studio_ServiceKey__production` and the like — so a key lives on this machine only and is never in
-the repo or a build. Shown masked (`EditorAuthStatus.MaskSecret`); **Reveal** shows it for
-`BackendKeyVault.RevealSeconds` (15) and then masks it again on its own, so a screen recording that
-catches the click does not keep the key on screen; **Set… / Change…** edits through a password field
-and a draft, **Clear** forgets it. Saving a key for the environment the editor is on activates it at
-once — the one key is set as both `EditorServiceAuth.ServiceKey` and `EditorAdminAuth.AdminKey`, since
-the server now grants scopes from the account's roles, and cached tokens are dropped; **Use for
-editor** activates the stored key when switching. A key left in the old admin-only slot from the
-two-row layout is adopted (`BackendKeyVault.Resolve`) so it need not be pasted again. The line under
-the row (`BackendKeyVault.Describe`) says whether the stored key is the one in use. The Auth section
-still edits the key in use directly and points here.
+**Each environment card has four blocks** (which ones a card draws is `ServerKeysLayout.BlocksFor`;
+every label is a constant in `ServerKeysText`, pinned by `ServerKeysTextTests`):
+
+1. **Where things point** — three rows named for what they control, each with its own button:
+   *Studio pushes & LIVE OPS go to* (the editor server address — **Use for editor**), *The game in
+   Play mode talks to* (`game_config.yaml` — **Use for game**) and *Built games download content
+   from* (Addressables `Remote.LoadPath` — **Use for content**). **Use everywhere** sits in the card
+   header.
+2. **Your key for this server** — one row, *Personal API key — used for content pushes and LIVE OPS;
+   what it can do comes from your account's roles.* A personal API key from Studio web (your account
+   (header) → API keys — see backend/20-personal-api-keys) or, for CI-style setups, the server's env
+   key. Stored in EditorPrefs under `BackendKeyVault.PrefName(BackendKeyVault.KeyKind, environmentName)` —
+   `CR_Studio_ServiceKey__production` and the like — so a key lives on this machine only and is never
+   in the repo or a build. Shown masked (`EditorAuthStatus.MaskSecret`); **Reveal** shows it for
+   `BackendKeyVault.RevealSeconds` (15) and then masks it again on its own, so a screen recording that
+   catches the click does not keep the key on screen; **Set… / Edit…** edits through a password field
+   and a draft, **Clear** forgets it. The Local card (named "Local", or any loopback API —
+   `ServerKeysLayout.IsLocal`) also has **Reset to local-dev default**: it forgets the saved key and,
+   while the editor points there, puts the committed local-dev keys back in both active slots.
+3. **Connection checks** — only on the card the editor points at, because they probe that server:
+   *Content push — can Studio get a push token?*, *LIVE OPS — can Studio get an admin token?* (with the
+   Valid / Invalid / Unreachable chip) and *Player login — the server correctly refuses a made-up
+   device.* See *Connection checks* below.
+4. **Advanced** (a collapsed foldout) — setting **names** only, never values: the active slots
+   `CR_EditorServiceKey` / `CR_EditorAdminKey`, this card's vault pref and its older admin-only slot,
+   the push and LIVE OPS token lifetimes for this server, and **Clear cached tokens**.
+
+**One source of truth.** Keys are edited on the environment card only. `Activate` copies the saved
+key into **both** `EditorServiceAuth.ServiceKey` and `EditorAdminAuth.AdminKey` (the server grants
+scopes from the account's roles) and drops cached tokens; saving a key on the card the editor points
+at activates it at once, and **Use for editor** activates the saved key when switching (a Local card
+with nothing saved falls back to the local-dev defaults). A key left in the old admin-only slot from
+the two-row layout is adopted (`BackendKeyVault.Resolve`). If either active key differs from the key
+saved for the environment the editor points at (`ActiveKeyCheck`), the card warns *"The active key
+differs from the one saved for <env>."* with a **Use saved key** button. The line under the row
+(`BackendKeyVault.Describe`) says whether the saved key is the one in use.
 
 ### Live ops tabs — Players (18) and Marketplace (19)
 
@@ -621,8 +644,10 @@ Both tabs live in `Assets/CR/Core/Data/Editor/LiveOps/` and talk to the backend'
 **admin** token, not the editor's `content:write` token: `EditorAdminAuth` (mirror of
 `EditorServiceAuth`, pref `CR_EditorAdminKey`, default `local-dev-admin-service-key` matching the
 AIO dev `AdminServiceKey`) exchanges the key at `POST /auth/service-token`, caches the JWT per server,
-and retries once on 401. The Auth tab (14) has a second key box for it. A 401/403 on either tab
-renders `AdminAuthGate.Explain(status)` and an **Open Auth tab** button instead of a stack trace.
+and retries once on 401. Its key is the environment's saved key, copied in by Server & Keys (there is
+no separate admin key box any more). A 401/403 on either tab renders `AdminAuthGate.Explain(status)`
+("…save your key in Server & Keys.") and an **Open Server & Keys** button
+(`ContentStudioTool.OpenServerAndKeys`) instead of a stack trace.
 
 Every server round trip is a `StudioJob` (`PlayerSearchJob`, `PlayerDossierJob`, `ListingsJob`,
 `AdminMutationJob`). Each job's `Steps()` first calls `AdminEndpointContext.Resolve()` on the main
@@ -1477,31 +1502,26 @@ section heading, the all-content bar when Advanced is on, and the unchanged `Dra
 roughly two thousand lines of working field logic instead of putting it at risk; tabs can be
 migrated to UI Toolkit one at a time behind the same shell.
 
-## The Auth section (SYSTEM › Auth)
+## Connection checks (formerly the Auth section)
 
-The one place the editor's server credentials are managed (`Core/Data/Editor/StudioAuthPanel.cs`,
-wording and verdicts from the tested pure-logic `Core/Data/Logic/EditorAuthStatus.cs`). Two
-halves, matching the two auth flows that exist:
+The Auth section was folded into **Server & Keys** (above)
+on 2026-09-27; `StudioAuthPanel.cs` is gone. Its three probes live on as block 3 of the card the
+editor points at (`Core/Data/Editor/StudioConfigurationPanel.Checks.cs`), with verdict wording from
+the tested pure-logic `Core/Data/Logic/EditorAuthStatus.cs` and `EditorAdminAuthStatus.cs`:
 
-- **Editor → Server (content pushes).** Every push authenticates with a short-lived
-  `ContentWrite` JWT minted by exchanging the **service key** at `POST /auth/service-token`
-  (`Game/World/Editor/EditorServiceAuth.cs`; the server side reads `EditorServiceKey` from its
-  config). The panel shows the key **masked** (tail-4 only, revealable on click), says whether
-  the built-in local-dev key or a custom one is in use, and edits go through a draft
-  `PasswordField` so a half-typed key is never live. The key is stored in **EditorPrefs
-  (`CR_EditorServiceKey`) on this machine only** — never in the repo, never in a build.
-  **Test authentication** runs the two-step probe — key exchange, then an authorized GET
-  against a content endpoint — because "wrong key" (401 on the exchange) and "wrong
-  scope/policy" (403 on the probe) are different repairs. **Forget cached tokens** clears the
-  per-server token cache; saving or resetting the key does that automatically.
-- **Player Login (game clients).** Probes the anonymous device flow by POSTing a made-up
-  device id at `/auth/game`. A **healthy server refuses it (401)** — a token for a device it
-  has never seen is the failure. 400 and 404 each get their own message naming the stale
-  server build that produces them.
+- **Content push — can Studio get a push token?** The two-step probe: exchange the active key at
+  `POST /auth/service-token`, then an authorized GET against a content endpoint — because "wrong
+  key" (401 on the exchange) and "wrong scope/policy" (403 on the probe) are different repairs.
+- **LIVE OPS — can Studio get an admin token?** Exchanges the active admin key and reads the scope
+  out of the returned JWT (`JwtScopeReader`) — the exchange answers 200 for a content-only key too,
+  so only the claim says whether LIVE OPS will work. Shows a Valid / Invalid / Unreachable chip.
+- **Player login — the server correctly refuses a made-up device.** POSTs a made-up device id at
+  `/auth/game`. A **healthy server refuses it (401)** — a token for a device it has never seen is
+  the failure. 400 and 404 each get their own message naming the stale server build that produces
+  them.
 
-Advanced adds the plumbing: the resolved server address, the raw token-expiry epoch, and where
-the key is stored. Nothing in the panel ever logs or renders the raw key except an explicit
-Reveal click.
+Switching server, saving a key, **Use saved key** and **Clear cached tokens** all forget the old
+verdicts. Nothing in the view ever logs or renders a raw key except an explicit, timed Reveal.
 
 ## Names people can read, ids behind Advanced
 
