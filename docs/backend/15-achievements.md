@@ -61,7 +61,7 @@ Since trainer progression (2026-09-26) wired the Talents domain, `explorer`'s ma
 `world_location`. A repeat visit or an unauthored reference key no longer moves it, whereas every
 `VisitLocation` event used to count. See [Trainer Progression — Effect on "locations visited"
 counting](?page=backend/22-trainer-progression#effect-on-locations-visited-counting) for the detail,
-including the one-time recount existing players see.
+including why there is no recount for existing players.
 
 ## Unity client
 

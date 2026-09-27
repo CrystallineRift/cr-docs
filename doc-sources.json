@@ -1638,11 +1638,15 @@
         "Game/CR.Game.Domain.Services/Implementation/Item/CaptureAttemptService.cs",
         "Game/CR.Game.Domain.Services/Implementation/Reward/RewardGrantService.cs",
         "Quests/CR.Quests.Domain.Services/Implementation/ConditionEvaluator.cs",
-        "Convenience/CR.Api.IntegrationTests/TrainerProgressionHttpTests.cs"
+        "Convenience/CR.Api.IntegrationTests/TrainerProgressionHttpTests.cs",
+        "Convenience/CR.REST.AIO/TalentDatabaseFallbackExtensions.cs",
+        "Convenience/CR.Data.Migrations.Test/TalentSeedSample/**/*.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Battle/BattleDomainService.cs",
+        "Pickups/CR.Pickups.Domain.Services/Implementation/PickupDomainService.cs"
       ],
       "cr-data": []
     },
-    "description": "Trainer progression Phase 1: Talents domain (world_location, trainer_level_requirement, trainer_xp_rule, M15001-M15004), the XP funnel and sources, derived level readers, trainerProgress on results, routes, admin XP grant, floor seed, TalentDatabase connection string"
+    "description": "Trainer progression Phase 1: Talents domain (world_location, trainer_level_requirement, trainer_xp_rule, M15001-M15004), the XP funnel and sources, derived level readers, trainerProgress on results, routes, admin XP grant, floor seed, TalentDatabase connection string (falls back to StatDatabase)"
   },
   "unity/34-trainer-progression": {
     "docPath": "docs/unity/34-trainer-progression.md",

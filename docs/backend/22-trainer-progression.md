@@ -9,8 +9,8 @@ level from 2 grants a talent point (spent from Phase 2). Spec: `cr-api-unity/doc
 |---|---|
 | Contracts | `Game/CR.Game.Model/Progression/` — `ITrainerProgressionService`, `TrainerProgress`, `TrainerProgressResult`, `TrainerXpAward`, `TrainerXpSource`, `TrainerModifiers`, `ITrainerModifierProvider`, `TrainerProgressTracker`, `TalentEffectType` |
 | Domain | `Talents/` — `CR.Talents.Data(.Sqlite/.Postgres/.Migration/.Migration.Postgres)`, `.Domain.Services` (`TrainerProgressionService`, `TrainerLevelCurve`, `TrainerXpRuleMath`, `TrainerProgressionContentValidation`, `NoTalentModifierProvider`), `.Model.REST`, `.Service.REST` |
-| Connection string | `TalentDatabase` (**prod: `ConnectionStrings__TalentDatabase` in `/opt/cr/.env` before the first deploy**) |
-| Migrations | M15001 `world_location`, M15002 `trainer_level_requirement` (+ L1–30 seed), M15003 `trainer_xp_rule` (+ 6 rules), M15004 floor seed (exported) |
+| Connection string | `TalentDatabase`; when the key is absent the API uses the `StatDatabase` connection string and logs `[startup] ConnectionStrings:TalentDatabase is not set; …` once (`TalentDatabaseFallbackExtensions`, `CR.REST.AIO`) |
+| Migrations | M15001 `world_location`, M15002 `trainer_level_requirement` (+ L1–30 seed), M15003 `trainer_xp_rule` (+ 6 rules). The floor seed (M15004 at first export) is **not shipped yet** — see [Offline floor](#offline-floor) |
 
 ## Data
 
@@ -31,7 +31,11 @@ level from 2 grants a talent point (spent from Phase 2). Spec: `cr-api-unity/doc
 | Location discovered | `QuestDomainService.RecordProgressEventAsync` on `VisitLocation` | 1 | 25 | `location_discovered_{key}` must be 1; unknown keys earn 0 |
 | Pickup collected | `PickupDomainService.CollectAsync` after the claim | 1 | 5 | pickup_collected claim |
 
-XP never fails the owning operation (`SafeAwardAsync`, `TrainerProgressTracker` log and return null).
+XP never fails the owning operation:
+
+- Source awards go through `SafeAwardAsync` and the `TrainerProgressTracker` bracket, which log and return null on failure. After the owning operation has committed (capture ownership, battle → Ended, pickup claim) they run with `CancellationToken.None`, so a client disconnect can neither lose the award nor turn a committed operation into an error. Cancellation *before* the commit still propagates.
+- Reward XP: `RewardGrantService` catches a non-cancellation failure from `GrantXpAsync`, logs it and pays the amount as a raw `trainer_xp` increment instead, so a quest claim, pickup reward list or achievement reward is never aborted half-paid (a retried claim would re-pay its items). This pays the XP exactly once because `GrantXpAsync` does everything that can throw *before* its `trainer_xp` increment.
+- The `trainer_level` write after the increment is best-effort and uncancellable: if it fails the grant still returns (logged as an error) and `GetProgressAsync` repairs the high-water mark on the next read. An admin grant that lowers the level and whose `trainer_level` write fails leaves the stored stat high until the next admin grant — the derived level readers use is right.
 Level readers derive: `ConditionEvaluator` evaluates `TrainerLevel` from `trainer_xp` via `LevelForXpAsync`.
 
 ## Results on the wire
@@ -53,7 +57,7 @@ A refused content write answers 400 `{ message, problems[] }` and writes nothing
 
 ## Offline floor
 
-`M15004SeedTalentContent_<date>` is written by Crystalline Rift Studio (Trainer Progression → Export floor seed, or `cr_talent_content_export_seed`): locations from the Studio catalog (insert-if-absent, both engines, authored ids), the curve and rules copied from the configured server (SQLite only — Postgres is their source). Rebake with `build-packages.sh`; `GameDataAdopter` re-adopts by content hash.
+**Not shipped yet — no floor-seed migration exists in cr-api today.** Offline play runs on the M15002/M15003 defaults and has no world locations until one is exported. The migration (`M<version>SeedTalentContent_<date>`, version = repository max + 1, so `M15004SeedTalentContent_<date>` at the first export) is written by Crystalline Rift Studio (Trainer Progression → Export floor seed, or `cr_talent_content_export_seed`): locations from the Studio catalog (insert-if-absent, both engines, authored ids), the curve and rules copied from the configured server (SQLite only — Postgres is their source). The export needs a Studio content key for the server it reads (Local or Production). Rebake with `build-packages.sh`; `GameDataAdopter` re-adopts by content hash. The generator's exact output is executed on SQLite and Postgres by `CR.Data.Migrations.Test/TalentContentSeedGeneratedSql*Tests` (sample in `TalentSeedSample/`, regenerate it when the template changes).
 
 ## Effect on "locations visited" counting
 
@@ -62,22 +66,34 @@ Wiring Talents changes what counts toward the `locations_visited_total` lifetime
 increment to `TrainerProgressionService.AwardAsync`, which writes it **only for a genuine first-time
 discovery of an authored `world_location`** — a repeat visit or an unauthored `referenceId` earns
 nothing. Before this, every `VisitLocation` event counted, so a player who revisited an already-known
-location or triggered an unauthored key had an inflated total. There is no backfill for the old
-inflated counts; an existing player's stat re-settles to the true discovery count on their next
-genuinely-new location visit (a one-time recount, not a jump). If `ITrainerProgressionService` isn't
+location or triggered an unauthored key had an inflated total. **There is no recount and no backfill:**
+
+- An existing player's old, inflated `locations_visited_total` stays as it is; it only grows from there.
+- `location_discovered_{key}` has no backfill either, so every authored place a player visited *before*
+  this release counts as a first discovery on their first revisit: +25 XP (the `LocationDiscovered`
+  rule) and +1 to `locations_visited_total`, once per place.
+
+If `ITrainerProgressionService` isn't
 wired at all, `QuestDomainService` falls back to the old raw per-event increment.
 
 ## Deploy prerequisites
 
-Both of these must land **before or with** the API deploy that ships this feature, or trainer
-progression stalls silently for players who reach it:
-
-- Append `ConnectionStrings__TalentDatabase` to `/opt/cr/.env` (copy of the `StatDatabase` value) —
-  `BaseRepository` throws on a missing connection-string key.
-- Push the authored world locations to Production (Crystalline Rift Studio → Trainer Progression →
+- **Required, before or with the API deploy that ships this feature** (or location progression
+  stalls silently): push the authored world locations to Production (Crystalline Rift Studio → Trainer Progression →
   Push locations) — until `world_location` is populated on Production, no discovery earns XP, the
   `explorer` achievement never unlocks, and the Journal's "locations visited" count never advances,
   with no error surfaced to the player.
+- Optional: `ConnectionStrings__TalentDatabase` in `/opt/cr/.env`. Without it the API falls back to
+  the `StatDatabase` connection string (one `[startup]` log line says so); set it only to point the
+  Talents tables somewhere else.
+
+## Admin web (World Locations)
+
+The cr-admin-web **World Locations** editor is for reading the server's locations and tweaking names
+only. The Studio's **Push locations** writes the whole catalog with `replace: true`: it retires every
+row the catalog doesn't name — a location created in the admin editor is gone on the next Studio
+push — and writes the catalog's names over any admin rename. Add, rename or retire locations in the
+Studio catalog; an admin tweak is a stopgap until the next push.
 
 ## Pitfalls
 

@@ -3,7 +3,7 @@
 ## 2026-09-26 — Trainer progression, Phase 1: trainer level
 
 - **cr-api: trainer XP and levels.** New `Talents` domain (M15001 `world_location`, M15002 `trainer_level_requirement` seeded L1–30,
-  M15003 `trainer_xp_rule`, M15004 floor seed). `ITrainerProgressionService` (in `CR.Game.Model/Progression`) grants XP for rewards,
+  M15003 `trainer_xp_rule`; the floor seed is not shipped yet — Studio → Trainer Progression → Export floor seed writes it, as M15004, with a Studio content key). `ITrainerProgressionService` (in `CR.Game.Model/Progression`) grants XP for rewards,
   wild/trainer wins, captures (+ first of species), authored location discoveries and pickups; level derives from `trainer_xp`
   (`TrainerLevel` requirements included). `IStatService.IncrementAsync` returns the value after. Results carry `trainerProgress`.
   One `CaptureAttemptService` for online and offline capture (place before claim — a full storage fails the throw instead of
@@ -11,13 +11,16 @@
   XP rules content routes, admin `POST /api/v1/admin/trainers/{id}/xp`. `POST /quests/progress` is now ownership-checked. The
   player-facing stat write routes (`POST /api/v1/stats/increment|max|set`) now refuse server-owned keys — `trainer_xp`,
   `trainer_level`, `location_discovered_*`, `species_captured_*` — with 403. The "locations visited" lifetime stat (and the
-  `explorer` achievement) now counts only genuine first-time discoveries of an *authored* location; existing players get a
-  one-time recount on their next new-location visit, no backfill. **Deploy: add `ConnectionStrings__TalentDatabase` to
-  `/opt/cr/.env`, and push world locations to Production, before or with this deploy** — otherwise location XP, `explorer`,
-  and the Journal's "locations visited" count all stay frozen with no error.
+  `explorer` achievement) now counts only genuine first-time discoveries of an *authored* location. No recount, no
+  backfill: old inflated totals stay, and a place visited before this release counts again (+25 XP, +1 visited) on its
+  first revisit. XP failures never fail the owning operation (reward XP falls back to a raw `trainer_xp` increment;
+  post-commit awards ignore request cancellation); a capture whose placement fails returns the creature to the wild.
+  A missing `ConnectionStrings:TalentDatabase` falls back to `StatDatabase` (logged once). **Deploy: push world
+  locations to Production before or with this deploy** — otherwise location XP, `explorer`, and the Journal's
+  "locations visited" count all stay frozen with no error.
 - **Unity:** offline XP through the same DLL; level-up toast; XP bar on the team screen; Crystalline Rift Studio → Trainer Progression
   (scan location triggers, push, export floor seed) and CLI commands; floor rebaked.
-- **Admin web:** World Locations, Trainer Level Curve and Trainer XP Rules editors; dossier level and Grant XP.
+- **Admin web:** World Locations (read / rename only — a Studio push replaces the list), Trainer Level Curve and Trainer XP Rules editors; dossier level and Grant XP.
 
 ## 2026-09-26 — Defeat objectives: trainers and lists
 
