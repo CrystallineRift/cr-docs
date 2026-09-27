@@ -2,11 +2,11 @@
 
 ## Overview
 
-The player menu is a 6-tab overlay opened from the overworld via the `ToggleMenu` input action. It is
+The player menu is a 7-tab overlay opened from the overworld via the `ToggleMenu` input action. It is
 the whole out-of-combat UI: the player's squad, their bag, their quest log, their record, and the
 game's settings — all without leaving the world scene.
 
-Tabs: **Team | Bag | Storage | Quests | Journal | System**
+Tabs: **Team | Bag | Storage | Quests | Map | Journal | System**
 
 Every tab reads real data from domain services. Nothing on Team, Bag, Storage, Quests, or Journal is mocked.
 
@@ -23,9 +23,10 @@ Every tab reads real data from domain services. Nothing on Team, Bag, Storage, Q
 | `Assets/CR/Core/Data/Client/Interface/ICreatureStatusClient.cs` | Per-creature active status conditions, online/offline routed |
 | `Assets/CR/UI/PlayerStorageView.cs` | Storage tab — box grid, Data File panel, team swap modal. Its rules live in the engine-free `CR.UI.Storage.Logic` asmdef; see [Creature Storage](26-creature-storage.md) |
 | `Assets/CR/UI/Quests/QuestJournalView.cs` | Quests tab — active + completed quests, objectives, rewards |
+| `Assets/CR/UI/WorldMap/WorldMapTab.cs` | Map tab — stylised world map, discoveries, current area, quest markers. See [World Map](35-world-map.md) |
 | `Assets/CR/UI/Journal/JournalView.cs` | Journal tab — achievements + lifetime stat records |
 | `Assets/CR/UI/Logic/` | Engine-free rules (`CR.UI.Logic` asmdef) shared by the above, unit tested |
-| `Assets/CR/UI/Resources/PlayerMenuWindow.uxml` | Layout — 6 tabs |
+| `Assets/CR/UI/Resources/PlayerMenuWindow.uxml` | Layout — 7 tabs |
 | `Assets/CR/UI/Resources/PlayerMenuWindow.uss` | Stylesheet — window chrome, Team, Storage, Quests, Journal |
 | `Assets/CR/UI/Resources/BagScreen.uxml` / `Assets/CR/UI/BagScreen.uss` | Bag layout + stylesheet |
 
@@ -53,6 +54,7 @@ Injected dependencies:
 | `ICreatureInventoryService`, `ICreatureDomainService`, `IGrowthProfileDomainService` | `PlayerStorageView` |
 | `QuestManager` | `QuestJournalView` |
 | `IAchievementDomainService`, `IStatService` | `JournalView` |
+| `IWorldMapLayoutSource`, `IWorldMapDiscoveryReader`, `AreaLoader` (all optional) | `WorldMapTab` |
 | `IGameAssetLoader` (optional) | Icon loading in Team / Bag / Journal, always through `UiIcon.Apply` |
 | `ICreatureStatusClient` | `BagScreenHandler` — the target picker's status badges and cure-item rules |
 | `IGameSessionService` | `CurrentTrainerId` / `CurrentAccountId` for every tab |

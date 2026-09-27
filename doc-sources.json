@@ -768,7 +768,8 @@
         "Assets/CR/UI/Logic/SpeciesInfo.cs",
         "Assets/CR/UI/Logic/StatusBadge.cs",
         "Assets/CR/Content/Defs/Items/*.asset",
-        "Assets/CR/Quests/NpcDisplayNameResolver.cs"
+        "Assets/CR/Quests/NpcDisplayNameResolver.cs",
+        "Assets/CR/UI/WorldMap/WorldMapTab.cs"
       ]
     },
     "description": "Player menu UI: 5-tab overlay (Team/Bag/Quests/Journal/System) wired to real domain data — PlayerTeamView squad sheet, BagScreenHandler backpack with BagItemPolicy filtering, QuestJournalView active/completed quests, JournalView achievements + stat records, CR.UI.Logic pure rules, input wiring via UICoordinator; Quests tab 'Return to {giver}' status for a ReturnToGiver quest awaiting the player"
@@ -1629,7 +1630,8 @@
         "Assets/CR/UI/Common/MessageDialog.cs",
         "Assets/CR/Tests/Editor/CrThemeTests.cs",
         "Assets/CR/UI/Panel Settings.asset",
-        "Assets/CR/Resources/Evolution/EvolutionPanelSettings.asset"
+        "Assets/CR/Resources/Evolution/EvolutionPanelSettings.asset",
+        "Assets/CR/UI/Resources/WorldMapTab.uss"
       ]
     },
     "description": "Global UI theme: CrTheme.tss on both runtime PanelSettings, CrTheme.uss design tokens (paper/glass/hud/accent/status colours, font/radius/spacing scales), shared .cr-window/.cr-scrim/.cr-hud-card classes, ScaledWindow USS-driven frame sizing under UI Scale, CrThemeTests guard"
@@ -1672,5 +1674,23 @@
       ]
     },
     "description": "Unity trainer progression: DLL bindings, trainerProgress reporting + level-up toast, TrainerProgress cache scope and reader, XP bar, Studio Trainer Progression tab (scan/push/export), CLI commands"
+  },
+  "unity/35-world-map": {
+    "docPath": "docs/unity/35-world-map.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [
+        "Assets/CR/UI/WorldMap/**",
+        "Assets/CR/UI/Resources/WorldMapTab.uss",
+        "Assets/CR/Core/Data/Registry/Definitions/WorldMapDefinition.cs",
+        "Assets/CR/Core/Data/Logic/WorldMap*.cs",
+        "Assets/CR/Core/Data/Logic/AreaSceneContentScan.cs",
+        "Assets/CR/Core/Data/Editor/WorldMapDefinitionEditor.cs",
+        "Assets/CR/Core/Data/Editor/TrainerProgression/WorldMapTools.cs",
+        "Assets/CR/Progression/*WorldMapDiscoveryReader.cs",
+        "Assets/CR/Content/Defs/WorldMap/**"
+      ]
+    },
+    "description": "World map: client-only WorldMapDefinition (nodes, routes, art addresses, unknown-area switch), Studio scan/validate/fix tooling and CLI, CR.UI.WorldMap.Logic (state builder, layout, navigator, quest targets), the player menu Map tab and canvas, the discovery reader seam (P1 empty stand-in)"
   }
 }

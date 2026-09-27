@@ -18,6 +18,10 @@
 
 The level curve and XP rules are edited in cr-admin-web (Content → Trainer Level Curve / Trainer XP Rules). Its World Locations editor is for reading and renaming only: the Studio push above replaces the whole list and retires any location created elsewhere — add locations here, in the catalog.
 
+**World map row.** The same tab has a *World map* row (status light, **Scan map areas**, **Open map**), which
+builds the player menu's Map tab layout from the area scenes. An area needs at least one location here to ever be
+discovered on the map. See [World Map](35-world-map.md).
+
 ## Deploy checklist
 
 Location XP, the `explorer` achievement, and the Journal's "locations visited" count are all dead on

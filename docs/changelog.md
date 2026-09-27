@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-09-27 — World map, Phase P1: layout, Studio tooling, Map tab
+
+- **Unity: Map tab** in the player menu (after Quests). A stylised node map of the six areas, the current one
+  named and pinned, and d-pad navigation between areas. Discoveries read through `IWorldMapDiscoveryReader`, which
+  P1 binds to an empty stand-in, so every other area reads "???" until Phase P2 wires sub-project 2's discovery
+  read. Read-only: no intent, no outcome.
+- **Studio:** World Map asset (`Assets/CR/Content/Defs/WorldMap/WorldMap.asset`) built by **Scan map areas**
+  (area scenes + doors, never prunes). The inspector has a live preview, drag/resize, drift validation with
+  one-click fixes, and art fields that make sprites Addressable at `map/…`. CLI commands:
+  `cr_world_map_scan`, `cr_world_map_validate`, `cr_world_map_starter_layout`.
+- **Theme:** `--cr-map-*` tokens.
+
 ## 2026-09-26 — Trainer progression, Phase 1: trainer level
 
 - **cr-api: trainer XP and levels.** New `Talents` domain (M15001 `world_location`, M15002 `trainer_level_requirement` seeded L1–30,

@@ -80,6 +80,7 @@ introduced, grouped by the family that owns them:
 | `--cr-evolution-*` | Evolution cutscene and the area banner |
 | `--cr-battle-*`, `--cr-condition-*`, `--cr-mission-*` | Battle HUD cards, status-condition badges, mission accents |
 | `--cr-dialogue-*`, `--cr-hud-*` | Dialogue panel; toasts + quest tracker share the hud family |
+| `--cr-map-*` | Player menu Map tab: canvas paper, node faces/outline/unknown/current, route lines, quest badge, six region tints (`--cr-map-region-<style>`) |
 
 About 70 literal colours remain, on purpose: single-use translucent washes (USS `var()` cannot go
 inside `rgba()`), a few deliberately brighter `:focus` states, and the legacy `CharacterSelect.uss` /
@@ -163,3 +164,4 @@ themed and do not use the `--cr-*` tokens.
 
 - [Player Menu UI](10-player-menu-ui.md) — paper window, UI Scale setting on the System tab
 - [UI Icons](29-ui-icons.md)
+- [World Map](35-world-map.md) — map tokens

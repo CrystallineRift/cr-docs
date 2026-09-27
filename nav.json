@@ -313,5 +313,10 @@
     "section": "Unity",
     "title": "Trainer Progression in Unity",
     "path": "unity/34-trainer-progression"
+  },
+  {
+    "section": "Unity",
+    "title": "World Map",
+    "path": "unity/35-world-map"
   }
 ]
