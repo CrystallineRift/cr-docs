@@ -88,6 +88,9 @@ The header's total counts every node either way.
 
 ## Troubleshooting
 
+- **Quest badges and the detail pane's "Locations n/m" line never appear in P1**: expected — the stand-in
+  reader reports zero locations for every area, so there is nothing to count and no location to place a
+  quest's `VisitLocation` target in. Both come back once P2 binds the real reader.
 - **An area never becomes discovered**: its scene has no Location Trigger (Validate shows "never discoverable").
 - **The whole map is "???" offline**: expected in P1 (stand-in reader). After P2 it means the offline floor lacks
   `world_location` (the Talents content seed has not been exported and rebaked). See
