@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-09-27 — Talents, Unity-only lane: authoring + tab (fake data, no server yet)
+
+- **Unity: Talents tab** in the player menu (after Map). Tree selector, tier grid, detail pane with
+  spend/respec — all wired to a fully faked seam (`EmptyTalentProgressReader`, `NoOpTalentActions`) that
+  swaps to the real server/DLL bindings with no UI code change once the Talents server phase lands. Node
+  states come from `TalentNodeStateBuilder`, an explicitly display-only, temporary stand-in — it never
+  gates a spend.
+- **Unity: authoring.** `TalentTreeDefinition` SO + custom inspector (tier grid, effect dropdowns, inline
+  validation, totals-at-max), at `Assets/CR/Content/Defs/Talents/`. The three starter trees (Exploration,
+  Capture minus Bond Trial, Battle) are authored and registered.
+- No cr-api Talents domain work in this lane — no new tables, no `TalentService`, no REST routes.
+
 ## 2026-09-27 — World map, Phase P1: layout, Studio tooling, Map tab
 
 - **Unity: Map tab** in the player menu (after Quests). A stylised node map of the six areas, the current one

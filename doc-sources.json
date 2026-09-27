@@ -1692,5 +1692,23 @@
       ]
     },
     "description": "World map: client-only WorldMapDefinition (nodes, routes, art addresses, unknown-area switch), Studio scan/validate/fix tooling and CLI, CR.UI.WorldMap.Logic (state builder, layout, navigator, quest targets), the player menu Map tab and canvas, the discovery reader seam (P1 empty stand-in)"
+  },
+  "unity/36-talents-ui": {
+    "docPath": "docs/unity/36-talents-ui.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [
+        "Assets/CR/UI/Talents/**",
+        "Assets/CR/UI/Resources/TalentsTab.uss",
+        "Assets/CR/Core/Data/Registry/Definitions/TalentTreeDefinition.cs",
+        "Assets/CR/Core/Data/Registry/Definitions/TalentEntry.cs",
+        "Assets/CR/Core/Data/Registry/Definitions/TalentEffectEntry.cs",
+        "Assets/CR/Core/Data/Editor/TalentTreeDefinitionEditor.cs",
+        "Assets/CR/Core/Data/Logic/Talent*.cs",
+        "Assets/CR/Progression/*Talent*",
+        "Assets/CR/Content/Defs/Talents/**"
+      ]
+    },
+    "description": "Talents UI (Phase 2 Unity lane, no server dependency yet): TalentTreeDefinition authoring SO + custom inspector, TalentTreeAuthoringValidation, the three starter trees, the Talents tab (TalentNodeStateBuilder, fake ITalentProgressReader/ITalentActions seam)"
   }
 }

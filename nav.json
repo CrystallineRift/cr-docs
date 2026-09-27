@@ -318,5 +318,10 @@
     "section": "Unity",
     "title": "World Map",
     "path": "unity/35-world-map"
+  },
+  {
+    "section": "Unity",
+    "title": "Talents UI (Unity) — Phase 2 lane",
+    "path": "unity/36-talents-ui"
   }
 ]
