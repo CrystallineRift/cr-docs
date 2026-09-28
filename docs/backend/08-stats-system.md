@@ -295,6 +295,7 @@ Defined in `CR.Stats.Data.Constants.StatKey`. Use these constants rather than in
 | `CreatureLevelKey(id)` | `"creature_level_{id:N}"` | Max | none until C2 |
 | `StatKey.LocationDiscoveredKey(key)` | `"location_discovered_{key}"` | Increment | `TrainerProgressionService.AwardAsync` — first-time gate per authored location |
 | `StatKey.SpeciesCapturedKey(baseCreatureId)` | `"species_captured_{id:N}"` | Increment | `TrainerProgressionService.AwardAsync` — first-time gate per species |
+| *(none yet)* | `"trainers_defeated_distinct"` | none until #1 C2 | `AchievementCriterionResolver` reads this key as a raw string literal for `AchievementCriterionType.DistinctTrainersDefeated` (16) — no `StatKey` constant and no writer exist yet, so this criterion never satisfies. See [Achievements](15-achievements.md) |
 
 `damage_healed_total` is **retired** (phase B): nothing produces heals server-side, so the constant is gone and
 no code writes it. Every key in this table is server-owned — see the stat-writer registry on

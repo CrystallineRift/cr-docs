@@ -10,7 +10,7 @@ Tabs: **Team | Bag | Storage | Quests | Map | Talents | Achievements | System**
 
 Every tab reads real data from domain services. Nothing on Team, Bag, Storage, Quests, Talents, or
 Achievements is mocked or hand-authored — see the Achievements tab section below for how its two seam
-readers are real adapters over existing services, not fakes, pending the Achievements v2 server phase.
+readers map the real v2 categories/criteria/points/board end to end.
 
 ## Files
 
@@ -564,27 +564,31 @@ authored categories, Statistics at the bottom), a Summary page (recent unlocks, 
 bars, a points shield), category pages with an earned-first achievement list, a criteria checklist per
 row, and a case-insensitive search across name/description.
 
-**Real data today, pending the Achievements v2 server phase.** `IAchievementCatalogReader` and
-`IAchievementBoardReader` are two Unity-only seam interfaces (same role `IWorldMapDiscoveryReader`/
-`ITalentProgressReader` play pre-server elsewhere in this menu), but — unlike those — both bindings are
-REAL adapters, not fakes:
+**Real v2 data, end to end.** `IAchievementCatalogReader` and `IAchievementBoardReader` are two Unity-only
+seam interfaces (same role `IWorldMapDiscoveryReader`/`ITalentProgressReader` play pre-server elsewhere in
+this menu) — both bindings are thin mappers over `IAchievementService`'s real categories, definitions,
+criteria and board:
 
-- `AchievementCatalogReader` wraps the existing `IAchievementService.GetAllDefinitionsAsync` — the same
-  authored achievements the old `JournalView` read directly. Every definition is filed under one shared
-  "General" category, given 0 points, and given exactly one criterion built from its legacy
-  `Threshold`/`TriggerType` (via `AchievementStatKeyMapper` + `StatKeyFormatter` for the label) — because
-  the `achievement_category`/`achievement_criterion` tables and the `points` column don't exist until
-  the Achievements v2 server phase (Phase A, see `docs/backend/15-achievements.md`) ships.
-- `AchievementBoardReader` wraps the existing `IAchievementService.GetUnlockedAsync` and
-  `IStatService.GetAllAsync` — both already readable with no server change — so the board shows this
-  trainer's REAL unlocks and REAL per-criterion progress. `AchievementBoardRead.TotalPoints` stays 0
-  because achievement points don't exist as a column yet.
+- `AchievementCatalogReader` wraps `IAchievementService.GetAllDefinitionsAsync`/`GetCategoriesAsync` — the
+  authored categories, points, and each achievement's real criteria list (no more single-"General"-category
+  folding or legacy threshold/trigger derivation — that interim behaviour is gone).
+- `AchievementBoardReader` wraps `IAchievementService.GetBoardAsync(trainerId)` — the authority-computed
+  board (see [Achievements → The board](?page=backend/15-achievements#the-board-getboardasync)), so
+  `AchievementBoardRead.TotalPoints` and every criterion's progress are the server's (or, offline, the
+  local domain service's) real numbers, not derived client-side from raw stats.
 
-`AchievementBoardProjection` (replaces `AchievementProgressCalculator`) turns the catalog + board into
-everything the tab renders: rail counts, per-category bars (hidden achievements never count toward a
-bar, earned or not — Feats-of-Strength-style categories get no bar at all), the 5 most recent unlocks,
-and search results. An achievement's criteria progress always comes from the board, never recomputed
-from raw stats.
+`IAchievementService` itself is the online/offline **router** for the board: online it's an HTTP read
+memoised in `IPlayerStateCache` under `CacheScope.AchievementBoard` (invalidated by the same battle/pickup/
+quest/item/capture/talk events `TrainerProgress` is); offline it calls the local
+`IAchievementDomainService.GetBoardAsync` DLL directly. A **fresh** online failure (nothing memoised yet)
+throws rather than falling back to a stale or fabricated board (Ruling R12) — `AchievementsView` shows a
+**Retry** button next to the usual `PlayerErrorText` message on that failure, and Retry re-runs
+`RenderAsync` for the same trainer/account.
+
+`AchievementBoardProjection` turns the catalog + board into everything the tab renders: rail counts,
+per-category bars (hidden achievements never count toward a bar, earned or not — Feats-of-Strength-style
+categories get no bar at all), the 5 most recent unlocks, and search results. An achievement's criteria
+progress always comes from the board, never recomputed from raw stats.
 
 **Statistics** (the rail's bottom entry, folds in the old Journal Records section) reads
 `IStatService.GetAllAsync` directly — the trainer's lifetime stat totals, alphabetically, with
@@ -599,10 +603,7 @@ string prefix, and their own relative order is alphabetical by slug — `battle`
 `StatKeyFormatter` (see [Pure logic](#pure-logic-cruilogic) below) formats every `quests_completed_cat_*`
 key as "{Category} quests completed" regardless of position.
 
-Once the Achievements v2 server phase ships the real category/criteria/points model and the
-`GET …/achievements/board` route, `IAchievementCatalogReader`/`IAchievementBoardReader` rebind to a
-GameData-backed catalog reader and the real online/offline board router — the tab's view code does not
-change. See `docs/backend/15-achievements.md`.
+See [Achievements](?page=backend/15-achievements) for the server-side model these readers surface.
 
 ## Pure logic (`CR.UI.Logic`)
 

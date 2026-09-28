@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026-09-27 — Achievements v2
+
+- **cr-api:** categories (`achievement_category`, one level of nesting), multi-criterion achievements
+  (`achievement_criterion`, `AchievementCriterionType` 0–16), `points`, `required_criteria_count` (N-of-M),
+  and meta chains (`AchievementEarned` criterion) replace the v1 single trigger/threshold model.
+  `IAchievementEvaluator` (`CR.Game.Model.Achievements`) evaluates every live, unearned achievement per
+  root call and repeats until nothing new unlocks; points pay as trainer XP
+  (`TrainerXpSource.AchievementEarned = 9`, a normal `trainer_xp_rule` row). New REST: `GET
+  /achievements/categories`, `PUT /achievements/bulk` (validated content push), `GET
+  /trainers/{id}/achievements/board` (authority-computed progress), admin `POST`/`DELETE
+  /admin/trainers/{id}/achievements/{contentKey}` (`AdminActionKind` 19/20, audited, idempotent grant).
+  Removed: the client-reported unlock POST and the query-param trainer GET. The admin dossier gains
+  `Achievements { TotalPoints, Earned[] }`. Migrations `M18001`–`M18007` (legacy triggers backfilled into
+  criteria; the five starter achievements seeded a category + 10 points, never overriding an authored
+  value; `M18007` Postgres-only back-fills `quest_completed_{key}` stats).
+- **Unity:** `IAchievementService` is now the online/offline router for the board itself (`CacheScope.
+  AchievementBoard`, fresh-failure-throws — Ruling R12, `AchievementsView` gets a Retry button), and
+  `Unlocked`/`ReportUnlocks` carry `AchievementUnlockNotice` (points included) instead of the legacy
+  definition type. The Achievements tab reads real categories/criteria/points/board end to end — the
+  interim single-"General"-category, zero-points lane is gone. The unlock toast shows a points shield
+  when `Points > 0`.
+- **Admin web:** new Content Studio resources **Achievement Categories** and **Achievements** (sync-all
+  against the bulk-push route, each excludes the other from its own prune), criterion/reward reference
+  pickers matching the resolver/reward-grant mapping, and a Player Dossier Achievements panel with
+  Grant/Revoke buttons.
+- See [Achievements](?page=backend/15-achievements) for the full model.
+
 ## 2026-09-27 — Quest categories
 
 - **cr-api:** `quest_template.category` (M17001, `QuestCategory`: Bonus 0, Main Story 1, Exploration 2, Battle 3, Talent 4)

@@ -11,7 +11,7 @@ the same cr-api DLLs over the player's local SQLite. Spec: `cr-api-unity/docs/su
 | Contract | `Game/CR.Game.Model/Progression/` — `ProgressOutcomeKind`, `ProgressOutcome`, `ProgressFacts`, `IProgressOutcomeSink`, `IProgressOutcomeHandler`, `ProgressReport` (+ `ProgressObjectiveDto`, `ProgressQuestDto`), `ProgressReportBuilder`, `ProgressOutcomeSinkExtensions.SafeRecordAsync`, `ProgressReportExtensions.MergedWith`; `Game/CR.Game.Model/Achievements/AchievementUnlockNotice`; `Game/CR.Game.Model/Npcs/INpcTalkService` |
 | Dispatcher | `Quests/CR.Quests.Domain.Services/Implementation/ProgressDispatcher.cs` — the one `IProgressOutcomeSink` |
 | Handlers | `LifetimeStatProjector` (order 100), `QuestObjectiveProjector` (order 200); 400+ reserved |
-| Achievement step | `IProgressAchievementStep` → `TriggerAchievementStep` (thin adapter over `AchievementDomainService` until sub-project #4 replaces it) |
+| Achievement evaluation | `CR.Game.Model.Achievements.IAchievementEvaluator` (optional ctor dep on `ProgressDispatcher`) → `AchievementDomainService.EvaluateAsync(accountId, trainerId, ct)`, called once per root call via `AchievementEvaluatorExtensions.SafeEvaluateAsync` — see [Achievements](15-achievements.md#evaluation) |
 | Counted keys | M16004 `quest_objective_counted_ref(quest_objective_progress_id, reference_key)` UNIQUE, back-filled from the legacy `counted_reference_ids` JSON (read-only; dropped in phase E) |
 | Talk intent | `Npcs/CR.Npcs.Domain.Services/Implementation/NpcTalkService.cs`, route `POST /api/v1/trainers/{trainerId}/npcs/{npcKey}/talk` |
 | Unity | `Assets/CR/Core/DI/ProgressBindings.cs` (offline dispatcher + talk), `Assets/CR/Npcs/Talk/` (talk client + router), `QuestManager.ApplyServerProgress` |
