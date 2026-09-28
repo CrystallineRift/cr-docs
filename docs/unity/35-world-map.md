@@ -5,11 +5,11 @@ discovered, where they are now, and which areas hold an active quest's "visit" t
 sends nothing to the authority and decides nothing: discovery is the server's outcome online, and the same
 domain DLLs' on local SQLite offline. The client only groups and draws it.
 
-> **Phase P1 (current).** The layout, Studio tooling, pure logic and the tab ship now. Discoveries come through
-> `IWorldMapDiscoveryReader`, which P1 binds to `EmptyWorldMapDiscoveryReader`, so every area reads "???"
-> except the one you stand in, and the header reads "Areas 0/6". Phase P2 binds the real reader over
-> sub-project 2's `GET /api/v1/trainers/{trainerId}/world-locations` (`CacheScope.LocationDiscoveries`) and
-> changes nothing else.
+> **P2 (current).** Discoveries are real: `IWorldMapDiscoveryReader` → `WorldMapDiscoveryReader`, reading the
+> same `GET /api/v1/trainers/{trainerId}/world-locations` (online) / DLL `IWorldLocationDiscoveryService`
+> (offline) the discovery registry reads, under the identical `CacheKey.Of(CacheScope.LocationDiscoveries,
+> trainerId)` — one memoised fetch answers both the map and the "Discovered:" toast. P1's stand-in,
+> `EmptyWorldMapDiscoveryReader` (every area "???", header "Areas 0/6"), is deleted.
 
 ## Where things live
 
@@ -22,7 +22,7 @@ domain DLLs' on local SQLite offline. The client only groups and draws it.
 | `Assets/CR/UI/WorldMap/Logic/` (`CR.UI.WorldMap.Logic`) | State builder, layout, navigator, quest targets, text, all unit-tested. |
 | `Assets/CR/UI/WorldMap/WorldMapTab.cs`, `WorldMapCanvas.cs` | The tab and its canvas. |
 | `Assets/CR/UI/Resources/WorldMapTab.uss` | Styles (CrTheme tokens only). |
-| `Assets/CR/Progression/IWorldMapDiscoveryReader.cs` | The discovery seam (P1: `EmptyWorldMapDiscoveryReader`). |
+| `Assets/CR/Progression/IWorldMapDiscoveryReader.cs`, `WorldMapDiscoveryReader.cs` | The discovery seam and its real (P2) implementation. |
 | `Assets/CR/Core/Data/Editor/WorldMapDefinitionEditor.cs`, `TrainerProgression/WorldMapTools.cs` | Inspector and tools. |
 
 ## Authoring
@@ -65,19 +65,23 @@ The header's total counts every node either way.
 ## Runtime
 
 - **Bindings** (`LocalDevGameInstaller`): `IWorldMapLayoutSource` → `ContentDefinitionWorldMapLayoutSource`
-  (the provider's SO); `IWorldMapDiscoveryReader` → `EmptyWorldMapDiscoveryReader` (P1). `PlayerMenuWindow`
+  (the provider's SO); `IWorldMapDiscoveryReader` → `WorldMapDiscoveryReader`. `PlayerMenuWindow`
   injects both, plus `AreaLoader`, **optionally**. Without them the tab says "The map isn't available yet." and the
   rest of the menu works.
 - **State**: an area is *Discovered* iff the read reports ≥1 discovered location in it, and *Current* comes from
   `AreaLoader.CurrentAreaKey` (display only: always named and marked, not counted). Everything else is *Unknown*
   ("???"). Keys compare trimmed and case-insensitive (`Meadow` / `meadow`). Location names come only from the
-  discovery read (null until discovered). The map never calls the content route `GET /api/v1/world-locations`.
+  discovery read (null until discovered). The map never calls the content route `GET /api/v1/world-locations`
+  directly — it reads through `WorldMapDiscoveryReader`, same as the discovery registry.
 - **Routes**: solid between two known areas, dashed from a known area to an unknown one, and not drawn between two
   unknown ones. Colours come from `--cr-map-edge` / `--cr-map-edge-unknown` through the canvas's
   `--map-edge-known` / `--map-edge-frontier` custom properties.
 - **Quest markers**: in-progress quests' uncompleted `VisitLocation` targets, minus the targets already counted,
-  mark the area the discovery read places that location in. With the P1 stand-in no location is placed, so no
-  marker shows until P2.
+  mark the area the discovery read places that location in.
+- **`Incomplete`**: true only when the trainer is online and the read fell back to the local cache after a
+  remote failure (`FreshSource.LocalAfterRemoteFailure`) — the map still renders that local snapshot rather
+  than an error, but flags it as possibly behind. Any other failure (not cancellation) returns
+  `WorldMapDiscoveryRead.Failed`, which the tab renders as its own error state, never a false all-"???" fog.
 - **Navigation**: one focusable button per area. The d-pad/stick picks the nearest area inside a 45° cone
   (`WorldMapNavigator`), and nothing in that direction keeps focus where it is. The bumpers change tab and B closes
   the menu, as everywhere. Focus starts on the current area. The detail pane follows focus.
@@ -88,11 +92,11 @@ The header's total counts every node either way.
 
 ## Troubleshooting
 
-- **Quest badges and the detail pane's "Locations n/m" line never appear in P1**: expected — the stand-in
-  reader reports zero locations for every area, so there is nothing to count and no location to place a
-  quest's `VisitLocation` target in. Both come back once P2 binds the real reader.
+- **Quest badges and the detail pane's "Locations n/m" line never appear**: the reader found zero
+  discovered locations for that area — either nothing has been discovered there yet, or the offline floor
+  lacks `world_location` rows (see below).
 - **An area never becomes discovered**: its scene has no Location Trigger (Validate shows "never discoverable").
-- **The whole map is "???" offline**: expected in P1 (stand-in reader). After P2 it means the offline floor lacks
+- **The whole map is "???" offline**: the offline floor lacks
   `world_location` (the Talents content seed has not been exported and rebaked). See
   [Trainer Progression in Unity](34-trainer-progression.md).
 - **No route lines**: `--map-edge-known` did not resolve. Check `WorldMapTab.uss` is in `Resources` and

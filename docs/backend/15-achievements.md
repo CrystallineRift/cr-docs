@@ -180,10 +180,13 @@ Seeded by `M7303SeedAchievements` (unchanged since v1) and assigned a category +
 | `questing_begins` | Quests | 10 | QuestsCompleted ≥ 1 | Item (heal potion) |
 
 Since trainer progression (2026-09-26) wired the Talents domain, `explorer`'s mapped stat
-(`locations_visited_total`) is written by `TrainerProgressionService.AwardAsync`, not by
-`QuestDomainService` directly — only for a genuine, first-time discovery of an *authored*
-`world_location`. See [Trainer Progression — Effect on "locations visited"
-counting](22-trainer-progression.md#effect-on-locations-visited-counting) for the detail.
+(`locations_visited_total`) is no longer written by `QuestDomainService` directly. It is now (Location
+Discoveries v2) a pure `LifetimeStatProjector` projection of the `LocationEntered` outcome's
+`Facts[FirstTime]`, gated by the `trainer_location_discovery` ledger — one increment per authored
+`world_location`, ever, per trainer. See [Location Discoveries](24-location-discoveries.md) and
+[Trainer Progression — Effect on "locations visited"
+counting](22-trainer-progression.md#effect-on-locations-visited-counting-superseded-see-location-discoveries-v2)
+for the detail.
 
 ## Admin grant / revoke and the dossier (spec §8.4)
 

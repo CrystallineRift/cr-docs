@@ -33,7 +33,8 @@ the same cr-api DLLs over the player's local SQLite. Spec: `cr-api-unity/docs/su
 | `ItemUsed`, `KeyItemActivated` | `ItemUseDomainService` | consume + effect succeeded |
 | `NpcTalked` | `NpcTalkService` | key validated; FirstTime when `npc_met_{key}` goes 0 → 1 |
 | `QuestCompleted` | `QuestObjectiveProjector` | the completion compare-and-set (InProgress → Completed, 1 row) |
-| `BattleWon`, `CreatureDefeated`, `TrainerDefeated`, `LocationEntered` | the compat route `POST /api/v1/quests/progress` (until C2 / sub-project #2 own them) | the old client's report, `Amount` forced to 1 |
+| `BattleWon`, `CreatureDefeated`, `TrainerDefeated` | the compat route `POST /api/v1/quests/progress` (until C2 owns them) | the old client's report, `Amount` forced to 1 |
+| `LocationEntered` | `LocationEntryService.EnterAsync` (BFF `POST .../world-locations/enter`, or forwarded from `POST /api/v1/quests/progress`) | a genuine `world_location` entry (`Facts[FirstTime]` set on first discovery); see [Location Discoveries](?page=backend/24-location-discoveries) |
 
 ## Outcome → derived writes
 
@@ -47,7 +48,7 @@ the same cr-api DLLs over the player's local SQLite. Spec: `cr-api-unity/docs/su
 | ItemCollected | `items_collected_total` +Quantity | CollectItem (+Quantity) |
 | ItemUsed / KeyItemActivated | — (`items_used_*` is `ItemUseDomainService`'s own record) | UsedItem / ActivateKeyItem (target = item content key) |
 | NpcTalked | `npcs_talked_to_total` +1 **only on FirstTime** (distinct NPCs) | TalkToNpc (distinct keys per quest instance) |
-| LocationEntered | — (`TrainerProgressionService` writes the location stats until #2) | VisitLocation (distinct keys per quest instance) |
+| LocationEntered | `locations_visited_total` +1, `location_discovered_{key}` MAX 1 — both only on `Facts[FirstTime]` | VisitLocation (distinct keys per quest instance) |
 | QuestCompleted | `quests_completed` +1, `quest_completed_{key}` +1 — at completion, not claim | CompleteQuest (target = quest content key) |
 
 Counting: additive objectives use a clamped atomic `UPDATE … CASE WHEN current_count + @n >= @target …`;
@@ -59,7 +60,7 @@ visit objective must have Count 1 (the template route answers 400 `invalid_objec
 ## The compat route `POST /api/v1/quests/progress`
 
 Kept for shipped clients until phase E. Reportable: `WinBattles`, the six defeat types (until C2),
-`VisitLocation` (until #2 forwards it), `TalkToNpc` (forwarded to `NpcTalkService`; an unknown key answers 200
+`VisitLocation` (forwarded to `LocationEntryService.EnterAsync`), `TalkToNpc` (forwarded to `NpcTalkService`; an unknown key answers 200
 with nothing counted). The specific and list defeat events count nothing — the "any" event every shipped client
 also sends becomes the one outcome. Every other type answers **400 `server_derived`**.
 
@@ -70,10 +71,10 @@ scan of every production stat write). Adding a writer means adding its row there
 
 | Key | Sole writer |
 |---|---|
-| `battles_won`, `battles_lost`, `creatures_defeated_total`, `trainers_defeated_total`, `creatures_captured_total`, `items_collected_total`, `npcs_talked_to_total`, `quests_completed`, `quest_completed_{key}` | `LifetimeStatProjector` |
+| `battles_won`, `battles_lost`, `creatures_defeated_total`, `trainers_defeated_total`, `creatures_captured_total`, `items_collected_total`, `npcs_talked_to_total`, `quests_completed`, `quest_completed_{key}`, `locations_visited_total`, `location_discovered_{key}` | `LifetimeStatProjector` |
 | `npc_met_{key}` | `NpcTalkService` |
 | `trainer_xp` | `TrainerProgressionService` (and `RewardGrantService`'s raw fallback when Talents is not wired) |
-| `trainer_level`, `species_captured_{id}`, `locations_visited_total`, `location_discovered_{key}` | `TrainerProgressionService` (the two location keys move to the projector with #2) |
+| `trainer_level`, `species_captured_{id}` | `TrainerProgressionService` |
 | `items_used_total`, `items_used_{key}` | `ItemUseDomainService` |
 | `exp_share_bonus_percent` | `IncreaseExpShareHandler` |
 | `stat_perm_boost_{stat}` | `BoostStatPermHandler` |

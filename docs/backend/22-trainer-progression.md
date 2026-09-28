@@ -10,14 +10,16 @@ level from 2 grants a talent point (spent from Phase 2). Spec: `cr-api-unity/doc
 | Contracts | `Game/CR.Game.Model/Progression/` — `ITrainerProgressionService`, `TrainerProgress`, `TrainerProgressResult`, `TrainerXpAward`, `TrainerXpSource`, `TrainerModifiers`, `ITrainerModifierProvider`, `TrainerProgressTracker`, `TalentEffectType` |
 | Domain | `Talents/` — `CR.Talents.Data(.Sqlite/.Postgres/.Migration/.Migration.Postgres)`, `.Domain.Services` (`TrainerProgressionService`, `TrainerLevelCurve`, `TrainerXpRuleMath`, `TrainerProgressionContentValidation`, `NoTalentModifierProvider`), `.Model.REST`, `.Service.REST` |
 | Connection string | `TalentDatabase`; when the key is absent the API uses the `StatDatabase` connection string and logs `[startup] ConnectionStrings:TalentDatabase is not set; …` once (`TalentDatabaseFallbackExtensions`, `CR.REST.AIO`) |
-| Migrations | M15001 `world_location`, M15002 `trainer_level_requirement` (+ L1–30 seed), M15003 `trainer_xp_rule` (+ 6 rules). The floor seed (M15004 at first export) is **not shipped yet** — see [Offline floor](#offline-floor) |
+| Migrations | M15001 `world_location`, M15002 `trainer_level_requirement` (+ L1–30 seed), M15003 `trainer_xp_rule` (+ 6 rules), M15010 `world_location.discovery_xp`/`discovery_quest_key`, M15011 `trainer_location_discovery` (the discovery ledger). The floor seed (M15004 at first export) is **not shipped yet** — see [Offline floor](#offline-floor) |
 
 ## Data
 
 - `trainer_level_requirement(level UNIQUE, required_xp)` — cumulative XP per level; seed `40·(L−1)² + 60·(L−1)` (L2 100, L5 880, L10 3,780, L20 15,580, L30 35,380). Cap = highest live level.
 - `trainer_xp_rule(source_key UNIQUE, base_xp, multiplier, low_level_threshold?, low_level_factor?)` — `source_key` is a rule-driven `TrainerXpSource` name. Amount = `round(base × units × multiplier)`, × factor when `trainerLevel − opponentLevel ≥ threshold`.
-- `world_location(content_key UNIQUE, name, area_key)` — only these keys earn discovery XP.
-- XP lives in the `trainer_xp` stat; `trainer_level` is a display/achievement high-water mark: grants raise it with `MaxAsync` and `GetProgressAsync` repairs it **up** only — a read never lowers it (its XP and level reads are not synchronised, so a down-repair could undo a concurrent level-up). The one write that lowers it is an admin take-back, which `SetAsync`s the level derived from its own post-increment total. First-time checks are per-key stats: `location_discovered_{key}`, `species_captured_{baseCreatureId:N}` (`IStatService.IncrementAsync` returns the value after; 1 = first).
+- `world_location(content_key UNIQUE, name, area_key, discovery_xp?, discovery_quest_key?)` — only these
+  keys earn discovery XP; the last two columns (M15010) override the flat rule amount and grant a one-time
+  quest — see [Location Discoveries](?page=backend/24-location-discoveries).
+- XP lives in the `trainer_xp` stat; `trainer_level` is a display/achievement high-water mark: grants raise it with `MaxAsync` and `GetProgressAsync` repairs it **up** only — a read never lowers it (its XP and level reads are not synchronised, so a down-repair could undo a concurrent level-up). The one write that lowers it is an admin take-back, which `SetAsync`s the level derived from its own post-increment total. First-time capture checks are the per-key stat `species_captured_{baseCreatureId:N}` (`IStatService.IncrementAsync` returns the value after; 1 = first); the location-discovery equivalent moved off a stat flag onto the `trainer_location_discovery` ledger (M15011) — `location_discovered_{key}` is now a projection, not a gate.
 - Seeds are insert-if-absent: re-running never overwrites an admin edit.
 - These four keys — `trainer_xp`, `trainer_level`, `location_discovered_{key}`, `species_captured_{id:N}` — are **server-owned**: the player-facing stat write routes (`POST /api/v1/stats/increment|max|set`) refuse them with `403 Forbidden` (`ServerOwnedStatKeys.Contains`, matched trimmed and case-insensitively by exact name or prefix). The write routes also refuse any key with leading or trailing whitespace (`400`), since a padded key would be stored as its own row nobody reads. Only server-side code writes them, through the progression funnel or the admin XP grant — never a client stat call. See [Stats and Lifetime Tracking](?page=backend/08-stats-system).
 
@@ -28,7 +30,7 @@ level from 2 grants a talent point (spent from Phase 2). Spec: `cr-api-unity/doc
 | Reward (quest, achievement, loot, pickup reward lists) | `RewardGrantService` → `GrantXpAsync(Reward)` | as authored | — | the owner's one-time transition |
 | Wild / trainer win | `BattleDomainService` on the winning action | `BattleRewardScaling.ExperienceForDefeatedLevel(final KO level)` | 1 × 1.0 (1.5 trainer), guard 10 / 0.25 | battle row → Ended |
 | Capture (+ first of species) | `CaptureAttemptService` after the ownership transition | creature level | 10 (+50) | the creature is no longer wild |
-| Location discovered | `QuestDomainService.RecordProgressEventAsync` on `VisitLocation` | 1 | 25 | `location_discovered_{key}` must be 1; unknown keys earn 0 |
+| Location discovered | `LocationEntryService.EnterAsync` (via the BFF `.../world-locations/enter` route, or forwarded from `POST /api/v1/quests/progress`) | 1 | 25, or the location's own `discovery_xp` override | the discovery ledger's per-trainer, per-location `xp_awarded` claim; unknown keys earn 0 — see [Location Discoveries](?page=backend/24-location-discoveries) |
 | Pickup collected | `PickupDomainService.CollectAsync` after the claim | 1 | 5 | pickup_collected claim |
 
 XP never fails the owning operation:
@@ -61,28 +63,18 @@ A refused content write answers 400 `{ message, problems[] }` and writes nothing
 
 **Not shipped yet — no floor-seed migration exists in cr-api today.** Offline play runs on the M15002/M15003 defaults and has no world locations until one is exported. The migration (`M<version>SeedTalentContent_<date>`, version = repository max + 1, so `M15004SeedTalentContent_<date>` at the first export) is written by Crystalline Rift Studio (Trainer Progression → Export floor seed, or `cr_talent_content_export_seed`): locations from the Studio catalog (insert-if-absent, both engines, authored ids), the curve and rules copied from the configured server (SQLite only — Postgres is their source). The export needs a Studio content key for the server it reads (Local or Production). Rebake with `build-packages.sh`; `GameDataAdopter` re-adopts by content hash. The generator's exact output is executed on SQLite and Postgres by `CR.Data.Migrations.Test/TalentContentSeedGeneratedSql*Tests` (sample in `TalentSeedSample/`, regenerate it when the template changes).
 
-## Effect on "locations visited" counting
+## Effect on "locations visited" counting (superseded — see Location Discoveries v2)
 
-Wiring Talents changes what counts toward the `locations_visited_total` lifetime stat (and so the
-`explorer` achievement, see [Achievements](?page=backend/15-achievements)): `QuestDomainService` now defers that
-increment to `TrainerProgressionService.AwardAsync`, which writes it **only for a genuine first-time
-discovery of an authored `world_location`** — a repeat visit or an unauthored `referenceId` earns
-nothing. Before this, every `VisitLocation` event counted, so a player who revisited an already-known
-location or triggered an unauthored key had an inflated total. **There is no recount and no backfill:**
+**Current behavior:** the discovery gate is the `trainer_location_discovery` ledger, not a stat flag.
+`locations_visited_total` and `location_discovered_{key}` are pure projections of the `LocationEntered`
+outcome (`LifetimeStatProjector`), written **only for a genuine first-time discovery of an authored
+`world_location`** — a repeat visit or an unauthored key earns nothing and writes nothing. See
+[Location Discoveries](?page=backend/24-location-discoveries) for the ledger, the XP/quest claims and the
+idempotency rules; `TrainerProgressionService.AwardAsync` no longer holds a location gate or a stat write
+at all — both were deleted in that change, along with the flag-rollback logic this section used to describe.
 
-- An existing player's old, inflated `locations_visited_total` stays as it is; it only grows from there.
-- `location_discovered_{key}` has no backfill either, so every authored place a player visited *before*
-  this release counts as a first discovery on their first revisit: +25 XP (the `LocationDiscovered`
-  rule) and +1 to `locations_visited_total`, once per place.
-
-The count is written right after the discovery flag, **before and independent of** the XP grant, and
-everything after the flag commits ignores request cancellation: a failed or missing `LocationDiscovered`
-rule never drops a genuine discovery's count (the award returns null). If the count write itself fails, the
-flag is rolled back (`-1`, logged) so the next visit is still a first visit and counts it — exactly once per
-authored key.
-
-If `ITrainerProgressionService` isn't
-wired at all, `QuestDomainService` falls back to the old raw per-event increment.
+There was never a recount or backfill across that change: the game is not live, so there are no legacy
+raw-counted players to repair.
 
 ## Deploy prerequisites
 
@@ -97,20 +89,27 @@ wired at all, `QuestDomainService` falls back to the old raw per-event increment
 
 ## Admin web (World Locations)
 
-The cr-admin-web **World Locations** editor is for reading the server's locations and tweaking names
-only. The Studio's **Push locations** writes the whole catalog with `replace: true`: it retires every
-row the catalog doesn't name — a location created in the admin editor is gone on the next Studio
-push — and writes the catalog's names over any admin rename. Add, rename or retire locations in the
-Studio catalog; an admin tweak is a stopgap until the next push.
+The cr-admin-web **World Locations** editor reads the server's locations and can tweak names,
+`discoveryXp` (number, blank/NaN → "use rule default") and `discoveryQuestKey` (a quest picker, by
+content key) — never `area_key`, which is authored only. The Studio's **Push locations** writes the
+whole catalog with `replace: true`: it retires every row the catalog doesn't name — a location created
+in the admin editor is gone on the next Studio push — and writes the catalog's values (name, XP, quest
+key) over any admin edit. Add, rename or retire locations in the Studio catalog; an admin tweak is a
+stopgap until the next push, or until it is pulled back into the catalog (Studio "Pull tuning from
+server" — see [Location Discoveries — Admin / authoring](?page=backend/24-location-discoveries#admin-authoring)).
 
 ## Pitfalls
 
 - A tuning change on the server reaches offline play only after export + rebake + a client build.
 - Never tune by editing M15002/M15003: their seeds are insert-if-absent and change nothing on an existing DB.
 - The exporter copies the server the Studio points at — Local copies local values.
-- **Never retire the `LocationDiscovered` or `CaptureFirstSpecies` rows from `trainer_xp_rule` while
-  live.** The first-time marker (`location_discovered_{key}` / `species_captured_{id:N}`) is written
-  by `AwardAsync` **before** the XP grant, as the gate that makes the award at-most-once. If the rule
-  is missing (or removed) when a player crosses that first-time moment, the marker is still written,
-  the grant silently no-ops (a location discovery still counts toward `locations_visited_total`), and that player's discovery/first-capture bonus is gone for good — there
-  is no second chance, because the marker already reads as "already awarded."
+- **Never retire the `CaptureFirstSpecies` row from `trainer_xp_rule` while live.** The first-time marker
+  (`species_captured_{id:N}`) is written **before** the XP grant, as the gate that makes the award
+  at-most-once. If the rule is missing (or removed) when a player crosses that first-time moment, the
+  marker is still written, the grant silently no-ops, and that player's first-capture bonus is gone for
+  good — there is no second chance, because the marker already reads as "already awarded." The location
+  equivalent has the same shape but a different gate: the `trainer_location_discovery.xp_awarded` claim
+  (not `location_discovered_{key}`) is what flips at-most-once — see
+  [Location Discoveries — Idempotency](?page=backend/24-location-discoveries#idempotency). Retiring the
+  `LocationDiscovered` rule (or leaving a location's `discovery_xp` unset with no rule) loses that
+  discovery's XP the same way, permanently, once the claim wins.

@@ -120,6 +120,11 @@
     "path": "backend/23-progress-dispatcher"
   },
   {
+    "section": "Backend",
+    "title": "Location Discoveries v2 (per-location XP, discovery quests, the ledger)",
+    "path": "backend/24-location-discoveries"
+  },
+  {
     "section": "Introduction",
     "title": "Changelog",
     "path": "changelog"

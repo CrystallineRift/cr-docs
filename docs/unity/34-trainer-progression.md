@@ -8,6 +8,43 @@
 - **Reading**: `ITrainerProgressReader` (`TrainerProgressReader`) — the server's `GET …/progression` memoised online (invalidated by BattleClosed, QuestClaimed, QuestProgressRecorded, PickupCollected, CreatureCaptured and every report), the DLL service offline. `PlayerTeamView` shows the derived level and an XP bar (`TrainerXpBar`: "EXP 45/180 to Lv. 3" / "MAX LEVEL").
 - **Level requirements** in dialogue (`progress.requirement` kind `TrainerLevel`) derive from `trainer_xp` through the DLL `ConditionEvaluator`.
 
+## Location discoveries (`Assets/CR/Progression/Discovery/`)
+
+Entering a location is an intent, resolved the same way online and offline (see
+[Location Discoveries](?page=backend/24-location-discoveries)):
+
+- **`ILocationEntryClient`/`LocationEntryClientUnityHttp`** — online transport: `POST` the BFF's
+  `.../world-locations/enter`, `GET .../world-locations` for the discovery list. Its own private request
+  DTO, since the server's `EnterWorldLocationRequest` lives in a BFF-only project.
+- **`ILocationEntryRouter`/`LocationEntryOnlineOfflineRouter`** — the online/offline seam. Online: calls the
+  client, applies a granted quest instance (`ApplyUpdatedInstance` + `OnQuestAccepted`), and invalidates
+  `CacheScope.LocationDiscoveries` unless the status is `UnknownLocation`. Offline: calls the DLL
+  `ILocationEntryService` over local SQLite. Both paths call `IDiscoveredLocationRegistry.Record` only on a
+  fresh `Discovered` status — a revisit never re-records or re-invalidates.
+- **`IDiscoveredLocationRegistry`/`DiscoveredLocationRegistry`** — memoises the trainer's discoveries
+  (`IPlayerStateCache`, `CacheScope.LocationDiscoveries`, keyed off `IGameSessionService.CurrentTrainerId`)
+  and raises a guarded, multi-subscriber `Discovered` event (a throwing subscriber never stops the others).
+  `WorldMapDiscoveryReader` reads the **same** cache key, so one fetch answers both the map and the
+  discovery toast.
+- **`QuestManager.OnLocationVisited`** sends the enter intent through `ILocationEntryRouter` (after the same
+  session-admission wait `RecordProgress` uses); `GrantedQuest != null` applies the instance and toasts
+  before `ApplyServerProgress(result.Progress)` runs unconditionally — replacing the old
+  `RecordProgress(VisitLocation, ...)` call with no double count.
+- **`ToastKind.Discovery`/`DiscoveryToastAdapter`** shows "Discovered: {name}" off the registry's
+  `Discovered` event, same shape as `AchievementUnlockToastAdapter`.
+- `GameChange.LocationEntered` invalidates `ActiveQuests, TrainerProgress, Stats, LocationDiscoveries,
+  AchievementBoard`.
+- **Discovery XP / discovery quest authoring** — each catalog row's drawer (`WorldLocationEntryDrawer`, both
+  the catalog inspector and the Studio Trainer Progression tab) has a "Use rule default" XP toggle and a
+  quest picker (`ContentPicker.Quests()`); `TrainerProgressionEditorSyncHelper.PushLocations` carries both
+  fields, and "⬇ Pull tuning from server" / `cr_world_locations_pull` copies name/XP/quest key back from the
+  server into the catalog (never adds or removes rows). See the `cr-world-locations` skill's "Discovery XP
+  override and discovery quest" section, and [Location Discoveries — Admin /
+  authoring](?page=backend/24-location-discoveries#admin-authoring).
+- **World map** — `WorldMapDiscoveryReader` (real, replacing the P1 `EmptyWorldMapDiscoveryReader` stand-in)
+  answers both `IWorldMapDiscoveryReader` and the discovery registry from one memoised read; see
+  [World Map](35-world-map.md).
+
 ## Authoring (Crystalline Rift Studio → WORLD → Trainer Progression)
 
 1. Place a `LocationTriggerBehaviour` in an area scene and set `_locationContentKey`.

@@ -289,11 +289,11 @@ Defined in `CR.Stats.Data.Constants.StatKey`. Use these constants rather than in
 | `QuestCompletedKey(key)` | `"quest_completed_{key}"` | Increment | `LifetimeStatProjector` on `QuestCompleted` (key trimmed, lower-case) |
 | `NpcsTalkedToTotal` | `"npcs_talked_to_total"` | Increment | `LifetimeStatProjector` on the **first** talk to each NPC (distinct NPCs) |
 | `NpcMetKey(key)` | `"npc_met_{key}"` | Increment | `NpcTalkService` — per-NPC talk counter; 1 = first talk |
-| `LocationsVisitedTotal` | `"locations_visited_total"` | Increment | `TrainerProgressionService.AwardAsync` on a first authored discovery (moves to the projector with sub-project #2) |
+| `LocationsVisitedTotal` | `"locations_visited_total"` | Increment | `LifetimeStatProjector` on `LocationEntered`, `Facts[FirstTime] == true` only |
 | `HighestCreatureLevel` | `"highest_creature_level"` | Max | none until C2 |
 | `TrainerLevel` | `"trainer_level"` | Set/Max | `TrainerProgressionService` (see [Trainer Progression](?page=backend/22-trainer-progression)) |
 | `CreatureLevelKey(id)` | `"creature_level_{id:N}"` | Max | none until C2 |
-| `StatKey.LocationDiscoveredKey(key)` | `"location_discovered_{key}"` | Increment | `TrainerProgressionService.AwardAsync` — first-time gate per authored location |
+| `StatKey.LocationDiscoveredKey(key)` | `"location_discovered_{key}"` | Max 1 | `LifetimeStatProjector` on `LocationEntered` — a **projection**, not a gate; the real first-time gate is the `trainer_location_discovery` ledger, see [Location Discoveries](?page=backend/24-location-discoveries) |
 | `StatKey.SpeciesCapturedKey(baseCreatureId)` | `"species_captured_{id:N}"` | Increment | `TrainerProgressionService.AwardAsync` — first-time gate per species |
 | *(none yet)* | `"trainers_defeated_distinct"` | none until #1 C2 | `AchievementCriterionResolver` reads this key as a raw string literal for `AchievementCriterionType.DistinctTrainersDefeated` (16) — no `StatKey` constant and no writer exist yet, so this criterion never satisfies. See [Achievements](15-achievements.md) |
 
@@ -396,8 +396,11 @@ The three write routes (`increment`, `max`, `set`) additionally refuse **server-
 `403 Forbidden`, checked before the ownership lookup: `trainer_xp`, `trainer_level`, and any
 `location_discovered_*` / `species_captured_*` key (`ServerOwnedStatKeys.Contains`, trimmed,
 case-insensitive, exact match or prefix). Before that, a key with leading or trailing whitespace is
-refused with `400` — it would be stored as its own row that no reader looks up. These four feed trainer progression's level derivation and its first-time XP gates — see
-[Trainer Progression](?page=backend/22-trainer-progression) — and only server-side code (the
+refused with `400` — it would be stored as its own row that no reader looks up. These four feed trainer
+progression's level derivation and `species_captured_*`'s first-time XP gate; `location_discovered_*` is
+now a projection of the `trainer_location_discovery` ledger, not a gate itself — see
+[Trainer Progression](?page=backend/22-trainer-progression) and
+[Location Discoveries](?page=backend/24-location-discoveries) — and only server-side code (the
 progression funnel, the admin XP grant) may write them; a player client has no legitimate reason to
 call these routes with those keys.
 

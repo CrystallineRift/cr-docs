@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026-09-27 — Location Discoveries v2
+
+- **cr-api:** `world_location` gains `discovery_xp` (M15010, null → the flat `LocationDiscovered` rule, 0
+  pays nothing) and `discovery_quest_key` (a quest granted once on first discovery). New
+  `trainer_location_discovery` ledger (M15011, `UNIQUE(trainer_id, location_key)`, insert-if-absent gate) —
+  the per-trainer, per-location first-discovery gate replaces the old `location_discovered_{key}` stat flag
+  entirely; that stat and `locations_visited_total` are now pure `LifetimeStatProjector` projections of a new
+  `LocationEntered` outcome. New orchestrator `LocationEntryService.EnterAsync` (`CR.Game.Domain.Services`):
+  claims the ledger, awards XP, grants the discovery quest (`IQuestDomainService.GrantQuestAsync`, now
+  returning `(Instance, Created)`), and emits `LocationEntered`. New player routes `POST
+  /api/v1/trainers/{trainerId}/world-locations/enter` and `GET .../world-locations`; the compat route `POST
+  /api/v1/quests/progress` with `VisitLocation` now forwards into the same orchestrator instead of the old
+  Talents-only path. → [Location Discoveries](?page=backend/24-location-discoveries)
+- **Unity:** `Assets/CR/Progression/Discovery/` — `ILocationEntryRouter` (online/offline), the online HTTP
+  client, and `IDiscoveredLocationRegistry` (memoised discoveries, a "Discovered: {name}" toast).
+  `QuestManager.OnLocationVisited` sends the enter intent through the router instead of the old
+  `RecordProgress` call. `WorldLocationEntryDrawer` (Studio catalog + Trainer Progression tab) authors
+  `discoveryXp`/`discoveryQuestKey` per location, with a server pull (`cr_world_locations_pull`) and a
+  push/pull drift line. New Content Audit rules for a missing or repeatable discovery quest, and for a
+  `VisitLocation` target outside the catalog (now a picker, not free text). World Map's P2 lands:
+  `WorldMapDiscoveryReader` replaces the P1 `EmptyWorldMapDiscoveryReader` stand-in, reading the same cache
+  key the discovery registry does. → [Trainer Progression in Unity](?page=unity/34-trainer-progression),
+  [Runtime Content Sync](?page=unity/27-content-sync), [World Map](?page=unity/35-world-map)
+
 ## 2026-09-27 — Achievements v2
 
 - **cr-api:** categories (`achievement_category`, one level of nesting), multi-criterion achievements

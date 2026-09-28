@@ -1694,7 +1694,31 @@
       ],
       "cr-data": []
     },
-    "description": "Trainer progression Phase 1: Talents domain (world_location, trainer_level_requirement, trainer_xp_rule, M15001-M15004), the XP funnel and sources, derived level readers, trainerProgress on results, routes, admin XP grant, floor seed, TalentDatabase connection string (falls back to StatDatabase)"
+    "description": "Trainer progression: Talents domain (world_location, trainer_level_requirement, trainer_xp_rule, trainer_location_discovery ledger, M15001-M15003 + M15010-M15011), the XP funnel and sources, derived level readers, trainerProgress on results, routes, admin XP grant, floor seed, TalentDatabase connection string (falls back to StatDatabase); location discovery XP/quest and the ledger gate now live in backend/24-location-discoveries"
+  },
+  "backend/24-location-discoveries": {
+    "docPath": "docs/backend/24-location-discoveries.md",
+    "repos": {
+      "cr-api": [
+        "Talents/**/*Discovery*.cs",
+        "Talents/CR.Talents.Data.Migration/M15010AddWorldLocationDiscoveryRewards.cs",
+        "Talents/CR.Talents.Data.Migration/M15011CreateTrainerLocationDiscoveryTable.cs",
+        "Game/CR.Game.Model/Exploration/**/*.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Exploration/**/*.cs",
+        "Game/CR.Game.Domain.Services/Interfaces/Exploration/**/*.cs",
+        "Game/CR.Game.Domain.Services/Models/Exploration/**/*.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/WorldLocationEntryEndpoints.cs",
+        "Convenience/CR.Api.IntegrationTests/WorldLocationEntryHttpTests.cs"
+      ],
+      "cr-data": [
+        "Assets/CR/Progression/Discovery/**/*.cs",
+        "Assets/CR/Progression/WorldMapDiscoveryReader.cs",
+        "Assets/CR/Core/Data/Editor/TrainerProgression/WorldLocationEntryDrawer.cs",
+        "Assets/CR/Core/Data/Logic/WorldLocationTuningSync.cs",
+        "Assets/CR/Core/Data/Logic/LocationDiscoveryAudit.cs"
+      ]
+    },
+    "description": "Location Discoveries v2: world_location discovery_xp/discovery_quest_key (M15010), trainer_location_discovery ledger (M15011), WorldLocationDiscoveryService, the LocationEntryService orchestrator, discovery quest grant (GrantQuestAsync Created flag), enter/discoveries routes, idempotency table, VisitLocation forwarding, Unity discovery router/registry/toast, WorldMapDiscoveryReader (P2), Studio pull/drift and content audit rules"
   },
   "backend/23-progress-dispatcher": {
     "docPath": "docs/backend/23-progress-dispatcher.md",
@@ -1741,7 +1765,7 @@
         "Assets/CR/UI/PlayerTeamView.cs"
       ]
     },
-    "description": "Unity trainer progression: DLL bindings, trainerProgress reporting + level-up toast, TrainerProgress cache scope and reader, XP bar, Studio Trainer Progression tab (scan/push/export), CLI commands"
+    "description": "Unity trainer progression: DLL bindings, trainerProgress reporting + level-up toast, TrainerProgress cache scope and reader, XP bar, Studio Trainer Progression tab (scan/push/export/pull), CLI commands, location-discovery router/registry/toast and the world-map discovery reader (see backend/24-location-discoveries)"
   },
   "unity/35-world-map": {
     "docPath": "docs/unity/35-world-map.md",
@@ -1759,7 +1783,7 @@
         "Assets/CR/Content/Defs/WorldMap/**"
       ]
     },
-    "description": "World map: client-only WorldMapDefinition (nodes, routes, art addresses, unknown-area switch), Studio scan/validate/fix tooling and CLI, CR.UI.WorldMap.Logic (state builder, layout, navigator, quest targets), the player menu Map tab and canvas, the discovery reader seam (P1 empty stand-in)"
+    "description": "World map: client-only WorldMapDefinition (nodes, routes, art addresses, unknown-area switch), Studio scan/validate/fix tooling and CLI, CR.UI.WorldMap.Logic (state builder, layout, navigator, quest targets), the player menu Map tab and canvas, the discovery reader seam (P2: real WorldMapDiscoveryReader over the shared LocationDiscoveries cache)"
   },
   "unity/36-talents-ui": {
     "docPath": "docs/unity/36-talents-ui.md",

@@ -185,7 +185,10 @@ once per won CAS, never at claim. See [Stats](08-stats-system.md) and [Achieveme
 **Authoring.** Categories are set on the `QuestDefinition` SO (Category dropdown, and an Area popup over the World Location
 Catalog's area keys) and pushed by Crystalline Rift Studio. The Studio Quests tab filters by category. Admin web edits both (Category
 select, free-text Area key). The Content Audit window reports `quest-area-unknown` for an area key no catalog location
-uses.
+uses. A `VisitLocation` objective's target is likewise picked from `ContentPicker.WorldLocations()` (a
+`QuestDefinitionEditor` popup, never free text) — a target missing from the catalog fires the separate
+`visit-location-target-uncatalogued` audit rule, since the authority advances nothing for a key it cannot
+resolve; see [Location Discoveries](?page=backend/24-location-discoveries).
 
 **Supersedes checklist step 0b's `quest_kind`.** Main Story means "main", and every other category is a side quest. Only
 `quest_line` / `line_step` remain planned.
@@ -739,8 +742,12 @@ public class QuestProgressEvent
 Progress is derived by the server from outcomes it produced — see [Progress Dispatcher](?page=backend/23-progress-dispatcher).
 `POST /api/v1/quests/progress` survives only for shipped clients: `WinBattles`, `DefeatAnyCreature` and
 `DefeatAnyTrainer` become one outcome each through the dispatcher; the specific and list defeat events count
-nothing (the "any" event carries the deed); `VisitLocation` awards discovery XP and emits `LocationEntered`;
-`TalkToNpc` is forwarded to the talk intent (`NpcTalkService`). Every other type is **400 `server_derived`** —
+nothing (the "any" event carries the deed); `VisitLocation` is forwarded (`ForwardVisitLocationAsync`,
+mirroring `ForwardTalkAsync`) to `LocationEntryService.EnterAsync`, the same orchestrator the BFF
+`POST .../world-locations/enter` route calls — it claims the discovery ledger, awards per-location XP (a
+flat rule amount or the location's own override), grants a discovery quest if one is authored, and emits
+`LocationEntered` — see [Location Discoveries](?page=backend/24-location-discoveries); `TalkToNpc` is
+forwarded to the talk intent (`NpcTalkService`). Every other type is **400 `server_derived`** —
 captures, collected items, item use and quest completion are produced server-side. `quests_completed` is counted
 when the quest **completes** (the completion compare-and-set), not when its rewards are claimed; a claim carries
 no achievement unlocks. Talk and visit objectives count **distinct** keys per quest instance, and a targeted

@@ -271,6 +271,24 @@ Three files in that project are worth knowing by name:
   The client whitelists against that comment.
 - A first-run bulk pull has no progress indication.
 
+## World locations: catalog is the source of truth, tuning pulls back (2026-09-27)
+
+Unlike the domains above, world locations do not go through `ServerContentSyncService`'s pull-and-reconcile
+loop at all. The Studio's **WorldLocations.asset** catalog is the authored source of truth for the whole
+row (key, area, name, `discoveryXp`, `discoveryQuestKey`); **Push locations** sends it whole with
+`replace: true`, retiring anything the catalog doesn't name — this is a Studio push, not a runtime pull, and
+never runs at boot.
+
+A **pull** exists only for the tuning fields an admin might have edited server-side after the last push:
+**⬇ Pull tuning from server** (Studio Trainer Progression tab) / `cr_world_locations_pull` copies
+`name`/`discoveryXp`/`discoveryQuestKey` from the server into the catalog for every key that exists in
+both, reports which fields changed, and never adds or removes rows (only Scan does that, from the area
+scenes). Push and Pull both print a drift line afterward — the field-by-field difference between catalog
+and server for keys in both — so an unpulled admin tweak, or an unpushed catalog edit, is visible
+immediately rather than silently overwritten by the next push. See
+[Location Discoveries — Admin / authoring](?page=backend/24-location-discoveries#admin-authoring) and the
+`cr-world-locations` skill.
+
 ## World pickup placements (A2, 2026-09-27)
 
 Content Studio → **Item Spawners** starts with *World pickup placements*: **Scan areas** reads every `PickupBehaviour` in
