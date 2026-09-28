@@ -25,7 +25,7 @@ Battle-victory loot lets a defeated creature yield items, currency, and trainer 
 2. Use the battle's `spawner_content_key` (added by `M8016`, threaded through `StartBattleAsync(..., string? spawnerContentKey, ...)`) to load the spawner loot table.
 3. Roll the unioned entries, grant each via `IRewardGrantService`, and attach the resolved drops as `LootAward[]` on the `BattleOutcome`.
 
-Loot `Experience` grants **trainer** XP (`StatKey.TrainerExperiencePoints`) via the stat system. This is separate from and additive to the existing per-creature combat XP awarded by `AwardBattleExperienceAsync` — there is no double-count.
+Loot `Experience` grants **trainer** XP via `RewardGrantService`, which — when `ITrainerProgressionService` is wired (it is, in `Program.cs`) — routes it through `GrantXpAsync(TrainerXpSource.Reward)` so the reward can level the trainer up and returns `TrainerProgress` on the result; a failure there falls back to a raw `StatKey.TrainerExperiencePoints` increment via the stat system (logged, at-most-once, never aborts a partially-paid reward list) — see [Trainer Progression — Sources](?page=backend/22-trainer-progression). This is separate from and additive to the existing per-creature combat XP awarded by `AwardBattleExperienceAsync` — there is no double-count.
 
 If the battle has no spawner (trainer battles, or a wild battle that did not pass a spawner content_key) only the creature table rolls. A failure to resolve the trainer or roll the table skips loot gracefully without failing the battle action.
 

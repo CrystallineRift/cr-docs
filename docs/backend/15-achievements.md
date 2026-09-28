@@ -105,8 +105,13 @@ producer) — there is no longer an intermediate step type. The two admin mutati
 are the only other callers; `ModerationService.GrantTrainerXpAsync` also calls `SafeEvaluateAsync` after
 paying admin XP, so an admin XP grant that crosses a `TrainerLevelReached` threshold can unlock in the same
 call. Unlocks travel as `AchievementUnlockNotice`s in `ProgressReport.NewlyUnlocked` (and in the compat
-route's `QuestProgressResult.NewlyUnlocked`); a claim carries none. The client never posts an unlock — the
-route is retired and the Unity router refuses an online client-evaluated unlock.
+route's `QuestProgressResult.NewlyUnlocked`). **A quest claim carries them too**: `QuestDomainService` takes
+an optional `IAchievementEvaluator` and `ClaimRewardsAsync` runs one `SafeEvaluateAsync` pass after its
+reward grants — before closing the XP tracker bracket, so an unlocked achievement's own points XP lands in
+the same `TrainerProgress` — returning unlocks on `QuestClaimResult.Progress.NewlyUnlocked` (so a
+`TrainerLevelReached` achievement can now unlock from the XP a claim's own rewards just paid, not only from
+an earlier incidental evaluation). The client never posts an unlock — the route is retired and the Unity
+router refuses an online client-evaluated unlock.
 
 ## REST (spec §6)
 
@@ -272,4 +277,10 @@ repeat grant still succeeds, a revoke never claws back rewards) against the admi
   `trainer_xp_rule` seeds) adds the `AchievementEarned` XP rule row. `M18007` (Postgres-only, no-op on
   SQLite — offline PlayerData/GameData live in two files a migration can't join) back-fills
   `quest_completed_{key}` stat rows from `quest_instance`/`quest_template` for trainers who completed quests
-  before the per-quest stat existed.
+  before the per-quest stat existed. `M18008` (`M18008BackfillQuestsCompletedForUnclaimed`, both engines,
+  guarded like `M18007` by the table existing) **adds to** (never overwrites) each trainer's
+  `quests_completed` the count of their `Completed`-but-unclaimed `quest_instance` rows — instances the old
+  at-claim counting scheme never counted and the new at-completion scheme can't retroactively see, since it
+  only fires on the completion compare-and-set going forward. See [Quest System — completion
+  outcome](07-quest-system.md#quest-categories-and-area-key) for the at-completion counting rule this closes
+  the gap for.

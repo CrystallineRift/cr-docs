@@ -400,17 +400,27 @@ VALUES
 
 ## How to Advance a Quest Objective from Unity
 
-The Unity client calls `POST /api/v1/quests/progress` after any game event that might satisfy an objective. The call should be fire-and-forget from the game logic perspective — it records the event and the backend handles matching it against active quests.
+:::caution
+This section describes the pre-server-authority `POST /api/v1/quests/progress` contract. It still exists
+for shipped clients, but as of the battle-outcome move-to-server (see "`RecordProgressEventAsync` is a
+compat translator" below) **`WinBattles` and every other battle/defeat objective type now answers `400
+server_derived`** — the example below no longer works for a win report. Only `VisitLocation` and
+`TalkToNpc` are still forwarded through this route; everything else is produced by the authority itself
+(`BattleDomainService` for battle outcomes) and reported via [Progress
+Dispatcher](?page=backend/23-progress-dispatcher), not this endpoint.
+:::
+
+The Unity client calls `POST /api/v1/quests/progress` after a talk or a location-entry event that might satisfy an objective. The call should be fire-and-forget from the game logic perspective — it records the event and the backend handles matching it against active quests.
 
 ```csharp
-// In the battle system, after a win
+// In the NPC talk flow, after talking to an NPC
 await _questClient.RecordProgressAsync(new QuestProgressRequest
 {
     AccountId    = _session.AccountId,
     TrainerId    = _session.TrainerId,
-    ObjectiveType = QuestObjectiveType.WinBattles,   // int value 3
+    ObjectiveType = QuestObjectiveType.TalkToNpc,   // int value 11
     Amount        = 1,
-    ReferenceId   = null,   // not needed for WinBattles
+    ReferenceId   = "kael_trainer_npc",
 });
 ```
 
@@ -423,9 +433,9 @@ curl -s -X POST http://localhost:5000/api/v1/quests/progress \
   -d '{
     "accountId":     "aaaaaaaa-...",
     "trainerId":     "bbbbbbbb-...",
-    "objectiveType": 3,
+    "objectiveType": 11,
     "amount":        1,
-    "referenceId":   null
+    "referenceId":   "kael_trainer_npc"
   }'
 ```
 
@@ -440,8 +450,8 @@ Response:
         {
           "objectiveTemplateId": "22222222-...",
           "currentCount": 1,
-          "targetCount":  3,
-          "isCompleted":  false
+          "targetCount":  1,
+          "isCompleted":  true
         }
       ]
     }
@@ -449,9 +459,10 @@ Response:
 }
 ```
 
-If the third win occurs, `newStatus` becomes `"Completed"` and `isCompleted` becomes `true`. The Unity client inspects `newStatus` to trigger the quest-complete celebration animation and enable the reward claim button.
+If every required objective is now complete, `newStatus` becomes `"Completed"` and `isCompleted` becomes `true`. The Unity client inspects `newStatus` to trigger the quest-complete celebration animation and enable the reward claim button.
 
-The same `RecordProgressEventAsync` call also writes the `battles_won` lifetime stat regardless of whether any quest matched.
+A battle win, a capture, an item use or a quest completion is never reported this way — see the compat
+translator section below for what each objective type now does.
 
 ## Reading Quests from Unity (the quest journal)
 
@@ -740,18 +751,25 @@ public class QuestProgressEvent
 ### `RecordProgressEventAsync` is a compat translator (server-authority phase B)
 
 Progress is derived by the server from outcomes it produced — see [Progress Dispatcher](?page=backend/23-progress-dispatcher).
-`POST /api/v1/quests/progress` survives only for shipped clients: `WinBattles`, `DefeatAnyCreature` and
-`DefeatAnyTrainer` become one outcome each through the dispatcher; the specific and list defeat events count
-nothing (the "any" event carries the deed); `VisitLocation` is forwarded (`ForwardVisitLocationAsync`,
-mirroring `ForwardTalkAsync`) to `LocationEntryService.EnterAsync`, the same orchestrator the BFF
-`POST .../world-locations/enter` route calls — it claims the discovery ledger, awards per-location XP (a
-flat rule amount or the location's own override), grants a discovery quest if one is authored, and emits
-`LocationEntered` — see [Location Discoveries](?page=backend/24-location-discoveries); `TalkToNpc` is
-forwarded to the talk intent (`NpcTalkService`). Every other type is **400 `server_derived`** —
-captures, collected items, item use and quest completion are produced server-side. `quests_completed` is counted
-when the quest **completes** (the completion compare-and-set), not when its rewards are claimed; a claim carries
-no achievement unlocks. Talk and visit objectives count **distinct** keys per quest instance, and a targeted
-talk/visit objective must have Count 1.
+`POST /api/v1/quests/progress` survives only for shipped clients, and its reportable set is now down to two
+types: `VisitLocation` is forwarded (`ForwardVisitLocationAsync`, mirroring `ForwardTalkAsync`) to
+`LocationEntryService.EnterAsync`, the same orchestrator the BFF `POST .../world-locations/enter` route
+calls — it claims the discovery ledger, awards per-location XP (a flat rule amount or the location's own
+override), grants a discovery quest if one is authored, and emits `LocationEntered` — see [Location
+Discoveries](?page=backend/24-location-discoveries); `TalkToNpc` is forwarded to the talk intent
+(`NpcTalkService`). **Every battle-outcome type is now `400 server_derived`** — `WinBattles`,
+`DefeatCreature`, `DefeatAnyCreature`, `DefeatCreaturesFromList`, `DefeatTrainer`, `DefeatAnyTrainer` and
+`DefeatTrainersFromList` all moved server-side once `BattleDomainService` itself started emitting
+`BattleWon`/`CreatureDefeated`/`TrainerDefeated` (including on a forfeit win — opponent Run 3x or an owed
+swap 3x) as part of resolving the battle action, batched through one `SafeRecordAllAsync` call per action so
+achievements evaluate once. Every other type not named above is also **400 `server_derived`** — captures,
+collected items, item use and quest completion are produced server-side. `quests_completed` is counted when
+the quest **completes** (the completion compare-and-set), not when its rewards are claimed; a **claim**
+still pays no `quests_completed` credit, but `ClaimRewardsAsync` now runs one achievement evaluation pass
+after its reward grants (so a points-earning reward can push a `TrainerLevelReached` achievement over the
+line at claim time) and returns any newly-unlocked achievements on `QuestClaimResult.Progress.NewlyUnlocked`
+— see [Achievements — Evaluation](?page=backend/15-achievements#evaluation). Talk and visit objectives count
+**distinct** keys per quest instance, and a targeted talk/visit objective must have Count 1.
 
 Quest-scoped progress resets with each instance. Lifetime stats never reset.
 

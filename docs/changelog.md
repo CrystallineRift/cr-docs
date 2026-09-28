@@ -1,5 +1,45 @@
 # Changelog
 
+## 2026-09-28 — Milestone 1 review fixes
+
+- **cr-api:** Battle outcomes (`BattleWon`, `CreatureDefeated`, `TrainerDefeated`, including forfeit wins —
+  opponent Run 3×, or an owed swap 3×) are now produced by `BattleDomainService` itself, batched through one
+  `SafeRecordAllAsync` call per action; `POST /api/v1/quests/progress` refuses **every** `WinBattles`/defeat
+  objective type with `400 server_derived` — its reportable set is down to `VisitLocation`/`TalkToNpc`.
+  `ActionOutcome` gains a `Progress` field (mirrors `ItemUseResult.Progress` et al.). `ClaimRewardsAsync` now
+  runs one achievement-evaluation pass after its reward grants and returns unlocks on
+  `QuestClaimResult.Progress.NewlyUnlocked` (a claim's own reward XP can now cross a `TrainerLevelReached`
+  threshold in the same call). `species_captured_{id}` moved from `TrainerProgressionService` to
+  `LifetimeStatProjector` (fed by the new `ProgressFacts.BaseCreatureId` fact) — `TrainerProgressionService`
+  now only reads it as the first-of-species gate. A capture made through item use now records one
+  `CreatureCaptured` outcome (via `ItemUseResult.PendingOutcomes`, folded into `ItemUseDomainService`'s own
+  `RecordAllAsync` call) instead of two, so achievements evaluate once per capture, not twice. New migration
+  `M18008` backs-fills `quests_completed` for quest instances that completed-but-were-unclaimed before the
+  at-completion counting scheme existed. `TrainerInventoryEndpoints` POST/PUT now always use a server-decided
+  `DefaultMaxSlots` (20), ignoring any `maxSlots` in the body; `PUT /trainer/{id}` restores the trainer's
+  existing inventory ids after binding, so a body can never redirect them. →
+  [Quest System](?page=backend/07-quest-system), [Stats](?page=backend/08-stats-system),
+  [Achievements](?page=backend/15-achievements), [Trainer Progression](?page=backend/22-trainer-progression),
+  [Progress Dispatcher](?page=backend/23-progress-dispatcher)
+- **cr-api (stale-docs catch-up):** the starter-creature gift flow (`GiveNpcCreatureToTrainerStorageAsync`,
+  `EnsureNpcCreatureTeamAsync`) gained a gift ledger (`INpcGiftLedger`, server-authority A2.4 — one
+  client-named gift creature per trainer/NPC, a resumable claim-then-transfer sequence) and a team-spawner
+  slot gate (A2.5 — a team slot's template must belong to that NPC's own `"{key}-team"` spawner). New
+  `IWildCreatureMintService` (A2.6, `POST /api/v1/creature/generated`) picks a live spawner template for a
+  requested species (excluding team spawners, with a content-key fallback for a stale template id) and mints
+  under it, rather than trusting client-supplied stats. New `IPlayerTrainerGuard`/`RequirePlayerTrainer`
+  (`Auth/CR.Auth.Service.REST/Security/PlayerTrainerGuardExtensions.cs`) replaces several inlined
+  account-only ownership checks (evolution, stats, market list/buy) with one guard that also refuses an
+  NPC battle-trainer identity. `RateLimitPolicies.PlayerIntent` partitions the talk route (and future
+  location-entry/talent-spend routes) per account, and `UseRateLimiter()` moved after
+  `UseAuthentication()`/`UseAuthorization()` in `Program.cs` so that partition actually has an account to
+  read. `ItemSpawnerEndpoints`'s `sync-config` route is now `RequireContentWrite`-gated. Loot/reward
+  `Experience` grants route through the trainer XP funnel when wired. →
+  [Starter Creature Flow](?page=backend/05-starter-creature-flow),
+  [Auth and Accounts](?page=backend/06-auth-and-accounts), [Spawner System](?page=backend/03-spawner-system),
+  [Loot System](?page=backend/13-loot-system), [Item Spawner](?page=backend/11-item-spawner),
+  [Creature Market](?page=backend/17-creature-market), [Backend Architecture](?page=backend/01-architecture)
+
 ## 2026-09-27 — Location Discoveries v2
 
 - **cr-api:** `world_location` gains `discovery_xp` (M15010, null → the flat `LocationDiscovered` rule, 0

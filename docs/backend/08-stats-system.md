@@ -169,23 +169,14 @@ await _statService.SetAsync(
     accountId, trainerId, StatKey.TrainerLevel, newLevel, "trainer_level_up", ct);
 ```
 
-**From Unity (via the quest progress endpoint):**
-
-```bash
-# Record a battle win — this writes both quest progress AND the battles_won stat
-curl -s -X POST http://localhost:5000/api/v1/quests/progress \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "accountId":     "aaaaaaaa-...",
-    "trainerId":     "bbbbbbbb-...",
-    "objectiveType": 3,
-    "amount":        1,
-    "referenceId":   null
-  }'
-```
-
-The `battles_won` stat is incremented as a side effect of `objectiveType = 3` (`WinBattles`), whether or not any active quest has a `WinBattles` objective.
+:::caution
+`battles_won` is no longer reachable through `POST /api/v1/quests/progress` — `WinBattles` (and every other
+battle/defeat objective type) now answers `400 server_derived` there. `BattleDomainService` writes
+`battles_won` itself, through the progress dispatcher, the moment it resolves the winning action (or a
+forfeit win) server-side — see [Progress Dispatcher](?page=backend/23-progress-dispatcher) and [Quest
+System — `RecordProgressEventAsync` is a compat translator](?page=backend/07-quest-system#recordprogresseventasync-is-a-compat-translator-server-authority-phase-b).
+Only `VisitLocation` and `TalkToNpc` still reach a stat write through this endpoint.
+:::
 
 ## How to Query the Audit Log
 
@@ -294,7 +285,7 @@ Defined in `CR.Stats.Data.Constants.StatKey`. Use these constants rather than in
 | `TrainerLevel` | `"trainer_level"` | Set/Max | `TrainerProgressionService` (see [Trainer Progression](?page=backend/22-trainer-progression)) |
 | `CreatureLevelKey(id)` | `"creature_level_{id:N}"` | Max | none until C2 |
 | `StatKey.LocationDiscoveredKey(key)` | `"location_discovered_{key}"` | Max 1 | `LifetimeStatProjector` on `LocationEntered` — a **projection**, not a gate; the real first-time gate is the `trainer_location_discovery` ledger, see [Location Discoveries](?page=backend/24-location-discoveries) |
-| `StatKey.SpeciesCapturedKey(baseCreatureId)` | `"species_captured_{id:N}"` | Increment | `TrainerProgressionService.AwardAsync` — first-time gate per species |
+| `StatKey.SpeciesCapturedKey(baseCreatureId)` | `"species_captured_{id:N}"` | Increment | `LifetimeStatProjector`, fed by `ProgressFacts.BaseCreatureId` (stamped on `CreatureCaptured` by `CaptureAttemptService`) — `TrainerProgressionService.AwardAsync` only *reads* the counter now (0 = first-of-species) to decide the first-capture XP bonus; it no longer writes it |
 | *(none yet)* | `"trainers_defeated_distinct"` | none until #1 C2 | `AchievementCriterionResolver` reads this key as a raw string literal for `AchievementCriterionType.DistinctTrainersDefeated` (16) — no `StatKey` constant and no writer exist yet, so this criterion never satisfies. See [Achievements](15-achievements.md) |
 
 `damage_healed_total` is **retired** (phase B): nothing produces heals server-side, so the constant is gone and

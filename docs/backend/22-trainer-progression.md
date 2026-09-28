@@ -19,7 +19,7 @@ level from 2 grants a talent point (spent from Phase 2). Spec: `cr-api-unity/doc
 - `world_location(content_key UNIQUE, name, area_key, discovery_xp?, discovery_quest_key?)` — only these
   keys earn discovery XP; the last two columns (M15010) override the flat rule amount and grant a one-time
   quest — see [Location Discoveries](?page=backend/24-location-discoveries).
-- XP lives in the `trainer_xp` stat; `trainer_level` is a display/achievement high-water mark: grants raise it with `MaxAsync` and `GetProgressAsync` repairs it **up** only — a read never lowers it (its XP and level reads are not synchronised, so a down-repair could undo a concurrent level-up). The one write that lowers it is an admin take-back, which `SetAsync`s the level derived from its own post-increment total. First-time capture checks are the per-key stat `species_captured_{baseCreatureId:N}` (`IStatService.IncrementAsync` returns the value after; 1 = first); the location-discovery equivalent moved off a stat flag onto the `trainer_location_discovery` ledger (M15011) — `location_discovered_{key}` is now a projection, not a gate.
+- XP lives in the `trainer_xp` stat; `trainer_level` is a display/achievement high-water mark: grants raise it with `MaxAsync` and `GetProgressAsync` repairs it **up** only — a read never lowers it (its XP and level reads are not synchronised, so a down-repair could undo a concurrent level-up). The one write that lowers it is an admin take-back, which `SetAsync`s the level derived from its own post-increment total. First-time capture checks read the per-key stat `species_captured_{baseCreatureId:N}` (`IStatService.GetAsync`, 0 = first) — **read-only** since [Progress Dispatcher](?page=backend/23-progress-dispatcher): `TrainerProgressionService.AwardAsync` no longer increments this key itself; `LifetimeStatProjector` does, from the `CreatureCaptured` outcome's `ProgressFacts.BaseCreatureId` fact, after the award has already read and used the pre-capture count. The location-discovery equivalent moved off a stat flag onto the `trainer_location_discovery` ledger (M15011) — `location_discovered_{key}` is now a projection, not a gate.
 - Seeds are insert-if-absent: re-running never overwrites an admin edit.
 - These four keys — `trainer_xp`, `trainer_level`, `location_discovered_{key}`, `species_captured_{id:N}` — are **server-owned**: the player-facing stat write routes (`POST /api/v1/stats/increment|max|set`) refuse them with `403 Forbidden` (`ServerOwnedStatKeys.Contains`, matched trimmed and case-insensitively by exact name or prefix). The write routes also refuse any key with leading or trailing whitespace (`400`), since a padded key would be stored as its own row nobody reads. Only server-side code writes them, through the progression funnel or the admin XP grant — never a client stat call. See [Stats and Lifetime Tracking](?page=backend/08-stats-system).
 
@@ -103,11 +103,15 @@ server" — see [Location Discoveries — Admin / authoring](?page=backend/24-lo
 - A tuning change on the server reaches offline play only after export + rebake + a client build.
 - Never tune by editing M15002/M15003: their seeds are insert-if-absent and change nothing on an existing DB.
 - The exporter copies the server the Studio points at — Local copies local values.
-- **Never retire the `CaptureFirstSpecies` row from `trainer_xp_rule` while live.** The first-time marker
-  (`species_captured_{id:N}`) is written **before** the XP grant, as the gate that makes the award
-  at-most-once. If the rule is missing (or removed) when a player crosses that first-time moment, the
-  marker is still written, the grant silently no-ops, and that player's first-capture bonus is gone for
-  good — there is no second chance, because the marker already reads as "already awarded." The location
+- **Never retire the `CaptureFirstSpecies` row from `trainer_xp_rule` while live.** `AwardAsync` reads the
+  first-time marker (`species_captured_{id:N}`) **before** deciding the bonus, but the marker's own
+  increment is now a separate write — `LifetimeStatProjector`, from the `CreatureCaptured` outcome the
+  capture call records right after the award — that lands later in the same call, after the award has
+  already read and used the pre-capture count. If the `CaptureFirstSpecies` rule is missing (or removed)
+  when a player crosses that first-time moment, the read still comes back 0, the grant still silently
+  no-ops (no rule to pay), and the marker still gets incremented moments later regardless — that player's
+  first-capture bonus is gone for good, because the marker now reads "already awarded" on every future
+  capture of that species. The location
   equivalent has the same shape but a different gate: the `trainer_location_discovery.xp_awarded` claim
   (not `location_discovered_{key}`) is what flips at-most-once — see
   [Location Discoveries — Idempotency](?page=backend/24-location-discoveries#idempotency). Retiring the

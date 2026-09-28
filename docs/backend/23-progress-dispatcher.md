@@ -22,18 +22,18 @@ the same cr-api DLLs over the player's local SQLite. Spec: `cr-api-unity/docs/su
 2. `ProgressDispatcher` runs every handler in order for each outcome. A handler that throws is logged; the others still run.
 3. A handler may **enqueue** a follow-up (a completed quest enqueues `QuestCompleted`); the dispatcher drains the FIFO queue inside the same root call, capped at **32** outcomes (the rest is dropped and logged at Error — a quest chain completing itself).
 4. After the queue drains, achievements are evaluated **once per root call** per trainer; unlocks land in `ProgressReport.NewlyUnlocked`.
-5. The producer sets `ProgressReport.TrainerProgress` from its bracket and returns the report on its own result: `ItemUseResult.Progress`, `PickupCollectResult.Progress`, `NpcTalkResult.Progress`, `QuestClaimResult.Progress` (XP only). The client applies it through `QuestManager.ApplyServerProgress` — the one entry.
+5. The producer sets `ProgressReport.TrainerProgress` from its bracket and returns the report on its own result: `ItemUseResult.Progress`, `PickupCollectResult.Progress`, `NpcTalkResult.Progress`, `QuestClaimResult.Progress`, and `ActionOutcome.Progress` (the winning battle action; mirrors the existing `ActionOutcome.TrainerProgress` field). `QuestClaimResult.Progress` is no longer XP-only — `ClaimRewardsAsync` runs one `SafeEvaluateAsync` achievement pass after its reward grants, so a claim can also carry `NewlyUnlocked` (see [Achievements](15-achievements.md#evaluation)). The client applies it through `QuestManager.ApplyServerProgress` — the one entry.
 
 ## Producers (the only callers of the sink)
 
 | Outcome | Producer | Emitted after |
 |---|---|---|
-| `CreatureCaptured` | `CaptureAttemptService` | ownership transfer + capture XP |
+| `CreatureCaptured` | `CaptureAttemptService` (via a capture-through-item-use: `CaptureAttemptService` no longer records this outcome itself — it returns it on `ItemUseResult.PendingOutcomes`, and `ItemUseDomainService` folds it into its own `ItemUsed`/`KeyItemActivated` outcomes before one `RecordAllAsync` call, so a capture evaluates achievements once, not twice) | ownership transfer + capture XP |
 | `ItemCollected` (Via=Pickup) | `PickupDomainService.CollectAsync` | the claim won; one per granted Item reward |
 | `ItemUsed`, `KeyItemActivated` | `ItemUseDomainService` | consume + effect succeeded |
 | `NpcTalked` | `NpcTalkService` | key validated; FirstTime when `npc_met_{key}` goes 0 → 1 |
 | `QuestCompleted` | `QuestObjectiveProjector` | the completion compare-and-set (InProgress → Completed, 1 row) |
-| `BattleWon`, `CreatureDefeated`, `TrainerDefeated` | the compat route `POST /api/v1/quests/progress` (until C2 owns them) | the old client's report, `Amount` forced to 1 |
+| `BattleWon`, `CreatureDefeated`, `TrainerDefeated` | `BattleDomainService` | after the existing KO-once (`TryCreditKnockOutAsync`) and battle-end (`TryEndBattleAsync`) CAS, one `CreatureDefeated` per credited KO, `BattleWon` (+ `TrainerDefeated`, `Facts[FirstTime]` from the NPC-trainer win) on a win, and the same pair on a **forfeit win** (opponent Run 3×, or an owed swap 3×) — all batched through a single `SafeRecordAllAsync` call per action so achievements evaluate once |
 | `LocationEntered` | `LocationEntryService.EnterAsync` (BFF `POST .../world-locations/enter`, or forwarded from `POST /api/v1/quests/progress`) | a genuine `world_location` entry (`Facts[FirstTime]` set on first discovery); see [Location Discoveries](?page=backend/24-location-discoveries) |
 
 ## Outcome → derived writes
@@ -59,10 +59,11 @@ visit objective must have Count 1 (the template route answers 400 `invalid_objec
 
 ## The compat route `POST /api/v1/quests/progress`
 
-Kept for shipped clients until phase E. Reportable: `WinBattles`, the six defeat types (until C2),
-`VisitLocation` (forwarded to `LocationEntryService.EnterAsync`), `TalkToNpc` (forwarded to `NpcTalkService`; an unknown key answers 200
-with nothing counted). The specific and list defeat events count nothing — the "any" event every shipped client
-also sends becomes the one outcome. Every other type answers **400 `server_derived`**.
+Kept for shipped clients until phase E. Reportable is now down to two types: `VisitLocation` (forwarded to
+`LocationEntryService.EnterAsync`), `TalkToNpc` (forwarded to `NpcTalkService`; an unknown key answers 200
+with nothing counted). `WinBattles` and all six defeat types moved server-side once `BattleDomainService`
+started emitting battle outcomes itself (see the Producers table above) and now answer **400
+`server_derived`** like everything else — captures, collected items, item use and quest completion.
 
 ## Stat-writer registry
 
@@ -74,7 +75,8 @@ scan of every production stat write). Adding a writer means adding its row there
 | `battles_won`, `battles_lost`, `creatures_defeated_total`, `trainers_defeated_total`, `creatures_captured_total`, `items_collected_total`, `npcs_talked_to_total`, `quests_completed`, `quest_completed_{key}`, `locations_visited_total`, `location_discovered_{key}` | `LifetimeStatProjector` |
 | `npc_met_{key}` | `NpcTalkService` |
 | `trainer_xp` | `TrainerProgressionService` (and `RewardGrantService`'s raw fallback when Talents is not wired) |
-| `trainer_level`, `species_captured_{id}` | `TrainerProgressionService` |
+| `trainer_level` | `TrainerProgressionService` |
+| `species_captured_{id}` | `LifetimeStatProjector`, fed by `ProgressFacts.BaseCreatureId` on `CreatureCaptured` (stamped by `CaptureAttemptService`) — `TrainerProgressionService` only reads it now, as the first-of-species gate |
 | `items_used_total`, `items_used_{key}` | `ItemUseDomainService` |
 | `exp_share_bonus_percent` | `IncreaseExpShareHandler` |
 | `stat_perm_boost_{stat}` | `BoostStatPermHandler` |

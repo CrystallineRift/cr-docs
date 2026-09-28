@@ -219,6 +219,7 @@ any client written before that date assumed.
 | An access token is never stored | The `token` column holds the `jti`, not the JWT. *Was: the whole signed token, so a database read yielded live sessions.* |
 | The signing key is UTF-8 and at least 256 bits | `JwtAuthentication.SigningKeyBytes` throws below 32 bytes. *Was: decoded as ASCII, which silently replaced every non-ASCII byte with `?`, and no length floor.* |
 | Anonymous auth routes are rate limited | Per client IP: 10/min on `/auth/basic` and `/auth/service-token`, 30/min on `/auth/game`, `/auth/oauth`, `/auth/token/refresh` and `POST /account`. Configurable under `RateLimits`. *Was: unlimited.* |
+| Player-intent routes get their own per-account window | `RateLimitPolicies.PlayerIntent` (`"cr-player-intent"`, default 120/min, `RateLimits:PlayerIntentPerMinute`) partitions on the token's account id, not IP, via `PerAccountWindowFor` — one player's talk (and, later, location-entry / talent-spend) spam cannot starve a different account behind the same NAT. A request that somehow reaches it with no account claim falls back to its IP. |
 | A production host refuses to start with the repo's dev keys | `ProductionSecretsGuard`. |
 | `/auth/basic` reveals nothing about who has an account | An unknown address and a wrong password both return a bare 401. *Was: 404 vs 401 — a free membership oracle.* |
 
@@ -226,6 +227,36 @@ The rate limits partition on the caller's address, which the app reads from `X-F
 trusts **only** from the proxy network (`ForwardedHeaders:KnownNetworks`, defaulting to the private
 ranges Docker allocates from). Trusting that header from anywhere would let a caller mint a fresh
 limit bucket per request.
+
+**`UseRateLimiter()` now runs after `UseAuthentication()`/`UseAuthorization()` in `Program.cs`**, not
+before. `PlayerIntent`'s `PerAccountWindowFor` partitions on `context.User.GetAccountId()`, which does
+not exist until authentication middleware has run — placed earlier (as it was, to save a token
+validation on an anonymous flood), every caller fell back to the IP partition regardless of the
+policy, so two accounts behind one NAT shared a single window. The anonymous `Credentials`/`Bootstrap`
+policies are unaffected by the move — they partition by IP either way, and an unauthenticated flood
+still gets a `429` before reaching the endpoint, on `/login` before it costs a PBKDF2 hash.
+
+### Player-trainer ownership: `IPlayerTrainerGuard` / `RequirePlayerTrainer`
+
+Several routes (evolution, stats, pickups, the trainer-heal intent) need "does the caller's account
+own this trainer" as a boundary check before running the handler — and specifically a **player**
+trainer, not one of the account's own NPC battle-trainer identities (minted for NPC battles, but
+living on the player's account). `PlayerTrainerGuardExtensions`
+(`Auth/CR.Auth.Service.REST/Security/PlayerTrainerGuardExtensions.cs`) centralizes this:
+
+- `HttpContext.CallerIsPlayerTrainerAsync(trainerId)` / `CallerOwnsNpcBattleTrainerAsync(trainerId)` —
+  ad-hoc checks for a handler that wants to branch on the answer.
+- `RequirePlayerTrainer(name = "trainerId")` — an endpoint filter that 404s (never 403, so it never
+  confirms another account's trainer id exists) unless the named `Guid` — a route/query parameter, or
+  a property of a bound request DTO, matched by name via reflection — is a player trainer of the
+  caller's account. Denies by default: no account claim is `401`, a missing or empty id is `400`.
+  Tags the route with `PlayerTrainerGuardMetadata` for a route-policy coverage test.
+
+`ITrainerRepository` implements `IPlayerTrainerGuard` (registered in `Program.cs` as
+`sp.GetRequiredService<ITrainerRepository>()` cast to the interface), so no new repository was added.
+This replaced ad-hoc `CallerOwnsTrainerAsync(accountId, ITrainerRepository, trainerId)` helpers inlined
+in `Program.cs` (evolution's three routes, `GET /api/v1/stats`) that checked account ownership only —
+not whether the trainer was an NPC's battle identity.
 
 ### What this means for clients
 

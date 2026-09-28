@@ -194,6 +194,28 @@ This writes a `spawner_spawn_history` row and generates the creature — it does
 
 If the player flees the battle, nothing about the spawner changes — spawning never consumed any capacity to begin with. Wild zones are perpetual by default.
 
+### Server-generated wild mints (`IWildCreatureMintService`, server-authority A2.6)
+
+`POST /api/v1/creature/generated` (`app.MapWildCreatureEndpoints()`) takes a species + a requested
+level from the client as an **intent**, never client-supplied stats — `WildCreatureMintService.MintAsync`
+picks the template and generates the creature itself:
+
+1. `ICreatureSpawnerTemplateRepository.GetActiveTemplatesForSpeciesAsync(baseCreatureId)` — every
+   live, active template for that species, joined against a live, active `spawner`, **excluding any
+   `"{npcKey}-team"` spawner** (`ExcludeTeamSpawnersClause`): an authored trainer's own battle team is
+   never a valid wild-encounter source for this species.
+2. If a template's `base_creature_id` has gone stale (a server rebuild reseeded the species under a
+   new id — the same drift `CreateFromSpawnerAtLevelAsync` already repairs once a template is
+   *selected*), falls back to `GetActiveTemplatesForSpeciesContentKeyAsync` using the requested
+   species' own `content_key` — only when that species actually resolves to one, so an invented
+   species id has no fallback and mints nothing.
+3. `templates.ChooseWildMint(requestedLevel)` picks a template/level pair; `CreateFromSpawnerAtLevelAsync`
+   generates from it under the Wild Trainer account, same as the spawn-proxy path above. Species, level
+   band, growth profile and ability progression set are the template's; the client's requested level is
+   only a hint the picker may adjust to fit the template's band.
+4. No matching template (even after the content-key fallback) refuses the mint (`null`, logged as a
+   warning) rather than generating an unauthored species.
+
 ## Admin/Debug Patterns for Spawner State
 
 **Check current spawner state:**

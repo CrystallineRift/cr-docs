@@ -51,7 +51,14 @@ precondition failing to apply).
 
 ### Listing (`ListCreatureAsync`)
 
-Refused, in order, when: the acting trainer doesn't currently own the creature (`NotOwned`); the
+**Boundary check before the service runs at all:** `ListCreatureAsync` and `BuyListingAsync`'s REST
+handlers now call `context.CallerIsPlayerTrainerAsync(trainerId)` (see [Auth and Accounts —
+`IPlayerTrainerGuard`](?page=backend/06-auth-and-accounts)) and answer `404` if it fails, before ever
+reaching `IMarketService`. The service's own account check (below) does not by itself catch an
+account's **NPC battle-trainer identity** — a trainer id that belongs to the account but is not a
+player trainer — being used as the acting trainer header; the guard does.
+
+Refused by the service, in order, when: the acting trainer doesn't currently own the creature (`NotOwned`); the
 acting trainer isn't found or doesn't belong to the acting account (`NotOwned`); the creature has
 `is_tradable = false` (`NotTradable`); the acting *account* already holds `MarketMaxActiveListings`
 `Active` listings (`ListingLimitReached`); the creature is the only member of the acting trainer's
