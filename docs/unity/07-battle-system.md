@@ -16,10 +16,19 @@ The battle system connects scene-level events (NPC interaction, wild encounter t
 
 ### Resolution vs Close — two lifecycle moments
 
-- `EndBattle(winner, reason)` marks the battle resolved and raises `OnBattleEnded` / `BattleEvents.BattleEnded`. The arena is **not** exited; the post-battle summary screen shows.
+- `EndBattle(winner, reason)` marks the battle resolved and raises `OnBattleEnded` / `BattleEvents.BattleEnded`. The arena is **not** exited; the post-battle summary screen shows. `reason` is one of the named string constants on `BattleEndReason` (`Capture`, plus the existing `"loop_complete"`/`"force_close"` literals), not a bare literal at call sites like `BattleBagPanelHandler`.
 - `CloseBattle()` is called by `BattleSummaryScreen` on OK (or auto-dismiss for `ran_away`). Restores camera + trainer position via `BattleStager.ExitArenaAsync` and raises `OnBattleClosed` / `BattleEvents.BattleClosed`.
 
 Gameplay systems (input gates, ambient audio) release on `BattleClosed`, not `BattleEnded`, so the world doesn't unlock behind the summary modal.
+
+**A capture is not a battle win (spec B7).** `EndBattle` computes `playerWon` from the winning side, but
+`BattleEndReason.ReportsBattleWon(reason, playerWon)` additionally excludes `Capture`: catching the wild
+creature ends the battle without reporting `IQuestService.OnBattleWon`/`OnTrainerDefeated`. The capture's
+own progress (`CreatureCaptured`, and the crystal's `ItemUsed`) comes back on the item-use result and is
+applied through `IQuestService.ApplyServerProgress` from `OnlineOfflineItemDomainService` — the client
+never reports the capture as a separate quest/achievement event. `BattleBagPanelHandler`'s capture branch
+no longer looks up the captured creature's base content key or calls a reporter itself; it just ends the
+battle with `BattleEndReason.Capture` and lets the item-use response's progress apply.
 
 ### Installer Binding
 
@@ -226,6 +235,15 @@ The heal + teleport run on `OnBattleClosed` (not `OnBattleEnded`) because the ar
 ## Experience
 
 XP is awarded **server-side** on a knockout (see *Battle Experience* on the backend battle-persistence page for the 90/10 fighter/bench split and EXP-share). `BattleCoordinator.FireOutcomeEvents` reads `ActionOutcome.ExperienceAwards` and raises `BattleEvents.ExpGained(creatureId, amount, leveledUp)` (plus `LevelUp` when a creature levels). The **battle summary** collects these into its XP section and "LEVEL UP" chip — the client does no XP math, it only renders what the outcome reports.
+
+**Trainer XP is a separate award on the same outcome.** Every `ActionOutcome` (win award, loot, any
+XP-granting turn — online and offline alike) also carries `TrainerProgress` (level/XP for the trainer,
+not the creature). `OnlineOfflineBattleDomainService.SubmitActionAsync` reads it off every action result
+and hands it to `IProgressionNotifier.ReportTrainerProgress` (`TrainerLevelUpToastAdapter` toasts a level
+up; `PlayerTeamView`'s XP bar reads the memoised `TrainerProgress` cache scope this invalidates). This is
+the same reporting path pickups, item use and talk funnel their trainer XP through — see [Domain Sync
+Pattern](?page=unity/16-domain-sync-pattern) for the `TrainerProgress` cache scope and its invalidation
+table.
 
 ## `BattleSession`
 
@@ -914,12 +932,20 @@ rejected, and on Enter alone the pickup would never be reconsidered while the pl
 Collection now raises `WorldToast` ("You picked up 50 Coins"), named from the granted reward rather
 than the content key, which is an authoring detail.
 
+`PickupBehaviour` no longer loops over `result.GrantedRewards` calling `IQuestService.OnItemCollected`
+itself — that client-reported-outcome reporter is gone. The server (or the offline DLL pickup service)
+already produced whatever quest/achievement progress and XP the collect earned, and returns it on the
+result as a `ProgressReport`; `PickupBehaviour` just hands it to `IQuestService.ApplyServerProgress`
+(falling back to `IProgressionNotifier.ReportTrainerProgress` only if the result carries no report, e.g.
+an older offline save).
+
 ### WorldToast
 
 A static bus in `CR.Core.Notifications`: gameplay raises, UI listens, and nothing in it knows what a
 toast looks like. `AchievementToastPresenter` shows both achievements and these. It keeps its
 achievement-specific name because the UI rig references it by class name from a scene — worth
-renaming when someone is in the Editor anyway.
+renaming when someone is in the Editor anyway. Its achievement toasts now also show the unlock's point
+value (`"+{points} pts"`, hidden when 0/null) via a new `ToastRequest.Points` carried through to `ShowOne`.
 
 ## A Failed Encounter Re-Arms Itself, and Tries to Fix the Spawner
 

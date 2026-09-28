@@ -206,9 +206,19 @@ var result = await _itemUseDomainService.UseItemAsync(
 On successful capture:
 
 1. `BattleEvents.RaiseCreatureCaptured(capturedCreatureId, "")` is raised
-2. `BattleCoordinator.EndBattle(null, "capture")` is called
+2. `BattleCoordinator.EndBattle(_trainerId, BattleEndReason.Capture)` is called — a named constant now,
+   not a bare `"capture"` literal; `BattleEndReason.ReportsBattleWon` excludes it from `OnBattleWon` (a
+   capture is not a battle win, spec B7)
 3. Battle ends immediately
 4. Captured creature is added to trainer's storage
+
+The captured creature's own progress (`CreatureCaptured`, and the crystal's `ItemUsed`) is **not**
+reported by `BattleBagPanelHandler` — it came back on the item-use result as a `ProgressReport` and was
+already applied by `OnlineOfflineItemDomainService` through `IQuestService.ApplyServerProgress`. The
+handler used to look up the captured creature's base content key and call
+`IQuestService.OnCreatureCaptured` itself; that reporter and its two repository dependencies
+(`IGeneratedCreatureRepository`, `ICreatureRepository`) are gone (M1-F1) — the authority (server online,
+the shared DLL dispatcher offline) is what decides capture progress now.
 
 ## Event Flow
 

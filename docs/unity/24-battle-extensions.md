@@ -336,14 +336,27 @@ class that touches both seams. Its responsibilities:
    built from the ability's real `Name`, `AnimationKey`, `Category`, `Power` and `Cost`.
 4. **Telemetry** — `IStatService.IncrementAsync(accountId, trainerId, "battle_missions_completed", 1,
    $"mission:{missionName}")`. `IStatService` resolves to the DLL `StatService` over
-   `StatOnlineOfflineRepository`, so the write is local-first and mirrors to the server when online —
-   see [Stats System](?page=backend/08-stats-system).
+   `StatOnlineOfflineRepository`.
 5. **Contribution** — `Augment` appends every cached unlock that is not already in the list, so a
    creature that legitimately knows Mega Burn never sees it twice.
 
 Every failure path degrades rather than throws: a missing reward ability logs a warning and skips the
 unlock, a failed ability lookup still fires the banner, and a failed stat write leaves the unlock
 standing. A battle must never break because a mission could not.
+
+:::caution
+**This telemetry write is now refused while online, and this is the known, tracked exception (server-
+authority phase B).** `StatOnlineOfflineRepository` used to write local-first and mirror to the server;
+it no longer does either while online — a stat write reaching it online is treated as a client-reported
+outcome (a bug, per the CORE RULE: the server must produce every outcome from what it decided, not take
+the client's word for it), so it is refused (no-op) and logged as an Error naming the stat and source.
+`BattleMissionConductor`'s `battle_missions_completed` write is the one caller still doing this — it has
+not yet been moved server-side — so as of this branch, **a mission completed while playing online records
+no stat at all**; only offline does the local increment happen. "The only durable trace a mission leaves
+is one stat increment on completion" (above) is therefore only true offline right now. See [Domain Sync
+Pattern](?page=unity/16-domain-sync-pattern#stats-and-achievement-unlocks-the-server-is-the-sole-authority-online)
+for the general rule, and [Stats System](?page=backend/08-stats-system) for the server side.
+:::
 
 :::caution
 **The template load is deliberately fire-and-forget.** `BattleStarted` is a synchronous event, so

@@ -101,15 +101,26 @@ Use `GameConfigurationKeys.GameServerHttpAddress` for any `/api/v1/...` route. T
 keys (`CreatureServerHttpAddress` and friends) carry a path segment of their own, so combining one
 with an `/api/v1` path produces a 404 that looks like a missing endpoint rather than a wrong base URL.
 
-### Writes go to both, reads prefer the server
+### Stats and achievement unlocks: the server is the sole authority online
 
-For player state — stats, achievement unlocks — the router writes **local first, then the server**.
-Local is the copy the UI reads and the offline evaluator checks, so it must not wait on the network;
-and a failed server write is logged rather than thrown, because losing a player's progress event is
-worse for them than a gap in our telemetry is for us. Server writes are idempotent so a replay is safe.
+`StatOnlineOfflineRepository` used to write **local first, then the server** on every stat write. That
+duplicated a decision the server-authority CORE RULE gives to the server alone: online, every stat is
+written by the server from the outcome it produced, so a stat write reaching this router while online is
+a client-reported outcome — a bug, never something to mirror. The router now **refuses** the write (returns
+`0`/no-op) and logs an Error naming the stat and source instead of writing anywhere. The one caller still
+tripping this as of writing is `BattleMissionConductor`'s `battle_missions_completed` (tracked, not yet moved
+server-side). Offline, the local SQLite write is the only write, invalidating `CacheScope.Stats` after.
 
-Reads prefer the server and fall back to local on any failure, which keeps a player who drops
-connection mid-session from watching their totals disappear.
+Achievement unlocks are no longer routed through an online/offline repository at all —
+`AchievementUnlockedOnlineOfflineRepository` was deleted. Unlocked rows are local, offline-only state
+(Achievements v2 spec §5.6/R3): the single `IAchievementUnlockedRepository` instance is bound both
+`WithId(LocalDataSources.Achievement.UnlockedOffline)` and unqualified, and only `AchievementDomainService`
+(the offline authority) reads or writes it. Online, the client never touches unlocked rows locally — it
+reads the achievement board straight from the server (see `AchievementBoard` cache scope below).
+
+Reads still prefer the server and fall back to local on any failure, which keeps a player who drops
+connection mid-session from watching their totals disappear — this applies to `Stats` reads and to the
+achievement/trainer-progression reads described next.
 
 :::caution
 A stubbed client is worse than no client. Stats shipped with an `IStatClient` that called
@@ -140,20 +151,29 @@ dirties whole scopes. Opening a window, switching tabs, entering an area or savi
 
 | Change | Scopes |
 |---|---|
-| BattleClosed | Creature, CreatureSlots, Items, Trainer, ActiveQuests, Stats, NpcTeam, NpcItems |
+| BattleClosed | Creature, CreatureSlots, Items, Trainer, ActiveQuests, Stats, NpcTeam, NpcItems, TrainerProgress, AchievementBoard |
 | TeamHealed | Creature |
-| PickupCollected | Items, Trainer, Creature, CreatureSlots, InventoryList, ItemInventoryList, ActiveQuests, Stats |
+| PickupCollected | Items, Trainer, Creature, CreatureSlots, InventoryList, ItemInventoryList, ActiveQuests, Stats, TrainerProgress, AchievementBoard |
 | MerchantPurchase / MerchantSell | Items, Trainer, MerchantStock, Stats |
 | MerchantRestocked | MerchantStock, MerchantMultipliers, MerchantStocked |
-| QuestAccepted / QuestAbandoned / QuestProgressRecorded | ActiveQuests |
-| QuestClaimed | ActiveQuests, Items, Trainer, Creature, CreatureSlots, InventoryList, ItemInventoryList, Stats |
-| ItemUsed (successful overworld use only) / HeldItemChanged | Items, Creature |
+| QuestAccepted / QuestAbandoned | ActiveQuests |
+| QuestProgressRecorded | ActiveQuests, TrainerProgress, AchievementBoard |
+| QuestClaimed | ActiveQuests, Items, Trainer, Creature, CreatureSlots, InventoryList, ItemInventoryList, Stats, TrainerProgress, AchievementBoard |
+| ItemUsed | Items, Creature, ActiveQuests, Stats, TrainerProgress, CreatureSlots, InventoryList, AchievementBoard |
+| HeldItemChanged | Items, Creature |
 | EvolutionCommitted | Creature, ActiveQuests, Stats |
-| CreatureCaptured | CreatureSlots, InventoryList, Stats |
+| CreatureCaptured | CreatureSlots, InventoryList, Stats, TrainerProgress, AchievementBoard |
 | CreatureMoved | CreatureSlots |
 | CreatureReleased | Creature, CreatureSlots |
 | MarketListed / MarketListingCancelled | Creature, CreatureSlots, InventoryList |
 | MarketPurchased | Creature, CreatureSlots, InventoryList, Trainer |
+| NpcTalked | ActiveQuests, Stats, TrainerProgress, AchievementBoard |
+| LocationEntered | ActiveQuests, TrainerProgress, Stats, LocationDiscoveries, AchievementBoard |
+
+`ItemUsed` widened past overworld use once offline item use started running the same DLL dispatcher as
+online (M1-F1, below): any item use can now grant quest progress or XP, not just held-item changes.
+`NpcTalked` and `LocationEntered` are new — the talk intent and the location-enter intent both went
+through the same server-authority treatment as items (see the dialogue and content-pipeline pages).
 
 **Call-site inventory.** Every online write raises its change; a new online write that is not in this list is a bug.
 `PlayerStateCache` itself subscribes `BattleEvents.BattleClosed` and clears everything on trainer/account change.
@@ -163,22 +183,35 @@ MerchantPurchase/Sell/Restocked · `QuestOnlineOfflineRepository` → QuestAccep
 `EvolutionOnlineOfflineRepository` → EvolutionCommitted · `GeneratedCreatureOnlineRepository` → CreatureCaptured/Released ·
 `TrainerCreatureInventoryOnlineRepository` → CreatureMoved · `MarketManager` → MarketListed/ListingCancelled/Purchased (a purchase also reads the bought creature once, so the
 mirror holds it before any cache-only creature read) ·
-`StatOnlineOfflineRepository` and `NpcOnlineOfflineRepository.UseNpcBattleItemAsync` invalidate their own key directly.
+`NpcOnlineOfflineRepository.UseNpcBattleItemAsync` invalidates its own key directly ·
+`LocationEntryOnlineOfflineRouter` → LocationEntered · `NpcTalkOnlineOfflineService` (via the server response, online only) → NpcTalked.
+`StatOnlineOfflineRepository` no longer raises a `GameChange` itself — it invalidates only its own `Stats` key, since
+online it refuses the write outright (see above) and offline nothing else needs to know.
 Trainer, inventory-list, item-add and creature-update writes store the server's returned row and need no change.
 
 Content keeps its earlier rule: `ContentBackFill` (local first, server on a content-key miss) for
 pickup/achievement/quest-template definitions. Missions and NPC identity are content read through the memo variant
 of the cache and are only reset by `Clear`.
 
-**Terminal state rides the same cache.** Collected pickups, achievement unlocks, completed quests and trainer
-defeats only ever grow, so the local table can be behind the server but never wrong. Each is mirrored once per
-key per session through `cache.EnsureMirroredAsync(key, reconcile)` (`PlayerStateCacheExtensions.cs`), under the
-scopes `CollectedPickups`, `AchievementUnlocks`, `CompletedQuests` (id = trainerId) and `TrainerDefeats`
-(id = accountId). A caller that arrives mid-reconcile waits for it; a failed reconcile is warned and retried on the
-next call; offline nothing runs; cancellation propagates. No `GameChange` names these scopes
-(`TerminalMirrorsAreNeverInvalidatedByAGameChange`) — the write path mirrors each new row itself — so only
-`Clear` (trainer or account change) reopens them. This replaced the separate `SessionReconcile` gate, which the four
-callers had each owned an instance of.
+**Terminal state rides the same cache.** Collected pickups, completed quests and trainer defeats only ever grow, so
+the local table can be behind the server but never wrong. Each is mirrored once per key per session through
+`cache.EnsureMirroredAsync(key, reconcile)` (`PlayerStateCacheExtensions.cs`), under the scopes `CollectedPickups`,
+`CompletedQuests` (id = trainerId) and `TrainerDefeats` (id = accountId). A caller that arrives mid-reconcile waits
+for it; a failed reconcile is warned and retried on the next call; offline nothing runs; cancellation propagates. No
+`GameChange` names these scopes (`TerminalMirrorsAreNeverInvalidatedByAGameChange`) — the write path mirrors each new
+row itself — so only `Clear` (trainer or account change) reopens them. This replaced the separate `SessionReconcile`
+gate, which the four callers had each owned an instance of. `AchievementUnlocks` used to be a fifth terminal-mirror
+scope; it is gone along with the online/offline achievement-unlock router (see above) — achievement state online is
+now the memoised `AchievementBoard` read, not a mirrored local table.
+
+**Two new memoised (never-mirrored) reads join the plain reads above.** `TrainerProgress` (trainer level/XP,
+`GET /api/v1/trainers/{id}/progression`) and `LocationDiscoveries` (every live world location plus this trainer's
+discovery of each, `GET …/trainers/{id}/world-locations`) follow the ordinary Fresh/Stale table, not the terminal
+pattern — they can go down as well as up in principle (a level never does today, but the read path makes no such
+assumption). `AchievementBoard` (`GET …/trainers/{id}/achievements/board`) is the same shape and is invalidated by
+every `GameChange` row `TrainerProgress` is in, since anything that pays XP can also move an achievement criterion.
+None of the three has a local SQLite mirror; offline, the DLL services under `LocalDevGameInstaller`'s trainer
+progression bindings answer instead (`ITrainerProgressReader`, `IWorldMapDiscoveryReader`, `AchievementDomainService`).
 
 **A memo outlives a mode switch, but is not read offline.** The memo variant keeps the server's value in the
 cache object. Going online → offline mid-session does not drop it, yet every offline read skips the memo and
