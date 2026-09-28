@@ -39,6 +39,19 @@
   [Auth and Accounts](?page=backend/06-auth-and-accounts), [Spawner System](?page=backend/03-spawner-system),
   [Loot System](?page=backend/13-loot-system), [Item Spawner](?page=backend/11-item-spawner),
   [Creature Market](?page=backend/17-creature-market), [Backend Architecture](?page=backend/01-architecture)
+- **Unity (M1-F1/M1-F2u):** offline item use now binds to the same DLL `ItemUseDomainService` + effect
+  handlers the server runs (`ItemUseOfflineBindings.Install`, called from `LocalDevGameInstaller`) instead
+  of the old hand-rolled `OfflineItemUseService` (deleted) — this is what gives an offline potion its
+  `ItemUsed` progress outcome and `items_used_total` stat write. `QuestManager.OnCreatureDefeated`/
+  `OnTrainerDefeated`/`OnBattleWon`, the matching `IQuestService` members, and `DefeatedOpponentReporter`
+  are deleted (cr-api-unity `107ce9d2`, `8aac92b1`): `BattleCoordinator`'s turn loop now applies each
+  action's `outcome.Progress` via `_questManager.ApplyServerProgress` right after `SubmitActionAsync`
+  returns, one call site for both the online HTTP and offline DLL `BattleDomainService` paths (the offline
+  binding resolves the same `IProgressOutcomeSink` `ProgressBindings` installs, proven by
+  `BattleOfflineProgressSinkWiringTests`). `QuestManager.ClaimOnceAsync` applies `result.Progress` through
+  the same `ApplyServerProgress` entry point instead of calling `ReportTrainerProgress` directly, so a
+  claim's own newly re-evaluated achievement unlocks reach the toast. →
+  [Battle System](?page=unity/07-battle-system), [Quest System](?page=backend/07-quest-system)
 
 ## 2026-09-27 — Location Discoveries v2
 

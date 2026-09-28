@@ -23,12 +23,32 @@ Gameplay systems (input gates, ambient audio) release on `BattleClosed`, not `Ba
 
 **A capture is not a battle win (spec B7).** `EndBattle` computes `playerWon` from the winning side, but
 `BattleEndReason.ReportsBattleWon(reason, playerWon)` additionally excludes `Capture`: catching the wild
-creature ends the battle without reporting `IQuestService.OnBattleWon`/`OnTrainerDefeated`. The capture's
+creature ends the battle without a `BattleWon`/`TrainerDefeated` outcome. The capture's
 own progress (`CreatureCaptured`, and the crystal's `ItemUsed`) comes back on the item-use result and is
 applied through `IQuestService.ApplyServerProgress` from `OnlineOfflineItemDomainService` — the client
 never reports the capture as a separate quest/achievement event. `BattleBagPanelHandler`'s capture branch
 no longer looks up the captured creature's base content key or calls a reporter itself; it just ends the
-battle with `BattleEndReason.Capture` and lets the item-use response's progress apply.
+battle with `BattleEndReason.Capture` and lets the item-use response's progress apply. Offline item use
+(potions in and out of battle, capture crystals) now binds to the same DLL `ItemUseDomainService` +
+effect handlers the server runs (`ItemUseOfflineBindings.Install`, called from
+`LocalDevGameInstaller`) instead of the old hand-rolled `OfflineItemUseService` (deleted, M1-F1,
+cr-api-unity `8aac92b1`) — this is what gives an offline potion its `ItemUsed` progress outcome (a
+`UsedItem` quest objective) and its `items_used_total` stat write, which the old mirror never produced.
+
+**Client battle-outcome reporters are gone (M1-F2u, cr-api-unity `107ce9d2`).**
+`QuestManager.OnCreatureDefeated`/`OnTrainerDefeated`/`OnBattleWon`, the matching `IQuestService`
+members, and `DefeatedOpponentReporter` (which used to remember a fainted opponent's species before its
+row was soft-deleted) are deleted — the server, or the same DLL `BattleDomainService` offline, now
+produces the `BattleWon`/`CreatureDefeated`/`TrainerDefeated` outcomes itself as part of resolving the
+battle action, so the client has no member left that could report them. `BattleCoordinator`'s turn loop
+applies each action's `outcome.Progress` via `_questManager.ApplyServerProgress` right after
+`SubmitActionAsync` returns — one call site covers both the online HTTP response and the offline DLL
+response, since both return the same `ActionOutcome`; the call is a no-op on a non-deciding turn
+(`Progress` is null there). The offline `IBattleDomainService` binding resolves its `IProgressOutcomeSink`
+from the same `ProgressBindings` install the rest of the offline stack uses, so an offline battle
+produces and applies progress through the identical path as online play —
+`BattleOfflineProgressSinkWiringTests` proves the DI actually resolves it, since the sink's constructor
+parameter is optional and a broken binding would otherwise compile silently.
 
 ### Installer Binding
 

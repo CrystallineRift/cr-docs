@@ -882,6 +882,15 @@ POST /api/v1/quests/claim
 
 On the Unity client, `QuestManager.ClaimRewardsAsync` deserializes this result and forwards it to `QuestRewardDispatcher`, which places spawned creatures, fires `OnRewardsDispatched`, and routes through the event-wiring system (see `docs/unity/15-event-wiring.md`). Stat writes (`TrainerExperiencePoints`, `QuestsCompleted`) are performed by the backend during `ClaimRewardsAsync` — the Unity side must not double-write them.
 
+`QuestManager.ClaimOnceAsync` applies `result.Progress` via the same `ApplyServerProgress` entry point the
+battle turn loop uses (M1-F2u, cr-api-unity `107ce9d2`), instead of calling `ReportTrainerProgress`
+directly. A claim produces no quest/objective progress of its own (the completion already counted the
+`quests_completed` credit), but the achievement re-evaluation pass `ClaimRewardsAsync` runs after paying
+rewards (see "Server authority hardening" below) can carry a genuinely new unlock — e.g. a
+`TrainerLevelReached` achievement crossed by this claim's XP — and routing it through
+`ApplyServerProgress` is what gets that unlock to the achievement toast. `ReportUnlocks`/
+`ReportTrainerProgress` now have exactly one call site each, inside `ApplyServerProgress`.
+
 ### Crystalline Rift Studio sync: `PUT /api/v1/quests/templates/bulk`
 
 Used by the Unity editor Crystalline Rift Studio to push `QuestDefinition` ScriptableObjects to the server. Each entry is matched by `content_key` and the template row plus all its objectives, rewards, and requirements are replaced atomically.
@@ -1127,12 +1136,15 @@ server-side accept heals on the next read.
   membership in `target_reference_ids`; an empty list can never complete, which is why the Unity quest editor
   refuses to push one. Sending the same listed key again is a no-op by design (distinct counting).
 - **Firing `DefeatCreature` instead of `DefeatAnyCreature`.** `DefeatCreature` matches objectives where `target_reference_id` equals the event's `ReferenceId`. `DefeatAnyCreature` matches all defeat-type objectives regardless of `ReferenceId`. Sending the wrong type means progress is never recorded.
-- **Looking up a defeated wild creature after the faint.** The battle domain soft-deletes an uncaptured
-  wild creature in the same call that returns the killing blow, so a `GetCreature` made afterwards returns
-  null. Unity's `BattleCoordinator` used to do exactly that and silently skipped `OnCreatureDefeated` —
-  "First Battle" (Defeat any creature) never completed; only `WinBattles` fired. Now
-  `DefeatedOpponentReporter` remembers each opponent's species when it is identified and always reports
-  the defeat; `QuestManager.OnCreatureDefeated(null)` still sends `DefeatAnyCreature`.
+- **Looking up a defeated wild creature after the faint (historical, now moot).** The battle domain
+  soft-deletes an uncaptured wild creature in the same call that returns the killing blow, so a
+  `GetCreature` made afterwards returns null. Unity's `BattleCoordinator` used to look the species up that
+  way and silently skip reporting a defeat — "First Battle" (Defeat any creature) never completed; only
+  `WinBattles` fired. The client-side fix was `DefeatedOpponentReporter`, which remembered each opponent's
+  species when it was identified and always reported the defeat. As of M1-F2u (cr-api-unity `107ce9d2`)
+  both it and `QuestManager.OnCreatureDefeated` are deleted: `BattleDomainService` now produces
+  `CreatureDefeated` itself, species and all, while the row still exists, so there is no
+  lookup-after-soft-delete left to get wrong.
 - **Setting `stat_key` on a `HasItem` requirement.** The `HasItem` evaluator reads `reference_id` for the item UUID — `stat_key` is ignored. Putting the item ID in `stat_key` will cause the check to always fail silently.
 - **Calling `ClaimRewardsAsync` twice.** The method throws if `rewards_claimed` is already true. The game layer must guard against double-claim. Retrying a failed claim request should first check the instance's current `rewards_claimed` state.
 - **Forgetting `giver_npc_content_key` in the migration.** If the template has no `giver_npc_content_key`, it will not appear when the NPC's quest list is queried with `npcContentKey`. Set it to match the NPC's `content_key` exactly, or leave it NULL for world quests.
