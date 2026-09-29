@@ -1,5 +1,19 @@
 # Battle Extensions
 
+:::caution Server authority C2: the tracker moved server-side
+As of server-authority phase C2, ability battle missions are tracked by the **server**
+(`CR.Game.Compat.Battle.Missions.BattleMissionTracker`, `BattleDomainService.AssignMissionsAsync` /
+`ApplyMissionsAsync`, `battle.mission_state`), not by the client. `BattleMissionCompleted` is a
+progress-outcome producer (`LifetimeStatProjector` writes `battle_missions_completed`) — the
+client-side `IStatService.IncrementAsync("battle_missions_completed", ...)` call this page describes
+below is the outcome C2 retires. `BattleMissionConductor` becomes a **presenter**: it reads
+`ActionOutcome.MissionProgress` / `BattleStateDto.Missions` and raises the same `BattleEvents`, and no
+longer owns a `BattleMissionTracker` or writes the stat itself. The rest of this page (the sidecar
+pattern, the HUD wiring, the picker) still applies; the "Tracker" and "Telemetry" sections below
+describe the pre-C2 client implementation and are pending a rewrite — read `CR.Game.Compat.Battle.Missions`
+in cr-api for the current tracker.
+:::
+
 Some features react to combat without *being* combat: in-battle missions, combo meters, style
 scoring, tutorial hints, achievement watchers. The temptation is to add them to the turn loop, where
 all the information already is. Every one of those additions makes `BattleCoordinator` and
