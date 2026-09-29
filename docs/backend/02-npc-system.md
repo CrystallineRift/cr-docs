@@ -435,8 +435,20 @@ not just any authenticated player.
 | `GET` | `/api/v1/npc/content-registry` | Returns the global NPC content definitions — `(contentKey, npcType)` pairs from the `ContentWorldId` rows — for editor sync tooling |
 | `PUT` | `/api/v1/npc/content-registry` | `UpsertContentRegistryNpc` — creates or updates a global NPC template. Body: `{ contentKey, npcType, itemSpawnerContentKey?, isRematchable? }` |
 | `DELETE` | `/api/v1/npc/content-registry/{contentKey}` | Soft-deletes a global NPC template |
+| `PUT` | `/api/v1/npc/content-registry/{contentKey}/battle-item-loadout` | `UpsertNpcBattleItemLoadout` — idempotent upsert of a trainer NPC's authored battle-item stock (`npc_battle_item_loadout`). Body: `{ items: [{ itemContentKey, quantity }] }`. Content Studio push leg (`SyncTrainerBattle`) |
 | `GET` | `/api/v1/npc/trainer-defeats` | Every `npc_content_key` the account has defeated (`offset` / `limit` bounded). Unity's `TrainerDefeatCache` reads the local PlayerData `trainer_defeat` table first and calls this once per account per session to mirror any server-only defeats into it; a trainer-battle win reaches the cache through `BattleResult.DefeatedNpcContentKey`, not a re-fetch |
 | `POST` | `/api/v1/npc/reset-teams` | `ResetNpcTeams` — discards the cached creature teams of every NPC with the given `contentKey`, across all accounts. Body: `{ contentKey }`. Returns `{ contentKey, npcsReset }` |
+
+:::note Server-authoritative Trainer battle start supersedes ensure-creature-team / ensure-items
+`POST /api/v1/battles` (`IBattleEncounterDomainService.StartEncounterAsync`, `EncounterKind.Trainer`)
+now builds the NPC's team from its `{key}-team` spawner templates and seeds its battle items from
+`npc_battle_item_loadout` itself, at the moment a battle actually starts — the client no longer
+calls `ensure-creature-team` / `ensure-items` as a pre-warm at world load (`NpcTrainerBehaviour`
+only reads the team/items back, for UI). The two routes stay live (still used by other flows/tests)
+but a Trainer battle never needs them any more. Offline, the same DLL service does the same thing
+against local SQLite; `M16050SeedMeadowScoutBattleIdentity` seeds the Meadow Scout's content-registry
+`Trainer` row and a `npc_battle_item_loadout` entry so the offline floor has one to test against.
+:::
 
 ### `POST /api/v1/npc/reset-teams` — ResetNpcTeams
 
