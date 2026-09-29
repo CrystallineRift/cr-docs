@@ -1,17 +1,30 @@
 # Battle Extensions
 
-:::caution Server authority C2: the tracker moved server-side
-As of server-authority phase C2, ability battle missions are tracked by the **server**
-(`CR.Game.Compat.Battle.Missions.BattleMissionTracker`, `BattleDomainService.AssignMissionsAsync` /
-`ApplyMissionsAsync`, `battle.mission_state`), not by the client. `BattleMissionCompleted` is a
-progress-outcome producer (`LifetimeStatProjector` writes `battle_missions_completed`) — the
-client-side `IStatService.IncrementAsync("battle_missions_completed", ...)` call this page describes
-below is the outcome C2 retires. `BattleMissionConductor` becomes a **presenter**: it reads
-`ActionOutcome.MissionProgress` / `BattleStateDto.Missions` and raises the same `BattleEvents`, and no
-longer owns a `BattleMissionTracker` or writes the stat itself. The rest of this page (the sidecar
-pattern, the HUD wiring, the picker) still applies; the "Tracker" and "Telemetry" sections below
-describe the pre-C2 client implementation and are pending a rewrite — read `CR.Game.Compat.Battle.Missions`
-in cr-api for the current tracker.
+:::info Server authority C1/C2: the turn loop and the mission tracker both moved server-side
+This page was rewritten for server-authority phases C1/C2 (2026-09-28). Two things changed under
+the sidecar pattern this page documents:
+
+- **The turn loop.** `BattleCoordinator` no longer decides who acts or runs an AI. It starts a
+  battle by intent (`POST /api/v1/battles` → `IBattleEncounterDomainService.StartEncounterAsync`)
+  and, each turn, submits only its own action (`POST /api/v1/battles/{battleId}/actions` →
+  `IBattleTurnDomainService.SubmitTurnAsync`). The server resolves the player's action, then plays
+  the entire opponent side itself (wild AI or trainer NPC, ≤ 8 steps) and returns every step —
+  `TurnResolution.Steps` — in order. `BattleCoordinator` replays them through the same
+  `PlayAndReconcileAsync` pipeline described below; it never calls a local AI. See
+  [The turn loop is server-driven](#the-turn-loop-is-server-driven-c1c2) below.
+- **The mission tracker.** Ability battle missions are tracked by the **server**
+  (`CR.Game.Compat.Battle.Missions.BattleMissionTracker`, shared netstandard2.1 code loaded by both
+  cr-api and Unity; `BattleDomainService.AssignMissionsAsync` / `ApplyMissionsAsync`;
+  `battle.mission_state`), not by the client. `BattleMissionCompleted` is a progress-outcome
+  producer (`LifetimeStatProjector` writes `battle_missions_completed`) rather than a client stat
+  write. `BattleMissionConductor` is now a pure **presenter**: it reads
+  `ActionOutcome.MissionProgress` and raises the same `BattleEvents` the HUD already listens to. The
+  Unity-side tracker (`Assets/CR/Game/Battle/Logic/BattleMissionTracker.cs`,
+  `MissionProgressEvent.cs`) is deleted; `MissionDefinition.cs` survives as a content-authoring type
+  only (Studio, the mission picker), not a runtime state machine.
+
+The rest of this page (the sidecar pattern, the two seams, the HUD wiring, the picker, elemental
+reactions) still applies as written.
 :::
 
 Some features react to combat without *being* combat: in-battle missions, combo meters, style
@@ -41,8 +54,16 @@ feature, not an extension — see [When *not* to use this](#when-not-to-use-this
 ### Outbound: `ActionResolved`
 
 ```csharp
-// Assets/CR/Game/Battle/BattleCoordinator.cs — turn loop
-await PlayAndReconcileAsync(outcome, playerTrainerId.Value, wildTrainerId, ct);
+// Assets/CR/Game/Battle/BattleCoordinator.cs — PlayStepsAsync, called once per TurnResolution.Steps
+// entry (the player's action, then every server-resolved AI reply) and once per
+// EncounterStartResult.OpeningSteps entry (C2d — see below)
+await PlayAndReconcileAsync(outcome, playerTrainerId, opponentTrainerId, ct);
+
+if (outcome.ActionType == BattleActionType.Item && outcome.ActingTrainerId != playerTrainerId
+    && !string.IsNullOrEmpty(outcome.ItemName))
+{
+    BattleEvents.RaiseOpponentItemUsed(outcome.ActingCreatureId.ToString(), outcome.ItemName, outcome.HpRestored);
+}
 
 // The outbound extension seam: sidecars observe resolved actions here.
 BattleEvents.RaiseActionResolved(outcome);
@@ -54,9 +75,11 @@ Two properties of this placement matter:
   `IBattlePresentationSequencer.PlayOutcomeAsync`, so by the time the event fires the hit has already
   been animated. A reaction to the hit — a mission toast, a combo bump — lands *after* the hit it
   reacts to instead of on top of it.
-- **Once per action, for both sides.** The event is raised in the shared tail of the loop, so it
-  fires for the player's actions and the wild AI's alike. Filtering by
-  `ActionOutcome.ActingTrainerId` is the extension's job, not the coordinator's.
+- **Once per resolved step, for both sides.** `PlayStepsAsync` is the one replay path shared by the
+  turn loop (`TurnResolution.Steps`) and the AI-first opening replay (`EncounterStartResult.OpeningSteps`,
+  C2d), so the event fires for the player's actions and every server-run AI step alike, in
+  resolution order. Filtering by `ActionOutcome.ActingTrainerId` is the extension's job, not the
+  coordinator's.
 
 `ActionOutcome` (`CR.Game.Model.Battle`, a cr-api DLL type) is the full resolved record: acting
 trainer, target creature, damage, faint flags, `ConditionsApplied` (what landed on the target) and
@@ -92,10 +115,10 @@ BattleEvents.RaisePlayerTurnStarted(activeCreatureId, abilities);
   Battles run identically in a container that binds no extension at all — which is what makes this a
   seam rather than a dependency.
 
-## Why an unlocked move "just works"
+## Why an unlocked move "just works" — and why it is no longer free of checks
 
-The reason this pattern is cheap is a property of the resolver: **there is no ownership check on
-abilities.**
+Inside `BattleDomainService.ResolveSingleActionAsync`, a submitted ability is looked up by id in the
+`abilities` table and resolved with no ownership check at that layer:
 
 ```csharp
 // cr-api — Game/CR.Game.Domain.Services/Implementation/Battle/BattleDomainService.cs
@@ -106,26 +129,43 @@ if (action.Type == BattleActionType.Ability && action.AbilityId.HasValue)
 }
 ```
 
-A submitted ability is looked up by id in the `abilities` table and resolved. Nothing validates that
-the id is in the creature's learned set or its ability-progression set. So an injected move is not a
-special case anywhere downstream — it goes through the same damage math, the same accuracy roll, the
-same `animation_key`, the same VFX/SFX keys, the same `AbilityFxCue`, the same
-`BattlePresentationSequencer` beats. The extension contributes *one list entry* and gets the entire
-pipeline for free.
+That is still why an injected move needs no special case downstream — it goes through the same
+damage math, the same accuracy roll, the same `animation_key`, the same VFX/SFX keys, the same
+`AbilityFxCue`, the same `BattlePresentationSequencer` beats. The extension contributes *one list
+entry* and gets the entire pipeline for free.
 
-Contrast with the `Switch` action a few lines below, which *does* validate
-(`newCreature.CurrentTrainerId == trainerId`). The asymmetry is deliberate-by-accident: switching to
-a creature you do not own would be a correctness bug, while using an ability you have not learned was
-simply never a scenario until missions existed.
+**But the entry point in front of it now checks (server authority C2).** `IBattleTurnDomainService`
+— the server-driven turn endpoint `POST /api/v1/battles/{battleId}/actions` — validates an `Ability`
+action *before* calling `SubmitActionAsync` at all:
+
+```csharp
+// cr-api — Npcs/CR.Npcs.Domain.Services/Implementation/Battle/BattleTurnDomainService.cs
+var known = await _creatureInspection.GetKnownAbilitiesAsync(creatureId.Value, ct);
+if (known.Any(a => a.AbilityId == abilityId.Value)) return true;
+
+var tracker = battle.MissionState.ParseTrackerState();
+return tracker?.UnlockedAbilityIds?.Contains(abilityId.Value) == true;
+```
+
+An ability is legal iff it is in the creature's learned set **or** in the server's own mission
+tracker's `UnlockedAbilityIds` (the same `battle.mission_state` snapshot `AssignMissionsAsync` /
+`ApplyMissionsAsync` maintain). An illegal ability is refused (`IllegalAbility`) and
+`SubmitActionAsync` is never called — nothing is charged, no turn is consumed. This is why the
+mission-unlock seam still "just works" without a dedicated grant table: the tracker's own snapshot
+*is* the grant list the legality check reads.
+
+Contrast with `Switch`, which has always validated inside `ResolveSingleActionAsync`
+(`newCreature.CurrentTrainerId == trainerId`) — that check is unchanged; C2 only added the
+*ability*-legality layer, at a different point in the call chain (before dispatch, in the new
+endpoint, not inside the resolver).
 
 :::caution
-**Online play currently trusts the client about unlocks.** Mission evaluation is entirely
-client-side, and the server accepts any ability id it can find in the `abilities` table. A modified
-client could submit Mega Burn on turn one without earning it. This is acceptable for a
-single-player/demo posture and is a known follow-up — server-side validation would mean the battle
-service tracking per-battle unlock grants, which is exactly the battle-system change this pattern was
-built to avoid. Do not build anything competitive or PvP-facing on top of client-evaluated unlocks
-until that lands.
+**The legacy `POST /api/v1/battle/{id}/submit` route does not carry this check.** It predates C2 and
+is scheduled for retirement (server-authority design §5 Phase C2 "Compatibility"), but it is still
+live as of this writing — a client that bypassed the new `/actions` endpoint and called the old
+route directly could still submit an unlearned ability. `BattleCoordinator` never does; this is a
+residual attack surface until the gate bump removes the old route. Do not add new callers of the
+legacy submit route.
 :::
 
 ## When to reach for a sidecar
@@ -144,6 +184,51 @@ A new **status condition**, a **damage formula change**, a **priority/turn-order
 the opponent AI must account for are battle-system changes. Bolting them onto `ActionResolved` means
 reacting one action too late, and there is no inbound seam that can alter a resolution in flight —
 `Augment` only adds options to a menu.
+
+## The turn loop is server-driven (C1/C2)
+
+This section is not about the sidecar pattern — it is the context every sidecar now runs inside,
+since it changes when and how often `ActionResolved` fires.
+
+**C1 — battle start by intent.** `BattleCoordinator` never rolls a wild spawn or builds an NPC's
+team. It calls `IBattleEncounterDomainService.StartEncounterAsync(accountId, trainerId, encounter,
+abilityMissionKey, ct)` with `encounter = { Kind: Wild, SpawnerKey }` or `{ Kind: Trainer, NpcKey }` —
+the server rolls the wild spawn through the normal validating `CreatureSpawnDomainService` path, or
+builds the NPC's team/items from its own authored content (`npc_battle_item_loadout`), and returns
+`EncounterStartResult { BattleId, RoundKey, ActiveTrainerId, OpeningSteps }`.
+
+**C2 — one intent per turn.** Each turn, `BattleCoordinator.RunTurnLoopAsync` only ever prompts the
+player and submits their own action via `IBattleTurnDomainService.SubmitTurnAsync(accountId,
+battleId, trainerId, action, ct)`. The server resolves it, then runs the opponent side itself (wild
+AI or trainer NPC, bounded at 8 steps per request — past the cap the AI side forfeits) and returns
+`TurnResolution { Steps, State, NextRoundKey, EndReason, Missions, Progress }`. `Steps` is the
+player's action plus every AI reply, in order; `BattleCoordinator` presents each one through
+`PlayStepsAsync` exactly as if it had resolved a single local turn. There is no `_wildAI`/`_trainerAI`
+field on `BattleCoordinator` any more, and no NPC `use-battle-item` HTTP call from the client — a
+trainer NPC's own item use is decided and applied entirely server-side, inside
+`BattleTurnDomainService.SubmitTurnAsync`, via an internal `INpcDomainService` call (never a battle
+route).
+
+**C2d — a faster opponent can open the battle on its own turn.** `DetermineFirstTurnAsync` picks
+whichever side's active creature has higher Speed; ties go to the player. When the opponent wins
+that check, `StartEncounterAsync` runs the *same* AI loop `BattleTurnDomainService` uses internally
+(shared via `IBattleTurnDomainService.RunOpeningStepsAsync`, capped at the same 8 steps, forfeiting
+the AI side past that) **before returning**, so the response's `RoundKey`/`ActiveTrainerId` already
+reflect the player's own turn (or the battle having ended). The opponent's already-resolved actions
+come back as `EncounterStartResult.OpeningSteps`; `BattleCoordinator` replays them through
+`PlayStepsAsync` right after the arena is revealed and before the first `RaisePlayerTurnStarted`
+prompt. A battle can never hang waiting for a player submit against a round that was never theirs.
+
+An AI item use — a trainer NPC drinking its own potion, in the turn loop or in an opening step —
+carries its own presentation data on the outcome: `ActionOutcome.ItemName` and `.HpRestored`, set by
+`BattleTurnDomainService` from the `NpcBattleItemUseResult` its internal `INpcDomainService` call
+returns. `PlayStepsAsync` raises `BattleEvents.RaiseOpponentItemUsed` for any non-player `Item`
+action outcome that carries an `ItemName` — the "Scout drank a Potion!" toast has a data source again
+now that the client no longer resolves the NPC's item use itself.
+
+**Offline** runs the identical DLL `BattleTurnDomainService` / `BattleEncounterDomainService` against
+local SQLite through the same online/offline router (`OnlineOfflineBattleTurnDomainService`,
+`OnlineOfflineBattleEncounterDomainService`) — one turn loop, one opening-AI loop, both authorities.
 
 ## Elemental reactions are content
 
@@ -250,69 +335,90 @@ plus one".
 
 | Piece | Path | Role |
 |-------|------|------|
-| `BattleMissionTracker` | `Assets/CR/Game/Battle/Logic/BattleMissionTracker.cs` | Pure rules engine. Folds one `ActionOutcome` into every active mission, reports what moved |
-| `MissionDefinition` / `MissionProgressEvent` | `Assets/CR/Game/Battle/Logic/` | The content record and the per-observation result |
-| `BattleMissionConductor` | `Assets/CR/Game/Battle/Missions/BattleMissionConductor.cs` | The sidecar. Owns both seams, resolves rewards, raises HUD events, writes the stat |
-| `IBattleMissionTemplateSource` | `Assets/CR/Game/Battle/Missions/` | Content source; SQLite + HTTP implementations behind `BattleMissionTemplateRoutedSource` |
+| `BattleMissionTracker` | cr-api `Convenience/CR.Game.Compat/Battle/Missions/BattleMissionTracker.cs` (netstandard2.1, shared with Unity) | Pure rules engine. Folds one `ActionOutcome` into every active mission, reports what moved. Runs server-side (online and offline authority) inside `BattleDomainService.AssignMissionsAsync` / `ApplyMissionsAsync` |
+| `MissionDefinition` (tracker's) / `BattleMissionTrackerState` | cr-api `Convenience/CR.Game.Compat/Battle/Missions/` | The content record and the persisted snapshot (`battle.mission_state`, JSON) the tracker restores from each call |
+| `MissionDefinition.cs` (Unity) | `Assets/CR/Game/Battle/Logic/MissionDefinition.cs` | **Content-authoring type only** — read by `IBattleMissionTemplateSource`/the Studio editor/the pre-battle mission-selection screen. Not the runtime tracker (that one is server-side now); the two are separate concerns that happen to share a name |
+| `BattleMissionConductor` | `Assets/CR/Game/Battle/Missions/BattleMissionConductor.cs` | The sidecar. A pure **presenter**: reads `ActionOutcome.MissionProgress`, resolves the reward ability's display data for `Augment`, raises HUD events. No tracker field, no stat write |
+| `IBattleMissionTemplateSource` | `Assets/CR/Game/Battle/Missions/` | Content source for the *pre-battle picker* (which mission the player may choose); SQLite + HTTP implementations behind `BattleMissionTemplateRoutedSource` |
 | `BattleHUD` | `Assets/CR/UI/Battle/BattleHUD.cs` | Renders progress toast, completion banner, unlocked-ability badge |
 | `battle_mission_template` | cr-api `Game/CR.Game.Data.Migration/M10004CreateBattleMissionTemplateTable.cs` | The table + the seeded `mission_pyromaniac` row |
-| `GET /api/v1/battle-missions` | cr-api `Game/CR.Game.Service.BFF/Endpoints/BattleMissionTemplateEndpoints.cs` | Read-only content endpoint |
+| `battle.mission_state` | cr-api migration **M16006** (Game domain) | Nullable TEXT column on `battle` — the tracker's own snapshot (progress + `UnlockedAbilityIds`), the thing `IsAbilityLegalAsync` reads |
+| `GET /api/v1/battle-missions` | cr-api `Game/CR.Game.Service.BFF/Endpoints/BattleMissionTemplateEndpoints.cs` | Read-only content endpoint — still the picker's feed, untouched by C2 |
 
 ### End-to-end flow
 
 ```
-BattleEvents.BattleStarted
+BattleCoordinator.StartWildBattleAsync / StartNpcBattleAsync
         │
-        ├─ BattleMissionConductor.OnBattleStarted
-        │      └─ fire-and-forget LoadTrackerAsync
-        │             └─ IBattleMissionTemplateSource.GetActiveMissionsAsync
-        │                    └─ BattleMissionTemplateRoutedSource → SyncRouter.ReadAsync
-        │                           ├─ online  → GET /api/v1/battle-missions
-        │                           └─ offline → battle_mission_template in game-data.bytes
-        │             └─ new BattleMissionTracker(missions, playerTrainerId)
+        ├─ IBattleEncounterDomainService.StartEncounterAsync(..., abilityMissionKey: selection)
+        │      └─ server: BattleDomainService.StartBattleAsync → AssignMissionsAsync
+        │             picks the named (or first active) mission template, builds the tracker,
+        │             persists battle.mission_state — before the response ever comes back
+        │      └─ if the opponent won the turn-1 speed check: RunOpeningStepsAsync plays it out
+        │             too, before returning (C2d) → EncounterStartResult.OpeningSteps
         │
-   ── turn loop ─────────────────────────────────────────────────────────────
+        ├─ AnnounceInitialMissions(initialState) — seeds the HUD at zero from BattleStateDto.Missions
+        ├─ PlayStepsAsync(OpeningSteps)  (C2d — only when non-empty)
+        │
+   ── turn loop (RunTurnLoopAsync) ─────────────────────────────────────────────
         │
         ├─ [player turn] BuildAbilityListAsync  →  Augment(...)  →  PlayerTurnStarted
         │                                             ▲
         │                                             └── conductor appends unlocked WildAbilityDto
         │
-        ├─ SubmitActionAsync → server resolves (no ownership check) → ActionOutcome
-        ├─ PlayAndReconcileAsync  (presentation plays)
-        └─ BattleEvents.ActionResolved(outcome)
-                 └─ conductor → tracker.Observe(outcome) → MissionProgressEvent[]
-                        ├─ not complete → BattleEvents.MissionProgressed  → HUD toast
-                        └─ complete     → IAbilityDomainService.GetAbilityAsync(rewardId)
-                                          ├─ cache WildAbilityDto { unlocked = true }
-                                          ├─ BattleEvents.MissionCompleted → HUD banner
-                                          └─ IStatService.IncrementAsync("battle_missions_completed")
-   ──────────────────────────────────────────────────────────────────────────
+        ├─ IBattleTurnDomainService.SubmitTurnAsync(playerAction)
+        │      └─ server: legality check (learned ∪ UnlockedAbilityIds) → SubmitActionAsync →
+        │             ApplyMissionsAsync (the tracker observes) → runs the AI side to completion
+        │             → TurnResolution { Steps, Missions, ... }
         │
-BattleEvents.BattleClosed → conductor drops the tracker and the unlock cache
+        └─ PlayStepsAsync(resolution.Steps)   — once per step, player's action then every AI reply
+                 ├─ PlayAndReconcileAsync(outcome)         (presentation plays)
+                 ├─ opponent Item outcome → RaiseOpponentItemUsed(itemName, hpRestored)   (C2d)
+                 ├─ ApplyServerProgress(outcome.Progress)  (XP/quests, server-produced)
+                 └─ BattleEvents.ActionResolved(outcome)
+                          └─ conductor reads outcome.MissionProgress (server-computed)
+                                 ├─ not complete → BattleEvents.MissionProgressed  → HUD toast
+                                 └─ complete     → IAbilityDomainService.GetAbilityAsync(rewardId)
+                                                   ├─ cache WildAbilityDto { unlocked = true }
+                                                   └─ BattleEvents.MissionCompleted → HUD banner
+                                                   (battle_missions_completed is written by
+                                                    LifetimeStatProjector server-side, not here)
+   ──────────────────────────────────────────────────────────────────────────────
+        │
+BattleEvents.BattleClosed → conductor drops its unlock cache
 ```
 
-### The tracker is pure, and per-battle
+### The tracker is pure, and per-battle — and now runs where the authority does
 
-`BattleMissionTracker` lives in the `CR.Game.Battle.Logic` asmdef, which has `"references": []` and
-`"noEngineReferences": true` — no Unity API, no repositories, no `async`. It takes a
-`IReadOnlyList<MissionDefinition>` and the player's trainer id, and exposes exactly two members:
-`Observe(ActionOutcome)` and `UnlockedAbilityIds`.
+`BattleMissionTracker` (cr-api `Convenience/CR.Game.Compat/Battle/Missions/BattleMissionTracker.cs`,
+`netstandard2.1`, loaded by both the server and Unity's offline DLL) has no repositories and no
+`async` — it takes an `IReadOnlyList<MissionDefinition>` and the player's trainer id, and exposes
+`Observe(ActionOutcome)`, `Statuses()`, `Snapshot()`/`Restore()` and `UnlockedAbilityIds`. It is
+constructed fresh from `battle.mission_state` on every call that needs it
+(`BattleDomainService.ApplyMissionsAsync`, `GetBattleStateAsync`, `BattleTurnDomainService`'s
+legality check) rather than held live in memory — "restore, observe, persist" per call, not one
+long-lived instance per battle.
 
-That purity is a consequence of the design, not a stylistic choice. *"Burn the same target three
-times"* is a fact about **this fight**, so the state dies with the tracker. Concretely, that means the
-mission feature ships with:
+That purity is still a consequence of the design, not a stylistic choice. *"Burn the same target
+three times"* is a fact about **this fight**, so the state dies with the battle. Concretely, that
+means the mission feature ships with:
 
-- **no persistence** — nothing to save, nothing to load;
-- **no migrations for progress** — only the template table is content;
-- **no online/offline routing for progress** — there is nothing to reconcile;
-- **no cross-session bugs** — a mission cannot arrive half-finished from a previous battle.
+- **one column of persistence** — `battle.mission_state`, a JSON snapshot, no separate mission or
+  grant tables (`M16006`);
+- **no separate online/offline routing for progress** — the same DLL runs both, against whichever
+  database is local;
+- **no cross-session bugs** — a mission cannot arrive half-finished from a previous battle, and
+  ending the battle drops the row with it.
 
-The only durable trace a mission leaves is one stat increment on completion.
+The only durable trace a mission leaves is one stat increment on completion, written by
+`LifetimeStatProjector` from the `BattleMissionCompleted` progress outcome — not by anything in the
+battle code itself.
 
 ### Rules the tracker encodes
 
-`Assets/CR/Game/Battle/Logic/Tests/BattleMissionTrackerTests.cs` — 11 EditMode tests, runnable
-without a scene, a database or a server.
+`Convenience/CR.Game.Compat.Test/BattleMissionTrackerTests.cs` (cr-api) — pure-function tests,
+runnable without a scene, a database or a server. (The Unity-side EditMode tests of the same name
+tested the old client tracker and were deleted with it; see [Tests](#tests) below.)
 
 | Rule | Test |
 |------|------|
@@ -338,47 +444,35 @@ presence.
 ### The conductor
 
 `BattleMissionConductor` implements `IPlayerAbilityAugmenter` and `IDisposable`, and is the only
-class that touches both seams. Its responsibilities:
+class that touches both seams. It is a **pure presenter now** (server authority C2) — no tracker
+field, no content-source dependency, no session dependency, no stat write. Its responsibilities:
 
-1. **Lifecycle** — subscribes to `BattleStarted` / `ActionResolved` / `BattleClosed` in its
-   constructor, unsubscribes in `Dispose`. On `BattleStarted` it clears the unlock cache and kicks
-   off the template load; on `BattleClosed` it drops the tracker and the cache.
-2. **Observation** — feeds each `ActionOutcome` to the tracker and turns each returned
-   `MissionProgressEvent` into either `BattleEvents.RaiseMissionProgressed` or the completion path.
-3. **Reward resolution** — on completion, resolves the reward ability id through
-   `IAbilityDomainService.GetAbilityAsync` and caches a `WildAbilityDto` with `unlocked = true`,
-   built from the ability's real `Name`, `AnimationKey`, `Category`, `Power` and `Cost`.
-4. **Telemetry** — `IStatService.IncrementAsync(accountId, trainerId, "battle_missions_completed", 1,
-   $"mission:{missionName}")`. `IStatService` resolves to the DLL `StatService` over
-   `StatOnlineOfflineRepository`.
-5. **Contribution** — `Augment` appends every cached unlock that is not already in the list, so a
+1. **Lifecycle** — subscribes to `ActionResolved` / `BattleClosed` in its constructor, unsubscribes
+   in `Dispose`. `BattleClosed` drops the unlock cache; there is no tracker to drop any more.
+2. **Observation** — reads `ActionOutcome.MissionProgress` (server-computed; one entry per mission
+   the action changed, `Completed = true` exactly once) and turns each entry into either
+   `BattleEvents.RaiseMissionProgressed` or the completion path. No local `Observe` call.
+3. **Reward resolution** — on completion, resolves `BattleMissionStatus.RewardAbilityId` (a Guid;
+   the server sends only the id) through `IAbilityDomainService.GetAbilityAsync` and caches a
+   `WildAbilityDto` with `unlocked = true`, built from the ability's real `Name`, `AnimationKey`,
+   `Category`, `Power` and `Cost`.
+4. **Contribution** — `Augment` appends every cached unlock that is not already in the list, so a
    creature that legitimately knows Mega Burn never sees it twice.
 
 Every failure path degrades rather than throws: a missing reward ability logs a warning and skips the
-unlock, a failed ability lookup still fires the banner, and a failed stat write leaves the unlock
-standing. A battle must never break because a mission could not.
+unlock, a failed ability lookup still fires the banner. A battle must never break because a mission
+could not.
 
 :::caution
-**This telemetry write is now refused while online, and this is the known, tracked exception (server-
-authority phase B).** `StatOnlineOfflineRepository` used to write local-first and mirror to the server;
-it no longer does either while online — a stat write reaching it online is treated as a client-reported
-outcome (a bug, per the CORE RULE: the server must produce every outcome from what it decided, not take
-the client's word for it), so it is refused (no-op) and logged as an Error naming the stat and source.
-`BattleMissionConductor`'s `battle_missions_completed` write is the one caller still doing this — it has
-not yet been moved server-side — so as of this branch, **a mission completed while playing online records
-no stat at all**; only offline does the local increment happen. "The only durable trace a mission leaves
-is one stat increment on completion" (above) is therefore only true offline right now. See [Domain Sync
-Pattern](?page=unity/16-domain-sync-pattern#stats-and-achievement-unlocks-the-server-is-the-sole-authority-online)
-for the general rule, and [Stats System](?page=backend/08-stats-system) for the server side.
-:::
-
-:::caution
-**The template load is deliberately fire-and-forget.** `BattleStarted` is a synchronous event, so
-`OnBattleStarted` cannot await content. It launches `LoadTrackerAsync` and returns; until it lands,
-`_tracker` is null and `OnActionResolved` returns early. The practical consequence is that a mission
-may start counting from the second or third action of a battle rather than the first, on a cold
-offline read. A late mission was judged better than a stalled battle — do not "fix" this by awaiting
-inside the event handler.
+**The completion stat write moved server-side, and the client reporter was deleted, not left in
+place.** `LifetimeStatProjector` writes `battle_missions_completed` from the `BattleMissionCompleted`
+progress outcome — the same outcome `ApplyMissionsAsync` emits through the sink on every completion,
+online and offline alike, through the one authority for whichever mode is active. The conductor's old
+`RecordCompletionStatAsync` (a direct `IStatService.IncrementAsync` call) is gone: keeping it would
+have double-counted every mission completion once the server-driven turn loop went live online (the
+server-authoritative core rule — "when moving a derivation server-side, delete the client reporter in
+the same change"). If you are looking for where this stat is written, it is
+`LifetimeStatProjector`'s `BattleMissionCompleted` case, not anything under `Assets/CR/Game/Battle`.
 :::
 
 ### Mission definitions are content
@@ -442,6 +536,13 @@ Container.Bind(typeof(Game.Battle.Missions.BattleMissionConductor),
     .NonLazy();
 ```
 
+The binding itself is unchanged by C2 — Zenject resolves whatever the constructor asks for, and
+`BattleMissionConductor`'s constructor shrank (dropped `IBattleMissionTemplateSource`, `IStatService`,
+`IGameSessionService`, `IBattleMissionSelection`; it now takes only `ICRLogger` and
+`IAbilityDomainService`) with no installer change needed. The `IBattleMissionTemplateSource` trio
+above still exists and is still bound — it feeds the *picker* (which mission the player may choose
+next battle), a separate concern from the conductor's own presentation job.
+
 Three details that are easy to get wrong:
 
 - **`.NonLazy()` is load-bearing.** The conductor subscribes to the static `BattleEvents` in its
@@ -493,18 +594,29 @@ domain's `M12005SeedBattleMissions_20260903` (exported from Crystalline Rift Stu
 idempotently, so every database — fresh Postgres, `cr_dev`, and the baked `game-data.bytes` floor —
 carries all ten.
 
-### The choice is client state, on purpose
+### The choice is client state — but the server reads it now (C1)
 
-`IBattleMissionSelection` stores the chosen `content_key` in `PlayerPrefs`, **keyed by trainer id**
-so two characters on one device do not inherit each other's loadout. That is not a shortcut: the
-conductor is a Unity sidecar that evaluates missions from the outcome stream, online and offline
-alike, so nothing on the server ever needs to know which mission was picked. A per-trainer table
-would be four data layers and a REST route to move one string that never crosses the wire.
+`IBattleMissionSelection` still stores the chosen `content_key` in `PlayerPrefs`, **keyed by trainer
+id** so two characters on one device do not inherit each other's loadout — that storage choice did
+not change. What changed under it (server authority C1/C2): the server's mission tracker now decides
+which mission a battle actually runs, so the client's job shrank to naming its *preference*, sent as
+an intent, not evaluated locally any more.
 
-`BattleMissionConductor.ChooseActive` narrows the loaded list to the selection, with two fallbacks
-that both matter: an **unset** choice runs the first mission (so a fresh save is not mission-less),
-and a choice naming content that no longer exists — renamed, deactivated, or saved by an older
-build — is logged and replaced rather than silently leaving the player with nothing.
+`BattleCoordinator.StartWildBattleAsync` / `StartNpcBattleAsync` pass
+`_missionSelection?.SelectedContentKey` as `StartEncounterAsync`'s `abilityMissionKey` parameter.
+Server-side, `BattleDomainService.AssignMissionsAsync` picks the named template if it resolves and is
+active, or **the first active ability-mission template by name** if the key is unset or unknown —
+the same "unset → first available" fallback the old client-side `ChooseActive` used to apply, just
+run on the other side of the wire now. There is no `ChooseActive` method on the conductor any more —
+it is a pure presenter and never sees the template list.
+
+:::caution
+**This wiring had a real gap for one round.** Neither the C1 battle-start-by-intent work nor the C2
+mission-tracker port actually threaded `SelectedContentKey` through as `abilityMissionKey` — the
+player's chosen mission silently never reached the server until this was found and fixed in the same
+change that rewired the client turn loop onto the C2 contract. If a battle is running a mission the
+player did not choose, check this call site first.
+:::
 
 ### Missions must be reachable, and a test enforces it
 
@@ -650,17 +762,19 @@ is total silence.
 scene-placed component *also* bound with `FromNewComponentOnNewGameObject`) would double-subscribe
 and double-count every mission. The tell-tale is each progress toast appearing twice.
 
-**Missions are player-scoped by trainer id, resolved late.** The tracker is constructed with
-`_session.CurrentTrainerId ?? Guid.Empty`. If a battle somehow starts before a trainer session
-exists, every outcome fails the `ActingTrainerId` check and no mission ever ticks.
+**Missions are player-scoped by trainer id — enforced server-side now.** The server's tracker is
+constructed with `battle.Trainer1Id` (always the player) in `BattleDomainService`, not a client
+session lookup. There is nothing left client-side that could resolve the wrong trainer.
 
 **`"battle_missions_completed"` is a raw string.** Unlike `battles_won` and friends it is not in
-`StatKey` (cr-api `Stats/CR.Stats.Data/Constants/StatKey.cs`). Anything that later reads this stat —
-an achievement, the journal — must match the literal exactly. Promoting it to a `StatKey` constant is
-the obvious cleanup.
+`StatKey` (cr-api `Stats/CR.Stats.Data/Constants/StatKey.cs`). Anything that reads this stat — an
+achievement, the journal — must match the literal exactly. `LifetimeStatProjector`'s
+`BattleMissionCompleted` case is the one writer; promoting the literal to a `StatKey` constant is the
+obvious cleanup.
 
-**Progress is not resumable.** Quitting mid-battle discards mission progress by design. There is no
-row to clean up, but do not build UI that promises otherwise.
+**Progress is not resumable.** Quitting mid-battle discards `battle.mission_state` with the rest of
+the battle row by design. There is no separate row to clean up, but do not build UI that promises
+otherwise.
 
 ### A transient toast is not "shown"
 
@@ -691,11 +805,16 @@ actually raises that event — a query against the migrated database, not a read
 
 | Suite | Location | Covers |
 |-------|----------|--------|
-| `BattleMissionTrackerTests` | Unity `Assets/CR/Game/Battle/Logic/Tests/` (EditMode, 11 tests) | Every counting rule above |
-| `BattleMissionSeedMigrationGeneratorTests` | Unity `Assets/CR/Game/Battle/Logic/Tests/` (EditMode, 17 tests) | The exported migration's text: both engine branches, idempotency guard, authored id preserved and lowercased, quote/backslash escaping, `Down()` matching id *and* key, stable ordering |
+| `BattleMissionTrackerTests` | cr-api `Convenience/CR.Game.Compat.Test/` (5 tests) | Observe-ignores-others, complete-once-and-unlocks, snapshot/restore reproduces progress, JSON round-trip, malformed-JSON returns null. Superseded the Unity `Assets/CR/Game/Battle/Logic/Tests/BattleMissionTrackerTests.cs`, deleted with the runtime tracker it tested |
+| `BattleDomainServiceTests` (mission cases) | cr-api `Game/CR.Game.Domain.Services.Test/` | `StartBattle_WithAnActiveAbilityMission_AssignsItAndPersistsTheSnapshot`, `StartBattle_WithNoMissionTemplateRepository_NeverPersistsMissionState` |
+| `BattleTurnDomainServiceTests` | cr-api `Npcs/CR.Npcs.Domain.Services.Test/Battle/` | The server-driven turn loop end to end: legality (learned ∪ mission-unlocked), the AI-loop step cap and forfeit, a stalls-then-recovers AI loop resolving under the cap, trainer-AI item use carrying `ItemName`/`HpRestored`, and (C2d) `RunOpeningStepsAsync`'s AI-first opening round |
+| `BattleEncounterDomainServiceTests` | cr-api `Npcs/CR.Npcs.Domain.Services.Test/Battle/` | Battle-start-by-intent, plus (C2d) the opponent-wins-the-speed-check case: `OpeningSteps` is non-empty and the returned round key/active trainer reflect the state *after* the opening AI loop ran |
+| `LifetimeStatProjectorTests` (mission case) | cr-api `Quests/CR.Quests.Domain.Services.Test/Progress/` | `BattleMissionCompleted` writes `battle_missions_completed` exactly once |
+| `BattleMissionSeedMigrationGeneratorTests` | Unity `Assets/CR/Game/Battle/Logic/Tests/` (EditMode, 17 tests) | The exported migration's text: both engine branches, idempotency guard, authored id preserved and lowercased, quote/backslash escaping, `Down()` matching id *and* key, stable ordering. Still Unity-side — this is Studio's content-export path, not the runtime tracker |
 | `BattleMissionContentKeyTests` | Unity `Assets/CR/Game/Battle/Logic/Tests/` (EditMode, 21 tests) | The snake_case rule, and that a derived key always passes it |
 | `BattleMissionTemplateRepositorySqliteTests` | cr-api `Game/CR.Game.Data.Test/` (2 tests) | Seeded Pyromaniac row is returned; inactive and soft-deleted rows are excluded |
 | `BattleMissionTemplateEndpointsTests` | cr-api `Game/CR.Game.Domain.Services.Test/Endpoints/` (4 tests) | 200 with templates, 200 with empty list, `Problem` on repository throw, cancellation token propagation |
+| `BattleMissionStateSqliteTests` | cr-api `Convenience/CR.Data.Migrations.Test/` (2 tests) | `battle.mission_state` migrates as nullable TEXT on both engines |
 
 ## Related Pages
 
