@@ -42,7 +42,8 @@
     "repos": {
       "cr-api": [
         "Npcs/**/*.cs",
-        "Npcs/**/*.csproj"
+        "Npcs/**/*.csproj",
+        "Game/CR.Game.Model/Npcs/*.cs"
       ],
       "cr-data": [
         "Assets/Scripts/Npcs/**/*NpcCreatureGrantBehaviour*.cs",
@@ -52,11 +53,14 @@
         "Assets/CR/Npcs/Runtime/Repository/Implementation/NpcOnlineOfflineRepository.cs",
         "Assets/CR/Npcs/Runtime/Http/NpcClientUnityHttp.cs",
         "Assets/CR/Game/World/Behaviours/NpcTrainerBehaviour.cs",
+        "Assets/CR/Game/World/Behaviours/NpcCreatureGrantBehaviour.cs",
         "Assets/CR/Npcs/Runtime/Http/INpcClient.cs",
-        "Assets/CR/Npcs/Talk/*.cs"
+        "Assets/CR/Npcs/Talk/*.cs",
+        "Assets/CR/Npcs/Gift/**/*.cs",
+        "Assets/CR/Core/DI/NpcGiftOfflineBindings.cs"
       ]
     },
-    "description": "NPC CRUD, team management, domain service, REST endpoints, NpcCreatureSlotSpec; NPC content globalization via ContentWorldId sentinel and M2010GlobalizeNpcContent; battle_trainer_id minting (M2012) + NPC battle-item use endpoint (use-battle-item)"
+    "description": "NPC CRUD, team management, domain service, REST endpoints, NpcCreatureSlotSpec; NPC content globalization via ContentWorldId sentinel and M2010GlobalizeNpcContent; battle_trainer_id minting (M2012) + NPC battle-item use endpoint (use-battle-item); receive-gift intent (M16007 gift_template_id) superseding ensure-creature-team/give-creature for gift NPCs"
   },
   "backend/03-spawner-system": {
     "docPath": "docs/backend/03-spawner-system.md",
@@ -236,14 +240,16 @@
         "Assets/Scripts/**/*NpcMerchantBehaviour*.cs",
         "Assets/CR/Game/World/Behaviours/NpcDialogueBehaviour.cs",
         "Assets/CR/Game/World/Behaviours/NpcInteractionBehaviour.cs",
+        "Assets/CR/Game/World/Behaviours/NpcCreatureGrantBehaviour.cs",
         "Assets/CR/Game/World/Behaviours/NpcInteractionIndicator.cs",
         "Assets/CR/Game/World/Behaviours/NpcInteractionRouting.cs",
         "Assets/CR/Game/World/Behaviours/NpcInteractionRoute.cs",
         "Assets/CR/Game/World/Behaviours/NpcTrainerBarkPolicy.cs",
-        "Assets/CR/Game/World/Behaviours/DialogueBackend.cs"
+        "Assets/CR/Game/World/Behaviours/DialogueBackend.cs",
+        "Assets/CR/Npcs/Gift/**/*.cs"
       ]
     },
-    "description": "Composable NPC interaction: NpcInteractionBehaviour dispatch, NpcBattleRequest, OnBattleRequested event, grant vs battle vs merchant vs dialogue flow; two dialogue backends (Plugin/Cr) and NpcInteractionRouting's pure decision table, trainer bark gating on DialogueOutcome.Completed"
+    "description": "Composable NPC interaction: NpcInteractionBehaviour dispatch, NpcBattleRequest, OnBattleRequested event, grant vs battle vs merchant vs dialogue flow; two dialogue backends (Plugin/Cr) and NpcInteractionRouting's pure decision table, trainer bark gating on DialogueOutcome.Completed; GiveCreatureAsync now calls the receive-gift intent (INpcGiftService), not INpcWorldRepository"
   },
   "unity/05-http-clients": {
     "docPath": "docs/unity/05-http-clients.md",
@@ -748,13 +754,15 @@
         "Game/CR.Game.Service.BFF/Endpoints/CreatureStatusEndpoints.cs",
         "Game/CR.Game.Domain.Services/Implementation/Item/ItemUseDomainService.cs",
         "Items/CR.Items.Data.Migration/M6020SeedCreatureConsumables.cs",
-        "Items/CR.Items.Data.Migration/M6022BackfillItemIconAssetKey.cs"
+        "Items/CR.Items.Data.Migration/M6022BackfillItemIconAssetKey.cs",
+        "Trainers/CR.Trainers.Service.REST/Endpoints/TrainerCreatureIntentEndpoints.cs"
       ],
       "cr-data": [
         "Assets/CR/Core/Data/Repository/GameConfigurationKeys.cs",
         "Assets/CR/UI/PlayerMenuWindow.cs",
         "Assets/CR/UI/PlayerTeamView.cs",
         "Assets/CR/UI/BagScreenHandler.cs",
+        "Assets/CR/Trainers/Inventory/**/*.cs",
         "Assets/CR/UI/BagScreen.uss",
         "Assets/CR/UI/Quests/**/*.cs",
         "Assets/CR/UI/Achievements/**/*.cs",
@@ -1355,11 +1363,14 @@
         "Game/CR.Game.Domain.Services/Models/TeamSlotEntry.cs",
         "Game/CR.Game.Domain.Services.Test/Creature/TeamSlotsTests.cs",
         "Game/CR.Game.Model/Spawner/AbilityProgressionSetEntry.cs",
-        "Spawner/CR.Spawner.Data.Migration/M5019AddUnlockQuestToAbilityProgressionSetEntry.cs"
+        "Spawner/CR.Spawner.Data.Migration/M5019AddUnlockQuestToAbilityProgressionSetEntry.cs",
+        "Trainers/CR.Trainers.Service.REST/Endpoints/TrainerCreatureIntentEndpoints.cs"
       ],
       "cr-data": [
         "Assets/CR/UI/Storage/Logic/**/*.cs",
         "Assets/CR/UI/PlayerStorageView.cs",
+        "Assets/CR/UI/PlayerTeamView.cs",
+        "Assets/CR/Trainers/Inventory/**/*.cs",
         "Assets/CR/UI/PlayerMenuWindow.cs",
         "Assets/CR/UI/Resources/PlayerMenuWindow.uxml",
         "Assets/CR/UI/Resources/PlayerMenuWindow.uss",

@@ -30,6 +30,15 @@ In practice, `NpcInteractionBehaviour` does call `IBattleCoordinator.StartNpcBat
 
 Creature transfers are atomic on the backend side — the server commits the creature to the trainer's inventory in a single transaction. If the client cancels mid-flight and abandons the request, it does not know whether the server completed the transfer. Using `CancellationToken.None` prevents the client from cancelling the request and then falsely concluding the transfer failed. The backend's idempotency guarantee (same NPC cannot give the same slot twice) covers the case where the transfer did complete but the client never received the response.
 
+:::note Phase D: `GiveCreatureAsync` calls the receive-gift intent, not `INpcWorldRepository`
+`GiveCreatureAsync` no longer calls `INpcWorldRepository.GiveCreatureAsync`. It calls
+`INpcGiftService.ReceiveGiftAsync(accountId, trainerId, npcWorld.ContentKey, ct)` (`CR.Npcs.Gift`,
+online/offline routed like the talk intent) and switches on `NpcGiftResult.Status`
+(`Granted` / `NotAGiftNpc` / `UnknownNpc`), hiding the grant prompt on all three — a refusal is the
+server's decision to make, never a reason for the client to keep offering a route that will 404 again.
+See [NPC System](?page=backend/02-npc-system) for the server side.
+:::
+
 ## Component Overview
 
 | Component | Responsibility |

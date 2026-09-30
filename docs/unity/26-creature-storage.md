@@ -61,6 +61,26 @@ UI asks for something impossible and gets a refusal rather than a half-applied w
 `TeamStorageSwapResult` is its own type because `InventorySwapResult` describes two slots inside a
 single inventory and carries one `InventoryId`. This operation spans two.
 
+## The write goes through an intent, not the DLL directly (Phase D)
+
+`PlayerTeamView` and `PlayerStorageView` still read through `ICreatureInventoryService`
+(`GetTeamAsync`, `GetStorageAsync`, `GetTeamSlotsAsync`, ...) — those are unaffected. But
+`SwapTeamSlotsAsync`, `MoveToStorageAsync`, `MoveToTeamAsync` and `SwapTeamAndStorageAsync` now go
+through `ITrainerCreatureIntentService` (`Assets/CR/Trainers/Inventory/`), not
+`ICreatureInventoryService` directly. Before Phase D, `ICreatureInventoryService` was bound straight
+to the local `CreatureInventoryService` DLL with no online/offline branch — meaning an online
+player's team edits never reached the server at all, only the local SQLite cache.
+
+`TrainerCreatureIntentOnlineOfflineService` is the router: online it calls the matching
+`POST /api/v1/trainers/{t}/creatures/{c}/move`, `.../team/swap` or
+`.../creatures/team-storage-swap` route (`TrainerCreatureIntentEndpoints.cs`, cr-api) and — because
+the endpoint answers a business-rule refusal (409, e.g. last-team-creature) with a message body, not
+the result object — rebuilds a `Success = false` result in the exact shape the offline DLL call
+returns, so the two views need no online/offline branch of their own. Offline, the router calls the
+same unqualified `ICreatureInventoryService` instance directly. `ITrainerItemIntentService`
+(`Assets/CR/UI/BagScreenHandler.cs`'s discard button) is the same pattern for
+`IItemInventoryService.RemoveFromBackpackAsync`.
+
 ## Gamepad
 
 Slots and swap cards are `Button`s, not clickable `VisualElement`s. `Button` is focusable and its

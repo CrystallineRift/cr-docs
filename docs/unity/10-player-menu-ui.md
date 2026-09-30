@@ -235,11 +235,24 @@ Loads the backpack (`IItemInventoryService.GetBackpackAsync`) and one `BaseItem`
 distinct item (`IItemDomainService.GetItemAsync`, one catalogue page plus a back-fill call for any
 straggler authored past the page limit).
 
+:::danger[Fixed: discard diverged from the server online (Phase D, "A4")]
+Discard used to call `IItemInventoryService.RemoveFromBackpackAsync` directly — bound straight to the
+local SQLite `ItemInventoryService` DLL with no online/offline branch, so it decremented the *local*
+backpack even while playing online and never told the server. The client's count and the server's
+count diverged the first time a player discarded anything online.
+
+Discard now goes through `ITrainerItemIntentService.DiscardAsync`: online it calls
+`POST /api/v1/trainers/{t}/items/{itemId}/discard` and the server runs the same DLL method over its
+own database; offline the router calls the local DLL directly, same as before. A 409 (discarding more
+than owned) comes back as a `Success = false` result either way, so the screen's refusal handling
+needed no changes.
+:::
+
 | Control | Behaviour |
 |---------|-----------|
 | All / Consumables / Key Items / Held Items | Real filtering via `BagItemPolicy.MatchesCategory` |
 | Sort | Alphabetical by resolved display name |
-| Discard | **Two-press**: first press arms the button (label becomes the confirmation), second commits `RemoveFromBackpackAsync`. Disarmed by selecting another item or switching pocket. |
+| Discard | **Two-press**: first press arms the button (label becomes the confirmation), second commits through `ITrainerItemIntentService.DiscardAsync` (`Assets/CR/Trainers/Inventory/`). Disarmed by selecting another item or switching pocket. |
 | Use | Opens the target picker when the item is flagged `TargetsOwnTeam`, then `IItemUseDomainService.UseItemAsync(trainerId, accountId, itemId, targetCreatureId, false, null, null, ct)` |
 | Equip (Slot 1 / 2) | Always opens the target picker, then `IHeldItemRepository.EquipHeldItemAsync` — the online/offline routed repository |
 

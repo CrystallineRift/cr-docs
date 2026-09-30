@@ -427,6 +427,7 @@ not just any authenticated player.
 | `GET` | `/api/v1/npc/{npcId}/items` | `GetNpcItems` — fetch NPC's current item inventory |
 | `GET` | `/api/v1/npc/{npcId}/creature-team` | `GetNpcCreatureTeam` — fetch the NPC's creatures. The write side answers with a count, so an online client needs this to read back a team the server just created |
 | `POST` | `/api/v1/npc/{id}/give-creature` | Give NPC's creature to trainer storage |
+| `POST` | `/api/v1/trainers/{trainerId}/npcs/{npcKey}/receive-gift` | `NpcGiftService.ReceiveGiftAsync` — generates the NPC's authored `gift_template_id` creature straight into storage, at most once per (trainer, NPC). See the note below. |
 | `GET` | `/api/v1/npc/{id}` | Get NPC by ID |
 | `GET` | `/api/v1/npc` | List NPCs for trainer |
 | `POST` | `/api/v1/npc` | Create NPC |
@@ -448,6 +449,25 @@ only reads the team/items back, for UI). The two routes stay live (still used by
 but a Trainer battle never needs them any more. Offline, the same DLL service does the same thing
 against local SQLite; `M16050SeedMeadowScoutBattleIdentity` seeds the Meadow Scout's content-registry
 `Trainer` row and a `npc_battle_item_loadout` entry so the offline floor has one to test against.
+:::
+
+:::note Server-authority Phase D: receive-gift supersedes ensure-creature-team / give-creature for gift NPCs
+A gift NPC now carries a `gift_template_id` (M16007, a base creature id) directly on its `npcs`
+content-registry row, authored in Content Studio — not a list of team-slot specs. `NpcGiftService
+.ReceiveGiftAsync` generates that base creature (mirroring `StarterCreatureService`'s pattern: first
+growth profile + first ability set, level from config key `gift_creature_level`, default 5), claims it
+in the `npc_gift_grant` ledger (`INpcGiftLedger`, at most one gift per (trainer, NPC) ever — a live
+claim on entry is replayed by creature id, never re-generated), and files it in trainer storage. One
+call does the whole grant; there is no separate "ensure" step to pre-warm.
+
+Unity's `NpcCreatureGrantBehaviour` / `NpcInteractionBehaviour.GiveCreatureAsync` (`Assets/CR/Game/
+World/Behaviours/`) call this through `INpcGiftService` (`CR.Npcs.Gift`, an online/offline router
+built like `NpcTalkOnlineOfflineService`) instead of `EnsureNpcCreatureTeamAsync` / `GiveCreatureAsync`
+for any NPC configured as a gift-giver. `ensure-creature-team` and `give-creature` stay live (used by
+NPC-owned battle teams and any content not yet migrated to `gift_template_id`) — they are not
+retired, just superseded for the gift-giving path. `NpcCreatureGrantBehaviour`'s `_slots` list is now
+only a scene-authored "this NPC offers a gift" toggle; the actual Granted / NotAGiftNpc / UnknownNpc
+decision is the server's, from `gift_template_id`, never client-side.
 :::
 
 ### `POST /api/v1/npc/reset-teams` — ResetNpcTeams
