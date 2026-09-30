@@ -428,9 +428,14 @@ not just any authenticated player.
 any more by the time they were retired (`StartEncounterAsync` builds a Trainer NPC's team/items
 itself at battle start; `receive-gift` replaced `give-creature` for every gift-giving NPC — see the
 two notes further down). The underlying `INpcDomainService` methods
-(`EnsureNpcCreatureTeamAsync`/`EnsureNpcItemsAsync`/`UseNpcBattleItemAsync`/`GiveCreatureAsync`) are
-still real, still-called DLL surface — only the HTTP door is gone. The rows below and the walkthrough/
-curl examples that follow describe that DLL behavior; treat any request against the routes marked
+(`EnsureNpcCreatureTeamAsync`/`EnsureNpcItemsAsync`/`UseNpcBattleItemAsync`) are still real,
+still-called DLL surface — only the HTTP door is gone. `GiveNpcCreatureToTrainerStorageAsync` is the
+exception: M2 close (L6) deleted its only caller, Unity's `INpcWorldRepository.GiveCreatureAsync` /
+`NpcOnlineOfflineRepository.GiveCreatureAsync` / `INpcClient.GiveCreatureAsync` (dead client for an
+already-retired route), so that DLL method is now unreachable from anywhere too — kept server-side
+only because its own unit tests (`NpcGiftRulesTests`, `NpcGiftResumabilityTests`) still exercise it
+directly; deleting it is a separate, not-yet-done cleanup. The rows below and the walkthrough/curl
+examples that follow describe historical DLL behavior; treat any request against the routes marked
 **retired** as 410, not as shown.
 :::
 
@@ -506,6 +511,12 @@ request's own token. A client that disconnects mid-AI-step must not abandon a fo
 partway through; the request's cancellation only applies up to and including the player's own
 `SubmitActionAsync`, the same "once it started, it finishes" rule `SafeRecordAllAsync` uses for
 progress outcomes.
+
+`BattleTurnDomainService.RunOpeningStepsAsync` — the AI-first opening loop `BattleEncounterDomainService
+.StartEncounterAsync` runs when a faster opponent wins the turn-1 speed check — follows the same rule.
+By the time it is called, `StartBattleAsync` has already committed the battle row, so there is no
+"before the side effect started" window to protect: the whole method (its round read and the AI loop)
+runs on `CancellationToken.None`, never the caller's token.
 :::
 
 :::note Server-authority Phase D: receive-gift supersedes ensure-creature-team / give-creature for gift NPCs

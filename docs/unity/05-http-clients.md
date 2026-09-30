@@ -206,10 +206,13 @@ When adding a new HTTP client, add the key constant here before using it in the 
 ## `INpcClient` / `NpcClientUnityHttp`
 
 The NPC client is the canonical example of the typed client pattern. From the actual source — note
-that `GiveCreatureAsync`/`EnsureNpcCreatureTeamAsync` below call routes Phase E retired (410) on the
-server; the methods are unused dead surface on the client now (`receive-gift` replaced the gift path,
-`StartEncounterAsync` builds NPC teams itself) but kept here only to illustrate the typed-client
-shape, not as a route still worth calling — see [NPC System](?page=backend/02-npc-system):
+that `EnsureNpcCreatureTeamAsync` below calls a route Phase E retired (410) on the server; the method
+is unused dead surface on the client now (`StartEncounterAsync` builds NPC teams itself) but kept
+here only to illustrate the typed-client shape, not as a route still worth calling — see
+[NPC System](?page=backend/02-npc-system). `GiveCreatureAsync` itself (and
+`INpcWorldRepository.GiveCreatureAsync` / `NpcOnlineOfflineRepository.GiveCreatureAsync` that used
+to call it) was deleted outright in M2 close (L6): `receive-gift` replaced the gift path, and there
+was no illustrative reason left to keep a method for a retired route with zero callers:
 
 ```csharp
 public class NpcClientUnityHttp : SimpleWebClient, INpcClient

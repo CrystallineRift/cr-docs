@@ -822,6 +822,14 @@ online/offline like every other trainer call — the online path also mirrors in
 The write deliberately lives outside the profile-update SQL — a movement-cadence save and an
 appearance edit can never clobber each other.
 
+**Content dependency (L7 review, M2 close):** `PUT /trainer/{id}/location` refuses (400) any
+`AreaKey` that does not match an authored `world_location.area_key` row (`IWorldLocationDiscoveryService.AreaKeyExistsAsync`
+— see [Location Discoveries](?page=backend/24-location-discoveries)). An area whose scene ships
+without ever getting a `world_location` row pushed from Studio therefore has every location save
+in it silently fail — the tracker/AreaLoader writer above logs the failure, but there is no
+player-facing symptom besides "my position didn't resume" after the next session. Push at least
+one `world_location` per playable area before shipping it.
+
 ### Resuming
 
 `TrainerResumeRule.Decide(savedAreaKey, hasSavedPosition, currentAreaKey)` (pure, EditMode-tested

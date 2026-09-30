@@ -24,7 +24,7 @@ through `ITrainerModifierProvider`, the one seam every consumer already had from
 |---|---|---|
 | M15101 | `talent_tree` | `content_key` UNIQUE, `name`, `description`, `icon_address` null, `sort_order` |
 | M15102 | `talent` | `content_key` UNIQUE, `talent_tree_id`, `name`, `description` (may use `{0}` for the current rank's first effect value), `icon_address` null, `tier` (1-5), `sort_order`, `max_rank` (1-5), `exclusive_group` null, `is_drawback`, `unlock_quest_key` null, `effects` (JSON text, backs `List<TalentEffect>` the same way `QuestObjectiveTemplate.TargetReferenceIds` does) |
-| M15103 | `trainer_talent` | `trainer_id`, `talent_id`, `rank`; **plain `UNIQUE(trainer_id, talent_id)`, one row per pair forever** — a respec writes rank 0, never a soft delete, so there is no revive-on-write churn on this table |
+| M15103 | `trainer_talent` | `trainer_id`, `talent_id`, `rank`; **plain `UNIQUE(trainer_id, talent_id)`, one row per pair forever** — a respec writes rank 0, never a soft delete, so there is no revive-on-write churn on this table. Both `ITalentAllocationRepository.GetAsync` and `ITalentWriteScope.GetAsync` still filter `deleted = false` defensively (M2 close, L3) even though nothing on this table ever sets it true today |
 | M15104 | `trainer_talent_lock` | `trainer_id` UNIQUE, `version` bigint — the per-trainer serialisation row (see [Spend, respec, admin set-rank](#spend-respec-admin-set-rank)) |
 
 Content tables bind to the GameData connection, player tables to PlayerData — no physical foreign
@@ -79,11 +79,13 @@ errors and ignores warnings.
 
 ### Readers and wiring
 
-`ITalentBuildReader` (internal to Talents) loads tree content once per instance (a scoped/singleton
-cache, not re-queried per call), reads allocations fresh every call, and reads completed quest keys
-only when some live talent carries an `unlock_quest_key` (`TalentQuestKeys`, shared with the write
-path so both sides apply the exact same "read gate" rule). A read failure inside is caught and
-logged, returning `TalentBuild.None` — a talent-content outage must never break an XP grant.
+`ITalentBuildReader` (internal to Talents) reads tree content and allocations fresh on every call
+(M2 close, L5: the old per-instance tree cache never invalidated, and Unity binds this reader
+`AsSingle` — a Content Studio talent push made during a running Play session was invisible until
+restart. Trees are now read every call, same as allocations) and reads completed quest keys only
+when some live talent carries an `unlock_quest_key` (`TalentQuestKeys`, shared with the write path
+so both sides apply the exact same "read gate" rule). A read failure inside is caught and logged,
+returning `TalentBuild.None` — a talent-content outage must never break an XP grant.
 
 `TalentModifierProvider : ITrainerModifierProvider` returns `build.Modifiers`; it replaces Phase 1's
 `NoTalentModifierProvider` at **every** DI site, online and offline. `TrainerProgressionService` takes
