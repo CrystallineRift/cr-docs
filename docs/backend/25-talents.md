@@ -131,6 +131,18 @@ a race where a concurrent player spend between the overspend check and the grant
 land against a stale spent-points count. A trainer that ends up overspent anyway (a curve edit, not a
 race) still just lands in `NeedsRespec`, which the build already handles.
 
+`WithTrainerTalentLockAsync`'s body receives an `ITalentLockScope` (one member: `ResetAllAsync`) on
+the **same** open scope/connection the lock itself holds — a body that decides mid-lock to respec (the
+admin take-back path, when `SpentPoints > newLevel - 1` and `respec: true`) calls
+`lockScope.ResetAllAsync(ct)` directly, never `ITalentService.RespecAsync`. `RespecAsync` itself is
+just `WithTrainerTalentLockAsync` with a body that calls the same `ResetAllAsync` — one algorithm, no
+duplication. Calling `RespecAsync` from *inside* an already-held lock would open a **second**
+connection and re-take the same trainer's lock row on it, which deadlocks against the first
+connection's own open transaction (Postgres: the second connection blocks on the row lock until the
+first commits, but the first is awaiting the second — no true cycle for Postgres to detect, so it just
+times out on the Npgsql command timeout). This was a real regression introduced while adding the
+lock-sharing above and is now covered by a Postgres Testcontainers test using the real `TalentService`.
+
 ### "Teach a talent" (quest tie-in)
 
 `SpendAsync`, and an admin `SetRankAsync` that **raises** a rank (never a lowering correction), emit

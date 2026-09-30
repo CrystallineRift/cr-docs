@@ -482,6 +482,15 @@ A related fix landed in the same pass: the battle's trainer-snapshot builder use
 live wild-owned creature in the database for its "wild team" snapshot instead of just the battle's own
 active creature, which could leak an unrelated battle's wild creature into a state read; it is now
 scoped to `activeCreatureId` like every non-wild trainer's team read already was.
+
+A residual race on that same fix: the reused candidate can pass `TryFindReusableWildCreatureAsync`'s
+exclusion check and still lose the *atomic* claim inside `StartBattleAsync`
+(`IBattleRepository.TryClaimWildCreatureAsync`) to a concurrent encounter that claimed it first. A
+lost claim now throws `WildCreatureClaimLostException` — `SeedForTrainerAsync` never falls back to a
+different wild creature (that fallback was itself the H2 bug, just on the race path). `StartBattleAsync`
+abandons the battle row it had already created and rethrows; `BattleEncounterDomainService
+.StartEncounterAsync` catches it and returns `EncounterStartStatus.EncounterUnavailable`, the same
+refusal the pre-claim exclusion check already used.
 :::
 
 :::note A thrown exception inside the AI turn loop forfeits the AI side, not the whole battle
@@ -490,6 +499,13 @@ try/catch; any exception forfeits the AI side via the same `ForfeitAiSideAsync` 
 already used (`EndReason = "Forfeit"`), instead of the exception propagating out and stranding the
 battle Active with no further turns possible. The forfeit call itself is guarded too
 (`ForfeitAiSideSafelyAsync`), in case the failed step had already ended the battle before throwing.
+
+Once the player's own action has committed, everything `SubmitTurnAsync` does next — the AI loop
+(decide/submit/forfeit) and the final-state reads after it — runs on `CancellationToken.None`, not the
+request's own token. A client that disconnects mid-AI-step must not abandon a forfeit/end write
+partway through; the request's cancellation only applies up to and including the player's own
+`SubmitActionAsync`, the same "once it started, it finishes" rule `SafeRecordAllAsync` uses for
+progress outcomes.
 :::
 
 :::note Server-authority Phase D: receive-gift supersedes ensure-creature-team / give-creature for gift NPCs
