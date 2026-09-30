@@ -130,7 +130,9 @@ When the player presses **E** inside the trigger:
 
 1. Check `_npcWorld.NpcId != Guid.Empty` — guard against pressing E before init completes
 2. **Grant check:** if `_grantBehaviour != null && _grantBehaviour.IsReady && _grantBehaviour.HasCreatureToGive`
-   - Call `EnsureNpcAsync` endpoint with give-creature action
+   - Call `GiveCreatureAsync` → `INpcGiftService.ReceiveGiftAsync` (the `receive-gift` intent; the
+     older `give-creature` route this used to call is retired, see [NPC
+     System](?page=backend/02-npc-system))
    - On success: `_grantBehaviour.HasCreatureToGive = false`, hide grant prompt
    - Grant takes priority — a trainer NPC that still has a creature to give will not trigger battle
 3. **Battle check:** else if `_trainerBehaviour != null && _trainerBehaviour.CanBattle`

@@ -2,6 +2,18 @@
 
 This document describes the complete end-to-end flow from Unity world boot through the player receiving their first creature. Understanding this flow is valuable both for debugging problems in the field and for building analogous systems (e.g., quest-giver NPCs that hand out items using the same pattern).
 
+:::caution `give-creature` is retired (410) — the starter NPC now hands over through `receive-gift`
+Steps 5-6 below, the "How to Test" curl script's step 5, and the `give-creature returns 500`
+section describe the pre-Phase-D flow against `POST /api/v1/npc/{npcId}/give-creature`. That route
+is gone (Phase E, 410 `route_retired`). The starter NPC carries a `gift_template_id` like any other
+gift-giver and `NpcInteractionBehaviour.GiveCreatureAsync` (the Unity method, same name, different
+call) now calls `INpcGiftService.ReceiveGiftAsync` → `POST /api/v1/trainers/{trainerId}/npcs/{npcKey}
+/receive-gift` instead — see the two Phase D/E notes on [NPC System](02-npc-system.md#rest-endpoints).
+`ensure-starter` itself is unaffected and still used to seed the NPC and read `hasCreatureToGive`.
+The narrative below is kept for the underlying idempotency/ledger design, which `receive-gift` still
+follows, but treat every `give-creature` call in it as historical.
+:::
+
 ## Why This Flow?
 
 The starter creature flow encapsulates two important design decisions:

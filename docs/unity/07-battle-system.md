@@ -411,7 +411,7 @@ On `OnTriggerEnter` (Player tag), a coroutine `EncounterDelayRoutine` is started
 
 ## Wild Battle AI
 
-`BattleCoordinator` injects `IWildBattleAIDomainService` (the DLL interface). The same `WildBattleAIDomainService` runs both client-side (offline) and server-side (via the `/wild-turn` endpoint in online mode).
+`IWildBattleAIDomainService` is a DLL interface, not something `BattleCoordinator` calls directly any more — the same `WildBattleAIDomainService` runs offline (bound locally) and server-side, but online the server now runs it inline inside `BattleTurnDomainService.SubmitTurnAsync` as part of resolving the player's own submitted action (server-authority C2), not through a separate endpoint. The old `/wild-turn` endpoint Unity used to call after every player turn is retired (410); see [Battle Persistence → Wild Turn Endpoint](?page=backend/09-battle-persistence#wild-turn-endpoint-retired).
 
 Decision priority:
 1. 20% random chance → use a Status-category ability if one exists

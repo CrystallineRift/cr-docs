@@ -34,7 +34,7 @@ the same cr-api DLLs over the player's local SQLite. Spec: `cr-api-unity/docs/su
 | `NpcTalked` | `NpcTalkService` | key validated; FirstTime when `npc_met_{key}` goes 0 → 1 |
 | `QuestCompleted` | `QuestObjectiveProjector` | the completion compare-and-set (InProgress → Completed, 1 row) |
 | `BattleWon`, `CreatureDefeated`, `TrainerDefeated` | `BattleDomainService` | after the existing KO-once (`TryCreditKnockOutAsync`) and battle-end (`TryEndBattleAsync`) CAS, one `CreatureDefeated` per credited KO, `BattleWon` (+ `TrainerDefeated`, `Facts[FirstTime]` from the NPC-trainer win) on a win, and the same pair on a **forfeit win** (opponent Run 3×, or an owed swap 3×) — all batched through a single `SafeRecordAllAsync` call per action so achievements evaluate once |
-| `LocationEntered` | `LocationEntryService.EnterAsync` (BFF `POST .../world-locations/enter`, or forwarded from `POST /api/v1/quests/progress`) | a genuine `world_location` entry (`Facts[FirstTime]` set on first discovery); see [Location Discoveries](?page=backend/24-location-discoveries) |
+| `LocationEntered` | `LocationEntryService.EnterAsync` (BFF `POST .../world-locations/enter` — the only caller since Phase E retired the `/quests/progress` compat route) | a genuine `world_location` entry (`Facts[FirstTime]` set on first discovery); see [Location Discoveries](?page=backend/24-location-discoveries) |
 
 ## Outcome → derived writes
 
@@ -57,13 +57,15 @@ restarted quest counts again) and raise the count monotonically to the number of
 overlap with the list as it is now). A **targeted** objective needs a matching subject; a targeted talk or
 visit objective must have Count 1 (the template route answers 400 `invalid_objective`, Studio refuses the push).
 
-## The compat route `POST /api/v1/quests/progress`
+## `POST /api/v1/quests/progress` is retired (Phase E)
 
-Kept for shipped clients until phase E. Reportable is now down to two types: `VisitLocation` (forwarded to
-`LocationEntryService.EnterAsync`), `TalkToNpc` (forwarded to `NpcTalkService`; an unknown key answers 200
-with nothing counted). `WinBattles` and all six defeat types moved server-side once `BattleDomainService`
-started emitting battle outcomes itself (see the Producers table above) and now answer **400
-`server_derived`** like everything else — captures, collected items, item use and quest completion.
+The compat route is gone (410 `route_retired`), and so is its translator —
+`RecordProgressEventAsync`/`ForwardVisitLocationAsync`/`ForwardTalkAsync`/`QuestProgressCompat` were
+deleted along with it. `VisitLocation` and `TalkToNpc` — the last two types it still forwarded — now
+only ever arrive through their real intents (`POST .../world-locations/enter`,
+`POST .../npcs/{npcKey}/talk`, see the Producers table above); `WinBattles` and every defeat type were
+already server-derived since `BattleDomainService` started emitting battle outcomes itself. See [Quest
+System — the retired compat route](?page=backend/07-quest-system) for the full history.
 
 ## Stat-writer registry
 

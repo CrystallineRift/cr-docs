@@ -202,6 +202,10 @@ GET /api/v1/npc/dddddddd-.../items
 
 ### Step 5 — Player receives the creature
 
+This step shows the `GiveNpcCreatureToTrainerStorageAsync` DLL method's behavior — the HTTP route
+below is retired (410); every real caller now goes through `receive-gift` (see the Phase D/E notes
+above and [Starter Creature Flow](05-starter-creature-flow.md)).
+
 ```
 POST /api/v1/npc/dddddddd-.../give-creature
 {
@@ -411,22 +415,35 @@ All list methods accept `offset` and `limit` for pagination. The default limit i
 
 All NPC endpoints are prefixed `/api/v1/npc`. Player-facing routes take the acting account from the
 validated token, never from the request body/query — a client-sent `accountId` is tolerated but
-ignored (`use-battle-item`, `trainer-defeats`). `use-battle-item` additionally refuses any target
-creature not owned by the NPC's own battle team or the calling trainer. The content-registry routes
+ignored (`trainer-defeats`). The content-registry routes
 (`GET`/`PUT`/`DELETE /api/v1/npc/content-registry*`) and `POST /api/v1/npc/reset-teams` read and
 write every account's data at once, so — unlike the player-facing routes above — they require
 `AuthorizationPolicies.RequireContentWrite` (the scope `/auth/service-token` mints for the editor),
 not just any authenticated player.
 
+:::caution Phase E retired four of these routes (410 `route_retired`)
+`ensure-creature-team`, `use-battle-item`, `ensure-items` and `give-creature` are gone from
+`NpcEndpoints.cs` — a caller gets the shared `{ "error": "route_retired" }` / 410 shape
+(`RetiredRouteEndpoints`), the same as every other Phase E retirement. Nothing in Unity called them
+any more by the time they were retired (`StartEncounterAsync` builds a Trainer NPC's team/items
+itself at battle start; `receive-gift` replaced `give-creature` for every gift-giving NPC — see the
+two notes further down). The underlying `INpcDomainService` methods
+(`EnsureNpcCreatureTeamAsync`/`EnsureNpcItemsAsync`/`UseNpcBattleItemAsync`/`GiveCreatureAsync`) are
+still real, still-called DLL surface — only the HTTP door is gone. The rows below and the walkthrough/
+curl examples that follow describe that DLL behavior; treat any request against the routes marked
+**retired** as 410, not as shown.
+:::
+
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/api/v1/npc/ensure-starter` | `EnsureStarterNpc` — idempotent upsert with slot 1 creature |
 | `POST` | `/api/v1/npc/ensure` | `EnsureNpc` — idempotent bare NPC creation (no creatures). Accepts `npcType` field (default `Npc`) |
-| `POST` | `/api/v1/npc/{npcId}/ensure-creature-team` | `EnsureNpcCreatureTeam` — idempotent multi-slot team seeding |
-| `POST` | `/api/v1/npc/{npcId}/ensure-items` | `EnsureNpcItems` — idempotent item inventory seeding |
+| `POST` | `/api/v1/npc/{npcId}/ensure-creature-team` | **Retired (410).** `EnsureNpcCreatureTeam` — idempotent multi-slot team seeding; DLL method still called internally, see note below |
+| `POST` | `/api/v1/npc/{npcId}/ensure-items` | **Retired (410).** `EnsureNpcItems` — idempotent item inventory seeding; DLL method still called internally |
+| `POST` | `/api/v1/npc/{npcId}/use-battle-item` | **Retired (410).** A trainer NPC's own in-battle item use is decided and applied entirely server-side now, inside `BattleTurnDomainService.SubmitTurnAsync` — see [Battle Extensions](?page=unity/24-battle-extensions) |
 | `GET` | `/api/v1/npc/{npcId}/items` | `GetNpcItems` — fetch NPC's current item inventory |
 | `GET` | `/api/v1/npc/{npcId}/creature-team` | `GetNpcCreatureTeam` — fetch the NPC's creatures. The write side answers with a count, so an online client needs this to read back a team the server just created |
-| `POST` | `/api/v1/npc/{id}/give-creature` | Give NPC's creature to trainer storage |
+| `POST` | `/api/v1/npc/{id}/give-creature` | **Retired (410).** Give NPC's creature to trainer storage — superseded by `receive-gift` below |
 | `POST` | `/api/v1/trainers/{trainerId}/npcs/{npcKey}/receive-gift` | `NpcGiftService.ReceiveGiftAsync` — generates the NPC's authored `gift_template_id` creature straight into storage, at most once per (trainer, NPC). See the note below. |
 | `GET` | `/api/v1/npc/{id}` | Get NPC by ID |
 | `GET` | `/api/v1/npc` | List NPCs for trainer |
@@ -445,10 +462,13 @@ not just any authenticated player.
 now builds the NPC's team from its `{key}-team` spawner templates and seeds its battle items from
 `npc_battle_item_loadout` itself, at the moment a battle actually starts — the client no longer
 calls `ensure-creature-team` / `ensure-items` as a pre-warm at world load (`NpcTrainerBehaviour`
-only reads the team/items back, for UI). The two routes stay live (still used by other flows/tests)
-but a Trainer battle never needs them any more. Offline, the same DLL service does the same thing
-against local SQLite; `M16050SeedMeadowScoutBattleIdentity` seeds the Meadow Scout's content-registry
-`Trainer` row and a `npc_battle_item_loadout` entry so the offline floor has one to test against.
+only reads the team/items back, for UI). **Phase E retired both HTTP routes outright (410
+`route_retired`)** now that nothing calls them any more; the DLL methods
+(`EnsureNpcCreatureTeamAsync`/`EnsureNpcItemsAsync`) are still real — `StartEncounterAsync` calls
+them internally, and the offline router still reaches them against local SQLite —
+there is just no HTTP door to either any more. `M16050SeedMeadowScoutBattleIdentity` seeds the
+Meadow Scout's content-registry `Trainer` row and a `npc_battle_item_loadout` entry so the offline
+floor has one to test against.
 :::
 
 :::note Server-authority Phase D: receive-gift supersedes ensure-creature-team / give-creature for gift NPCs
@@ -463,10 +483,11 @@ call does the whole grant; there is no separate "ensure" step to pre-warm.
 Unity's `NpcCreatureGrantBehaviour` / `NpcInteractionBehaviour.GiveCreatureAsync` (`Assets/CR/Game/
 World/Behaviours/`) call this through `INpcGiftService` (`CR.Npcs.Gift`, an online/offline router
 built like `NpcTalkOnlineOfflineService`) instead of `EnsureNpcCreatureTeamAsync` / `GiveCreatureAsync`
-for any NPC configured as a gift-giver. `ensure-creature-team` and `give-creature` stay live (used by
-NPC-owned battle teams and any content not yet migrated to `gift_template_id`) — they are not
-retired, just superseded for the gift-giving path. `NpcCreatureGrantBehaviour`'s `_slots` list is now
-only a scene-authored "this NPC offers a gift" toggle; the actual Granted / NotAGiftNpc / UnknownNpc
+for any NPC configured as a gift-giver — including the starter NPC, see [Starter Creature
+Flow](05-starter-creature-flow.md). **Phase E retired the `give-creature` HTTP route outright (410)**:
+every content NPC's gift now goes through `gift_template_id`/`receive-gift`, so nothing called it any
+more by the time it was retired. `NpcCreatureGrantBehaviour`'s `_slots` list is now only a
+scene-authored "this NPC offers a gift" toggle; the actual Granted / NotAGiftNpc / UnknownNpc
 decision is the server's, from `gift_template_id`, never client-side.
 :::
 

@@ -400,64 +400,26 @@ VALUES
 
 ## How to Advance a Quest Objective from Unity
 
-:::caution
-This section describes the pre-server-authority `POST /api/v1/quests/progress` contract. It still exists
-for shipped clients, but as of the battle-outcome move-to-server (see "`RecordProgressEventAsync` is a
-compat translator" below) **`WinBattles` and every other battle/defeat objective type now answers `400
-server_derived`** — the example below no longer works for a win report. Only `VisitLocation` and
-`TalkToNpc` are still forwarded through this route; everything else is produced by the authority itself
-(`BattleDomainService` for battle outcomes) and reported via [Progress
-Dispatcher](?page=backend/23-progress-dispatcher), not this endpoint.
+:::caution `POST /api/v1/quests/progress` is retired (Phase E, 410 `route_retired`)
+This section used to describe the pre-server-authority `POST /api/v1/quests/progress` contract. Phase
+E deleted the whole compat vertical — `IQuestDomainService.RecordProgressEventAsync`/
+`ForwardTalkAsync`/`ForwardVisitLocationAsync`, `QuestProgressCompat`, and (cr-api-unity)
+`IQuestRepository.RecordProgressAsync`/`IQuestClient.RecordProgressAsync` and their
+`QuestClientUnityHttp`/`QuestOnlineOfflineRepository` implementations — there is no client method left
+that calls this, and the route itself answers 410 regardless of `objectiveType`. Every objective now
+advances through the real intent that produces it, never a client-reported progress event:
+- `TalkToNpc` → the talk intent, `NpcTalkService` (via `POST /api/v1/trainers/{t}/npcs/{npcKey}/talk`)
+- `VisitLocation` → `POST /api/v1/trainers/{t}/world-locations/enter`
+  (`LocationEntryService.EnterAsync`) — see [Location Discoveries](?page=backend/24-location-discoveries)
+- Every battle/defeat/capture/item/quest-completion type → produced by the authority itself
+  (`BattleDomainService`, `ItemUseDomainService`, `QuestDomainService.ClaimRewardsAsync`, …) and
+  reported via [Progress Dispatcher](?page=backend/23-progress-dispatcher), never posted by the client
+
+`ProgressReportQuestExtensions.ToQuestProgressResultAsync` and the `QuestProgressResult`/
+`QuestProgressEvent` DTOs below are the one piece of the old vertical still standing — kept because
+`ClaimRewardsAsync` still uses them to shape its own response, not because anything posts progress
+through them any more.
 :::
-
-The Unity client calls `POST /api/v1/quests/progress` after a talk or a location-entry event that might satisfy an objective. The call should be fire-and-forget from the game logic perspective — it records the event and the backend handles matching it against active quests.
-
-```csharp
-// In the NPC talk flow, after talking to an NPC
-await _questClient.RecordProgressAsync(new QuestProgressRequest
-{
-    AccountId    = _session.AccountId,
-    TrainerId    = _session.TrainerId,
-    ObjectiveType = QuestObjectiveType.TalkToNpc,   // int value 11
-    Amount        = 1,
-    ReferenceId   = "kael_trainer_npc",
-});
-```
-
-The HTTP call:
-
-```bash
-curl -s -X POST http://localhost:5000/api/v1/quests/progress \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "accountId":     "aaaaaaaa-...",
-    "trainerId":     "bbbbbbbb-...",
-    "objectiveType": 11,
-    "amount":        1,
-    "referenceId":   "kael_trainer_npc"
-  }'
-```
-
-Response:
-```json
-{
-  "updatedInstances": [
-    {
-      "instanceId": "cccccccc-...",
-      "newStatus":  "InProgress",
-      "objectives": [
-        {
-          "objectiveTemplateId": "22222222-...",
-          "currentCount": 1,
-          "targetCount":  1,
-          "isCompleted":  true
-        }
-      ]
-    }
-  ]
-}
-```
 
 If every required objective is now complete, `newStatus` becomes `"Completed"` and `isCompleted` becomes `true`. The Unity client inspects `newStatus` to trigger the quest-complete celebration animation and enable the reward claim button.
 
@@ -749,22 +711,24 @@ public class QuestProgressEvent
 }
 ```
 
-### `RecordProgressEventAsync` is a compat translator (server-authority phase B)
+### Progress is derived server-side, not reported (server-authority phase B → Phase E)
 
 Progress is derived by the server from outcomes it produced — see [Progress Dispatcher](?page=backend/23-progress-dispatcher).
-`POST /api/v1/quests/progress` survives only for shipped clients, and its reportable set is now down to two
-types: `VisitLocation` is forwarded (`ForwardVisitLocationAsync`, mirroring `ForwardTalkAsync`) to
-`LocationEntryService.EnterAsync`, the same orchestrator the BFF `POST .../world-locations/enter` route
-calls — it claims the discovery ledger, awards per-location XP (a flat rule amount or the location's own
+`POST /api/v1/quests/progress` went through two stages: phase B narrowed its reportable set to
+`VisitLocation`/`TalkToNpc` (everything else already `400 server_derived`), then **Phase E retired the
+route outright (410)** and deleted `RecordProgressEventAsync`/`ForwardVisitLocationAsync`/
+`ForwardTalkAsync`/`QuestProgressCompat` — there is no compat translator left. `VisitLocation` now only
+ever arrives through `LocationEntryService.EnterAsync` (the BFF `POST .../world-locations/enter` route)
+— it claims the discovery ledger, awards per-location XP (a flat rule amount or the location's own
 override), grants a discovery quest if one is authored, and emits `LocationEntered` — see [Location
-Discoveries](?page=backend/24-location-discoveries); `TalkToNpc` is forwarded to the talk intent
-(`NpcTalkService`). **Every battle-outcome type is now `400 server_derived`** — `WinBattles`,
-`DefeatCreature`, `DefeatAnyCreature`, `DefeatCreaturesFromList`, `DefeatTrainer`, `DefeatAnyTrainer` and
-`DefeatTrainersFromList` all moved server-side once `BattleDomainService` itself started emitting
-`BattleWon`/`CreatureDefeated`/`TrainerDefeated` (including on a forfeit win — opponent Run 3x or an owed
-swap 3x) as part of resolving the battle action, batched through one `SafeRecordAllAsync` call per action so
-achievements evaluate once. Every other type not named above is also **400 `server_derived`** — captures,
-collected items, item use and quest completion are produced server-side. `quests_completed` is counted when
+Discoveries](?page=backend/24-location-discoveries); `TalkToNpc` only ever arrives through the talk
+intent (`NpcTalkService`, `POST /api/v1/trainers/{t}/npcs/{npcKey}/talk`). Every battle-outcome type —
+`WinBattles`, `DefeatCreature`, `DefeatAnyCreature`, `DefeatCreaturesFromList`, `DefeatTrainer`,
+`DefeatAnyTrainer`, `DefeatTrainersFromList` — moved server-side once `BattleDomainService` itself
+started emitting `BattleWon`/`CreatureDefeated`/`TrainerDefeated` (including on a forfeit win —
+opponent Run 3x or an owed swap 3x) as part of resolving the battle action, batched through one
+`SafeRecordAllAsync` call per action so achievements evaluate once. Every other type is likewise
+produced server-side — captures, collected items, item use and quest completion. `quests_completed` is counted when
 the quest **completes** (the completion compare-and-set), not when its rewards are claimed; a **claim**
 still pays no `quests_completed` credit, but `ClaimRewardsAsync` now runs one achievement evaluation pass
 after its reward grants (so a points-earning reward can push a `TrainerLevelReached` achievement over the
@@ -813,7 +777,7 @@ All quest endpoints are prefixed `/api/v1/quests`.
 | `GET` | `/api/v1/quests/{instanceId}` | Get a specific quest instance by ID |
 | `POST` | `/api/v1/quests/accept` | Accept a quest and create an instance |
 | `POST` | `/api/v1/quests/abandon` | Abandon an active quest instance |
-| `POST` | `/api/v1/quests/progress` | Record a progress event against active quests |
+| `POST` | `/api/v1/quests/progress` | **Retired (410).** See [How to Advance a Quest Objective from Unity](#how-to-advance-a-quest-objective-from-unity) above |
 | `POST` | `/api/v1/quests/claim` | Claim rewards for a completed quest |
 | `PUT` | `/api/v1/quests/templates/bulk` | Bulk create-or-update quest templates by `content_key` (Crystalline Rift Studio sync) |
 | `GET` | `/api/v1/quests/templates/by-content-key/{contentKey}` | One template with objectives, rewards and requirements; 404 on unknown key. The Unity `QuestTemplateOnlineOfflineRepository` calls this only when a `content_key` misses the local `quest_template` cache, then upserts the result locally |
@@ -848,27 +812,15 @@ POST /api/v1/quests/accept
 
 ```json
 POST /api/v1/quests/progress
-{
-  "accountId":     "00000000-...",
-  "trainerId":     "00000000-...",
-  "objectiveType": 3,
-  "amount":        1,
-  "referenceId":   null
-}
+{ "accountId": "00000000-...", "trainerId": "00000000-...", "objectiveType": 3, "amount": 1 }
 
-→ 200 OK  (QuestProgressResult)
-{
-  "updatedInstances": [
-    {
-      "instanceId": "cccccccc-...",
-      "newStatus":  "InProgress",
-      "objectives": [
-        { "objectiveTemplateId": "22222222-...", "currentCount": 1, "targetCount": 3, "isCompleted": false }
-      ]
-    }
-  ]
-}
+→ 410 Gone
+{ "error": "route_retired" }
 ```
+
+Every `objectiveType` gets the same 410 now, regardless of whether it used to be forwarded or was
+already `400 server_derived` — see the caution block above for what advances each objective type
+instead.
 
 ```json
 POST /api/v1/quests/claim

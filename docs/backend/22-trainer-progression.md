@@ -32,7 +32,7 @@ from `TalentBuild.Evaluate` every call. Spec: `cr-api-unity/docs/superpowers/spe
 | Reward (quest, achievement, loot, pickup reward lists) | `RewardGrantService` → `GrantXpAsync(Reward)` | as authored | — | the owner's one-time transition |
 | Wild / trainer win | `BattleDomainService` on the winning action | `BattleRewardScaling.ExperienceForDefeatedLevel(final KO level)` | 1 × 1.0 (1.5 trainer), guard 10 / 0.25 | battle row → Ended |
 | Capture (+ first of species) | `CaptureAttemptService` after the ownership transition | creature level | 10 (+50) | the creature is no longer wild |
-| Location discovered | `LocationEntryService.EnterAsync` (via the BFF `.../world-locations/enter` route, or forwarded from `POST /api/v1/quests/progress`) | 1 | 25, or the location's own `discovery_xp` override | the discovery ledger's per-trainer, per-location `xp_awarded` claim; unknown keys earn 0 — see [Location Discoveries](?page=backend/24-location-discoveries) |
+| Location discovered | `LocationEntryService.EnterAsync` (via the BFF `.../world-locations/enter` route — the only caller since Phase E retired the `/quests/progress` compat forward) | 1 | 25, or the location's own `discovery_xp` override | the discovery ledger's per-trainer, per-location `xp_awarded` claim; unknown keys earn 0 — see [Location Discoveries](?page=backend/24-location-discoveries) |
 | Pickup collected | `PickupDomainService.CollectAsync` after the claim | 1 | 5 | pickup_collected claim |
 | Creature level-up (Mentor talent) | `BattleDomainService.ResolveSingleActionAsync`, via `SafeGrantXpAsync` | levels the KO crossed × `CreatureLevelUpTrainerXp` | `TrainerXpSource.CreatureLevelUp`, no seed row (a raw grant, not a rule) | paid inside the same widened `TrainerProgressTracker` bracket as the KO's other awards — see [Talents §6.8](25-talents.md#effects) |
 
@@ -60,7 +60,7 @@ Level readers derive: `ConditionEvaluator` evaluates `TrainerLevel` from `traine
 | `GET/PUT /api/v1/trainer-progression/level-curve` | any token · RequireContentWrite | whole curve; levels 1..N, strictly increasing, L1 = 0 |
 | `GET/PUT /api/v1/trainer-progression/xp-rules` | any token · RequireContentWrite | upsert by source key |
 | `POST /api/v1/admin/trainers/{trainerId}/xp` | RequireAdmin | `{ amount, reason, respec? }`; negative allowed, never below 0, refused `409 WouldOverspendTalents` unless `respec`; audit `GrantTrainerXp` (16) |
-| `POST /api/v1/quests/progress` | player | now 404 for another account's trainer |
+| `POST /api/v1/quests/progress` | anonymous | **retired (410)** as of Phase E — no ownership check runs, every caller gets the same `route_retired` shape |
 
 Talent spend/respec/admin set-rank routes, the talent tree content routes, and the Moderation
 `SetTalentRank`/`RespecTalents` admin routes are documented on [Talents](25-talents.md), not here.

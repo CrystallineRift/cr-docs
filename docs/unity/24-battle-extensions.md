@@ -159,13 +159,12 @@ Contrast with `Switch`, which has always validated inside `ResolveSingleActionAs
 *ability*-legality layer, at a different point in the call chain (before dispatch, in the new
 endpoint, not inside the resolver).
 
-:::caution
-**The legacy `POST /api/v1/battle/{id}/submit` route does not carry this check.** It predates C2 and
-is scheduled for retirement (server-authority design §5 Phase C2 "Compatibility"), but it is still
-live as of this writing — a client that bypassed the new `/actions` endpoint and called the old
-route directly could still submit an unlearned ability. `BattleCoordinator` never does; this is a
-residual attack surface until the gate bump removes the old route. Do not add new callers of the
-legacy submit route.
+:::note
+**The legacy `POST /api/v1/battle/{id}/submit` route is retired (Phase E, 410 `route_retired`).** It
+predated C2 and never carried the ability-legality check above; it is no longer a residual attack
+surface — a caller now gets 410, same shape as every other Phase E retirement
+(`RetiredRouteEndpoints`). `BattleCoordinator` only ever called the new `/actions` endpoint, so this
+was mechanical cleanup, not a behavior change for any real client.
 :::
 
 ## When to reach for a sidecar
@@ -229,6 +228,51 @@ now that the client no longer resolves the NPC's item use itself.
 **Offline** runs the identical DLL `BattleTurnDomainService` / `BattleEncounterDomainService` against
 local SQLite through the same online/offline router (`OnlineOfflineBattleTurnDomainService`,
 `OnlineOfflineBattleEncounterDomainService`) — one turn loop, one opening-AI loop, both authorities.
+
+### C2d follow-up: the opening-steps loop can end the battle before the player's first prompt
+
+A fast opponent's `OpeningSteps` can themselves end the battle — a step-cap forfeit, or a KO chain
+before the player ever acts. `BattleCoordinator` used to replay the opening steps and then *always*
+enter `RunTurnLoopAsync` regardless, which either hung prompting on an already-over battle or hit the
+"did not hand control back to the player" log line. The pure
+`CR.Game.Battle.Logic.OpeningStepsOutcome.From(steps)` reads `BattleEnded`/`WinnerId`/`BattleOutcome`
+off the **last** opening step; `BattleCoordinator.TryResolveOpeningStepsBattleEnd` uses it (both the
+NPC and wild call sites) to resolve straight to `EndBattle` instead of ever starting the turn loop.
+
+### Player item use travels the same intent as everything else
+
+`BattleBagPanelHandler.ExecuteUseAsync` used to call `IItemUseDomainService.UseItemAsync` directly (a
+per-item route now retired, see [Item Effects](../backend/19-item-effects.md) and [Battle
+Persistence](?page=backend/09-battle-persistence)) and raise its own `BattleEvents` from that result,
+then *separately* submit the turn action — a double path against a route going away. It now only
+builds the action JSON and calls `_battleCoordinator.SubmitPlayerAction`, exactly like an ability or a
+switch; the resolved `ActionOutcome` comes back through the normal turn loop. Since abilities never
+had item-specific outcome fields (HP restore, rejection, capture), `BattleCoordinator.PlayStepsAsync`
+gained a symmetric player-side branch — driven by the pure
+`CR.Game.Battle.Logic.PlayerItemOutcomePresentation.From(outcome, playerTrainerId)` — right beside the
+existing opponent-item-use branch above. See [Battle Bag Panel](?page=unity/13-battle-bag-ui) for the
+full item-use flow as it is now.
+
+One real bug this exposed: a capture ending through the shared turn loop surfaces the server's real
+`TurnResolution.EndReason` (`"Captured"`) instead of the bag panel's old ad-hoc `"capture"` literal,
+which used to short-circuit past the turn loop (calling `EndBattle` directly) and never hit this path.
+`RunTurnLoopAsync`'s end-of-battle block now skips `RaiseCameraCueVictory` for a capture (no
+`WinnerId`, spec B7) — without that guard a real capture flashed a false DEFEAT cue.
+
+### `EndReason` literal checks must match the server's real strings
+
+`BattleTurnDomainService.ComputeEndReason` returns exactly `"Won"`, `"Lost"`, `"Draw"`, `"Fled"`,
+`"Captured"` or `"Forfeit"`. Three client-side comparisons drifted from those strings before Phase E:
+`BattleSummaryScreen.IsEscape`/`BattleLossRules.IsPlayerLoss` checked stale `"escaped"`/`"ran_away"`
+literals the server has never produced (a real Run over the shared intent fell through as a generic
+win/defeat, with no whiteout suppression and no ESCAPED banner), `BattleOutcomeSubtitle.For` checked
+`"Win"` instead of `"Won"`, and `OpeningStepsOutcome.From` derived its reason via
+`BattleOutcome.ToString()`, which drifts from the server's mapping ("Win"/"Loss"/"Escaped" vs.
+"Won"/"Lost"/"Fled"). `CR.Game.Battle.BattleEndReason` (moved into the `CR.Game.Battle.Logic`
+assembly so `OpeningStepsOutcome` can reference it) now centralizes this: `Won`/`Lost`/`Draw`/`Fled`
+(`IsFled`)/`Capture`(`"Captured"`)/`Forfeit` constants, plus `FromOutcome(BattleOutcome?)` — the same
+switch `ComputeEndReason` applies server-side. Every literal `EndReason` comparison in this codebase
+should go through these, never a bare string or an enum `.ToString()`.
 
 ## Elemental reactions are content
 

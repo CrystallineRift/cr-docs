@@ -91,13 +91,19 @@ added later without changing the contract.
 
 ## Quest system integration
 
-`POST /api/v1/quests/progress` with `objectiveType = VisitLocation` is **forwarded**, not 400: it is an
-intent ("I entered key X"), not an outcome. `QuestDomainService.ForwardVisitLocationAsync` calls
-`LocationEntryService.EnterAsync` through a narrow adapter (`LocationEntryForwarderAdapter`, resolving
-`ILocationEntryService` lazily via `IServiceProvider` — a direct constructor dependency would cycle, since
-`LocationEntryService` itself depends on `IQuestDomainService`; a factory-registered cycle is invisible to
-.NET DI's own detector and hung a test for 1h49m before this fix). See
-[Quest System — the compat route](?page=backend/07-quest-system) and
+Before Phase E, `POST /api/v1/quests/progress` with `objectiveType = VisitLocation` was **forwarded**
+(`QuestDomainService.ForwardVisitLocationAsync`) into `LocationEntryService.EnterAsync` through a
+narrow adapter (`LocationEntryForwarderAdapter`, resolving `ILocationEntryService` lazily via
+`IServiceProvider` — a direct constructor dependency would cycle, since `LocationEntryService` itself
+depends on `IQuestDomainService`; a factory-registered cycle is invisible to .NET DI's own detector and
+hung a test for 1h49m before this fix). **Phase E retired the compat route and deleted `QuestDomainService.ForwardVisitLocationAsync`** — `POST
+.../world-locations/enter` (this page's own route, above) is now the only door into
+`LocationEntryService.EnterAsync`; `VisitLocation` objectives only ever advance from a genuine entry
+through it, never a client-reported progress event. `LocationEntryForwarderAdapter`/
+`ILocationEntryForwarder` (the DI indirection `ForwardVisitLocationAsync` used to call through) are
+still in the codebase but now unreachable — `QuestDomainService`'s own `_locationEntry` field is never
+read anywhere — a candidate for a future cleanup pass, not deleted in this round. See
+[Quest System — the retired compat route](?page=backend/07-quest-system) and
 [Progress Dispatcher](?page=backend/23-progress-dispatcher).
 
 ## Unity (online/offline)

@@ -30,9 +30,12 @@ it (`TalentTreeAuthoringValidation`) is deleted; there is one validation, not tw
 
 ### Starter content
 
-`Exploration`, `Capture` (minus **Bond Trial** — an empty tier 5, the one intentional validation warning)
-and `Battle` are authored at `Assets/CR/Content/Defs/Talents/`, registered on the project's
-`ContentDefinitionProvider`. **Opportunist** (Capture, tier 3) ships at `CaptureXp +15/30/40%`, the design
+`Exploration`, `Capture` and `Battle` are authored at `Assets/CR/Content/Defs/Talents/`, registered on
+the project's `ContentDefinitionProvider`. **Bond Trial** (Capture, tier 5) is now authored too —
+`content_key: bond_trial`, `maxRank: 1`, effect `CaptureMission` (=23), `valuesPerRank: [1]`; the empty
+tier 5 that used to be this tree's one intentional validation warning is gone locally
+(`TalentTreeValidation.Validate`: Errors=0, Warnings=0), but it is **content only, not yet pushed** to
+Studio — the live/floor tree still has the empty tier 5 until someone pushes it. **Opportunist** (Capture, tier 3) ships at `CaptureXp +15/30/40%`, the design
 spec's retune (the original `+25/50/75%` would have exceeded the `CaptureXp` cap combined with Naturalist).
 
 ### Studio push and the offline floor

@@ -40,17 +40,20 @@ The `BattleBagPanelHandler` MonoBehaviour manages the panel:
 - Wire up confirm/cancel actions
 - Display capture crystal visual indicators
 
-**Zenject Injection:**
+**Zenject Injection** (current signature — item use no longer goes through
+`IItemUseDomainService` directly, see [Confirming Item Use](#confirming-item-use) below):
 ```csharp
 [Zenject.Inject]
 public void Init(
     IBattleCoordinator battleCoordinator,
-    IItemUseDomainService itemUseDomainService,
-    IItemInventoryService itemInventoryService,
     IItemDomainService itemDomainService,
-    ICreatureInventoryService creatureInventoryService,
+    TeamSync teamSync,
+    InventorySync inventorySync,
     ILogger<BattleBagPanelHandler> logger,
-    CR.UI.IUICoordinator coordinator)
+    CR.UI.IUICoordinator coordinator,
+    ICreatureDomainService creatureDomainService,
+    ICreatureStatusClient statusClient,
+    [Zenject.InjectOptional] CR.Core.Assets.IGameAssetLoader? assetLoader)
 ```
 
 ### BattleHUD
@@ -198,34 +201,41 @@ The `bag-confirm-button` is enabled only when:
 - An item is selected
 - A valid target is selected
 
-Clicking the button calls:
+Clicking the button calls the same shared pipeline `ExecuteUseAsync` that the inline command-card
+bag's quick-use also uses. **As of server-authority C2b, item use no longer calls
+`IItemUseDomainService.UseItemAsync` — that per-item route is retired.** It builds the action JSON and
+submits it exactly like an ability or a switch:
 
 ```csharp
-var result = await _itemUseDomainService.UseItemAsync(
-    trainerId, trainerId, itemId,
-    targetCreatureId, targetIsOpponent,
-    currentBattleId, currentRoundNumber,
-    CancellationToken.None);
+var actionJson = BuildItemActionJson(itemId, targetCreatureId, targetIsOpponent);
+_battleCoordinator.SubmitPlayerAction(actionJson);
 ```
+
+The server resolves it inside `BattleTurnDomainService.SubmitTurnAsync` (online) or the same DLL
+offline, and the resulting `ActionOutcome` comes back through the normal turn loop — presented like
+any other step by `BattleCoordinator.PlayStepsAsync`, not by this handler. A capture attempt is
+detected client-side *before* submitting (`_itemDefinitionCache`'s `EffectType == CaptureCreature`)
+purely to fire pre-result VFX (ball arc, screen shake) and arm a one-shot listener for the "broke
+free" miss cue — the server alone still decides whether the throw lands.
 
 ### Capture Success
 
-On successful capture:
+On a successful capture, the outcome comes back as any other resolved action would — there is no
+bag-panel-specific end-battle call any more:
 
-1. `BattleEvents.RaiseCreatureCaptured(capturedCreatureId, "")` is raised
-2. `BattleCoordinator.EndBattle(_trainerId, BattleEndReason.Capture)` is called — a named constant now,
-   not a bare `"capture"` literal; `BattleEndReason.ReportsBattleWon` excludes it from `OnBattleWon` (a
-   capture is not a battle win, spec B7)
-3. Battle ends immediately
-4. Captured creature is added to trainer's storage
+1. `BattleCoordinator.PlayStepsAsync` maps the outcome through
+   `CR.Game.Battle.Logic.PlayerItemOutcomePresentation.From(outcome, playerTrainerId)` and, when
+   `CapturedCreatureId` is set, raises `BattleEvents.RaiseCreatureCaptured(capturedCreatureId, "")`,
+   `RaiseCameraCueCapture` and `RaiseVibrationStrong` itself.
+2. The turn loop's own end-of-battle handling ends the battle with the server's real
+   `TurnResolution.EndReason` (`"Captured"`, `BattleEndReason.Capture`) — not a client-picked reason —
+   and skips the victory/defeat camera cue for it (a capture has no winner, spec B7).
+3. Captured creature is added to trainer's storage server-side; the client only presents the result.
 
 The captured creature's own progress (`CreatureCaptured`, and the crystal's `ItemUsed`) is **not**
-reported by `BattleBagPanelHandler` — it came back on the item-use result as a `ProgressReport` and was
-already applied by `OnlineOfflineItemDomainService` through `IQuestService.ApplyServerProgress`. The
-handler used to look up the captured creature's base content key and call
-`IQuestService.OnCreatureCaptured` itself; that reporter and its two repository dependencies
-(`IGeneratedCreatureRepository`, `ICreatureRepository`) are gone (M1-F1) — the authority (server online,
-the shared DLL dispatcher offline) is what decides capture progress now.
+reported by `BattleBagPanelHandler` — it comes back on the resolved `ActionOutcome` as a
+`ProgressReport`, produced by the authority (server online, the shared DLL dispatcher offline) and
+applied through the normal `ApplyServerProgress` path, same as every other action's progress.
 
 ## Event Flow
 
@@ -244,13 +254,17 @@ Show/hide opponent target based on flags
         ↓
 Player selects target
         ↓
-OnConfirmClicked()
+OnConfirmClicked() → ExecuteUseAsync()
         ↓
-Call UseItemAsync on backend
+Refuse client-side if a capture crystal in a trainer battle (no server round trip)
         ↓
-BattleEvents.RaiseCreatureCaptured (if captured)
+Build the action JSON, BattleCoordinator.SubmitPlayerAction() — same battle-actions intent as an ability
         ↓
-End battle
+Server resolves it inside SubmitTurnAsync; ActionOutcome comes back through the normal turn loop
+        ↓
+BattleCoordinator.PlayStepsAsync presents it (HP restored / refusal / RaiseCreatureCaptured)
+        ↓
+End battle if the outcome ended it
         ↓
 Close panel
 ```

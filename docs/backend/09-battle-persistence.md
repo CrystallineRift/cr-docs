@@ -819,7 +819,11 @@ first; see [Capture Mechanic → Refused in trainer battles](?page=unity/14-capt
 2. **Low HP** (< 35% of the max HP seen for the active creature) with a heal in the bag → drink it.
 3. **Otherwise** → delegate to the injected `IWildBattleAIDomainService` for the attack decision.
 
-It never emits Run. Item turns mirror the player's two-step: apply the item effect via `POST /api/v1/npc/{npcId}/use-battle-item` (`NpcDomainService.UseNpcBattleItemAsync` — `RestoreHp`/`RestoreFullHp`, decrements the NPC's bag), then submit the `{"type":2,...}` action to consume the turn.
+It never emits Run. Item turns call `NpcDomainService.UseNpcBattleItemAsync` directly
+(`RestoreHp`/`RestoreFullHp`, decrements the NPC's bag) from inside
+`BattleTurnDomainService.SubmitTurnAsync` — never over HTTP; the old two-step (a separate
+`use-battle-item` call, then submit) and its route are retired, see [Battle routes](#rest-endpoints)
+below.
 
 ### Demo content
 
@@ -829,9 +833,15 @@ It never emits Run. Item turns mirror the player's two-step: apply the item effe
 
 A system "Wild" trainer with well-known GUID `00000000-0000-0000-0000-000000000001` is seeded by `M9990SeedGameData`. All spawned wild creatures are assigned to this trainer. When a battle ends, `WriteBackHpAsync` soft-deletes the wild trainer's active creature (if uncaptured) and clears its `generated_creature_current_stats` row.
 
-## Wild Turn Endpoint
+## Wild Turn Endpoint (retired)
 
-`POST /api/v1/battle/{battleId}/wild-turn` is called by the Unity client when `ActionOutcome.NextActiveTrainerId == WildTrainerId` in online mode. It calls `IWildBattleAIDomainService.DecideActionAsync()` and submits the result via `SubmitActionAsync`, returning the `ActionOutcome`.
+`POST /api/v1/battle/{battleId}/wild-turn` — a client-polled endpoint the Unity client called when
+`ActionOutcome.NextActiveTrainerId == WildTrainerId` in online mode — is retired (410 `route_retired`,
+Phase E, `WildBattleEndpoints.cs`). The server now runs the wild side's turn itself, inline, inside
+`BattleTurnDomainService.SubmitTurnAsync` (server-authority C2: "one intent per turn" — see [Battle
+Extensions](?page=unity/24-battle-extensions)) right after resolving the player's own action, so the
+whole exchange is one round trip instead of two. `IWildBattleAIDomainService.DecideActionAsync()`
+itself is unchanged — only the HTTP door that used to poll it separately is gone.
 
 `WildBattleAIDomainService` heuristics (in priority order):
 1. 20% random chance → use a Status-category ability, **but only one that actually inflicts a
@@ -856,19 +866,27 @@ The Unity client uses the same DLL `WildBattleAIDomainService` for offline battl
 
 ## REST Endpoints
 
-Defined in `Game/CR.Game.Service.BFF/Endpoints/BattleEndpoints.cs` and `WildBattleEndpoints.cs`:
+Defined in `Game/CR.Game.Service.BFF/Endpoints/BattleEndpoints.cs`,
+`Npcs/CR.Npcs.Service.REST/Endpoints/BattleStartEndpoints.cs` and `BattleActionsEndpoints.cs`. Phase E
+retired the whole original per-call surface (`start`/`submit`/`round-key`/`run`) plus `wild-turn` —
+each answers `{ "error": "route_retired" }` / 410 now — in favor of one intent-based pair:
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| `POST` | `/api/v1/battle/start` | Creates a battle; returns `BattleId` + first `ActiveTrainerId` + round key |
+| `POST` | `/api/v1/battles` | **C1 — start by intent.** `IBattleEncounterDomainService.StartEncounterAsync`; body names a `{ Kind: Wild, SpawnerKey }` or `{ Kind: Trainer, NpcKey }` encounter, never a raw opponent trainer id. Returns `EncounterStartResult { BattleId, RoundKey, ActiveTrainerId, OpeningSteps }` |
+| `POST` | `/api/v1/battles/{battleId}/actions` | **C2 — one intent per turn.** `IBattleTurnDomainService.SubmitTurnAsync`; submits the player's own action (ability/item/switch/run). The server resolves it, then runs the opponent side itself (wild AI or trainer NPC, bounded at 8 steps) and returns `TurnResolution { Steps, State, NextRoundKey, EndReason, Missions, Progress }` |
 | `GET` | `/api/v1/battle/{id}/state` | Returns full `BattleStateDto` |
-| `GET` | `/api/v1/battle/{id}/round-key?trainerId=` | Returns current round key for a given trainer |
-| `POST` | `/api/v1/battle/{id}/submit` | Submits a trainer's action for the active turn; returns `ActionOutcome` |
-| `POST` | `/api/v1/battle/{id}/run` | Attempts to flee; triggers escape-chance formula |
 | `GET` | `/api/v1/battle/{id}/summary` | Returns post-battle summary (outcome, creature HP grid) |
-| `POST` | `/api/v1/battle/{id}/wild-turn` | Triggers Wild AI turn (online mode only); body is empty `{}` |
+| `POST` | `/api/v1/battle/start` | **Retired (410).** Superseded by `POST /api/v1/battles` |
+| `POST` | `/api/v1/battle/{id}/submit` | **Retired (410).** Superseded by `POST /api/v1/battles/{id}/actions` |
+| `GET` | `/api/v1/battle/{id}/round-key` | **Retired (410).** The intent response carries the round key directly |
+| `POST` | `/api/v1/battle/{id}/run` | **Retired (410).** Run is now `BattleActionIntentKind.Run` through `.../actions`, same as every other action |
+| `POST` | `/api/v1/battle/{id}/wild-turn` | **Retired (410).** The wild side's turn now runs inline inside `SubmitTurnAsync` — see [Wild Turn Endpoint](#wild-turn-endpoint-retired) above |
 
-All endpoints require bearer authentication.
+All endpoints require bearer authentication. `EndReason` on `TurnResolution` is one of `"Won"`,
+`"Lost"`, `"Draw"`, `"Fled"`, `"Captured"`, `"Forfeit"` (`BattleTurnDomainService.ComputeEndReason`) —
+see [Battle Extensions → EndReason](?page=unity/24-battle-extensions) for the client-side literal
+checks that must match these exact strings.
 
 In-battle mission content is served separately, from
 `Game/CR.Game.Service.BFF/Endpoints/BattleMissionTemplateEndpoints.cs`:

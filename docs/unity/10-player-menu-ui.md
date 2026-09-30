@@ -167,7 +167,9 @@ activatable card underneath.
 
 #### Why the server swaps through a temporary slot
 
-Online, the swap is `PUT /trainer/{trainerId}/inventory/creature/{inventoryId}/swap`, which calls
+Online, the swap is `POST /api/v1/trainers/{trainerId}/team/swap` (`TrainerCreatureIntentEndpoints
+.SwapTeamSlotsAsync`, server-authority Phase D/E — the old `PUT .../inventory/creature/{inventoryId}
+/swap` route is retired, 410), which calls
 `BaseTrainerCreatureInventoryRepository.SwapCreatureSlots`. Both engines run the **same three-step
 script inside a transaction**: slot A → `-1`, slot B → A, `-1` → B. A single `UPDATE … CASE` that
 exchanges the two values looks cleaner but fails on PostgreSQL whenever **both slots are occupied**:

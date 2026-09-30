@@ -149,9 +149,13 @@ Every write method is transactional: the `trainer_stat` upsert and the `stat_eve
 
 ## How to Record a Stat from Unity
 
-The intended path is **not** direct HTTP calls to the Stats endpoint — stats are written as a side-effect of quest progress events. The Unity client fires `POST /api/v1/quests/progress` after any game event, and the Quest domain service writes stats as part of that call.
+The intended path is **not** direct HTTP calls to the Stats endpoint, and — since Phase E retired
+`POST /api/v1/quests/progress` outright — it is also no longer a side effect of a client-reported quest
+progress event. Every lifetime stat is now written by `LifetimeStatProjector` from an outcome the
+authority itself produced (a talk, a location entry, a battle resolution, …), never from anything the
+Unity client posts — see [Progress Dispatcher](?page=backend/23-progress-dispatcher).
 
-However, if a domain that does not use quests needs to write a stat (e.g., the Trainer domain writing `trainer_level`), it injects `IStatService` and calls it directly server-side. There is no client-facing endpoint for stat writes.
+If a domain that does not use quests needs to write a stat (e.g., the Trainer domain writing `trainer_level`), it injects `IStatService` and calls it directly server-side. There is no client-facing endpoint for stat writes.
 
 **From the server side (e.g., in a domain service):**
 
@@ -170,12 +174,13 @@ await _statService.SetAsync(
 ```
 
 :::caution
-`battles_won` is no longer reachable through `POST /api/v1/quests/progress` — `WinBattles` (and every other
-battle/defeat objective type) now answers `400 server_derived` there. `BattleDomainService` writes
-`battles_won` itself, through the progress dispatcher, the moment it resolves the winning action (or a
-forfeit win) server-side — see [Progress Dispatcher](?page=backend/23-progress-dispatcher) and [Quest
-System — `RecordProgressEventAsync` is a compat translator](?page=backend/07-quest-system#recordprogresseventasync-is-a-compat-translator-server-authority-phase-b).
-Only `VisitLocation` and `TalkToNpc` still reach a stat write through this endpoint.
+`POST /api/v1/quests/progress` is retired (Phase E, 410 `route_retired`) — no stat is reachable through
+it any more, for any objective type. `battles_won` is written by `BattleDomainService` itself, through
+the progress dispatcher, the moment it resolves the winning action (or a forfeit win) server-side;
+`VisitLocation`/`TalkToNpc` (the last two types the old compat route still forwarded) now only ever
+arrive through `POST .../world-locations/enter` and the talk intent respectively. See [Progress
+Dispatcher](?page=backend/23-progress-dispatcher) and [Quest System — the retired compat
+route](?page=backend/07-quest-system).
 :::
 
 ## How to Query the Audit Log
