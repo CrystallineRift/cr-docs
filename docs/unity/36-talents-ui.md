@@ -95,13 +95,24 @@ DLLs are rebuilt.
 `TrainerLevelUpToastText` reads `"Trainer level N (+K talent point(s))"` — `K` is the levels gained,
 singular/plural on `K`, and the points clause is left out at the level cap.
 
-## Movement speed — still pending
+## Movement speed
 
-`MalbersMovementController.SetSpeed(float multiplier)` and a `TrainerModifierApplier` reading
-`MoveSpeedMultiplier` from `ITrainerProgressReader` (spec §10.4) have **not** landed yet — the one
-client-applied talent effect is the remaining gap before this lane is feature-complete. `SetSpeed`/
-`IMovementController` already exist; the multiplier is already computed server- and offline-side. See
-[Talents — Effects](?page=backend/25-talents#effects-consumers) for what it will read once wired.
+`MalbersMovementController.SetSpeed(float multiplier)` scales every `MSpeedSet`'s position
+(non-root-motion) and animator (root motion) value off a baseline captured once at initialization,
+writing fresh constant `FloatReference`s rather than mutating a shared `FloatVar` asset — repeated
+calls are non-compounding, since they always re-derive from that baseline, and it never writes a
+transform directly. The multiplier itself comes from the pure, EditMode-tested
+`TrainerMoveSpeedLogic` (`CR.Core.Movement`), which reads `MoveSpeedMultiplier` off a
+`TrainerProgress` via `TrainerModifiers` and defaults to neutral on a null/failed read.
+
+`TrainerModifierApplier` (world-init-gated, code-created the same "search the hierarchy, else create"
+way as `AchievementToastPresenter`) is what actually calls `SetSpeed`: it reads
+`ITrainerProgressReader` and pushes the multiplier onto `TrainerMovementController.Current` on world
+init, after every `IProgressionNotifier.TrainerProgressed`, after a new `TalentsChanged` event
+(`TalentOnlineOfflineRouter` raises it on a successful spend/respec), and whenever a new movement
+controller comes up (`TrainerMovementController.OnMovementReady`, the same spawn hook the overworld
+camera gate already uses). See
+[Talents — Effects](?page=backend/25-talents#effects-consumers) for what it reads.
 
 ## Related
 

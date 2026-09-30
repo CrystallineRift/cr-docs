@@ -475,6 +475,44 @@ the same change"). If you are looking for where this stat is written, it is
 `LifetimeStatProjector`'s `BattleMissionCompleted` case, not anything under `Assets/CR/Game/Battle`.
 :::
 
+### Capture missions (Bond Trial)
+
+Phase 3 adds a second mission *pool* on top of the same tracker, seam and conductor above — see
+[Capture Missions](?page=backend/capture-missions) for the server side. Nothing about the presenter
+pattern changes; the conductor gains one more branch and one more event.
+
+- **Two new mission types**, `HitsWithoutSwitch` and `BelowHpWithoutKo`, join `StatusApplication` /
+  `KnockOut` / `ElementalReaction` in `CR.Game.Model.Battle.BattleMissionTypes` (moved off
+  `CR.Game.Data.Constants` this phase — R7 — because the Compat tracker cannot reference
+  `CR.Game.Data`). `BelowHpWithoutKo` reuses `threshold` as an HP percentage (1-99), not an event
+  count, and is a state check on every player action rather than a counter.
+- **A new reward type**, `GuaranteedCapture`, has no ability to unlock. When
+  `BattleMissionConductor.OnActionResolved` sees a completed mission whose `RewardType` is
+  `GuaranteedCapture`, it raises `MissionCompleted(name, "")` (an empty ability name, so the banner
+  drops the "unlocked!" clause) and `BattleEvents.RaiseCaptureReady()` instead of resolving a reward
+  ability. It also re-raises `CaptureReady` whenever `ActionOutcome.GuaranteedCaptureReady` is true —
+  that flag is sticky server-side (true on completion and every later outcome until a committed
+  capture clears it), so a HUD that attaches mid-battle still ends up in the right state.
+  `BattleCoordinator.AnnounceInitialMissions` raises it once more from the battle's initial
+  `GetBattleStateAsync` read, for a resumed battle where the trial is already done.
+- **`BattleEvents.CaptureReady`** is a payload-free, idempotent event. `BattleHUD` shows a persistent
+  "Capture ready" badge (CrTheme tokens, the mission layer) that stays up until `ResetMissionUi` clears
+  it with the rest of the mission UI on battle start/close — unlike the toast/banner, it does not
+  fade on its own, because the flag itself does not expire until a capture. `BattleBagPanelHandler`
+  tracks the same flag (reset on battle start/end) and reads the crystal row's chance label through
+  `CaptureChanceLabel.For(chance, captureReady)` (`CR.Game.Battle.Logic`, pure) — "Sure catch" instead
+  of the computed percentage. Both are presentation only: the server still rolls every throw
+  (`CaptureAttemptService.IsGuaranteedAsync`), and a storage-full guaranteed throw keeps both the
+  flag and the crystal.
+- **The mission picker excludes capture missions.** `PlayerTeamView.RenderMissionsAsync` filters to
+  `RewardType == AbilityUnlock` — a Bond Trial is armed automatically by the talent that grants it,
+  not chosen, and completing it has no move to add to the list.
+- **Studio.** `BattleMissionDefinitionEditor` hides the ability picker and filters the mission-type
+  popup through `BattleMissionTypes.AllowedInCapturePool` (every type except `KnockOut`) when the
+  authored `rewardType` is `GuaranteedCapture`, and labels the threshold field "HP %" for
+  `BelowHpWithoutKo`. `BattleMissionDefinition.OnValidate` clears `rewardAbilityId` on the same
+  switch, so a stale reference from an earlier `AbilityUnlock` draft can't survive into a push.
+
 ### Mission definitions are content
 
 Missions follow the same content standard as every other domain: authored in the backend, baked into

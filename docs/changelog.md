@@ -1,5 +1,37 @@
 # Changelog
 
+## 2026-09-29 — Capture Missions Phase 3 (Bond Trial), round 2
+
+- **cr-api:** `ResolveItemActionAsync`'s non-capture branch (a heal, or a failed capture throw) now
+  populates `TargetFinalHp`/`TargetMaxHp` on the outcome, so a `BelowHpWithoutKo` mission progresses on
+  a missed capture throw and not just on an Ability action (R8). The legacy
+  `CR.Game.Data.Constants.BattleMissionTypes`/`BattleMissionRewardTypes` — superseded by
+  `CR.Game.Model.Battle` (R7) — are deleted; a grep confirmed no remaining consumers. The nine starter
+  `capture_trial_*` missions are hand-merged into `M12005SeedBattleMissions_20260903` (preserving its
+  existing `IntroducedKeys` rollback safety net rather than a mechanical regeneration), with a new
+  reader test pinning that the offline floor carries all nine. →
+  [Capture Missions](?page=backend/26-capture-missions), [Battle Persistence](?page=backend/09-battle-persistence)
+- **Unity:** `BattleMissionConductor` gains the `GuaranteedCapture` completion branch and re-raises the
+  new `BattleEvents.CaptureReady` while `ActionOutcome.GuaranteedCaptureReady` stays true; `BattleHUD`
+  shows a persistent "Capture ready" badge, and the completion banner drops "  unlocked!" for a reward
+  with no ability. `BattleBagPanelHandler` swaps the crystal row's chance for "Sure catch" through the
+  new pure `CaptureChanceLabel` (`CR.Game.Battle.Logic`). `PlayerTeamView`'s mission picker now excludes
+  capture missions. Studio's `BattleMissionDefinitionEditor` moves off the deleted
+  `CR.Game.Data.Constants` onto `CR.Game.Model.Battle`, hides the ability picker and filters the
+  mission-type popup for a `GuaranteedCapture` reward, and labels the threshold "HP %" for
+  `BelowHpWithoutKo`. The nine capture-mission SOs are authored under
+  `Assets/CR/Content/Defs/BattleMissions/` (not pushed to any server this round — see USER STEPS). →
+  [Battle Extensions](?page=unity/24-battle-extensions), [Capture Mechanic](?page=unity/14-capture-mechanic),
+  [Battle Bag Panel](?page=unity/13-battle-bag-ui)
+- **cr-admin-web:** The battle-missions descriptor gains `HitsWithoutSwitch`/`BelowHpWithoutKo` and the
+  `GuaranteedCapture` reward, mirroring `BattleMissionTemplateValidation`'s three added rules in zod. →
+  [Capture Missions — cr-admin-web](?page=backend/26-capture-missions)
+- **Docs:** New page [Capture Missions](?page=backend/26-capture-missions). Fixed two stale notes:
+  [Talents UI](?page=unity/36-talents-ui)'s movement-speed section (it landed on
+  `feature/trainer-progression` task 13, not still pending), and
+  [Moderation](?page=backend/18-moderation)'s admin anonymous-route count (sixteen routes in
+  `AdminEndpointsHttpTests.AdminRoutes()`, not eleven).
+
 ## 2026-09-29 — Talents Phase 2
 
 - **cr-api:** New `Talents.*` tables (`talent_tree`, `talent`, `trainer_talent`, `trainer_talent_lock`,

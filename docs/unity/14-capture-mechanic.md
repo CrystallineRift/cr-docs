@@ -272,3 +272,25 @@ also requires the throw to target the active wild creature of the caller's own l
 capture XP; the item-use response carries it in `ItemUseResult.Progress`, and `OnlineOfflineItemDomainService`
 applies it through `QuestManager.ApplyServerProgress` in both modes. The battle bag no longer reports captures,
 and a capture ends the battle **without** counting as a battle win (`BattleEndReason.Capture`).
+
+## The guaranteed throw (Bond Trial, #7 capture missions)
+
+A talent-granted mission pool (see [Capture Missions](?page=backend/capture-missions)) can complete
+mid-battle and arm a **guaranteed capture**: `CaptureAttemptService.IsGuaranteedAsync` checks the six
+conditions in that page's §6.5 (the battle is Active, the thrower is Trainer1, the opponent is the
+wild sentinel, the target is the wild's own active creature, and `battle.guaranteed_capture_ready` is
+set) and, when they all hold, sets `chance = 1.0f` — bypassing `CalculateChance` and the clamp above
+entirely, but still rolled through the same `_roll.Next() <= chance` comparison, so the roll seam
+itself is untouched. The flag clears only after a committed capture
+(`ClearGuaranteedCaptureAsync`); a storage-full capture still commits, so it clears the flag too. A
+refused throw (wrong target, ended battle, trainer battle) never touches the flag.
+
+This is display-only from the client's side: Unity never computes the chance itself, so there is
+nothing for it to fake. `BattleBagPanelHandler` tracks `BattleEvents.CaptureReady` (raised by
+`BattleMissionConductor` on the mission's completion and again on every later
+`ActionOutcome.GuaranteedCaptureReady = true`) and swaps the crystal row's percentage for "Sure catch"
+through the pure `CaptureChanceLabel.For(chance, captureReady)`
+(`Assets/CR/Game/Battle/Logic/CaptureChanceLabel.cs`). `BattleHUD` shows a persistent "Capture ready"
+badge for the same event, cleared alongside the rest of the mission UI on battle start/close. See
+[Battle Extensions](?page=unity/24-battle-extensions) for the mission-pool wiring and
+[Battle Bag Panel](?page=unity/13-battle-bag-ui) for the label itself.

@@ -34,9 +34,19 @@ Tracks the overall battle session.
 | `trainer2_active_creature_id` | UUID NULL | Trainer 2's creature currently on field |
 | `started_at` | DATETIME | |
 | `ended_at` | DATETIME NULL | |
+| `mission_state` | TEXT NULL | JSON snapshot of the active `BattleMissionTracker` (M16006). `NULL` means no missions for this battle (assignment failed, or the fight has none) |
+| `guaranteed_capture_ready` | BOOLEAN NOT NULL DEFAULT false | M20001 (Game domain). Sticky once a `GuaranteedCapture` mission (Bond Trial) completes; cleared only by a committed capture — see [Capture Missions](?page=backend/capture-missions) |
 | `deleted` | BOOLEAN | Soft delete |
 
 `trainer{1,2}_active_creature_id` is set at battle start (first team creature) and updated when a creature faints and is swapped. It is the source of truth for "whose creature is fighting" — there are no per-battle HP rows.
+
+`mission_state` and `guaranteed_capture_ready` are both written from the same two seams:
+`BattleDomainService.AssignMissionsAsync` (called from `StartBattleAsync`) builds the tracker and
+persists its first snapshot before the battle response returns; `ApplyMissionsAsync` re-persists it
+after every resolved action (`IBattleRepository.UpdateMissionStateAsync(battleId, missionState,
+markGuaranteedCaptureReady, ct)` — the boolean parameter only ever sets the flag to `true`, never back
+to `false`). `CaptureAttemptService.ClearGuaranteedCaptureAsync` is the only writer that turns it back
+off, and only after a capture actually commits.
 
 ### `battle_round`
 
@@ -127,11 +137,11 @@ Read by the game through `GET /api/v1/battle-missions`; authored by the Crystall
 | `content_key` | VARCHAR(255) | Designer-facing key, e.g. `mission_pyromaniac`; indexed (**not** unique — uniqueness is enforced by the endpoint, which 409s) |
 | `name` | VARCHAR(255) | What the client HUD shows |
 | `description` | TEXT NULL | |
-| `mission_type` | VARCHAR(50) | What the client tracker counts: `StatusApplication`, `KnockOut` or `ElementalReaction` (`CR.Game.Data.Constants.BattleMissionTypes`) |
-| `condition_key` | VARCHAR(100) NULL | Status-condition name (`Burn`) or reaction name (`Conduction`); unused by `KnockOut` |
-| `threshold` | INT | Qualifying events needed to complete |
+| `mission_type` | VARCHAR(50) | What the tracker counts: `StatusApplication`, `KnockOut`, `ElementalReaction`, `HitsWithoutSwitch` or `BelowHpWithoutKo` (`CR.Game.Model.Battle.BattleMissionTypes`, moved off `CR.Game.Data.Constants` in #7) |
+| `condition_key` | VARCHAR(100) NULL | Status-condition name (`Burn`) or reaction name (`Conduction`); unused by `KnockOut`, `HitsWithoutSwitch` and `BelowHpWithoutKo` |
+| `threshold` | INT | Qualifying events needed to complete — except `BelowHpWithoutKo`, which reuses this column as an HP percentage (1-99) |
 | `same_target` | BOOLEAN | `true` = the count is per target creature; `false` = any qualifying event pools |
-| `reward_type` | VARCHAR(50) | Only `AbilityUnlock` exists today (`CR.Game.Data.Constants.BattleMissionRewardTypes`) |
+| `reward_type` | VARCHAR(50) | `AbilityUnlock` or `GuaranteedCapture` (`CR.Game.Model.Battle.BattleMissionRewardTypes`) — a `GuaranteedCapture` row has no `reward_ability_id` and instead sets `battle.guaranteed_capture_ready` on completion |
 | `reward_ability_id` | UUID NULL | Points at an `abilities` row (no FK constraint) |
 | `is_active` | BOOLEAN | Only active rows are served; indexed |
 | `created_at` / `updated_at` / `deleted` | DATETIME / BOOLEAN | Standard soft-delete columns |
@@ -153,13 +163,16 @@ in Studio should be exported the same way rather than hand-written into a Creatu
 :::
 
 :::caution
-**There is no `battle_mission_instance` table, and that is the design.** Mission progress is
-evaluated entirely client-side by a per-battle, in-memory tracker and dies with the battle, so there
-is nothing to persist, migrate or reconcile. The only durable trace of a completion is a
-`battle_missions_completed` stat increment through the Stats domain. The corollary is that the
-server currently trusts the client about unlocks — `SubmitActionAsync` resolves any ability id
-present in the `abilities` table and never checks that the creature learned it. See
-[Battle Extensions](?page=unity/24-battle-extensions).
+**There is no `battle_mission_instance` table, and that is the design — but mission progress moved
+server-side (#1 C2).** A per-battle `BattleMissionTracker` (`CR.Game.Compat`, shared netstandard2.1
+code) is folded fresh from `battle.mission_state` on every call inside `BattleDomainService`, on
+whichever host is authoritative for the mode (the API online, the same DLL over local SQLite
+offline) — there is still nothing to persist beyond that one JSON column, migrate or reconcile
+across a fight. The only durable trace of a completion is a `battle_missions_completed` stat
+increment through the Stats domain, and an ability unlock is legal only when it is in the
+tracker's own `UnlockedAbilityIds` snapshot (`SubmitActionAsync` no longer trusts a bare ability id
+from the client). See [Battle Extensions](?page=unity/24-battle-extensions) and
+[Capture Missions](?page=backend/capture-missions).
 :::
 
 `Game/CR.Game.Model/Missions/*` plus `BattleMissionService` / `BattleMissionEndpoints`

@@ -800,8 +800,7 @@
         "Game/CR.Game.Data/Implementation/BaseBattleMissionTemplateRepository.cs",
         "Game/CR.Game.Data/Model/BattleMissionTemplateUpsertRequest.cs",
         "Game/CR.Game.Data/Validation/BattleMissionTemplateValidation.cs",
-        "Game/CR.Game.Data/Constants/BattleMissionTypes.cs",
-        "Game/CR.Game.Data/Constants/BattleMissionRewardTypes.cs",
+        "Game/CR.Game.Data.Migration/M20001AddGuaranteedCaptureReadyToBattle.cs",
         "Game/CR.Game.Service.BFF/Endpoints/BattleMissionTemplateEndpoints.cs",
         "Game/CR.Game.Data.Test/BattleMissionTemplateValidationTests.cs",
         "Game/CR.Game.Data.Postgres.Test/BattleMissionTemplateRepositoryPostgresTests.cs",
@@ -873,10 +872,12 @@
       ],
       "cr-data": [
         "Assets/CR/Game/Battle/BattleHttpDomainAdapter.cs",
-        "Assets/CR/Game/Battle/OnlineOfflineBattleDomainService.cs"
+        "Assets/CR/Game/Battle/OnlineOfflineBattleDomainService.cs",
+        "Assets/CR/Game/Battle/Missions/BattleMissionConductor.cs",
+        "Assets/CR/Game/Battle/BattleCoordinator.cs"
       ]
     },
-    "description": "Battle DB tables (battle with active creature IDs, battle_round, battle_round_input, battle_action_log), persistent HP/conditions on generated_creature_current_stats + generated_creature_status_conditions, IBattleRepository, IGeneratedCreatureRepository, BattleDomainService, BattleHttpDomainAdapter, REST endpoints, DI wiring, ability progression, animation_key + VFX/SFX keys on abilities; trainer battles (battle_type Wild/Trainer, minted battle trainer via npcs.battle_trainer_id, run refused without turn cost, heal-on-start, 1.5x XP / 2x currency, TrainerBattleAIDomainService swap→heal→attack, opponent_content_key M8017, M10020 Meadow demo trainer); elemental reactions as authored content (elemental_reaction table M12006, IElementalReactionRepository, /api/v1/elemental-reactions, resolver injection + ActionOutcome.ReactionLogLine) and the versioned elemental_damage matrix (/api/v1/elemental-damage, active-version pointer honoured with a has-rows fallback, M12007 Radiant self-multiplier fix + DECIMAL(4,2) widening)"
+    "description": "Battle DB tables (battle with active creature IDs, mission_state, guaranteed_capture_ready, battle_round, battle_round_input, battle_action_log), persistent HP/conditions on generated_creature_current_stats + generated_creature_status_conditions, IBattleRepository, IGeneratedCreatureRepository, BattleDomainService, BattleHttpDomainAdapter, REST endpoints, DI wiring, ability progression, animation_key + VFX/SFX keys on abilities; trainer battles (battle_type Wild/Trainer, minted battle trainer via npcs.battle_trainer_id, run refused without turn cost, heal-on-start, 1.5x XP / 2x currency, TrainerBattleAIDomainService swap→heal→attack, opponent_content_key M8017, M10020 Meadow demo trainer); elemental reactions as authored content (elemental_reaction table M12006, IElementalReactionRepository, /api/v1/elemental-reactions, resolver injection + ActionOutcome.ReactionLogLine) and the versioned elemental_damage matrix (/api/v1/elemental-damage, active-version pointer honoured with a has-rows fallback, M12007 Radiant self-multiplier fix + DECIMAL(4,2) widening); server-tracked battle missions (#1 C2) and the capture-mission pool (#7, M20001) — see backend/26-capture-missions"
   },
   "unity/11-dialogue-integration": {
     "docPath": "docs/unity/11-dialogue-integration.md",
@@ -1799,10 +1800,12 @@
         "Assets/CR/Core/Data/Logic/Talent*.cs",
         "Assets/CR/Progression/*Talent*",
         "Assets/CR/Content/Defs/Talents/**",
-        "Assets/CR/Game/World/Editor/TalentTreeEditorSyncHelper.cs"
+        "Assets/CR/Game/World/Editor/TalentTreeEditorSyncHelper.cs",
+        "Assets/CR/Progression/TrainerModifierApplier.cs",
+        "Assets/CR/Core/Movement/Runtime/TrainerMoveSpeedLogic.cs"
       ]
     },
-    "description": "Talents UI (Phase 2 Unity lane): TalentTreeDefinition authoring SO + custom inspector calling cr-api's real TalentTreeValidation, Studio push/export + CLI, the three starter trees, the Talents tab (TalentNodeStateBuilder over the real TalentRules/TrainerProgress), ITalentProgressReader/ITalentActions wired to the real server/offline TalentService (TalentOnlineOfflineRouter, TalentClientUnityHttp); movement-speed (TrainerModifierApplier) still pending"
+    "description": "Talents UI (Phase 2 Unity lane): TalentTreeDefinition authoring SO + custom inspector calling cr-api's real TalentTreeValidation, Studio push/export + CLI, the three starter trees, the Talents tab (TalentNodeStateBuilder over the real TalentRules/TrainerProgress), ITalentProgressReader/ITalentActions wired to the real server/offline TalentService (TalentOnlineOfflineRouter, TalentClientUnityHttp); movement-speed is a real client-applied effect (TrainerModifierApplier + TrainerMoveSpeedLogic pushing MalbersMovementController.SetSpeed)"
   },
   "backend/25-talents": {
     "docPath": "docs/backend/25-talents.md",
@@ -1833,5 +1836,35 @@
       "cr-data": []
     },
     "description": "Talents Phase 2: talent_tree/talent/trainer_talent/trainer_talent_lock (M15101-M15104), TalentBuild/TalentRules/TalentTreeValidation (pure, Compat), TalentService spend/respec/admin-set-rank, the player + content REST routes, every effect consumer (crystal save, loot, pickup currency, rare encounters, damage, creature XP/exp share, Mentor), the quest gate + ReachTalentRank/TalentRankReached tie-in, and the admin SetTalentRank/RespecTalents routes + WouldOverspendTalents"
+  },
+  "backend/26-capture-missions": {
+    "docPath": "docs/backend/26-capture-missions.md",
+    "repos": {
+      "cr-api": [
+        "Game/CR.Game.Model/Battle/BattleMissionTypes.cs",
+        "Game/CR.Game.Model/Battle/BattleMissionRewardTypes.cs",
+        "Game/CR.Game.Model/Battle/BattleMissionStatus.cs",
+        "Game/CR.Game.Data.Migration/M20001AddGuaranteedCaptureReadyToBattle.cs",
+        "Convenience/CR.Game.Compat/Battle/Missions/**/*.cs",
+        "Convenience/CR.Game.Compat.Test/CaptureMissionFeasibilityTests.cs",
+        "Convenience/CR.Game.Compat.Test/CaptureMissionDrawTests.cs",
+        "Convenience/CR.Game.Compat.Test/BattleMissionTrackerTests.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Battle/BattleDomainService.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Item/CaptureAttemptService.cs",
+        "Game/CR.Game.Data.Migration/M12005SeedBattleMissions_20260903.cs",
+        "Convenience/CR.Data.Migrations.Test/BattleMissionSeedSqliteTests.cs"
+      ],
+      "cr-data": [
+        "Assets/CR/Game/Battle/Missions/BattleMissionConductor.cs",
+        "Assets/CR/Game/Battle/Events/BattleEvents.cs",
+        "Assets/CR/Game/Battle/Logic/CaptureChanceLabel.cs",
+        "Assets/CR/UI/Battle/BattleBagPanelHandler.cs",
+        "Assets/CR/UI/Battle/BattleHUD.cs",
+        "Assets/CR/Core/Data/Registry/Definitions/BattleMissionDefinition.cs",
+        "Assets/CR/Core/Data/Editor/BattleMissionDefinitionEditor.cs",
+        "Assets/CR/Content/Defs/BattleMissions/capture_trial_*.asset"
+      ]
+    },
+    "description": "Capture missions (Bond Trial, #7 Phase 3): the GuaranteedCapture reward pool sharing #1 C2's server-tracked mission design — HitsWithoutSwitch/BelowHpWithoutKo mission types, CaptureMissionFeasibility + CaptureMissionDraw (pure, filter-before-draw), battle.guaranteed_capture_ready (M20001), CaptureAttemptService.IsGuaranteedAsync bypassing the normal 5-95% clamp, the nine capture_trial_* starter missions in M12005, the Unity conductor's GuaranteedCapture branch + BattleEvents.CaptureReady, the HUD badge and the bag's Sure catch label"
   }
 }

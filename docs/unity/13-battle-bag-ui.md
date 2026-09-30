@@ -111,6 +111,13 @@ Example item row text:
 - `capture_crystal_standard (Standard, 95%)`
 - `capture_crystal_fine (Fine, 100%)`
 
+While a Bond Trial capture mission has completed for this battle
+(`BattleEvents.CaptureReady`, see [Capture Mechanic](?page=unity/14-capture-mechanic)), the
+percentage is replaced with `Sure catch` — `capture_crystal_standard (Standard, Sure catch)` — through
+the pure `CaptureChanceLabel.For(chance, captureReady)` in `CR.Game.Battle.Logic`. `captureReady` is
+tracked as a field on `BattleBagPanelHandler`, set by the same event and reset on battle start/end;
+the label change is cosmetic only, and the server decides every throw regardless of what the row says.
+
 ## Data Model
 
 ### ItemUsageFlags
