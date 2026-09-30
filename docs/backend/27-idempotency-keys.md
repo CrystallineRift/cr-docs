@@ -39,23 +39,38 @@ behavior change that would otherwise break an old client outright.
 
 ## Which routes require it
 
-Every route that already carries `RateLimitPolicies.PlayerIntent` or `RateLimitPolicies.BattleStart`
-(see [Auth & Accounts](06-auth-and-accounts.md)) also carries the `Idempotency-Key` requirement — the
-same curated set of player write intents, kept in sync by
-`IdempotencyKeyCoverageHttpTests.Every_PlayerIntent_Or_BattleStart_write_route_requires_an_idempotency_key`,
-which fails the build the day a new `PlayerIntent`/`BattleStart` route is added without also calling
-`.RequireIdempotencyKey()`. As of this pass that is: `POST /api/v1/battles` (battle-start intent),
-`POST .../npcs/{npcKey}/receive-gift`, `POST .../npcs/{npcKey}/talk`,
-`POST /api/v1/battles/{battleId}/actions`, `POST .../world-locations/enter`,
-`POST .../talents/{talentId}/spend`, `POST .../talents/respec`, and the whole
-`TrainerCreatureIntentEndpoints` group (`creatures/{id}/move`, `team/swap`,
-`items/{id}/discard`, `creatures/team-storage-swap`).
+Coverage is driven straight off `RoutePolicyManifest` (`RoutePolicyCoverageTests.cs`), the same source
+of truth `RoutePolicyCoverageTests` itself checks every mapped route against: any non-`GET` row whose
+policy is `Pol.Player` or `Pol.Authenticated` and whose ownership is `Own.Guard`, `Own.Handler`, or
+`Own.Account` — i.e. a route that reads identity from the token and writes state scoped to that
+account/trainer — must carry `.RequireIdempotencyKey()`. `Pol.Content`, `Pol.Admin`, and `Pol.Retired`
+are out of scope blanket (operator/content-write surfaces and dead 410 routes, not player-facing
+retry-prone client intents), and so is `Pol.Anon` (auth bootstrap/account creation: no authenticated
+principal exists yet to claim the idempotency record's `principal_id` against).
 
-**Deferred, not yet covered:** several other `RequirePlayer` write routes outside this curated set
-(market listing create/cancel, evolution trigger, quest dialogue-choice-shaped intents, pickups
-collect) do not yet carry either the rate limit or the idempotency requirement. Extending both to the
-full set of player write routes is real follow-up work, not done in this pass — see the M2 idempotency
-report for the cost/benefit ruling.
+`IdempotencyKeyCoverageHttpTests.Every_player_write_route_in_the_manifest_requires_an_idempotency_key`
+enforces this: it fails the build the day a new in-scope route is added without also calling
+`.RequireIdempotencyKey()`, unless the route is listed in the test's `Exemptions` dictionary with a
+written reason. Four routes are exempted today:
+
+| Route | Why |
+|---|---|
+| `PUT /trainer/{trainerId:guid}/location` | A continuous position-sync tick fired on every world-location change during normal movement, not a discrete gameplay intent. Last-write-wins, nothing additive a duplicate could double. |
+| `POST /api/v1/trainers/{trainerId:guid}/creatures/by-ids` | A read (bulk fetch by id list) shaped as `POST` only because the id list doesn't fit a `GET` query string — no mutation. |
+| `POST /api/v1/npc/ensure` | Idempotent by construction — creates a bare NPC only if one doesn't already exist. |
+| `POST /api/v1/pickups/{trainerId:guid}/collected` | Mark-only bookkeeping keyed by `instanceId`, grants nothing. The reward-granting route is `/collect`, which **is** keyed. |
+
+This covers every player write intent in the manifest today, including trainer create/update/delete,
+trainer inventory create/update/delete, team heal, account link/password/personal-API-key
+create+revoke, `/auth/oauth/link`, evolution begin/commit/cancel, stats increment/max/set, market
+list/cancel/buy, merchant purchase/sell/stock-from-spawner/clear-inventory, quest accept/abandon/
+claim-rewards, item use, held-item equip/unequip, pickup collect, plus the original curated set
+(battle-start, `receive-gift`, `talk`, `world-locations/enter`, `talents/spend`, `talents/respec`, and
+the whole `TrainerCreatureIntentEndpoints` group).
+
+**Deferred:** the `Exemptions` dictionary's staleness check only catches an exemption that stopped
+applying (route removed or reclassified) — it does not stop someone from adding a new exemption for a
+route that should actually be keyed. The written-reason requirement is a norm the test does not enforce.
 
 ## How it is implemented
 
@@ -101,8 +116,8 @@ the handler again rather than being permanently stuck replaying a failure.
   observable, order-sensitive side effect): replay returns the exact first response and does not
   re-run the swap, a reused key with a different body is `422` and changes nothing, a pre-seeded
   `InProgress` claim is `409` and never reaches the handler, and a pre-seeded expired claim does not
-  block a fresh one. The coverage test enumerates every mapped route and fails if a
-  `PlayerIntent`/`BattleStart` route is missing the metadata.
+  block a fresh one. The coverage test enumerates every mapped route and fails if an in-scope player
+  write route is missing the metadata and is not listed in `Exemptions`.
 
 ## Client side
 

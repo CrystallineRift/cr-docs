@@ -223,6 +223,7 @@ any client written before that date assumed.
 | Every player-intent write route accepts an `Idempotency-Key` header | Same curated route set as the `PlayerIntent`/`BattleStart` rate limits, above. A retry with the same key and body replays the first response instead of running the handler again. See [Idempotency Keys](27-idempotency-keys.md). *Was: no dedup — a lost response meant the client's only recovery was "resend and hope it wasn't already applied."* |
 | A production host refuses to start with the repo's dev keys | `ProductionSecretsGuard`. |
 | `/auth/basic` reveals nothing about who has an account | An unknown address and a wrong password both return a bare 401. *Was: 404 vs 401 — a free membership oracle.* |
+| `POST /auth/oauth/link` links onto the caller's own token account, and requires `player` scope | `callerId = user.GetAccountId()`; a body `accountId` that disagrees is `403`, a service-key token is `403`. The route now carries `RequirePlayer` like its sibling account endpoints (`/account/link`, `/account/password`). *Was: the body's `accountId` decided the link target — any authenticated caller (including a service-key token, since the route only required `RequireAuthorization()`) could attach an OAuth identity to a different account.* |
 
 The rate limits partition on the caller's address, which the app reads from `X-Forwarded-For` and
 trusts **only** from the proxy network (`ForwardedHeaders:KnownNetworks`, defaulting to the private
@@ -418,7 +419,7 @@ All auth-related clients use `GameConfigurationKeys.AuthServerHttpAddress` as th
 | `POST` | `/auth/game` | Device login with a game installation id → access + refresh tokens |
 | `POST` | `/auth/basic` | Email/password login → access + refresh tokens. The only login the browser admin app can perform |
 | `POST` | `/auth/oauth` | Exchange a third-party OAuth token for CR tokens |
-| `POST` | `/auth/oauth/link` | Link an OAuth provider identity to the signed-in account |
+| `POST` | `/auth/oauth/link` | Link an OAuth provider identity to the signed-in account (player). The target account is always the caller's own token account, never the request body — a body `accountId` naming a different account is `403`; a service-key token (no account claim) is `403` |
 | `GET`  | `/auth/oauth/link` | The provider links on the signed-in account |
 | `POST` | `/auth/token/refresh` | Exchange a refresh token for a new access token |
 | `POST` | `/auth/service-token` | Exchange a pre-shared service key for a scoped, account-less token (`admin` or `content:write`) |
