@@ -471,6 +471,27 @@ Meadow Scout's content-registry `Trainer` row and a `npc_battle_item_loadout` en
 floor has one to test against.
 :::
 
+:::note Wild encounters seed the exact creature the encounter spawned or reused — not "newest wild anywhere"
+`IBattleDomainService.StartBattleAsync` now takes an explicit `Guid? wildCreatureId`, threaded down
+from `BattleEncounterDomainService`'s own spawn result or its reused-candidate pick
+(`TryFindReusableWildCreatureAsync`, which excludes any candidate already active in another `Active`
+battle via `IBattleRepository.IsCreatureActiveInAnotherBattleAsync`). Before this fix, seeding picked
+"the newest wild creature anywhere" — usually right by accident, but not once reuse legitimately picks
+an older creature, which could seed one wild encounter with a *different* encounter's wild opponent.
+A related fix landed in the same pass: the battle's trainer-snapshot builder used to query every
+live wild-owned creature in the database for its "wild team" snapshot instead of just the battle's own
+active creature, which could leak an unrelated battle's wild creature into a state read; it is now
+scoped to `activeCreatureId` like every non-wild trainer's team read already was.
+:::
+
+:::note A thrown exception inside the AI turn loop forfeits the AI side, not the whole battle
+`BattleTurnDomainService.SubmitTurnAsync`'s AI step (decide → NPC item use → submit) now runs inside a
+try/catch; any exception forfeits the AI side via the same `ForfeitAiSideAsync` the step-cap path
+already used (`EndReason = "Forfeit"`), instead of the exception propagating out and stranding the
+battle Active with no further turns possible. The forfeit call itself is guarded too
+(`ForfeitAiSideSafelyAsync`), in case the failed step had already ended the battle before throwing.
+:::
+
 :::note Server-authority Phase D: receive-gift supersedes ensure-creature-team / give-creature for gift NPCs
 A gift NPC now carries a `gift_template_id` (M16007, a base creature id) directly on its `npcs`
 content-registry row, authored in Content Studio — not a list of team-slot specs. `NpcGiftService
@@ -489,6 +510,24 @@ every content NPC's gift now goes through `gift_template_id`/`receive-gift`, so 
 more by the time it was retired. `NpcCreatureGrantBehaviour`'s `_slots` list is now only a
 scene-authored "this NPC offers a gift" toggle; the actual Granted / NotAGiftNpc / UnknownNpc
 decision is the server's, from `gift_template_id`, never client-side.
+
+**Replay checks live ownership, not the ledger claim alone.** A replayed `receive-gift` call (the
+ledger row already exists) re-reads the granted creature's *current* owner before reporting anything:
+if it still belongs to the claiming trainer, replay reports `Granted` again (idempotent, no re-write);
+if ownership has since moved on (sold to a market, given away) it reports `AlreadyReceived` and makes
+**no** write — it never reassigns `current_trainer_id` back to the claimant, which would have silently
+stolen the creature back from wherever it went. A genuine storage failure on the *first* grant attempt
+(distinct from the "already filed for this trainer" case, which still reports `Granted`) reports the
+new `NpcGiftStatus.StorageFailed` instead of a false `Granted`.
+
+**Authoring `gift_template_id` from Content Studio.** `PUT /api/v1/npc/content-registry` accepts an
+optional `giftTemplateCreatureContentKey` (a base creature's `content_key`), resolved server-side to
+the `Guid` `gift_template_id` the row already stored — the same content-key-to-id pattern spawner
+templates use for `CreatureContentKey`; an unknown key is a `400`, and nothing upserts. In Unity,
+`NpcDefinition.giftTemplateCreatureContentKey` is authored via a Gift section in
+`NpcDefinitionEditor` (a `ContentPicker.Creatures()` field), and `ContentCreatorSyncHelper.SyncNpc`
+sends it on push. This only adds the authoring path — no gift NPC content has been re-authored through
+it yet; push each gift NPC from Content Studio to actually set its `gift_template_id`.
 :::
 
 ### `POST /api/v1/npc/reset-teams` — ResetNpcTeams

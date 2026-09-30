@@ -63,6 +63,10 @@ closed. Every kind of invalidity is handled identically — a rank orphaned by a
 **ignored, not clamped** — because one rule is simpler than several and the fix is always a free
 respec (the "Respec required" banner). `NeedsRespec` is also set whenever `SpentPoints > level − 1`
 (an admin XP take-back, or a curve edit). `AvailablePoints = max(0, (level − 1) − SpentPoints)`.
+**Overspent zeros every modifier outright** (`Modifiers = TrainerModifiers.None` for the whole build,
+not a per-rank clamp of just the orphaned ones) until the trainer respecs — a M2 fix pass finding: the
+old per-rank-valid behavior let an overspent trainer keep every individually-still-valid rank's effect,
+which was the wrong side to be generous on for something already flagged "needs respec."
 
 `TalentRules` holds `PointsPerTier = 5`, `MaxTier = 5`, the effect caps (below), and the pure
 `CanSpend(tree, talent, build, expectedRank)` (the one-point compare-and-set check) plus
@@ -117,9 +121,15 @@ SetRank(talentId, rank):         // admin only
 
 A refusal rolls the scope back without committing and returns the **unchanged** current progress —
 never an exception. An unknown trainer throws `InvalidOperationException`, checked *before* any scope
-opens, so no `trainer_talent_lock` row is ever created for a trainer that was never real. XP is read
-outside the talent transaction (it lives in Stats) — a concurrent admin XP take-back can leave a
-trainer overspent, but that state is exactly `NeedsRespec`, which the build already handles.
+opens, so no `trainer_talent_lock` row is ever created for a trainer that was never real.
+
+**Admin XP grants take the same lock as player spend.** `ITalentService.WithTrainerTalentLockAsync<T>`
+exposes the same per-trainer `trainer_talent_lock` row `Spend`/`Respec`/`SetRank` already serialize on;
+`GrantTrainerXpAsync`'s negative-amount (admin take-back) path runs its whole check-then-grant body
+inside that lock, re-reading progress fresh instead of trusting a read taken before the lock — closing
+a race where a concurrent player spend between the overspend check and the grant could let a take-back
+land against a stale spent-points count. A trainer that ends up overspent anyway (a curve edit, not a
+race) still just lands in `NeedsRespec`, which the build already handles.
 
 ### "Teach a talent" (quest tie-in)
 
