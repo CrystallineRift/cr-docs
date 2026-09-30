@@ -11,7 +11,12 @@ call) now calls `INpcGiftService.ReceiveGiftAsync` → `POST /api/v1/trainers/{t
 /receive-gift` instead — see the two Phase D/E notes on [NPC System](02-npc-system.md#rest-endpoints).
 `ensure-starter` itself is unaffected and still used to seed the NPC and read `hasCreatureToGive`.
 The narrative below is kept for the underlying idempotency/ledger design, which `receive-gift` still
-follows, but treat every `give-creature` call in it as historical.
+follows, but treat every `give-creature` call in it as historical. `NpcDomainService
+.GiveNpcCreatureToTrainerStorageAsync` itself (steps 5-6 below) was deleted outright (M2 close, L7):
+its only caller was the already-410'd Unity give-creature client, deleted in an earlier pass, so the
+method had been unreachable dead code with only its own unit tests exercising it — see
+[NPC System](02-npc-system.md#step-5--player-receives-the-creature) for the still-live
+`receive-gift` equivalent.
 :::
 
 ## Why This Flow?

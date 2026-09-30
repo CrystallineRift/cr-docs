@@ -41,6 +41,16 @@ has fainted, or a wipe would be unrecoverable.
 Refusals travel with the disabled card. A greyed-out slot with no explanation reads as a bug;
 "Ignis Fang is your last creature able to battle" reads as a rule.
 
+**A creature that is the active combatant of a still-Active battle cannot move, swap, or be
+team-storage-swapped, online or offline.** `CreatureInventoryService` checks
+`IBattleRepository.IsCreatureActiveInAnotherBattleAsync` before `MoveBetweenInventoriesAsync`,
+`SwapTeamAndStorageAsync`, and `SwapSlotsAsync` (team inventory only) touch anything, and refuses
+with `Success = false` before opening a transaction. The battle row references its active creature by
+id; letting that id leave the team (or get reordered out from under a slot-based reference) desyncs
+the fight. The check lives in the DLL service itself, not the REST endpoint, so offline play — which
+calls `ICreatureInventoryService` directly, bypassing `TrainerCreatureIntentEndpoints` — gets the same
+refusal.
+
 ## The swap is one transaction
 
 `ICreatureInventoryService.SwapTeamAndStorageAsync` — **not** `MoveToStorage` followed by

@@ -202,9 +202,9 @@ GET /api/v1/npc/dddddddd-.../items
 
 ### Step 5 — Player receives the creature
 
-This step shows the `GiveNpcCreatureToTrainerStorageAsync` DLL method's behavior — the HTTP route
-below is retired (410); every real caller now goes through `receive-gift` (see the Phase D/E notes
-above and [Starter Creature Flow](05-starter-creature-flow.md)).
+This step shows the (now-deleted, M2 close L7) `GiveNpcCreatureToTrainerStorageAsync` DLL method's
+historical behavior — the HTTP route below is retired (410); every real caller now goes through
+`receive-gift` (see the Phase D/E notes above and [Starter Creature Flow](05-starter-creature-flow.md)).
 
 ```
 POST /api/v1/npc/dddddddd-.../give-creature
@@ -365,28 +365,17 @@ Internally:
 1. Calls `EnsureNpcAsync(accountId, trainerId, contentKey)` — ensures the NPC row exists (defaults to `NpcType.Npc`)
 2. Calls `EnsureNpcCreatureTeamAsync(npc.Id, accountId, trainerId, [new NpcCreatureSlotSpec(starterCreatureContentKey, 1)])` — fills slot 1 if empty
 
-### `GiveNpcCreatureToTrainerStorageAsync`
+### `GiveNpcCreatureToTrainerStorageAsync` — deleted (M2 close, L7)
 
-Transfers the first creature from the NPC's team into the trainer's storage inventory. Fails if the NPC has no creatures.
-
-```csharp
-Task<GeneratedCreature> GiveNpcCreatureToTrainerStorageAsync(
-    Guid npcId,
-    Guid accountId,
-    Guid trainerId,
-    CancellationToken ct = default);
-```
-
-Internally:
-1. Fetches the NPC's team — throws `InvalidOperationException` if empty
-2. Takes `team.First()` (slot 1 in practice)
-3. Removes the creature from the NPC's team
-4. Gets or creates the trainer's `Creature` storage inventory (creates a 100-slot inventory named `"Storage"` if none exists)
-5. Determines the next available slot (`existingSlots.Max(c => c.SlotNumber) + 1`, or 1 if empty)
-6. Adds the creature to the trainer's storage inventory
-7. Updates the creature's `CurrentTrainerId` to the receiving trainer
-
-**Failure mode:** If the trainer's storage inventory is full (more than 100 creatures), slot assignment continues incrementally beyond `MaxSlots`. There is currently no hard enforcement of `MaxSlots` at the repository level — it is advisory metadata.
+Used to transfer the first creature from the NPC's team into the trainer's storage inventory. Its
+only caller was Unity's `INpcWorldRepository.GiveCreatureAsync` client for the already-410'd
+`give-creature` route, deleted in an earlier pass (L6) — once that client was gone the DLL method was
+unreachable dead code, so it and its dedicated tests (`NpcGiftRulesTests`' two give-creature cases,
+the whole `NpcGiftResumabilityTests.cs` file) were removed outright. `EnsureFiledInStorageAsync`,
+`ReleaseClaimSafelyAsync` and `IsCreatureAlreadyStoredViolation` went with it — they had no other
+caller. The real, still-live equivalent is `INpcGiftService.ReceiveGiftAsync` via
+`POST /api/v1/trainers/{trainerId}/npcs/{npcKey}/receive-gift` (see the Phase D/E notes below and
+[Starter Creature Flow](05-starter-creature-flow.md)).
 
 ### Other Operations
 
@@ -429,14 +418,13 @@ any more by the time they were retired (`StartEncounterAsync` builds a Trainer N
 itself at battle start; `receive-gift` replaced `give-creature` for every gift-giving NPC — see the
 two notes further down). The underlying `INpcDomainService` methods
 (`EnsureNpcCreatureTeamAsync`/`EnsureNpcItemsAsync`/`UseNpcBattleItemAsync`) are still real,
-still-called DLL surface — only the HTTP door is gone. `GiveNpcCreatureToTrainerStorageAsync` is the
+still-called DLL surface — only the HTTP door is gone. `GiveNpcCreatureToTrainerStorageAsync` was the
 exception: M2 close (L6) deleted its only caller, Unity's `INpcWorldRepository.GiveCreatureAsync` /
 `NpcOnlineOfflineRepository.GiveCreatureAsync` / `INpcClient.GiveCreatureAsync` (dead client for an
-already-retired route), so that DLL method is now unreachable from anywhere too — kept server-side
-only because its own unit tests (`NpcGiftRulesTests`, `NpcGiftResumabilityTests`) still exercise it
-directly; deleting it is a separate, not-yet-done cleanup. The rows below and the walkthrough/curl
-examples that follow describe historical DLL behavior; treat any request against the routes marked
-**retired** as 410, not as shown.
+already-retired route), leaving the DLL method itself unreachable — a later pass (L7) deleted the
+method and its dedicated tests outright. The rows below and the walkthrough/curl examples that follow
+describe historical DLL behavior; treat any request against the routes marked **retired** as 410, not
+as shown.
 :::
 
 | Method | Path | Description |

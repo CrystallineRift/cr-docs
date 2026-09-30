@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-09-30 — M2 close, L7: battle-active creature move/swap guard
+
+- **cr-api:** `CreatureInventoryService` gained an `IBattleRepository` dependency and now refuses
+  `MoveBetweenInventoriesAsync` (so `MoveToTeamAsync`/`MoveToStorageAsync`), `SwapTeamAndStorageAsync`,
+  and `SwapSlotsAsync` (team inventory only) with `Success = false` before opening a transaction
+  whenever a creature involved is the active combatant of a still-Active battle
+  (`IsCreatureActiveInAnotherBattleAsync`) — the fix lives in the DLL service so online and offline
+  share it, per the server-authority core rule (offline calls `ICreatureInventoryService` directly,
+  bypassing `TrainerCreatureIntentEndpoints`). `TrainerCreatureIntentHttpTests` gained a Docker/Postgres
+  409 test through the real `team-storage-swap` route. → [Creature Storage & Team Exchange](?page=unity/26-creature-storage)
+- **cr-api:** `NpcDomainService.GiveNpcCreatureToTrainerStorageAsync` — unreachable since L6 deleted its
+  only Unity caller — is deleted outright, along with its private helpers
+  (`EnsureFiledInStorageAsync`/`ReleaseClaimSafelyAsync`/`IsCreatureAlreadyStoredViolation`), its
+  `INpcDomainService` interface member, its two `NpcGiftRulesTests` cases, and the entire
+  `NpcGiftResumabilityTests.cs` file. → [NPC System](?page=backend/02-npc-system), [Starter Creature Flow](?page=backend/05-starter-creature-flow)
+
 ## 2026-09-29 — Capture Missions Phase 3 (Bond Trial), round 2
 
 - **cr-api:** `ResolveItemActionAsync`'s non-capture branch (a heal, or a failed capture throw) now
