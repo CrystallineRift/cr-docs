@@ -1798,9 +1798,40 @@
         "Assets/CR/Core/Data/Editor/TalentTreeDefinitionEditor.cs",
         "Assets/CR/Core/Data/Logic/Talent*.cs",
         "Assets/CR/Progression/*Talent*",
-        "Assets/CR/Content/Defs/Talents/**"
+        "Assets/CR/Content/Defs/Talents/**",
+        "Assets/CR/Game/World/Editor/TalentTreeEditorSyncHelper.cs"
       ]
     },
-    "description": "Talents UI (Phase 2 Unity lane, no server dependency yet): TalentTreeDefinition authoring SO + custom inspector, TalentTreeAuthoringValidation, the three starter trees, the Talents tab (TalentNodeStateBuilder, fake ITalentProgressReader/ITalentActions seam)"
+    "description": "Talents UI (Phase 2 Unity lane): TalentTreeDefinition authoring SO + custom inspector calling cr-api's real TalentTreeValidation, Studio push/export + CLI, the three starter trees, the Talents tab (TalentNodeStateBuilder over the real TalentRules/TrainerProgress), ITalentProgressReader/ITalentActions wired to the real server/offline TalentService (TalentOnlineOfflineRouter, TalentClientUnityHttp); movement-speed (TrainerModifierApplier) still pending"
+  },
+  "backend/25-talents": {
+    "docPath": "docs/backend/25-talents.md",
+    "repos": {
+      "cr-api": [
+        "Talents/**/*.cs",
+        "Talents/**/*.csproj",
+        "Game/CR.Game.Model/Progression/TalentSpendError.cs",
+        "Game/CR.Game.Model/Progression/TalentAllocation.cs",
+        "Game/CR.Game.Model/Progression/TalentModifierValue.cs",
+        "Game/CR.Game.Model/Progression/TalentSpendResult.cs",
+        "Game/CR.Game.Model/Progression/TalentEffectType.cs",
+        "Game/CR.Game.Model/Progression/ITalentService.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Item/CaptureAttemptService.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Item/ItemUseDomainService.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Battle/BattleDomainService.cs",
+        "Loot/CR.Loot.Domain.Services/**/*.cs",
+        "Pickups/CR.Pickups.Domain.Services/Implementation/PickupDomainService.cs",
+        "Spawner/CR.Spawner.Domain/Services/CreatureSpawnDomainService.cs",
+        "Spawner/CR.Spawner.Domain/Services/RareEncounterWeighting.cs",
+        "Convenience/CR.Game.Compat/**/CreatureSnapshot.cs",
+        "Moderation/CR.Moderation.Domain.Services/Implementation/ModerationService.cs",
+        "Moderation/CR.Moderation.Model.REST/AdminActionKind.cs",
+        "Moderation/CR.Moderation.Domain.Services/Models/ModerationReason.cs",
+        "Quests/CR.Quests.Data/Extensions/QuestCompletionExtensions.cs",
+        "Quests/CR.Quests.Domain.Services/Implementation/QuestObjectiveProjector.cs"
+      ],
+      "cr-data": []
+    },
+    "description": "Talents Phase 2: talent_tree/talent/trainer_talent/trainer_talent_lock (M15101-M15104), TalentBuild/TalentRules/TalentTreeValidation (pure, Compat), TalentService spend/respec/admin-set-rank, the player + content REST routes, every effect consumer (crystal save, loot, pickup currency, rare encounters, damage, creature XP/exp share, Mentor), the quest gate + ReachTalentRank/TalentRankReached tie-in, and the admin SetTalentRank/RespecTalents routes + WouldOverspendTalents"
   }
 }

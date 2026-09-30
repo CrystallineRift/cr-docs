@@ -1,5 +1,37 @@
 # Changelog
 
+## 2026-09-29 — Talents Phase 2
+
+- **cr-api:** New `Talents.*` tables (`talent_tree`, `talent`, `trainer_talent`, `trainer_talent_lock`,
+  M15101-M15104) and the pure `TalentBuild`/`TalentRules`/`TalentTreeValidation` (shipped in Compat, so
+  Unity runs the same rules the server does). `TrainerProgress` gains real `SpentPoints`,
+  `AvailablePoints`, `NeedsRespec`, `Allocations`, `Modifiers` and `QuestLockedTalentIds` —
+  `NoTalentModifierProvider` is deleted everywhere. `TalentService` (spend/respec/admin set-rank) and
+  its player + content REST routes (`POST .../talents/{id}/spend`, `.../respec`,
+  `GET/PUT /api/v1/talents/trees*`). Every effect consumer is wired: crystal save (`ItemUseResult.ItemRetained`),
+  loot drop chance, pickup currency, rare-encounter weighting, battle damage, creature XP/exp share, and
+  the Mentor creature-level-up→trainer-XP bonus (widened to every KO turn, not just the winning one). A
+  talent may gate on a quest (`unlock_quest_key`); spending one raises `QuestObjectiveType.ReachTalentRank`
+  (50, MAX semantics) via a new `TalentRankReached` outcome. Admin: `AdminActionKind.SetTalentRank` (17)/
+  `RespecTalents` (18), and a negative XP grant that would overspend a trainer's talents is refused
+  `WouldOverspendTalents` unless `respec: true` (respec-then-grant). →
+  [Talents](?page=backend/25-talents), [Trainer Progression](?page=backend/22-trainer-progression),
+  [Moderation](?page=backend/18-moderation), [Quest System](?page=backend/07-quest-system),
+  [Loot System](?page=backend/13-loot-system), [Spawner System](?page=backend/03-spawner-system)
+- **Unity:** The Talents tab's authoring SOs, validation, Studio push (`PUT .../talents/trees/bulk`),
+  offline floor seed export, and the tab's DI (`ITalentProgressReader`/`ITalentActions` rebound off their
+  Phase 1 stand-ins onto the real server/offline `ITalentService`) all landed — the whole lane is
+  feature-complete except the one client-applied effect, movement speed
+  (`TrainerModifierApplier`/`MalbersMovementController.SetSpeed`), which is not started. Level-up toast
+  now names the talent point(s) granted. → [Talents UI](?page=unity/36-talents-ui),
+  [Trainer Progression (Unity)](?page=unity/34-trainer-progression),
+  [Capture Mechanic](?page=unity/14-capture-mechanic)
+- **cr-admin-web:** Player Dossier gains a Progression panel (spent/available points, `NeedsRespec`
+  badge, per-tree allocations with drawback/exclusive/quest-lock markers) and Set-rank/Respec dialogs;
+  the Grant XP dialog's "respec if needed" checkbox appears after a `WouldOverspendTalents` refusal; a
+  new `talent-trees` content resource mirrors the Studio authoring flow; quest editors gain
+  `ReachTalentRank`. → [Talents — cr-admin-web](?page=backend/25-talents#cr-admin-web)
+
 ## 2026-09-28 — Milestone 1 review fixes
 
 - **cr-api:** Battle outcomes (`BattleWon`, `CreatureDefeated`, `TrainerDefeated`, including forfeit wins —

@@ -125,6 +125,11 @@
     "path": "backend/24-location-discoveries"
   },
   {
+    "section": "Backend",
+    "title": "Talents (Phase 2)",
+    "path": "backend/25-talents"
+  },
+  {
     "section": "Introduction",
     "title": "Changelog",
     "path": "changelog"
@@ -331,7 +336,7 @@
   },
   {
     "section": "Unity",
-    "title": "Talents UI (Unity) — Phase 2 lane",
+    "title": "Talents UI (Unity)",
     "path": "unity/36-talents-ui"
   }
 ]

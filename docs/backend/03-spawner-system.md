@@ -483,6 +483,18 @@ author and neither should cost the player an encounter that has already been com
 carrying 1000× the weight of the full one: the bug it guards was probabilistic, so a single green
 pass would prove nothing.
 
+## Rare Encounter Shift (Talents)
+
+`SelectProductivePoolAsync` takes an optional `trainerId` (default `Guid.Empty`, "not named"). When a
+real trainer is named and there are 2+ productive candidates, it reads that trainer's
+`RareEncounterShift` talent modifier (−50…+50, a fraction) and reshapes the weighted draw through
+`RareEncounterWeighting.Apply` (`Spawner.Domain.Services`, pure, no I/O — extracted so the formula
+itself is unit-testable, since the draw's `Random` has no injectable seam): each candidate's weight
+`w = SpawnWeight × RarityMultiplier` becomes `w × (1 + s × (1 − w / maxW))`, where `s` is the shift —
+the lightest pools gain the most, and a negative shift favours the common ones. A single candidate
+(e.g. a forced `poolName`) is left unshifted, and a modifier read failure logs and falls back to the
+authored weights — see [Talents §6.5](?page=backend/25-talents#effects-consumers).
+
 ## A Template Must Point at a Creature That Exists
 
 Nothing enforces this. There is no foreign key from `creature_spawner_template.base_creature_id` to

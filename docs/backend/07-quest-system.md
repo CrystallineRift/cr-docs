@@ -676,6 +676,7 @@ When `is_repeatable = true`, a trainer can accept the same template again after 
 | `DefeatTrainer` | 40 | Win against a specific trainer (`target_reference_id` = trainer battle content key; rematches count, a blank target means any trainer) |
 | `DefeatAnyTrainer` | 41 | Win any trainer battle |
 | `DefeatTrainersFromList` | 42 | Defeat N DISTINCT trainers from `target_reference_ids` |
+| `ReachTalentRank` | 50 | Reach a rank in a talent (the "teach a talent" gate, [Talents §8.3](25-talents.md#quest-tie-in)); `target_reference_id` = talent content key, blank matches the highest rank on any talent |
 
 **List objectives (9, 42)** store their targets as a JSON array in `quest_objective_template.target_reference_ids`
 and the targets already counted in `quest_objective_progress.counted_reference_ids` (M7018, both engines,
@@ -770,6 +771,13 @@ after its reward grants (so a points-earning reward can push a `TrainerLevelReac
 line at claim time) and returns any newly-unlocked achievements on `QuestClaimResult.Progress.NewlyUnlocked`
 — see [Achievements — Evaluation](?page=backend/15-achievements#evaluation). Talk and visit objectives count
 **distinct** keys per quest instance, and a targeted talk/visit objective must have Count 1.
+
+`ReachTalentRank` (50) is the one type that is **not** count-up-to-target: `TalentService` raising a
+rank (a spend, or an admin set-rank that raises) emits a `TalentRankReached` outcome whose `Quantity`
+is the new rank, and `QuestObjectiveProjector` sets — never adds — `current_count` to that quantity,
+clamped to `target_count` and never lowered (`ObjectiveCounting.Max`, a new case alongside the
+default count-up-to-target rule every other type uses). An admin *lowering* a rank (a correction, not
+play) emits nothing — see [Talents → Quest tie-in](25-talents.md#quest-tie-in).
 
 Quest-scoped progress resets with each instance. Lifetime stats never reset.
 
@@ -1160,6 +1168,7 @@ server-side accept heals on the next read.
 - [Dialogue System](?page=unity/31-dialogue-system) — the `quest.accept`/`quest.claim`/`quest.state`/`quest.objectivePending` dialogue vocabulary that reads and writes grant mode and reward claim mode
 - [Dialogue Authoring](?page=unity/32-dialogue-authoring) — the audit rules that check a dialogue's `quest.*` actions agree with a quest's grant/claim mode
 - [Dialogue Server Domain](?page=backend/21-dialogue-domain) — the sibling content domain that shares the `RequireContentWrite` auth pattern
+- [Talents](?page=backend/25-talents) — `ReachTalentRank` (50) and the `TalentRankReached` outcome that drives it
 
 ## Server authority hardening (A2, 2026-09-27)
 

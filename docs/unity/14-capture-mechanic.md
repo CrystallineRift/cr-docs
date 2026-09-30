@@ -54,7 +54,12 @@ Where:
 2. **Cannot capture enemy creatures** - Only wild creatures can be captured. In a trainer battle the crystal is refused *before* anything is spent — see [Refused in trainer battles](#refused-in-trainer-battles).
 3. **Maximum 95% chance** - Even at low HP with high modifiers, the chance caps at 95%
 4. **Minimum 5% chance** - Even at full health with high modifiers, there's always a small chance
-5. **Crystals are consumed on use** - Both successful and failed captures use the crystal
+5. **Crystals are consumed on use** - Both successful and failed captures use the crystal, **unless
+   a talent saves it**: on a failed roll, the trainer's `CrystalSaveChance` talent modifier (0-50%,
+   [Talents §6.2](?page=backend/25-talents#effects-consumers)) rolls with the same `ICaptureRoll`; a
+   save sets `ItemUseResult.ItemRetained = true` and `ItemUseDomainService` refunds the item already
+   taken under the claim-before-pay ordering (no change to that ordering — the client sees "Your
+   crystal survived" as presentation only, never a client-decided outcome)
 
 ## Backend Implementation
 
@@ -250,6 +255,7 @@ empty-target path is only a fallback.
 - [Battle System](unity/07-battle-system.md)
 - [Battle Bag Panel](unity/13-battle-bag-ui.md)
 - [Item System](backend/09-item-system.md)
+- [Talents](?page=backend/25-talents) — `CrystalSaveChance`, `CaptureChancePercent`, `CaptureXpPercent`
 - [Trainer Progression](?page=backend/22-trainer-progression) — capture XP and first-of-species bonus
 - [Trainer Progression in Unity](?page=unity/34-trainer-progression) — offline capture bindings
 

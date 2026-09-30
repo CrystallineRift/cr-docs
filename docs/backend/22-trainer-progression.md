@@ -1,14 +1,16 @@
 # Trainer Progression (Phase 1: Trainer Level)
 
 The player's trainer earns XP for what they do and levels up on an admin-editable curve (cap 30). Each
-level from 2 grants a talent point (spent from Phase 2). Spec: `cr-api-unity/docs/superpowers/specs/2026-09-26-trainer-progression-design.md`.
+level from 2 grants a talent point, spent through the real [Talents](25-talents.md) domain (Phase 2,
+landed) — `AvailablePoints`/`SpentPoints`/`NeedsRespec` below are no longer placeholders; they are read
+from `TalentBuild.Evaluate` every call. Spec: `cr-api-unity/docs/superpowers/specs/2026-09-26-trainer-progression-design.md`.
 
 ## Where things live
 
 | Piece | Location |
 |---|---|
-| Contracts | `Game/CR.Game.Model/Progression/` — `ITrainerProgressionService`, `TrainerProgress`, `TrainerProgressResult`, `TrainerXpAward`, `TrainerXpSource`, `TrainerModifiers`, `ITrainerModifierProvider`, `TrainerProgressTracker`, `TalentEffectType` |
-| Domain | `Talents/` — `CR.Talents.Data(.Sqlite/.Postgres/.Migration/.Migration.Postgres)`, `.Domain.Services` (`TrainerProgressionService`, `TrainerLevelCurve`, `TrainerXpRuleMath`, `TrainerProgressionContentValidation`, `NoTalentModifierProvider`), `.Model.REST`, `.Service.REST` |
+| Contracts | `Game/CR.Game.Model/Progression/` — `ITrainerProgressionService`, `TrainerProgress` (now also `AvailablePoints`/`SpentPoints`/`NeedsRespec`/`Allocations`/`Modifiers`/`QuestLockedTalentIds` — see [Talents](25-talents.md)), `TrainerProgressResult`, `TrainerXpAward`, `TrainerXpSource`, `TrainerModifiers`, `ITrainerModifierProvider`, `TrainerProgressTracker`, `TalentEffectType` |
+| Domain | `Talents/` — `CR.Talents.Data(.Sqlite/.Postgres/.Migration/.Migration.Postgres)`, `.Domain.Services` (`TrainerProgressionService`, `TrainerLevelCurve`, `TrainerXpRuleMath`, `TrainerProgressionContentValidation`, `TalentBuildReader`, `TalentModifierProvider`, `TalentService`), `.Model.REST`, `.Service.REST`. `NoTalentModifierProvider` is deleted — `ITrainerModifierProvider` now always resolves to the real `TalentModifierProvider`, both online and offline. |
 | Connection string | `TalentDatabase`; when the key is absent the API uses the `StatDatabase` connection string and logs `[startup] ConnectionStrings:TalentDatabase is not set; …` once (`TalentDatabaseFallbackExtensions`, `CR.REST.AIO`) |
 | Migrations | M15001 `world_location`, M15002 `trainer_level_requirement` (+ L1–30 seed), M15003 `trainer_xp_rule` (+ 6 rules), M15010 `world_location.discovery_xp`/`discovery_quest_key`, M15011 `trainer_location_discovery` (the discovery ledger). The floor seed (M15004 at first export) is **not shipped yet** — see [Offline floor](#offline-floor) |
 
@@ -32,6 +34,7 @@ level from 2 grants a talent point (spent from Phase 2). Spec: `cr-api-unity/doc
 | Capture (+ first of species) | `CaptureAttemptService` after the ownership transition | creature level | 10 (+50) | the creature is no longer wild |
 | Location discovered | `LocationEntryService.EnterAsync` (via the BFF `.../world-locations/enter` route, or forwarded from `POST /api/v1/quests/progress`) | 1 | 25, or the location's own `discovery_xp` override | the discovery ledger's per-trainer, per-location `xp_awarded` claim; unknown keys earn 0 — see [Location Discoveries](?page=backend/24-location-discoveries) |
 | Pickup collected | `PickupDomainService.CollectAsync` after the claim | 1 | 5 | pickup_collected claim |
+| Creature level-up (Mentor talent) | `BattleDomainService.ResolveSingleActionAsync`, via `SafeGrantXpAsync` | levels the KO crossed × `CreatureLevelUpTrainerXp` | `TrainerXpSource.CreatureLevelUp`, no seed row (a raw grant, not a rule) | paid inside the same widened `TrainerProgressTracker` bracket as the KO's other awards — see [Talents §6.8](25-talents.md#effects) |
 
 XP never fails the owning operation:
 
@@ -44,7 +47,9 @@ Level readers derive: `ConditionEvaluator` evaluates `TrainerLevel` from `traine
 
 ## Results on the wire
 
-`trainerProgress` (`TrainerProgressResult?`: `xpGained, totalXp, oldLevel, newLevel, xpIntoLevel, xpForNextLevel (null at cap), availablePoints, needsRespec, trainerId`) is on `QuestClaimResult`, `QuestProgressResult`, `ActionOutcome` (winning action), `ItemUseResult` (capture) and `PickupCollectResult`. It is the before/after of one `TrainerProgressTracker` bracket around the operation's grants.
+`trainerProgress` (`TrainerProgressResult?`: `xpGained, totalXp, oldLevel, newLevel, xpIntoLevel, xpForNextLevel (null at cap), availablePoints, needsRespec, trainerId`) is on `QuestClaimResult`, `QuestProgressResult`, `ActionOutcome` (winning action), `ItemUseResult` (capture) and `PickupCollectResult`. It is the before/after of one `TrainerProgressTracker` bracket around the operation's grants. `TrainerProgressionService.GrantCoreAsync` reads the talent build once at the level the grant starts from, and re-reads it (one more cheap indexed query) only when the grant itself crosses a level boundary — otherwise a same-call level-up would report the pre-grant `AvailablePoints`.
+
+`GET .../progression`'s full `TrainerProgress` additionally carries `SpentPoints`, `NeedsRespec`, `Allocations` (`{talentId, rank}[]`, every row with `rank > 0` including ones current content no longer supports), `Modifiers` (`{effectType, value}[]`, summed and clamped, non-zero only) and `QuestLockedTalentIds` — see [Talents](25-talents.md).
 
 ## Routes
 
@@ -54,8 +59,11 @@ Level readers derive: `ConditionEvaluator` evaluates `TrainerLevel` from `traine
 | `GET /api/v1/world-locations` · `PUT …/world-locations/bulk` | any token · RequireContentWrite | bulk `{ locations[], replace }`; replace retires unnamed rows; empty replace refused |
 | `GET/PUT /api/v1/trainer-progression/level-curve` | any token · RequireContentWrite | whole curve; levels 1..N, strictly increasing, L1 = 0 |
 | `GET/PUT /api/v1/trainer-progression/xp-rules` | any token · RequireContentWrite | upsert by source key |
-| `POST /api/v1/admin/trainers/{trainerId}/xp` | RequireAdmin | `{ amount, reason }`; negative allowed, never below 0; audit `GrantTrainerXp` (16) |
+| `POST /api/v1/admin/trainers/{trainerId}/xp` | RequireAdmin | `{ amount, reason, respec? }`; negative allowed, never below 0, refused `409 WouldOverspendTalents` unless `respec`; audit `GrantTrainerXp` (16) |
 | `POST /api/v1/quests/progress` | player | now 404 for another account's trainer |
+
+Talent spend/respec/admin set-rank routes, the talent tree content routes, and the Moderation
+`SetTalentRank`/`RespecTalents` admin routes are documented on [Talents](25-talents.md), not here.
 
 A refused content write answers 400 `{ message, problems[] }` and writes nothing.
 

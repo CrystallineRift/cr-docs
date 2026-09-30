@@ -11,7 +11,7 @@ Battle-victory loot lets a defeated creature yield items, currency, and trainer 
 
 ## Roll logic
 
-`LootRollService.Roll(entries, IRandom)` (in `CR.Loot.Domain.Services`) is pure and deterministic under a seeded `IRandom`: for each non-deleted entry it rolls the drop test, samples a quantity, and emits a `RewardGrant`. Unknown/misspelled `reward_type` strings are **skipped** (never coerced to a default). `ILootDomainService.RollVictoryLootAsync(spawnerContentKey, creatureContentKey, ct)` loads both owner tables, unions the entries, and returns the rolled `RewardGrant` list.
+`LootRollService.Roll(entries, IRandom, double dropChanceMultiplier = 1.0)` (in `CR.Loot.Domain.Services`) is pure and deterministic under a seeded `IRandom`: for each non-deleted entry it rolls the drop test against `min(1, drop_chance × dropChanceMultiplier)`, samples a quantity, and emits a `RewardGrant`. Unknown/misspelled `reward_type` strings are **skipped** (never coerced to a default). `ILootDomainService.RollVictoryLootAsync(spawnerContentKey, creatureContentKey, npcContentKey?, dropChanceMultiplier = 1.0, ct)` loads both owner tables, unions the entries, and returns the rolled `RewardGrant` list. `BattleDomainService` passes the player's `DropChanceMultiplier` talent modifier (0-50%) — see [Talents §6.3](?page=backend/25-talents#effects-consumers).
 
 ## Battle wiring
 
