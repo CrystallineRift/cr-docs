@@ -135,6 +135,11 @@
     "path": "backend/26-capture-missions"
   },
   {
+    "section": "Backend",
+    "title": "Idempotency Keys",
+    "path": "backend/27-idempotency-keys"
+  },
+  {
     "section": "Introduction",
     "title": "Changelog",
     "path": "changelog"

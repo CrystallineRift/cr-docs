@@ -57,6 +57,18 @@ private async void OnButtonClick()
 }
 ```
 
+### Server Idempotency Keys (planned)
+
+The server now supports (see [Idempotency Keys](../backend/27-idempotency-keys.md)) an
+`Idempotency-Key` header on the curated set of player write-intent routes (battle actions, battle
+start, talent spend/respec, receive-gift, talk, world-location entry, and the trainer creature
+move/swap/discard group): a retry with the same key and the same body replays the first response
+instead of running the handler again. The client side of this — the shared web layer attaching one key
+per logical user action (created once at the call site boundary, reused across every retry of that
+same call, never on a `GET`) and Polly retrying on network error/timeout/502/503/504/429/409 — is not
+yet implemented; this section will describe it once it lands. Until then, the "no automatic retry"
+section above still describes `SimpleWebClient`'s actual behavior.
+
 ## `SimpleWebClient`
 
 `SimpleWebClient` is an abstract base class that wraps **Best HTTP** library calls.

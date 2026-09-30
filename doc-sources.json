@@ -1877,5 +1877,25 @@
       ]
     },
     "description": "Capture missions (Bond Trial, #7 Phase 3): the GuaranteedCapture reward pool sharing #1 C2's server-tracked mission design — HitsWithoutSwitch/BelowHpWithoutKo mission types, CaptureMissionFeasibility + CaptureMissionDraw (pure, filter-before-draw), battle.guaranteed_capture_ready (M20001), CaptureAttemptService.IsGuaranteedAsync bypassing the normal 5-95% clamp, the nine capture_trial_* starter missions in M12005, the Unity conductor's GuaranteedCapture branch + BattleEvents.CaptureReady, the HUD badge and the bag's Sure catch label"
+  },
+  "backend/27-idempotency-keys": {
+    "docPath": "docs/backend/27-idempotency-keys.md",
+    "repos": {
+      "cr-api": [
+        "Auth/CR.Auth.Data.Migration/M16009CreateIdempotencyRecordTable.cs",
+        "Auth/CR.Auth.Data/Model/IdempotencyRecord.cs",
+        "Auth/CR.Auth.Data/Interface/IIdempotencyRecordRepository.cs",
+        "Auth/CR.Auth.Data/Implementation/BaseIdempotencyRecordRepository.cs",
+        "Auth/CR.Auth.Data.Postgres/IdempotencyRecordRepository.cs",
+        "Auth/CR.Auth.Data.Sqlite/IdempotencyRecordRepository.cs",
+        "Auth/CR.Auth.Data.Sqlite.Test/IdempotencyRecordRepositoryTests.cs",
+        "Auth/CR.Auth.Service.REST/Security/IdempotencyKeyMiddleware.cs",
+        "Auth/CR.Auth.Service.REST.Test/IdempotencyKeyMiddlewareTests.cs",
+        "Convenience/CR.Api.IntegrationTests/IdempotencyKeyHttpTests.cs",
+        "Convenience/CR.REST.AIO/appsettings.json"
+      ],
+      "cr-data": []
+    },
+    "description": "Server idempotency keys: the Idempotency-Key header on player write-intent routes, the idempotency_record dedup ledger, and the shared UseIdempotencyKeys middleware that claims/replays/rejects a retried request"
   }
 }

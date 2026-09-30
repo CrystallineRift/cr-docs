@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-09-30 — Server idempotency keys (server half; client half deferred)
+
+- **cr-api:** New `Idempotency-Key` header support on a curated set of player write-intent routes
+  (battle start, battle actions submit, receive-gift, talk, world-location entry, talent spend/respec,
+  and the trainer creature move/swap/discard group) — the same routes already carrying
+  `RateLimitPolicies.PlayerIntent`/`BattleStart`. A retry with the same key and the same request
+  (method + resolved path + query + body) replays the first call's stored response
+  (`Idempotent-Replayed: true`); a different request under the same key is `422`; a still-`InProgress`
+  claim is `409` with `Retry-After`. Implemented as middleware (`IdempotencyKeyMiddleware`,
+  `CR.Auth.Service.REST`), not a per-route endpoint filter, since it must hash the raw body before
+  minimal-API model binding consumes it. New `idempotency_record` table (`M16009`, Auth domain) with a
+  bounded lazy-cleanup sweep of expired claims. Config switch `Idempotency:RequireKey` (default
+  `false`: missing header accepted + logged) — flip alongside the client's `MinClientVersion` gate bump
+  once every shipped client attaches the header (**user step**, not yet done).
+  → [Idempotency Keys](?page=backend/27-idempotency-keys), [Auth & Accounts](?page=backend/06-auth-and-accounts)
+- **Deferred to a follow-up:** the client side (shared web layer attaching one key per logical action,
+  Polly retrying on network error/timeout/5xx/429/409) and extending the same coverage to the
+  remaining `RequirePlayer` write routes outside this curated set (market listing create/cancel,
+  evolution trigger, pickups collect) — not done in this pass.
+
 ## 2026-09-30 — M2 close, L7: battle-active creature move/swap guard
 
 - **cr-api:** `CreatureInventoryService` gained an `IBattleRepository` dependency and now refuses
