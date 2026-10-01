@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-10-01 — Online session identity + online cache mirrors (post-launch fixes)
+
+- **Root cause (client):** `AccountBootstrapper.PlayOnlineAsync` reused the offline helper (`EnsureAnonymousAccountAsync`
+  → `GetAccountsPaginatedAsync`, which always reads the local auth DB), so an online session ran under the device's
+  LOCAL anonymous account (`34dd0b10…`) while the server token and every server/online-cache row carried the server
+  account (`bc51456e…`). Account-scoped online-cache reads missed, remote reads re-inserted rows, and the trainer list
+  came back empty after a reload. Separately `CharacterSelectController` hard-coded `SetTrainerAsync(id, false)`, so
+  online sessions logged `Online=False` / `online=False`.
+- **cr-api-unity:** `PlayOnlineAsync` walks the token ladder (`IGameAuthRepository.TryGetAccessToken`) and adopts the
+  server's account id (`OnlineSessionIdentity.Resolve`, pure + tested; `AccountBootstrapperOnlineIdentityTests`);
+  refuses to start under a stand-in account when no token is issued. Offline unchanged. Character select passes
+  `IsPlayingOnline` as the trainer's online flag. `TrainerInventoryOnlineRepository` mirrors containers verbatim;
+  `GeneratedCreatureOnlineRepository` mirrors `CurrentHitPoints`; `TrainerItemInventoryOnlineRepository` refuses the
+  cache-only remove/set-quantity writes online.
+- **cr-api:** `ITrainerInventoryRepository.MirrorInventoryAsync(Inventory)` — verbatim update-then-insert by id, both
+  engines; `TrainerInventoryRepositoryMirrorTests` (SQLite). No server deploy needed (DLL consumed by Unity only).
+- **One-time cleanup:** delete the online caches once so rows cached under the old account/ids go away —
+  `trainerOnline.bytes`, `trainerInventoryOnline.bytes`, `trainerCreatureInventoryOnline.bytes`,
+  `trainerItemInventoryOnline.bytes`, `generatedCreatureOnline.bytes` (and `authOnline.bytes`) under
+  `Application.persistentDataPath`. They are caches of server responses and are rebuilt on the next online read.
+  See `unity/19-account-mode-startup.md` → "Online session identity", `unity/16-domain-sync-pattern.md` → "Mirror
+  writes are verbatim".
+
 ## 2026-10-01 — Online trainer cache: "Trainer … not found" on bag sync
 
 - **Root cause (client):** `TrainerOnlineRepository` mirrored server trainer rows into the SQLite online cache through

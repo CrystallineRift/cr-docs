@@ -42,8 +42,32 @@ select; no manual hide is needed. (A separate `StartMenuController` prototype wa
 | Button | Behavior |
 |---|---|
 | **Play Offline** | `AccountBootstrapper.PlayOfflineAsync()` (sets `IsPlayingOnline=false`, resolves local account) → navigate to character select. No network. |
-| **Play Online** | Probe the server first (`IConnectivityProbe`). Reachable → `PlayOnlineAsync()` (silent guest) → character select. Unreachable → stay on menu, show "Online unavailable — check your connection." Never enters online. |
+| **Play Online** | Probe the server first (`IConnectivityProbe`). Reachable → `PlayOnlineAsync()` (silent guest: token ladder, then the session adopts the **server's** account id — see "Online session identity") → character select. Unreachable → stay on menu, show "Online unavailable — check your connection." Never enters online. |
 | **Continue** | Reads the last chosen mode from the dedicated `LastPlayMode` key (written only on an explicit menu choice — distinct from the `IsPlayingOnline` routing flag) and runs the same path as that mode's button, dropping the player at that mode's **character selection** (not straight into the world). Online resumption is probe-gated identically. Shown only once a mode has been chosen at least once. |
+
+## Online session identity
+
+An online session is keyed by the account the **server** named on the token it issued — never by an account
+read out of the device's local auth database. `PlayOnlineAsync()` walks the token ladder
+(`IGameAuthRepository.TryGetAccessToken()`: live token → refresh → register this installation anonymously and
+authenticate; `GameAuthRepository.PersistAccountTokenLocally` writes the server's account id into
+`GameConfigurationKeys.AccountIdKey` on every successful auth), then `OnlineSessionIdentity.Resolve(authenticated,
+storedServerAccountId)` (`CR.Core.Data.Logic`, pure) hands that id to `IGameSessionService.SetAccountAsync`. No
+token, or a token naming no account → `InvalidOperationException`; the menu shows "Something went wrong" and nothing
+starts under a stand-in account.
+
+Before 2026-10-01 `PlayOnlineAsync` reused the offline helper (`EnsureAnonymousAccountAsync`: first no-email row of
+`GetAccountsPaginatedAsync`, which routes to the **offline** DB always), so the online session ran under the local
+anonymous account (`34dd0b10…`) while the token, every server row and every online-cache row carried the server
+account (`bc51456e…`). Every account-scoped online-cache read (`GetTrainersInAccountPaginated`, `GetInventories`,
+creature/item entry lists) missed, each remote read re-inserted the rows, and the trainer list came back empty after
+a reload. Offline is untouched: `PlayOfflineAsync`/`EnsureLocalAccountAsync` still resolve the local anonymous account
+and never reach for a token — online and offline trainers stay separate worlds. Pinned by
+`AccountBootstrapperOnlineIdentityTests` (Assets/CR/Tests/Editor) and `OnlineSessionIdentityTests`.
+
+`CharacterSelectController.SelectAsync` passes `IsPlayingOnline` to `SetTrainerAsync` (it used to hard-code `false`,
+so an online session persisted `IsOnlineTrainer = false`, `GameInitializer` logged `online=False` and
+`WorldContext.IsOnlineTrainer` / `SessionStateBridge` told every consumer the trainer was local).
 
 ## Connectivity probe
 
@@ -104,6 +128,8 @@ belt-and-suspenders for any other direct-repo writer.
 - Retiring the legacy `StartupFlowController` / `LoginView` *as a boot gate* (already disabled in the boot
   scene); keep `LoginView`'s login/create-account UI for a future "secure your account" upgrade.
 - `IAuthRepository.GetAnonymousAccountIdAsync` (SQL-level no-email filter returning just the id) to replace the
-  `GetAccountsPaginatedAsync(0,100)` scan in `AccountBootstrapper.EnsureAnonymousAccountAsync` — removes the
-  100-row fragility and avoids full-`Account` deserialization on the boot path. Needs an online REST surface too.
+  `GetAccountsPaginatedAsync(0,100)` scan in `AccountBootstrapper.EnsureAnonymousAccountAsync` (offline path only
+  since 2026-10-01) — removes the 100-row fragility and avoids full-`Account` deserialization on the boot path.
+- A mid-session re-auth that lands on a different server account (`ReAuthenticateAsync` after a server reset) updates
+  `AccountIdKey` but not the running session; the player must return to the menu for the session to follow it.
 - EditMode tests for boot-ensure, mode setting, Continue, and probe-fail blocking (probe is mockable).

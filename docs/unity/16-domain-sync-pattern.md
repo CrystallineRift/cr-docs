@@ -197,8 +197,31 @@ alone — the server's id, the server's account, balance, location, timestamps a
 server's trainer under a random id, `GetTrainerById(serverId)` always missed, every remote read inserted another
 duplicate row, and the first cache-served read failed with "Trainer … not found" (`InventorySync.RefreshAsync`).
 `TrainerOnlineRepository` reads the cache **by trainer id** even on the `(accountId, trainerId)` overload: the row
-carries the account the server reports, and the online session's account id (the device's local account) is not
-guaranteed to match it. Pinned by `TrainerRepositoryMirrorTests` (cr-api, SQLite).
+carries the account the server reports. Pinned by `TrainerRepositoryMirrorTests` (cr-api, SQLite).
+
+The same rule covers inventory containers: `ITrainerInventoryRepository.MirrorInventoryAsync(Inventory)`
+(`BaseTrainerInventoryRepository`, update-then-insert by id of id/name/type/account/trainer/max_slots, revives a
+deleted row) replaces the cache's `CreateInventory`/`UpdateInventory` in `TrainerInventoryOnlineRepository` — the
+old reconcile looked the cache up under the *session* account and then created (PK clash) or updated (account-scoped,
+max_slots only). Pinned by `TrainerInventoryRepositoryMirrorTests`. `GeneratedCreatureOnlineRepository.BackFillCacheAsync`
+keeps using `CreateCreatureForCapture`/`UpdateCreature` (both honour the given id and rewrite every column) but now
+also mirrors `CurrentHitPoints` into the cache's current-stats row (`UpsertCurrentHitPointsAsync` /
+`DeleteCurrentStatsAsync`) — neither write touches it, so a cache-served read showed full health. Creature- and
+item-entry caches (`trainer_creature_inventory_items`, `trainer_item_inventory_items`) still store through the
+cache's add/remove: those rows are reconciled by (inventory, creature|item, slot), never by entry id, and the only
+account-scoped part of them is the **session** account they are written and read under.
+
+That is why the online session's account id matters to every one of these caches: since 2026-10-01 the online
+session adopts the account the server named on its token (`AccountBootstrapper.PlayOnlineAsync` →
+`OnlineSessionIdentity.Resolve`; see `unity/19-account-mode-startup.md` → "Online session identity") instead of the
+device's local anonymous account, so account-scoped cache reads (`GetTrainersInAccountPaginated`, `GetInventories`,
+entry lists) match the rows the mirrors wrote. Rows cached under the old local account are orphans; delete the
+`*Online.bytes` caches once (see the changelog).
+
+`TrainerItemInventoryOnlineRepository.RemoveItemFromInventory` / `UpdateItemQuantity` / `UpdateItemQuantityByEntryId`
+throw `NotSupportedException` online: they used to write only the online cache (no server call — a client-reported
+outcome), and there is deliberately no client-facing remove/set-quantity endpoint. Item moves are server intents
+(use, sell, gift, quest reward) and the next read re-fetches the server's answer.
 
 Content keeps its earlier rule: `ContentBackFill` (local first, server on a content-key miss) for
 pickup/achievement/quest-template definitions. Missions and NPC identity are content read through the memo variant

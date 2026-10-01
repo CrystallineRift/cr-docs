@@ -420,7 +420,16 @@
         "Assets/CR/Core/Sync/Logic/CacheScope.cs",
         "Assets/CR/Core/Data/Cache/PlayerStateCache.cs",
         "Assets/CR/Npcs/Runtime/Merchant/Logic/NpcMerchantOnlineOfflineService.cs",
-        "Assets/CR/Npcs/Runtime/Repository/Implementation/NpcOnlineOfflineRepository.cs"
+        "Assets/CR/Npcs/Runtime/Repository/Implementation/NpcOnlineOfflineRepository.cs",
+        "Assets/CR/Core/Data/Repository/Implementation/TrainerInventoryRepositories/TrainerInventoryOnlineRepository.cs",
+        "Assets/CR/Core/Data/Repository/Implementation/Creatures/GeneratedCreatureRepositories/GeneratedCreatureOnlineRepository.cs",
+        "Assets/CR/Core/Data/Repository/Implementation/TrainerItemInventoryRepositories/TrainerItemInventoryOnlineRepository.cs",
+        "Assets/CR/Core/Session/AccountBootstrapper.cs"
+      ],
+      "cr-api": [
+        "Trainers/CR.Trainers.Data/Interface/ITrainerInventoryRepository.cs",
+        "Trainers/CR.Trainers.Data/Implementation/BaseTrainerInventoryRepository.cs",
+        "Trainers/CR.Trainers.Data.Sqlite.Test/TrainerInventoryRepositoryMirrorTests.cs"
       ]
     },
     "description": "IDomainSync pattern: BattleSync (SOAP bridge via events), TeamSync (world-scoped team cache), InventorySync (world-scoped backpack cache), Zenject bindings; cache-first policy: content (pickup/achievement defs, quest templates) local-first with server on content_key miss, terminal player state (collected pickups, unlocks, completed quests, trainer defeats) local-first with session-once server reconcile, in-progress state server-when-online"
@@ -1150,7 +1159,9 @@
         "Assets/CR/UI/Resources/MainMenu.uxml",
         "Assets/main-menu.uss",
         "Assets/CR/UI/Common/UiFocusRecovery.cs",
-        "Assets/CR/UI/Logic/**"
+        "Assets/CR/UI/Logic/**",
+        "Assets/CR/Core/Data/Logic/OnlineSessionIdentity.cs",
+        "Assets/CR/UI/CharacterSelectController.cs"
       ]
     },
     "description": "Mode-gated account/startup: one device-bound account, boot-time EnsureLocalAccountAsync (mode-neutral) so an account always exists, mode-first menu (Continue/Play Online/Play Offline) via the existing MainMenuController (IUIScreen 'MainMenu'), connectivity-gated online entry via IConnectivityProbe (reuses version-check), no reconciliation between offline/online worlds, characters mode-locked via IsOnlineTrainer; supporting fixes: ByteArrayTypeHandler + M0008NormalizeEmptySalt for legacy salt rows, NpcMerchantService NotifyBackpackChanged post-commit so InventorySync refreshes"
