@@ -961,6 +961,35 @@ that already has live instances** — add new objectives at the end, or accept t
 ones needs a data migration, not just a Studio push. See
 [Dialogue Authoring](?page=unity/32-dialogue-authoring) for the same warning from the authoring side.
 
+### Objective ids are deterministic, and orphaned progress rows self-heal
+
+An objective that arrives **without an authored id** (a `QuestDefinition` SO via
+`LocalQuestTemplateSyncClient`, or a Studio push) is inserted under
+`QuestObjectiveTemplateIds.Derive(questTemplateId, sortOrder)` — a UUID v5 of the same
+`(template, sort_order)` key the upsert matches on — never `Guid.NewGuid()`. An objective that
+arrives **with** an authored id (the online back-fill writing the server's template into the local
+cache) is inserted under it, and if the sort-order-matched row was born under a different id the row
+is re-keyed to the authored one (`RekeyObjectiveIdAsync`, mirroring the template re-key above). A
+removed-then-re-added objective revives its soft-deleted row instead of colliding with it.
+
+Why this matters: Unity keeps quest templates in **game-data** and quest progress in **player-data**,
+two SQLite files. `GameDataAdopter` wipes game-data on every bundled-content update and the SOs
+re-seed it. With minted ids every re-seed gave each objective a new id while `quest_objective_progress`
+kept the old ones — the projector found no row for the current objective and counted nothing, and the
+journal (which joins progress to objectives on id) rendered `0/N` for progress the authority had
+already counted (post-launch "capture quest shows 0/3" bug). Derived ids make the re-seed land on
+the ids the rows were accepted under.
+
+For instances accepted before this fix (or any other way a row ends up pointing at an objective the
+template no longer has), the authority repairs its own derived state:
+`OrphanedObjectiveProgress.Pair` pairs orphan rows (creation order) with row-less objectives (sort
+order) **only when the counts agree**, and
+`IQuestInstanceRepository.GetObjectiveProgressRelinkedAsync` moves them
+(`RelinkObjectiveProgressAsync`). It runs in `QuestObjectiveProjector` before an outcome is applied
+and in `QuestDomainService.GetActiveQuestsAsync` before the client reads progress, so a healed row
+keeps its count and the next relevant outcome advances it. A count mismatch (an objective added or
+removed since acceptance) is ambiguous and is left alone.
+
 ## Reward Claiming
 
 `ClaimRewardsAsync` distributes all rewards defined in `quest_reward_template` for the completed quest instance before marking it claimed. Each reward row is processed by `GrantRewardAsync`, which dispatches on `RewardType`.

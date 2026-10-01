@@ -104,3 +104,9 @@ stays client-incrementable until C2). Key normalisation for `npc_met_` and `ques
   the registry test and is a review blocker.
 - A new outcome kind: append to `ProgressOutcomeKind` (never renumber), add the projector case and the objective
   map row, add its registry row, and delete the client reporter in the same change.
+- **A re-seeded objective id orphans progress rows.** `QuestObjectiveProjector` finds an instance's row by
+  `objective_template_id`; Unity's game-data wipe used to re-mint those ids, so the row for the current objective
+  was never found and the outcome counted nothing (no warning — `row == null` is also the "objective added
+  later" case). Objective ids are now derived from `(template id, sort order)` and the projector first calls
+  `GetObjectiveProgressRelinkedAsync`, which moves an orphan row onto the current objective when the pairing is
+  unambiguous. See [Quest System → Objective ids are deterministic](?page=backend/07-quest-system).
