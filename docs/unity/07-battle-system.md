@@ -1048,6 +1048,8 @@ Stale rows surviving one extra sync is the recoverable failure. The deletion is 
 
 **`BattleHUD` IDs are now `Guid`, not `string`.** Comparisons inside the HUD use `Guid` equality; HpChanged events arriving before `CreaturesIdentified` are cached in `_hpCache` and replayed when the IDs land. Out-of-order or dropped events no longer leave the opponent panel blank.
 
+**Opponent card read `??? Lv0` at the end of every wild battle.** When a wild battle ends the authority retires the uncaptured wild creature (soft delete) and the by-id read filters deleted rows, so the next `GetBattleStateAsync` has a player creature and no opponent. `BattleCoordinator.ReidentifyActivesIfChanged` used to compare active ids only, read "no opponent" as "opponent changed to nobody", and re-raised `CreaturesIdentified` with an empty id, `???` and level 0 (Editor.log: `CreaturesIdentified ... opponent=???(Lv0,)`). The decision now lives in `CR.Game.Battle.Logic.ActiveIdentityRefresh` (pure, tested): a side with no active creature in the state carries its last `IdentifiedSide` forward and never counts as a change; a creature that *is* in the state but has no name entry still reads `???`, because that is a real content gap.
+
 ## Related Pages
 
 - [Battle Persistence](?page=backend/09-battle-persistence) — DB tables, `IBattleDomainService`, REST endpoints
