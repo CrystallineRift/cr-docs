@@ -149,6 +149,13 @@ existing upsert and prune logic. Crystalline Rift Studio's editor push is unaffe
 re-pulls the single spawner from the server when reachable, and falls back to the authored floor
 otherwise.
 
+The server side of Studio's push (`POST /api/v1/spawners/sync-config`, both for a `SpawnerDefinition`
+and for a `TrainerBattleDefinition`'s `-team` spawner) replaces pools and templates in **one
+transaction** since 2026-10-01 — a battle start that reads the spawner mid-push sees the old team or
+the new one, never none — and **refuses a payload with no templates** (`400`, names `allowEmpty`)
+rather than emptying the spawner. Studio never sends `allowEmpty`; a trainer with no authored slots
+is a push error to fix in the Editor, not a server state.
+
 ## Elemental reactions and the damage matrix
 
 Both are authored content as of 2026-09-03, and both are read by the **offline**

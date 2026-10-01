@@ -189,6 +189,22 @@ the starting trainer is marked `Abandoned` and run through `WriteBackHpAsync`, w
 the stranded wild and clears its current-stats row. Without this, a dev save accumulated 12 stale
 battles and 10 leaked wild creatures.
 
+That sweep only runs when the same trainer starts another battle. A still-`Active` battle also
+**locks its creatures**: `IsCreatureActiveInAnotherBattleAsync` makes team moves, slot swaps and
+team↔storage swaps refuse ("is in an active battle"), and the whiteout heal refuses with `in_battle`.
+So those paths sweep too, with an age rule: `IBattleRepository.AbandonStaleActiveBattlesAsync(trainerId,
+staleBefore)` marks `Abandoned` every Active battle on either side of the trainer that started before
+the cutoff **and has opened no `battle_round` since it** (a live battle opens a round every turn).
+The cutoff is `BattleStaleness.StaleAfter` (30 minutes) — longer than any real fight. Production
+2026-10-01: a trainer battle seeded against an empty opponent team sat `Active` and froze the
+player's team until this existed.
+
+A trainer battle is **refused before any row is written** when the opponent has no team:
+`StartBattleAsync` throws `OpponentTeamEmptyException` for `battle_type = Trainer` when
+`GetTeamAsync(trainer2)` is empty; `BattleEncounterDomainService` maps it to
+`EncounterStartStatus.OpponentTeamEmpty` and `POST /api/v1/battles` answers `409 opponent_team_empty`.
+A one-sided battle cannot be played or ended, so it must never exist.
+
 ## Repository Layer
 
 ### `IBattleRepository`
@@ -265,6 +281,7 @@ public interface IBattleDomainService
 
 ### `StartBattleAsync`
 
+0. Trainer battles only: load trainer 2's team; empty → `OpponentTeamEmptyException`, nothing written. Then abandon the starting trainer's stale `Active` battles.
 1. Insert `battle` row (`status = "Active"`, `battle_type`)
 2. For each trainer, load their team and set the first creature as active via `SetActiveCreatureAsync` (writes `trainer{1,2}_active_creature_id`). No per-battle creature rows are written.
 3. Determine first-turn trainer by comparing the two active creatures' Speed stats (ties → trainer1)
