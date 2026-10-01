@@ -583,6 +583,16 @@ A `QuestInstance` carries only IDs, status and counts. Objective *text* lives on
 `ObjectiveTemplateId`. An objective with no progress row yet (progress never recorded) still renders,
 at zero — so the player sees the full task list the moment they accept.
 
+The instance repositories select instance columns only, so `QuestDomainService` attaches the rows on
+every instance read — `GetActiveQuestsAsync`, `GetCompletedQuestsAsync` and `GetQuestInstanceAsync`
+all populate `QuestInstance.ObjectiveProgress` (via `GetObjectiveProgressRelinkedAsync`) before
+returning. Online, the Unity router mirrors exactly what `GET /api/v1/quests/active` and
+`GET /api/v1/quests/{instanceId}` return into the local cache, so a read that leaves the list empty
+renders every objective at 0/N even though the authority already counted it (post-launch fix,
+2026-10-01: the Runaway Cargo capture was logged `1/3` by the projector while both reads answered
+`"objectiveProgress": []`). If the template read fails for one instance, that instance is returned as
+stored (empty list) and the trainer's other quests are unaffected.
+
 Roll-up maths and the "may this quest be claimed" rule are **not** in the view: they live in the
 engine-free `CR.UI.Logic` assembly (`QuestProgressCalculator`, `QuestActionPolicy`) and are unit
 tested. Optional objectives never hold the headline progress bar back, and `CanClaim` requires
@@ -1026,7 +1036,8 @@ template no longer has), the authority repairs its own derived state:
 order) **only when the counts agree**, and
 `IQuestInstanceRepository.GetObjectiveProgressRelinkedAsync` moves them
 (`RelinkObjectiveProgressAsync`). It runs in `QuestObjectiveProjector` before an outcome is applied
-and in `QuestDomainService.GetActiveQuestsAsync` before the client reads progress, so a healed row
+and in every `QuestDomainService` instance read (`GetActiveQuestsAsync`, `GetCompletedQuestsAsync`,
+`GetQuestInstanceAsync`) before the client reads progress, so a healed row
 keeps its count and the next relevant outcome advances it. A count mismatch (an objective added or
 removed since acceptance) is ambiguous and is left alone.
 
