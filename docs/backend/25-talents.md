@@ -112,6 +112,8 @@ Spend(talentId, expectedRank):
 
 Respec():
   scope.ResetAllAsync()          // always succeeds for a real trainer — free
+  commit, THEN read progress     // the progression read runs on its own connection: reading it inside
+                                 // the uncommitted scope returned the pre-reset SpentPoints (prod 2026-10-01)
 
 SetRank(talentId, rank):         // admin only
   rank outside 0..max_rank       → InvalidRank

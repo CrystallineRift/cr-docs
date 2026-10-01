@@ -234,6 +234,14 @@ Three things this chain depends on, each of which was a trap:
   if it is not there yet it warns and stores **null**, which reads as "no prerequisite". The order of
   `ContentDefinitionProvider.quests` is therefore load-bearing; the chain is registered in dependency
   order.
+- **The server resolves the same key on push (2026-10-01).** `PUT /api/v1/quests/templates/bulk` used to
+  keep only what `Guid.TryParse` accepted and store **null** for a QuestCompleted requirement authored
+  as a content key — which `ConditionEvaluator` compares against completed template ids, so Runaway
+  Cargo and First Battle 409'd `requirements_not_met` for every online player. `QuestEndpoints.
+  ResolveRequirementsAsync` now resolves a QuestCompleted key to the template id — this push's authored
+  ids first (order on the wire does not matter), then the stored row — and an unresolvable key refuses
+  the whole push with `400 invalid_requirement` instead of silently storing a gate nobody can open.
+  Other requirement types still take a Guid reference as before.
 - **The seed ids are UUIDv5 of the content key**, matching what the authored assets carry. A seed
   with an id of its own is discarded the moment Crystalline Rift Studio pushes the asset — the unique index is
   on `content_key`, so the row already exists and every objective and reward hangs off a template

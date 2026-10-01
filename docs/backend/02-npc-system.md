@@ -493,6 +493,15 @@ already used (`EndReason = "Forfeit"`), instead of the exception propagating out
 battle Active with no further turns possible. The forfeit call itself is guarded too
 (`ForfeitAiSideSafelyAsync`), in case the failed step had already ended the battle before throwing.
 
+That guard is also why a bug in the AI step shows up as a free player win rather than a 500 — watch for
+`EndReason = "Forfeit"` on turn 1. Production hit exactly that on 2026-10-01: `BaseNpcRepository.
+GetNpcByBattleTrainerIdAsync` compared the varchar(64) `battle_trainer_id` column (M2012) straight
+against a Guid parameter, which Postgres refuses (`42883: operator does not exist: character varying =
+uuid`) and SQLite's text affinity accepted, so every trainer battle's first AI step threw and forfeited.
+The lookup now compares as text per dialect (`CAST(@battleTrainerId AS text)` on Postgres,
+`LOWER(...) = LOWER(...)` on SQLite), the same shape `BaseTrainerRepository`'s battle-trainer exclusion
+already used, pinned by `NpcBattleTrainerLookupRepositoryTests` on a real Postgres container.
+
 Once the player's own action has committed, everything `SubmitTurnAsync` does next — the AI loop
 (decide/submit/forfeit) and the final-state reads after it — runs on `CancellationToken.None`, not the
 request's own token. A client that disconnects mid-AI-step must not abandon a forfeit/end write
