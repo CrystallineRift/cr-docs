@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-10-01 — Studio: World Locations and Pickup Placements are their own WORLD tabs
+
+- **Why:** after editing a location and pressing Refresh, the Studio showed no push option: the catalog lived
+  inside *Trainer Progression* (a tab named for the level curve), and it was not a content tab, so the header
+  work pill said "In sync", the Review window listed nothing and Push All skipped it. Nothing in the rail was
+  hidden or filtered — `ContentSectionCatalog` has no gating — the push simply sat under the wrong name and
+  outside the unpushed-edit accounting.
+- **cr-api-unity:** `ContentSectionCatalog` gains `pickup-placements` and `world-locations` (WORLD group, in that
+  order after Item Spawners; 26 sections). Studio tabs 25 (World Locations: catalog rows, Scan areas, ⬆ Push
+  locations, ⬇ Pull tuning, drift line) and 26 (Pickup Placements: Scan areas, ⬆ Push placements, scan list).
+  World Locations joins `_allContentTabs`: the catalog asset is stamped like any definition, so the work pill,
+  Review and Push All count an unpushed catalog edit (Push All sends it whole with replace + drift line; Pull All
+  routes to Pull tuning; Revert is not offered). Trainer Progression keeps Export floor seed, talent trees and the
+  world map row and links to World Locations; Item Spawners drops the pickup strip. One `RunCatalogAction`
+  helper behind all three tabs. Selecting `WorldLocations.asset` deep-links to World Locations.
+- **Tests:** `ContentSectionCatalogTests` (count + order), `ContentStudioToolWorldLocationsTabMappingTests`,
+  `ContentStudioToolPickupPlacementsTabMappingTests`, `WorldMapToolsTests` mapping split.
+- **Tooling:** `cr_edit_tests_status` report now carries `perAssembly` pass/fail/skip counts for multi-assembly runs.
+
 ## 2026-10-01 — Online session identity + online cache mirrors (post-launch fixes)
 
 - **Root cause (client):** `AccountBootstrapper.PlayOnlineAsync` reused the offline helper (`EnsureAnonymousAccountAsync`

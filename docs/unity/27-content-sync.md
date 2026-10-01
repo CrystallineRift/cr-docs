@@ -280,7 +280,7 @@ row (key, area, name, `discoveryXp`, `discoveryQuestKey`); **Push locations** se
 never runs at boot.
 
 A **pull** exists only for the tuning fields an admin might have edited server-side after the last push:
-**⬇ Pull tuning from server** (Studio Trainer Progression tab) / `cr_world_locations_pull` copies
+**⬇ Pull tuning from server** (Studio WORLD → World Locations tab) / `cr_world_locations_pull` copies
 `name`/`discoveryXp`/`discoveryQuestKey` from the server into the catalog for every key that exists in
 both, reports which fields changed, and never adds or removes rows (only Scan does that, from the area
 scenes). Push and Pull both print a drift line afterward — the field-by-field difference between catalog
@@ -291,7 +291,7 @@ immediately rather than silently overwritten by the next push. See
 
 ## World pickup placements (A2, 2026-09-27)
 
-Content Studio → **Item Spawners** starts with *World pickup placements*: **Scan areas** reads every `PickupBehaviour` in
+Content Studio → WORLD → **Pickup Placements** (its own tab since 2026-10-01; it used to be a strip at the top of Item Spawners): **Scan areas** reads every `PickupBehaviour` in
 `Assets/CR/Scenes/Areas` straight from the scene YAML (`PickupPlacementScan` — prefab-instance overrides, falling back to the
 prefab's own values) and validates the list as the server will (duplicate ids, missing keys); **Push placements** sends it to
 `PUT /api/v1/pickups/placements/bulk` on the configured server and reads the list back. Pushing only adds. CLI:

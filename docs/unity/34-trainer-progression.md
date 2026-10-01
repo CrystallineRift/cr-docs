@@ -35,7 +35,7 @@ Entering a location is an intent, resolved the same way online and offline (see
 - `GameChange.LocationEntered` invalidates `ActiveQuests, TrainerProgress, Stats, LocationDiscoveries,
   AchievementBoard`.
 - **Discovery XP / discovery quest authoring** — each catalog row's drawer (`WorldLocationEntryDrawer`, both
-  the catalog inspector and the Studio Trainer Progression tab) has a "Use rule default" XP toggle and a
+  the catalog inspector and the Studio World Locations tab) has a "Use rule default" XP toggle and a
   quest picker (`ContentPicker.Quests()`); `TrainerProgressionEditorSyncHelper.PushLocations` carries both
   fields, and "⬇ Pull tuning from server" / `cr_world_locations_pull` copies name/XP/quest key back from the
   server into the catalog (never adds or removes rows). See the `cr-world-locations` skill's "Discovery XP
@@ -45,11 +45,11 @@ Entering a location is an intent, resolved the same way online and offline (see
   answers both `IWorldMapDiscoveryReader` and the discovery registry from one memoised read; see
   [World Map](35-world-map.md).
 
-## Authoring (Crystalline Rift Studio → WORLD → Trainer Progression)
+## Authoring (Crystalline Rift Studio → WORLD → World Locations, then Trainer Progression)
 
 1. Place a `LocationTriggerBehaviour` in an area scene and set `_locationContentKey`.
 2. **Scan areas** (`cr_world_locations_scan`) — merges every area's trigger keys into `Assets/CR/Content/Defs/Progression/WorldLocations.asset`. Entries no scene holds are kept and reported; delete the row to retire one. A key in two scenes keeps its first area and is reported; a key held by two catalog rows keeps the first row, and the dropped row is reported by key and id in the Studio status line / CLI result.
-3. **Push locations** (`cr_world_locations_push`) — PUT the whole catalog with replace; reports id divergence.
+3. **Push locations** (`cr_world_locations_push`) — PUT the whole catalog with replace; reports id divergence. Steps 2–3 and **⬇ Pull tuning from server** live on the **World Locations** tab (WORLD group, between Pickup Placements and Trainer Progression); the catalog is also a content tab, so the header work pill, the Review window and Push All count an unpushed catalog edit like any other definition (Push All sends it whole, with the same drift line). Steps 4–5, the talent trees and the world map row stay on **Trainer Progression**, which links to World Locations.
 4. **Export floor seed** (`cr_talent_content_export_seed`) — writes the Talents seed migration into cr-api (curve + rules read from the server). `cr_talent_content_seed_status` says current/stale. Needs a Studio content key for the target server (Local or Production) — the exporter and the push both go through the same authenticated content-write path as any other Studio push.
 5. Rebake: `cr-api/Convenience/CR.Game.Compat/build-packages.sh` (or `cr_rebake_floor`).
 
