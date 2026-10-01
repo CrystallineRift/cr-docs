@@ -506,6 +506,36 @@ resolved the template from the local DB and sent the server a minted id it had n
 400 Bad Request and a quest that never started. An empty caller id keeps the old
 keep-existing/mint-new behavior.
 
+### The accept intent is keyed by `content_key`, never by template id
+
+Authored ids *should* match, but the game must not depend on it: production's
+`quest-runaway-cargo` row was minted under `c241235f…` while every client bakes the SO id
+`7c3e9a1d…` from `Runaway Cargo.asset`, and the id-keyed accept answered
+`400 "Quest template 7c3e9a1d-… not found."` for a quest the server plainly had. The fix lives on
+both sides of the seam:
+
+- **Server:** `POST /api/v1/quests/by-content-key/{contentKey}/accept` →
+  `IQuestDomainService.AcceptQuestByContentKeyAsync`. Same guard (`RequirePlayerTrainer`), same
+  idempotency key, same rules as the id route (requirements evaluated, idempotent, abandoned instance
+  restarts); the server resolves *its own* row by key. The id route stays for tooling and wire
+  compatibility.
+- **Client:** `IQuestService.AcceptQuestAsync(string questContentKey)` is the only accept. Every
+  caller already holds the key — `QuestGranterBehaviour` (the SO's `contentKey`), `QuestAutoGranter`
+  (the server's available list), `QuestAcceptActionHandler` (the dialogue arg), `PickupBehaviour`
+  (the reward's `ReferenceKey`). The legacy Lua hook (`QuestDialogueBridge`) resolves its UUID to a
+  template first. `QuestOnlineOfflineRepository.AcceptQuestAsync` sends the key online and hands the
+  same key to the local `QuestDomainService` offline — the same boundary, the same code.
+- **Reads:** an online instance names the *server's* template id. When the local content has no row
+  under that id, `QuestOnlineOfflineRepository.GetQuestTemplateAsync` answers from the server via
+  `ServerQuestTemplateIndex` (one `GET /templates` per session for id → key, then
+  `GET /templates/by-content-key/{key}` for the full template, every answer cached) — in the
+  server's id namespace, objective ids included, so the journal, tracker and reward dispatcher join
+  instance ↔ template ↔ objective progress whatever the ids are. Nothing local is rewritten.
+- **Studio push realigns prod:** `UpsertQuestTemplateRequest.Id` (nullable, last) carries the SO's id;
+  `QuestEditorSyncHelper.BuildUpsertBody` sends it. The repository re-keys a minted row as described
+  above (instances follow, no FKs), so one "Push" of a diverged quest from Studio makes the server's
+  id match the content's. Pushes without an id (older Studio, cr-admin-web) keep the stored id.
+
 ### Quest endpoints are token-authoritative for the account
 
 Every trainer-facing quest handler derives the account from the Bearer token
@@ -775,11 +805,13 @@ All quest endpoints are prefixed `/api/v1/quests`.
 | `GET` | `/api/v1/quests/available` | List available quest templates for a trainer |
 | `GET` | `/api/v1/quests/active` | List InProgress quest instances for a trainer |
 | `GET` | `/api/v1/quests/{instanceId}` | Get a specific quest instance by ID |
-| `POST` | `/api/v1/quests/accept` | Accept a quest and create an instance |
+| `POST` | `/api/v1/quests/{templateId}/accept` | Accept a quest by template id (tooling / wire compatibility) |
+| `POST` | `/api/v1/quests/by-content-key/{contentKey}/accept` | Accept a quest by `content_key` — the route the game client uses; the server resolves its own template row |
 | `POST` | `/api/v1/quests/abandon` | Abandon an active quest instance |
 | `POST` | `/api/v1/quests/progress` | **Retired (410).** See [How to Advance a Quest Objective from Unity](#how-to-advance-a-quest-objective-from-unity) above |
 | `POST` | `/api/v1/quests/claim` | Claim rewards for a completed quest |
-| `PUT` | `/api/v1/quests/templates/bulk` | Bulk create-or-update quest templates by `content_key` (Crystalline Rift Studio sync) |
+| `PUT` | `/api/v1/quests/templates/bulk` | Bulk create-or-update quest templates by `content_key` (Crystalline Rift Studio sync). Optional `id` per template = the authored SO id; a stored row under another id is re-keyed to it |
+| `GET` | `/api/v1/quests/templates` | Every template, no children (player-readable). The client's `ServerQuestTemplateIndex` reads it once per session to map a server template id to its `content_key` |
 | `GET` | `/api/v1/quests/templates/by-content-key/{contentKey}` | One template with objectives, rewards and requirements; 404 on unknown key. The Unity `QuestTemplateOnlineOfflineRepository` calls this only when a `content_key` misses the local `quest_template` cache, then upserts the result locally |
 
 ### Query parameters (GET endpoints)
