@@ -62,6 +62,24 @@ workbench degrades visibly ("addressables unavailable") instead of failing to co
 - Blocking errors: empty name, accuracy outside 1–100, negative cost, missing target type.
   Status-category moves with Power > 0 warn but don't block.
 
+## Placeholder defaults (a blank slot never publishes null)
+
+`AbilityFxDefaults` (`CR.AbilityWorkbench.Logic`, pure, tested by `AbilityFxDefaultsTests`) is the
+one Unity-side table of the placeholder keys cr-api's `M13008RepairAbilityFeedbackKeys` applied to
+every server row: element rules first (Fire, Water, Ice), then category (Physical = `sfx/sfx-dash`
+cast + `sfx/sfx-fireball-hit-audio` hit; Special = water cast + ice hit; Status = `sfx/sfx-buff-loop`
+both), with matching VFX drawn from the authored Fire/Water/Ice/Normal moves. Miss sounds and the
+travel slot on melee/status moves have no default and stay null.
+
+`AbilityEditorSyncHelper.FxKey` = stored key, else the Addressables address of the assigned asset
+(`KeyOrDerived`), else that default. Both the Studio push (`SyncAbility`, Push All, Review → Push)
+and the floor-seed exporter (`M9997`) go through it, so server and baked floor agree. An authored
+key is never replaced. Background: the server's ability UPDATE writes every column verbatim (same
+as the creature, item and status-condition updates — no COALESCE), so before this rule a Push All
+from assets with empty slots erased every sound the server had (2026-09-25). The shipped
+`AbilityConfig` assets now carry the same defaults in their key fields, so the readiness strip
+reads Ready for every move.
+
 ## Authoring starter templates (one-time)
 
 Create 4–6 `AbilityFxTemplate` assets by hand (Assets → Create → CR → Editor → Ability FX
