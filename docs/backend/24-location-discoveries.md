@@ -129,6 +129,12 @@ used to call through) — `QuestDomainService`'s ctor no longer takes that depen
   [Trainer Progression — Admin web](?page=backend/22-trainer-progression#admin-web-world-locations)); an
   admin-web tweak survives only until the next Studio push, unless pulled first
   (`cr_world_locations_pull` / Studio's "Pull tuning from server").
+- Studio's drift line (after Push / Pull, `WorldLocationTuningSync.Diff`) compares everything the push sends —
+  name, area, XP override, discovery quest — and every row on either side: a catalog key the server lacks,
+  and a server key the catalog lacks (which a replace push would retire). The server's `discoveryXp` is
+  `int?` with no override flag, so `WorldLocationServerMapping.FromServer` derives it (a number is an
+  override, null is the rule default); reading the JSON straight into the catalog row used to throw on a
+  null and read every override as drift. "⬆ Push locations" asks before it runs, because replace retires.
 - Content Audit: `location-discovery-quest-missing` (the key doesn't resolve to a registered, non-parked
   quest) and `location-discovery-quest-repeatable` (refuse-level — the grant is idempotent only for a
   non-repeatable template); `visit-location-target-uncatalogued` for a `VisitLocation` objective whose target
