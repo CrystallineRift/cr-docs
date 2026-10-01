@@ -189,6 +189,17 @@ mirror holds it before any cache-only creature read) ·
 online it refuses the write outright (see above) and offline nothing else needs to know.
 Trainer, inventory-list, item-add and creature-update writes store the server's returned row and need no change.
 
+**Mirror writes are verbatim, never authority writes.** The trainer cache stores a server row through
+`ITrainerRepository.MirrorTrainerAsync(Trainer)` (`BaseTrainerRepository`, both engines): every column keyed by id
+alone — the server's id, the server's account, balance, location, timestamps and deleted flag. It must not go through
+`CreateTrainer`/`UpdateTrainer`: those are the authority's own writes, so `CreateTrainer` mints a fresh id and
+`UpdateTrainer` leaves currency and location untouched on purpose. Doing so (the pre-2026-10-01 behaviour) stored the
+server's trainer under a random id, `GetTrainerById(serverId)` always missed, every remote read inserted another
+duplicate row, and the first cache-served read failed with "Trainer … not found" (`InventorySync.RefreshAsync`).
+`TrainerOnlineRepository` reads the cache **by trainer id** even on the `(accountId, trainerId)` overload: the row
+carries the account the server reports, and the online session's account id (the device's local account) is not
+guaranteed to match it. Pinned by `TrainerRepositoryMirrorTests` (cr-api, SQLite).
+
 Content keeps its earlier rule: `ContentBackFill` (local first, server on a content-key miss) for
 pickup/achievement/quest-template definitions. Missions and NPC identity are content read through the memo variant
 of the cache and are only reset by `Clear`.

@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-10-01 — Online trainer cache: "Trainer … not found" on bag sync
+
+- **Root cause (client):** `TrainerOnlineRepository` mirrored server trainer rows into the SQLite online cache through
+  the authority writes `CreateTrainer`/`UpdateTrainer`. `CreateTrainer` mints its own id, so the server's trainer was
+  stored under a random id; `GetTrainerById(serverId)` always missed, every remote read inserted another duplicate
+  row, and the first cache-served (`LocalFresh`) read failed `ItemInventoryService.GetItemsAsync` /
+  `InventorySync.RefreshAsync` with "Trainer … not found". The server's `GET /trainer/{id}` returned 200 every time.
+- **cr-api:** `ITrainerRepository.MirrorTrainerAsync(Trainer)` — verbatim update-then-insert by id of every column
+  (account, currency, location, timestamps, deleted), both engines; `TrainerRepositoryMirrorTests` (SQLite).
+- **cr-api-unity:** every cache store in `TrainerOnlineRepository` is a mirror; cache reads key by trainer id (the
+  online session's account id is the device's local account, not the server's). See
+  `unity/16-domain-sync-pattern.md` → "Mirror writes are verbatim".
+
 ## 2026-09-30 — Server idempotency keys (server half; client half deferred)
 
 - **cr-api:** New `Idempotency-Key` header support on a curated set of player write-intent routes
