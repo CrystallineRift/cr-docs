@@ -60,7 +60,7 @@
         "Assets/CR/Core/DI/NpcGiftOfflineBindings.cs"
       ]
     },
-    "description": "NPC CRUD, team management, domain service, REST endpoints, NpcCreatureSlotSpec; NPC content globalization via ContentWorldId sentinel and M2010GlobalizeNpcContent; battle_trainer_id minting (M2012) + NPC battle-item use endpoint (use-battle-item); receive-gift intent (M16007 gift_template_id) superseding ensure-creature-team/give-creature for gift NPCs"
+    "description": "NPC CRUD, team management, domain service, REST endpoints, NpcCreatureSlotSpec; NPC content globalization via ContentWorldId sentinel and M2010GlobalizeNpcContent; battle_trainer_id minting (M2012) + NPC battle-item use endpoint (use-battle-item); receive-gift intent (M16007 gift_template_id) superseding ensure-creature-team/give-creature for gift NPCs; battle-item-loadout read-back (GET .../battle-item-loadout, content-write policy) and gift-creature clear (DELETE .../gift-creature, sets gift_template_id NULL, idempotent, npc_gift_grant untouched) — the loadout PUT only upserts and never prunes an item dropped from a push"
   },
   "backend/03-spawner-system": {
     "docPath": "docs/backend/03-spawner-system.md",
@@ -1908,5 +1908,72 @@
       "cr-data": []
     },
     "description": "Server idempotency keys: the Idempotency-Key header on player write-intent routes, the idempotency_record dedup ledger, and the shared UseIdempotencyKeys middleware that claims/replays/rejects a retried request"
+  },
+  "admin-web/01-content-editing": {
+    "docPath": "docs/admin-web/01-content-editing.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [],
+      "cr-admin-web": [
+        "src/resources/types.ts",
+        "src/lib/zodFields.ts",
+        "src/components/editors/**",
+        "src/components/resource/ResourceForm.tsx",
+        "src/components/resource/ResourceDetail.tsx",
+        "src/components/resource/RowsEditor.tsx",
+        "src/components/resource/ResourceList.tsx",
+        "src/components/resource/problems.ts",
+        "src/components/resource/rowErrors.ts"
+      ]
+    },
+    "description": "Studio web (cr-admin-web) shared content-editing UI: the ResourceForm/ResourceDetail layout (sections, two-column grid, pinned save footer, ValidationSummary jump-to-problem, Advanced raw-JSON tab, per-field Raw JSON toggle, read-only ValueView mode), ResourceList (count pill, `/` filter, EmptyState), and the FieldMeta/RowColumn editor kinds (object, rows with reorder/duplicate/collapse, siblingRef, assetKey, map, flags, reference, typedParams, typedMeta, json fallback) a descriptor composes from. cr-admin-web is not watched for staleness by scripts/check-stale.js (REPO_PATHS only covers cr-api/cr-data) — the cr-admin-web globs here are for a human skimming this file, not the automated check."
+  },
+  "admin-web/02-dialogue-editing": {
+    "docPath": "docs/admin-web/02-dialogue-editing.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [],
+      "cr-admin-web": [
+        "src/resources/dialogues/**"
+      ]
+    },
+    "description": "Studio web dialogue editing: the structured `document` graph editor (speakers, nodes by type — line/choice/branch/action/end —, options, branch cases, conditions/actions with typed args, entry node) built on the shared `object`/`rows`/`siblingRef`/`map` kinds, and the legacy free-JSON document's round-trip-safe `.loose()` schema with the Advanced tab as escape hatch for anything unrecognised."
+  },
+  "admin-web/03-item-editing": {
+    "docPath": "docs/admin-web/03-item-editing.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [],
+      "cr-admin-web": [
+        "src/resources/items/**"
+      ]
+    },
+    "description": "Studio web item editing: the `typedParams` form for `effectParameters`/`triggerParameters` keyed off `effectType`/`triggerType`, byte-compatible serialisation with EffectParameterSerializer and the seed migrations, which effect/trigger types take no parameters, and the raw-JSON fallback for a legacy or unrecognised stored value."
+  },
+  "admin-web/04-quest-editing": {
+    "docPath": "docs/admin-web/04-quest-editing.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [],
+      "cr-admin-web": [
+        "src/resources/quests/**"
+      ]
+    },
+    "description": "Studio web quest editing: which key family (item/creature/NPC/world-location content key vs quest/item/creature GUID vs free-typed trainer/talent key) each objective/requirement/reward target picker uses, the fix for objective types 21/22 (Activate key item / Used item) which used to point their picker at the item GUID instead of the content key `ItemUseDomainService` actually emits, and the `targetMetadata`/reward `metadata` `typedMeta` columns (wired up, currently empty specs — no objective or reward type parses metadata server-side yet)."
+  },
+  "admin-web/05-developer-guide": {
+    "docPath": "docs/admin-web/05-developer-guide.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [],
+      "cr-admin-web": [
+        "src/resources/**",
+        "src/components/editors/**",
+        "src/components/editors/README.md",
+        "src/test/referenceResource.tsx",
+        "src/lib/zodFields.ts"
+      ]
+    },
+    "description": "How to add a field to an existing cr-admin-web resource descriptor or add a whole new resource: FieldMeta/RowColumn kinds, fieldsFromSchema inference vs explicit override, the ResourceDescriptor shape, registry.ts registration, and the renderFieldsForm/descriptor.test patterns used to prove a field round-trips and validates."
   }
 }

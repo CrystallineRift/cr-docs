@@ -5,6 +5,31 @@
     "path": "00-introduction"
   },
   {
+    "section": "Admin Web",
+    "title": "Content Editing in the Web Studio",
+    "path": "admin-web/01-content-editing"
+  },
+  {
+    "section": "Admin Web",
+    "title": "Dialogue Editing",
+    "path": "admin-web/02-dialogue-editing"
+  },
+  {
+    "section": "Admin Web",
+    "title": "Item Editing",
+    "path": "admin-web/03-item-editing"
+  },
+  {
+    "section": "Admin Web",
+    "title": "Quest Editing",
+    "path": "admin-web/04-quest-editing"
+  },
+  {
+    "section": "Admin Web",
+    "title": "For Developers: Adding a Field or a Resource",
+    "path": "admin-web/05-developer-guide"
+  },
+  {
     "section": "Backend",
     "title": "Backend Architecture",
     "path": "backend/01-architecture"
