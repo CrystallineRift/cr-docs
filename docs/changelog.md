@@ -12,6 +12,9 @@
   Pull fills `giftTemplateCreatureContentKey` from the server's gift id via the creature list (an
   unresolvable id leaves the field and ends Pull with a warning), so Pull → Push round-trips.
 - **Tests:** `NpcLoadoutAndGiftPushTests`, `TrainerBattleOfflineSyncTests` (replace + empty), `ContentReviewRowsTests` (CanDiff).
+- **Deploy order:** the Studio needs cr-api ≥ 7261d2a on whatever server it targets; do not point it at
+  Production before prod runs that build. Pushing an NPC with no authored gift clears a gift set in the web
+  Studio unless Pull ran first.
   → [Content Registry](?page=unity/08-content-registry), [NPC System](?page=backend/02-npc-system)
 
 ## 2026-10-01 — Studio: World Locations and Pickup Placements are their own WORLD tabs

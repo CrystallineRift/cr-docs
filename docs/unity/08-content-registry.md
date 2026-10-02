@@ -453,7 +453,7 @@ foreach (var key in _registry.CreatureKeys)
 | `SyncCreature(def)` | `PUT /api/v1/creatures/by-content-key/{contentKey}` | Pushes all base stat fields |
 | `SyncSpawner(def)` | `PUT /api/v1/spawners/by-content-key/{contentKey}` | Pushes spawner metadata + `battleArenaKey` only |
 | `SyncSpawnerFull(def)` | `POST /api/v1/spawners/sync-config` | Pushes metadata **and** pools + templates atomically — this is what **Push All** uses for spawners |
-| `SyncNpc(def)` | `PUT /api/v1/npc/content-registry`, then (no gift authored) `DELETE /api/v1/npc/content-registry/{contentKey}/gift-creature` | Upserts the NPC content-registry row (`contentKey`, `npcType`, `itemSpawnerContentKey`, `giftTemplateCreatureContentKey`). It sends no `isRematchable`, and no longer needs to: the server's field is nullable, so an omitted flag is *preserved* rather than reset — an NPC-tab push can no longer switch a trainer's rematch off. A null gift on the PUT also means *keep*, so when the asset authors **no** gift creature the push follows up with the idempotent gift `DELETE` (`NpcGiftClearUrl`) — clearing the field in the Studio clears it on the server. Pull fills the field back from the server's gift id (mapped to a creature key through the server creature list), so Pull → Push round-trips a gift instead of deleting it. A server row with **no** gift keeps the authored key, the same rule as `itemSpawnerContentKey` (`SyncFieldMerge.PreferServerUnlessBlank`), so a pull never blanks a gift that was authored but not yet pushed; an id that resolves to no creature also leaves the key and ends Pull with a warning |
+| `SyncNpc(def)` | `PUT /api/v1/npc/content-registry`, then (no gift authored) `DELETE /api/v1/npc/content-registry/{contentKey}/gift-creature` | Upserts the NPC content-registry row (`contentKey`, `npcType`, `itemSpawnerContentKey`, `giftTemplateCreatureContentKey`). It sends no `isRematchable`, and no longer needs to: the server's field is nullable, so an omitted flag is *preserved* rather than reset — an NPC-tab push can no longer switch a trainer's rematch off. A null gift on the PUT also means *keep*, so when the asset authors **no** gift creature the push follows up with the idempotent gift `DELETE` (`NpcGiftClearUrl`) — clearing the field in the Studio clears it on the server. Pull fills the field back from the server's gift id (mapped to a creature key through the server creature list), so Pull → Push round-trips a gift instead of deleting it. A server row with **no** gift keeps the authored key, the same rule as `itemSpawnerContentKey` (`SyncFieldMerge.PreferServerUnlessBlank`), so a pull never blanks a gift that was authored but not yet pushed; an id that resolves to no creature also leaves the key and ends Pull with a warning. **Pushing an NPC whose asset authors no gift clears any gift set elsewhere (e.g. in the web Studio)** — run Pull first so the asset picks it up |
 | `SyncTrainerBattle(def)` | five calls, below | Pushes a `TrainerBattleDefinition`'s team, its cached-team reset, the trainer's identity and its battle-item loadout — see *A trainer battle push is five writes* |
 
 **Delete methods** — call the soft-delete backend endpoints; return `(ok, message)` where `ok = false` means the server rejected the delete (surfaces the error text to the user):
@@ -948,6 +948,13 @@ push would retire the first's entries. `DuplicateNameRule` (pure, 7 tests) refus
 assets at push time and lets the rest through.
 
 #### A trainer battle push is five writes
+
+:::caution Needs cr-api ≥ 7261d2a on the target server
+The loadout read-back (`GET …/battle-item-loadout`), the gift clear (`DELETE …/gift-creature`) and
+the replace-with-`allowEmpty` PUT arrived in cr-api 7261d2a. Against an older server — check before
+pointing the Studio at **Production** — every NPC without a gift reports "gift clear failed — 404"
+after its PUT, every trainer Diff says "Not on server", and an emptied loadout is not cleared.
+:::
 
 **Trainer Battles** (tab 13) syncs like every other tab — a `⬆ Push` on each row, a `⬆ Push` in the
 top bar, counted by the header's pending-edits pill, and included in **Push All Content** (ordered
