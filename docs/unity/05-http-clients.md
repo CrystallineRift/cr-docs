@@ -57,6 +57,18 @@ private async void OnButtonClick()
 }
 ```
 
+### Server Idempotency Keys (planned)
+
+The server now supports (see [Idempotency Keys](../backend/27-idempotency-keys.md)) an
+`Idempotency-Key` header on the curated set of player write-intent routes (battle actions, battle
+start, talent spend/respec, receive-gift, talk, world-location entry, and the trainer creature
+move/swap/discard group): a retry with the same key and the same body replays the first response
+instead of running the handler again. The client side of this — the shared web layer attaching one key
+per logical user action (created once at the call site boundary, reused across every retry of that
+same call, never on a `GET`) and Polly retrying on network error/timeout/502/503/504/429/409 — is not
+yet implemented; this section will describe it once it lands. Until then, the "no automatic retry"
+section above still describes `SimpleWebClient`'s actual behavior.
+
 ## `SimpleWebClient`
 
 `SimpleWebClient` is an abstract base class that wraps **Best HTTP** library calls.
@@ -205,7 +217,14 @@ When adding a new HTTP client, add the key constant here before using it in the 
 
 ## `INpcClient` / `NpcClientUnityHttp`
 
-The NPC client is the canonical example of the typed client pattern. From the actual source:
+The NPC client is the canonical example of the typed client pattern. From the actual source — note
+that `EnsureNpcCreatureTeamAsync` below calls a route Phase E retired (410) on the server; the method
+is unused dead surface on the client now (`StartEncounterAsync` builds NPC teams itself) but kept
+here only to illustrate the typed-client shape, not as a route still worth calling — see
+[NPC System](?page=backend/02-npc-system). `GiveCreatureAsync` itself (and
+`INpcWorldRepository.GiveCreatureAsync` / `NpcOnlineOfflineRepository.GiveCreatureAsync` that used
+to call it) was deleted outright in M2 close (L6): `receive-gift` replaced the gift path, and there
+was no illustrative reason left to keep a method for a retired route with zero callers:
 
 ```csharp
 public class NpcClientUnityHttp : SimpleWebClient, INpcClient

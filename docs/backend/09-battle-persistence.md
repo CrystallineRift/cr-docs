@@ -34,9 +34,19 @@ Tracks the overall battle session.
 | `trainer2_active_creature_id` | UUID NULL | Trainer 2's creature currently on field |
 | `started_at` | DATETIME | |
 | `ended_at` | DATETIME NULL | |
+| `mission_state` | TEXT NULL | JSON snapshot of the active `BattleMissionTracker` (M16006). `NULL` means no missions for this battle (assignment failed, or the fight has none) |
+| `guaranteed_capture_ready` | BOOLEAN NOT NULL DEFAULT false | M20001 (Game domain). Sticky once a `GuaranteedCapture` mission (Bond Trial) completes; cleared only by a committed capture — see [Capture Missions](?page=backend/capture-missions) |
 | `deleted` | BOOLEAN | Soft delete |
 
 `trainer{1,2}_active_creature_id` is set at battle start (first team creature) and updated when a creature faints and is swapped. It is the source of truth for "whose creature is fighting" — there are no per-battle HP rows.
+
+`mission_state` and `guaranteed_capture_ready` are both written from the same two seams:
+`BattleDomainService.AssignMissionsAsync` (called from `StartBattleAsync`) builds the tracker and
+persists its first snapshot before the battle response returns; `ApplyMissionsAsync` re-persists it
+after every resolved action (`IBattleRepository.UpdateMissionStateAsync(battleId, missionState,
+markGuaranteedCaptureReady, ct)` — the boolean parameter only ever sets the flag to `true`, never back
+to `false`). `CaptureAttemptService.ClearGuaranteedCaptureAsync` is the only writer that turns it back
+off, and only after a capture actually commits.
 
 ### `battle_round`
 
@@ -127,11 +137,11 @@ Read by the game through `GET /api/v1/battle-missions`; authored by the Crystall
 | `content_key` | VARCHAR(255) | Designer-facing key, e.g. `mission_pyromaniac`; indexed (**not** unique — uniqueness is enforced by the endpoint, which 409s) |
 | `name` | VARCHAR(255) | What the client HUD shows |
 | `description` | TEXT NULL | |
-| `mission_type` | VARCHAR(50) | What the client tracker counts: `StatusApplication`, `KnockOut` or `ElementalReaction` (`CR.Game.Data.Constants.BattleMissionTypes`) |
-| `condition_key` | VARCHAR(100) NULL | Status-condition name (`Burn`) or reaction name (`Conduction`); unused by `KnockOut` |
-| `threshold` | INT | Qualifying events needed to complete |
+| `mission_type` | VARCHAR(50) | What the tracker counts: `StatusApplication`, `KnockOut`, `ElementalReaction`, `HitsWithoutSwitch` or `BelowHpWithoutKo` (`CR.Game.Model.Battle.BattleMissionTypes`, moved off `CR.Game.Data.Constants` in #7) |
+| `condition_key` | VARCHAR(100) NULL | Status-condition name (`Burn`) or reaction name (`Conduction`); unused by `KnockOut`, `HitsWithoutSwitch` and `BelowHpWithoutKo` |
+| `threshold` | INT | Qualifying events needed to complete — except `BelowHpWithoutKo`, which reuses this column as an HP percentage (1-99) |
 | `same_target` | BOOLEAN | `true` = the count is per target creature; `false` = any qualifying event pools |
-| `reward_type` | VARCHAR(50) | Only `AbilityUnlock` exists today (`CR.Game.Data.Constants.BattleMissionRewardTypes`) |
+| `reward_type` | VARCHAR(50) | `AbilityUnlock` or `GuaranteedCapture` (`CR.Game.Model.Battle.BattleMissionRewardTypes`) — a `GuaranteedCapture` row has no `reward_ability_id` and instead sets `battle.guaranteed_capture_ready` on completion |
 | `reward_ability_id` | UUID NULL | Points at an `abilities` row (no FK constraint) |
 | `is_active` | BOOLEAN | Only active rows are served; indexed |
 | `created_at` / `updated_at` / `deleted` | DATETIME / BOOLEAN | Standard soft-delete columns |
@@ -153,13 +163,16 @@ in Studio should be exported the same way rather than hand-written into a Creatu
 :::
 
 :::caution
-**There is no `battle_mission_instance` table, and that is the design.** Mission progress is
-evaluated entirely client-side by a per-battle, in-memory tracker and dies with the battle, so there
-is nothing to persist, migrate or reconcile. The only durable trace of a completion is a
-`battle_missions_completed` stat increment through the Stats domain. The corollary is that the
-server currently trusts the client about unlocks — `SubmitActionAsync` resolves any ability id
-present in the `abilities` table and never checks that the creature learned it. See
-[Battle Extensions](?page=unity/24-battle-extensions).
+**There is no `battle_mission_instance` table, and that is the design — but mission progress moved
+server-side (#1 C2).** A per-battle `BattleMissionTracker` (`CR.Game.Compat`, shared netstandard2.1
+code) is folded fresh from `battle.mission_state` on every call inside `BattleDomainService`, on
+whichever host is authoritative for the mode (the API online, the same DLL over local SQLite
+offline) — there is still nothing to persist beyond that one JSON column, migrate or reconcile
+across a fight. The only durable trace of a completion is a `battle_missions_completed` stat
+increment through the Stats domain, and an ability unlock is legal only when it is in the
+tracker's own `UnlockedAbilityIds` snapshot (`SubmitActionAsync` no longer trusts a bare ability id
+from the client). See [Battle Extensions](?page=unity/24-battle-extensions) and
+[Capture Missions](?page=backend/capture-missions).
 :::
 
 `Game/CR.Game.Model/Missions/*` plus `BattleMissionService` / `BattleMissionEndpoints`
@@ -175,6 +188,22 @@ A battle row is only closed by the normal end-of-battle paths, so force-quitting
 the starting trainer is marked `Abandoned` and run through `WriteBackHpAsync`, which soft-deletes
 the stranded wild and clears its current-stats row. Without this, a dev save accumulated 12 stale
 battles and 10 leaked wild creatures.
+
+That sweep only runs when the same trainer starts another battle. A still-`Active` battle also
+**locks its creatures**: `IsCreatureActiveInAnotherBattleAsync` makes team moves, slot swaps and
+team↔storage swaps refuse ("is in an active battle"), and the whiteout heal refuses with `in_battle`.
+So those paths sweep too, with an age rule: `IBattleRepository.AbandonStaleActiveBattlesAsync(trainerId,
+staleBefore)` marks `Abandoned` every Active battle on either side of the trainer that started before
+the cutoff **and has opened no `battle_round` since it** (a live battle opens a round every turn).
+The cutoff is `BattleStaleness.StaleAfter` (30 minutes) — longer than any real fight. Production
+2026-10-01: a trainer battle seeded against an empty opponent team sat `Active` and froze the
+player's team until this existed.
+
+A trainer battle is **refused before any row is written** when the opponent has no team:
+`StartBattleAsync` throws `OpponentTeamEmptyException` for `battle_type = Trainer` when
+`GetTeamAsync(trainer2)` is empty; `BattleEncounterDomainService` maps it to
+`EncounterStartStatus.OpponentTeamEmpty` and `POST /api/v1/battles` answers `409 opponent_team_empty`.
+A one-sided battle cannot be played or ended, so it must never exist.
 
 ## Repository Layer
 
@@ -252,6 +281,7 @@ public interface IBattleDomainService
 
 ### `StartBattleAsync`
 
+0. Trainer battles only: load trainer 2's team; empty → `OpponentTeamEmptyException`, nothing written. Then abandon the starting trainer's stale `Active` battles.
 1. Insert `battle` row (`status = "Active"`, `battle_type`)
 2. For each trainer, load their team and set the first creature as active via `SetActiveCreatureAsync` (writes `trainer{1,2}_active_creature_id`). No per-battle creature rows are written.
 3. Determine first-turn trainer by comparing the two active creatures' Speed stats (ties → trainer1)
@@ -806,7 +836,11 @@ first; see [Capture Mechanic → Refused in trainer battles](?page=unity/14-capt
 2. **Low HP** (< 35% of the max HP seen for the active creature) with a heal in the bag → drink it.
 3. **Otherwise** → delegate to the injected `IWildBattleAIDomainService` for the attack decision.
 
-It never emits Run. Item turns mirror the player's two-step: apply the item effect via `POST /api/v1/npc/{npcId}/use-battle-item` (`NpcDomainService.UseNpcBattleItemAsync` — `RestoreHp`/`RestoreFullHp`, decrements the NPC's bag), then submit the `{"type":2,...}` action to consume the turn.
+It never emits Run. Item turns call `NpcDomainService.UseNpcBattleItemAsync` directly
+(`RestoreHp`/`RestoreFullHp`, decrements the NPC's bag) from inside
+`BattleTurnDomainService.SubmitTurnAsync` — never over HTTP; the old two-step (a separate
+`use-battle-item` call, then submit) and its route are retired, see [Battle routes](#rest-endpoints)
+below.
 
 ### Demo content
 
@@ -816,9 +850,15 @@ It never emits Run. Item turns mirror the player's two-step: apply the item effe
 
 A system "Wild" trainer with well-known GUID `00000000-0000-0000-0000-000000000001` is seeded by `M9990SeedGameData`. All spawned wild creatures are assigned to this trainer. When a battle ends, `WriteBackHpAsync` soft-deletes the wild trainer's active creature (if uncaptured) and clears its `generated_creature_current_stats` row.
 
-## Wild Turn Endpoint
+## Wild Turn Endpoint (retired)
 
-`POST /api/v1/battle/{battleId}/wild-turn` is called by the Unity client when `ActionOutcome.NextActiveTrainerId == WildTrainerId` in online mode. It calls `IWildBattleAIDomainService.DecideActionAsync()` and submits the result via `SubmitActionAsync`, returning the `ActionOutcome`.
+`POST /api/v1/battle/{battleId}/wild-turn` — a client-polled endpoint the Unity client called when
+`ActionOutcome.NextActiveTrainerId == WildTrainerId` in online mode — is retired (410 `route_retired`,
+Phase E, `WildBattleEndpoints.cs`). The server now runs the wild side's turn itself, inline, inside
+`BattleTurnDomainService.SubmitTurnAsync` (server-authority C2: "one intent per turn" — see [Battle
+Extensions](?page=unity/24-battle-extensions)) right after resolving the player's own action, so the
+whole exchange is one round trip instead of two. `IWildBattleAIDomainService.DecideActionAsync()`
+itself is unchanged — only the HTTP door that used to poll it separately is gone.
 
 `WildBattleAIDomainService` heuristics (in priority order):
 1. 20% random chance → use a Status-category ability, **but only one that actually inflicts a
@@ -843,19 +883,27 @@ The Unity client uses the same DLL `WildBattleAIDomainService` for offline battl
 
 ## REST Endpoints
 
-Defined in `Game/CR.Game.Service.BFF/Endpoints/BattleEndpoints.cs` and `WildBattleEndpoints.cs`:
+Defined in `Game/CR.Game.Service.BFF/Endpoints/BattleEndpoints.cs`,
+`Npcs/CR.Npcs.Service.REST/Endpoints/BattleStartEndpoints.cs` and `BattleActionsEndpoints.cs`. Phase E
+retired the whole original per-call surface (`start`/`submit`/`round-key`/`run`) plus `wild-turn` —
+each answers `{ "error": "route_retired" }` / 410 now — in favor of one intent-based pair:
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| `POST` | `/api/v1/battle/start` | Creates a battle; returns `BattleId` + first `ActiveTrainerId` + round key |
+| `POST` | `/api/v1/battles` | **C1 — start by intent.** `IBattleEncounterDomainService.StartEncounterAsync`; body names a `{ Kind: Wild, SpawnerKey }` or `{ Kind: Trainer, NpcKey }` encounter, never a raw opponent trainer id. Returns `EncounterStartResult { BattleId, RoundKey, ActiveTrainerId, OpeningSteps }` |
+| `POST` | `/api/v1/battles/{battleId}/actions` | **C2 — one intent per turn.** `IBattleTurnDomainService.SubmitTurnAsync`; submits the player's own action (ability/item/switch/run). The server resolves it, then runs the opponent side itself (wild AI or trainer NPC, bounded at 8 steps) and returns `TurnResolution { Steps, State, NextRoundKey, EndReason, Missions, Progress }` |
 | `GET` | `/api/v1/battle/{id}/state` | Returns full `BattleStateDto` |
-| `GET` | `/api/v1/battle/{id}/round-key?trainerId=` | Returns current round key for a given trainer |
-| `POST` | `/api/v1/battle/{id}/submit` | Submits a trainer's action for the active turn; returns `ActionOutcome` |
-| `POST` | `/api/v1/battle/{id}/run` | Attempts to flee; triggers escape-chance formula |
 | `GET` | `/api/v1/battle/{id}/summary` | Returns post-battle summary (outcome, creature HP grid) |
-| `POST` | `/api/v1/battle/{id}/wild-turn` | Triggers Wild AI turn (online mode only); body is empty `{}` |
+| `POST` | `/api/v1/battle/start` | **Retired (410).** Superseded by `POST /api/v1/battles` |
+| `POST` | `/api/v1/battle/{id}/submit` | **Retired (410).** Superseded by `POST /api/v1/battles/{id}/actions` |
+| `GET` | `/api/v1/battle/{id}/round-key` | **Retired (410).** The intent response carries the round key directly |
+| `POST` | `/api/v1/battle/{id}/run` | **Retired (410).** Run is now `BattleActionIntentKind.Run` through `.../actions`, same as every other action |
+| `POST` | `/api/v1/battle/{id}/wild-turn` | **Retired (410).** The wild side's turn now runs inline inside `SubmitTurnAsync` — see [Wild Turn Endpoint](#wild-turn-endpoint-retired) above |
 
-All endpoints require bearer authentication.
+All endpoints require bearer authentication. `EndReason` on `TurnResolution` is one of `"Won"`,
+`"Lost"`, `"Draw"`, `"Fled"`, `"Captured"`, `"Forfeit"` (`BattleTurnDomainService.ComputeEndReason`) —
+see [Battle Extensions → EndReason](?page=unity/24-battle-extensions) for the client-side literal
+checks that must match these exact strings.
 
 In-battle mission content is served separately, from
 `Game/CR.Game.Service.BFF/Endpoints/BattleMissionTemplateEndpoints.cs`:
@@ -1044,3 +1092,18 @@ Pure logic tests — `BattleResolver.Resolve()` called directly with `ResolvedCo
 - [Backend Architecture](?page=backend/01-architecture) — DDD layering, repository pattern
 - [NPC System](?page=backend/02-npc-system) — NPC trainer team seeding feeds creature states at battle start
 - [Content Registry](?page=unity/08-content-registry) — content keys identify creature species in battle state
+
+## Server authority hardening (A2, 2026-09-27)
+
+- **M16003**: `battle.owed_swap_trainer_id`, `battle.owed_swap_refusals`, and `battle_ko_credit (battle_id, creature_id)` UNIQUE.
+- **End CAS.** Every battle end goes through `TryEndBattleAsync` (Active→Ended, clears any owed swap). A request that loses it
+  gets the "already ended" 409 and pays nothing.
+- **KO-once.** KO XP, battle loot and the trainer-XP win award need a real >0→0 HP transition *and* the first
+  `TryCreditKnockOutAsync` for that creature in that battle. Re-attacking a creature already at 0 HP pays nothing.
+- **Owed swap.** A KO with backups left sets `owed_swap_trainer_id`. Until that trainer Switches, anything else it submits is
+  refused with a rejected-switch outcome (`ActionType = Switch`, `SwitchRejected`, `NeedsSwap`, same trainer, new round key);
+  the third refusal ends the battle as its loss. Shipped clients already turn `NeedsSwap` into a forced Switch.
+- **Duplicate submit.** The round input insert is `ON CONFLICT DO NOTHING`; a losing duplicate is a 409, not a 500.
+- **No self-battle.** `StartBattleAsync(t, t, …)` throws (a trainer battle heals trainer 2's team).
+- **Heal.** `POST /api/v1/trainers/{trainerId}/team/heal` heals only after a whiteout — no active battle and every team creature
+  at 0 HP (an empty team counts) — via `ITeamHealService`; otherwise **409** `{ "error": "heal_not_allowed", "reason": "in_battle" | "not_whited_out" }`.

@@ -54,7 +54,12 @@ Where:
 2. **Cannot capture enemy creatures** - Only wild creatures can be captured. In a trainer battle the crystal is refused *before* anything is spent — see [Refused in trainer battles](#refused-in-trainer-battles).
 3. **Maximum 95% chance** - Even at low HP with high modifiers, the chance caps at 95%
 4. **Minimum 5% chance** - Even at full health with high modifiers, there's always a small chance
-5. **Crystals are consumed on use** - Both successful and failed captures use the crystal
+5. **Crystals are consumed on use** - Both successful and failed captures use the crystal, **unless
+   a talent saves it**: on a failed roll, the trainer's `CrystalSaveChance` talent modifier (0-50%,
+   [Talents §6.2](?page=backend/25-talents#effects-consumers)) rolls with the same `ICaptureRoll`; a
+   save sets `ItemUseResult.ItemRetained = true` and `ItemUseDomainService` refunds the item already
+   taken under the claim-before-pay ordering (no change to that ordering — the client sees "Your
+   crystal survived" as presentation only, never a client-decided outcome)
 
 ## Backend Implementation
 
@@ -76,15 +81,12 @@ Items with `effect_type = 11` (CaptureCreature) use this modifier.
    - Target must be the opposing wild creature
    - Item must not be a held item
 
-2. **Capture Attempt** (`CaptureCreatureHandler.ApplyAsync`)
+2. **Capture Attempt** (`CaptureCreatureHandler.ApplyAsync` → shared `CaptureAttemptService.AttemptAsync`)
    - Loads wild creature's current HP from battle state
    - Calculates capture chance using the formula above
    - Rolls against the chance
-   - On success: reassigns creature ownership, then places it via
-     `ICreatureInventoryService.AddToTeamOrStorageAsync` — team if a slot is free
-     (next free slot, max 6), storage otherwise. `InventoryAddResult.AddedToTeam`
-     reports where it went. The offline mirror (`OfflineItemUseService`) uses the
-     same method, so online and offline placement behave identically.
+   - On success: places the creature **before** claiming ownership, then claims it, then awards
+     capture XP. See the shared implementation below.
 
 ### REST Endpoint
 
@@ -214,16 +216,22 @@ The `BattleCoordinator` then ends the battle with reason `"capture"`.
 
 ## Offline Support
 
-Offline (local SQLite) battles roll **identical odds** to the server:
+Offline (local SQLite) battles roll **identical odds** to the server, because both modes run **one**
+implementation, `CaptureAttemptService` (`CR.Game.Domain.Services`, shipped to Unity in the DLL
+package): wild + not fainted → chance
+`clamp((max−cur)/max × crystal × trainerMultiplier, 0.05, 0.95)` → roll → place on team/storage (a
+full storage fails the capture and the crystal is not consumed) → claim ownership
+(`CurrentTrainerId`, `FirstCaughtByTrainerId`, `CaptureDate`) → capture XP (+ first-of-species). The
+server's `CaptureCreatureHandler` resolves the wild target from the battle record and delegates to
+it; Unity's `OfflineItemUseService`
+(`Assets/CR/Game/Battle/Offline/OfflineItemUseService.cs`) delegates the same way — there is no
+separate offline capture logic to drift out of sync. `ItemUseResult.TrainerProgress` carries the XP
+result (see [Trainer Progression](?page=backend/22-trainer-progression) /
+[Trainer Progression in Unity](?page=unity/34-trainer-progression)).
 
-- The pure formula lives in `CR.Game.Domain.Services/Implementation/Item/CaptureChanceCalculator.cs`
-  (shipped to Unity in the DLL package) and is used by both the server
-  `CaptureCreatureHandler` and the Unity `OfflineItemUseService`
-  (`Assets/CR/Game/Battle/Offline/OfflineItemUseService.cs`).
-- The offline `CaptureCreature` case mirrors the server handler: wild-battle /
-  opponent / fainted validations, ownership reassignment
-  (`CurrentTrainerId`, `FirstCaughtByTrainerId`, `CaptureDate`), and
-  `ICreatureInventoryService.AddToStorageAsync`.
+Placing **before** claiming ownership matters: a capture whose storage is full leaves the creature
+still wild rather than owned-but-unlisted, so the throw can be retried cleanly instead of stranding
+the creature.
 
 ### Opponent target resolution
 
@@ -247,3 +255,42 @@ empty-target path is only a fallback.
 - [Battle System](unity/07-battle-system.md)
 - [Battle Bag Panel](unity/13-battle-bag-ui.md)
 - [Item System](backend/09-item-system.md)
+- [Talents](?page=backend/25-talents) — `CrystalSaveChance`, `CaptureChancePercent`, `CaptureXpPercent`
+- [Trainer Progression](?page=backend/22-trainer-progression) — capture XP and first-of-species bonus
+- [Trainer Progression in Unity](?page=unity/34-trainer-progression) — offline capture bindings
+
+## Capture CAS (A2, 2026-09-27)
+
+`CaptureAttemptService` claims the creature with `ICreatureCaptureClaim.TryClaimFromWildAsync` (wild → trainer, only while still
+wild) **before** placing it; a lost claim is a failure with no XP, and a failed placement returns the creature to the wild.
+Offline binds the claim to the player-data `GeneratedCreatureRepository` (`ServerAuthorityBindingsExtensions`). Online, the server
+also requires the throw to target the active wild creature of the caller's own live wild battle.
+
+## Capture progress (server-authority phase B)
+
+`CaptureAttemptService` emits `CreatureCaptured` (species content key) after the ownership transfer and the
+capture XP; the item-use response carries it in `ItemUseResult.Progress`, and `OnlineOfflineItemDomainService`
+applies it through `QuestManager.ApplyServerProgress` in both modes. The battle bag no longer reports captures,
+and a capture ends the battle **without** counting as a battle win (`BattleEndReason.Capture`).
+
+## The guaranteed throw (Bond Trial, #7 capture missions)
+
+A talent-granted mission pool (see [Capture Missions](?page=backend/capture-missions)) can complete
+mid-battle and arm a **guaranteed capture**: `CaptureAttemptService.IsGuaranteedAsync` checks the six
+conditions in that page's §6.5 (the battle is Active, the thrower is Trainer1, the opponent is the
+wild sentinel, the target is the wild's own active creature, and `battle.guaranteed_capture_ready` is
+set) and, when they all hold, sets `chance = 1.0f` — bypassing `CalculateChance` and the clamp above
+entirely, but still rolled through the same `_roll.Next() <= chance` comparison, so the roll seam
+itself is untouched. The flag clears only after a committed capture
+(`ClearGuaranteedCaptureAsync`); a storage-full capture still commits, so it clears the flag too. A
+refused throw (wrong target, ended battle, trainer battle) never touches the flag.
+
+This is display-only from the client's side: Unity never computes the chance itself, so there is
+nothing for it to fake. `BattleBagPanelHandler` tracks `BattleEvents.CaptureReady` (raised by
+`BattleMissionConductor` on the mission's completion and again on every later
+`ActionOutcome.GuaranteedCaptureReady = true`) and swaps the crystal row's percentage for "Sure catch"
+through the pure `CaptureChanceLabel.For(chance, captureReady)`
+(`Assets/CR/Game/Battle/Logic/CaptureChanceLabel.cs`). `BattleHUD` shows a persistent "Capture ready"
+badge for the same event, cleared alongside the rest of the mission UI on battle start/close. See
+[Battle Extensions](?page=unity/24-battle-extensions) for the mission-pool wiring and
+[Battle Bag Panel](?page=unity/13-battle-bag-ui) for the label itself.

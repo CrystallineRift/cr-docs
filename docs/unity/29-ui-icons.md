@@ -82,7 +82,9 @@ IconAddress.TryParse("icons/items/x", …)    // true  -> ("items", "x")
 IconAddress.TryParse("creatures/cindris", …)// false -> a PREFAB address, not one of ours
 ```
 
-Type constants: `IconAddress.Items`, `.Creatures`, `.Abilities`, `.Status`.
+Type constants: `IconAddress.Items`, `.Creatures`, `.Abilities`, `.Status`, `.Talents` (talent trees/talents,
+Phase 2 Unity lane — not a section in `icon-map.json` below; talent icons are assigned directly on the
+authored ScriptableObjects, not batch-mapped).
 
 The type segment is what keeps two content types that share a key apart — an item and a creature may
 both be authored as `ember`, and one address for both would hand the creature's portrait to the bag

@@ -407,3 +407,13 @@ An empty condition list short-circuits before the catalogue read.
 - [UI Icons](../unity/29-ui-icons.md) — `icon_asset_key`, `IconAddress`, the importer
 - [Capture Mechanic](../unity/14-capture-mechanic.md) — `CaptureCreature` in detail
 - [Creature Generation](04-creature-generation.md) — status conditions in the battle resolver
+
+## Server authority hardening (A2, 2026-09-27)
+
+- **Consume before effect.** A consumable (except `TriggerEvolution`) is taken from the owned bag entry by guarded decrement
+  (`IItemEntryGuardedWrites.TryTakeFromEntryAsync`) before its handler runs; a failed or throwing effect returns it
+  (`ReturnToEntryAsync`). Two parallel uses of the last potion heal once. A refund that cannot land is logged.
+- **Targets.** In battle the battle must be `Active` and the caller its trainer 1. An opponent target must be the battle's active
+  opponent; an own target must be a creature the trainer owns. Anything else is a 400 before any item is taken.
+- **Capture** is additionally bound to the caller's live **wild** battle and its active wild creature, and ownership moves by the
+  `ICreatureCaptureClaim` compare-and-set — a double tap captures once; the loser's crystal is refunded.

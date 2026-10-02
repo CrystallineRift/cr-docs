@@ -30,6 +30,15 @@ In practice, `NpcInteractionBehaviour` does call `IBattleCoordinator.StartNpcBat
 
 Creature transfers are atomic on the backend side — the server commits the creature to the trainer's inventory in a single transaction. If the client cancels mid-flight and abandons the request, it does not know whether the server completed the transfer. Using `CancellationToken.None` prevents the client from cancelling the request and then falsely concluding the transfer failed. The backend's idempotency guarantee (same NPC cannot give the same slot twice) covers the case where the transfer did complete but the client never received the response.
 
+:::note Phase D: `GiveCreatureAsync` calls the receive-gift intent, not `INpcWorldRepository`
+`GiveCreatureAsync` no longer calls `INpcWorldRepository.GiveCreatureAsync`. It calls
+`INpcGiftService.ReceiveGiftAsync(accountId, trainerId, npcWorld.ContentKey, ct)` (`CR.Npcs.Gift`,
+online/offline routed like the talk intent) and switches on `NpcGiftResult.Status`
+(`Granted` / `NotAGiftNpc` / `UnknownNpc`), hiding the grant prompt on all three — a refusal is the
+server's decision to make, never a reason for the client to keep offering a route that will 404 again.
+See [NPC System](?page=backend/02-npc-system) for the server side.
+:::
+
 ## Component Overview
 
 | Component | Responsibility |
@@ -121,7 +130,9 @@ When the player presses **E** inside the trigger:
 
 1. Check `_npcWorld.NpcId != Guid.Empty` — guard against pressing E before init completes
 2. **Grant check:** if `_grantBehaviour != null && _grantBehaviour.IsReady && _grantBehaviour.HasCreatureToGive`
-   - Call `EnsureNpcAsync` endpoint with give-creature action
+   - Call `GiveCreatureAsync` → `INpcGiftService.ReceiveGiftAsync` (the `receive-gift` intent; the
+     older `give-creature` route this used to call is retired, see [NPC
+     System](?page=backend/02-npc-system))
    - On success: `_grantBehaviour.HasCreatureToGive = false`, hide grant prompt
    - Grant takes priority — a trainer NPC that still has a creature to give will not trigger battle
 3. **Battle check:** else if `_trainerBehaviour != null && _trainerBehaviour.CanBattle`
@@ -394,6 +405,14 @@ To change the binding, edit the action asset — do **not** hardcode a new lette
 not currently conflict, but anything that starts consuming `Attack` will collide with interaction on
 the same physical button.
 :::
+
+## Talk progress is an intent
+
+A press that counts as talking (see `NpcInteractionRouting.RecordsTalkProgress`; conversation routes — including
+a plugin trainer bark — leave it to the conversation) calls `QuestManager.TalkToNpcAsync(contentKey)`, which goes
+through `NpcTalkOnlineOfflineService`: online the talk route, offline the DLL `NpcTalkService`. The Pixel
+Crushers bridge sends the actor's `content_key` field only — an actor without one sends nothing (a Warning names
+the fix). The server counts one talk per NPC per quest; the client never counts it.
 
 ## Related Pages
 

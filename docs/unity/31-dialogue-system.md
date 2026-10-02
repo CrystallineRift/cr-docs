@@ -176,7 +176,7 @@ Every type string that exists today, its module, its args, and where it is decla
 | `quest.objectiveCount` | condition | `quest` (QuestKey, required), `objective` (Int, optional — the objective's sort order, default 0), `min` / `max` (Int, optional — open bound when left out) | True when the quest is in progress and that objective's progress count is within `min..max`. Lets a giver say "one down, two to go" per count. Not for "all done": that is `quest.state ReadyToTurnIn`. A quest not in progress is false. |
 | `quest.accept` | action | `quest` (QuestKey, required) | Resolves the content key to a template and calls `IQuestService.AcceptQuestAsync`. An unknown key throws (the runner turns that into `End(Declined)` + a warning). |
 | `quest.claim` | action | `quest` (QuestKey, required) | Finds the quest's `Completed && !RewardsClaimed` instance and calls `IQuestService.ClaimRewardsAsync`. None found throws the same way. |
-| `quest.recordTalk` | action | `npc` (NpcKey, optional — default is the context NPC) | Calls `IQuestService.OnNpcInteracted(npc)` — see [How a talk is recorded](#how-a-talktonpc-talk-is-recorded), below. |
+| `quest.recordTalk` | action | `npc` (NpcKey, optional — default is the context NPC) | Calls `IQuestService.TalkToNpcAsync(npc)` — see [How a talk is recorded](#how-a-talktonpc-talk-is-recorded), below. |
 
 Implementations: `Assets/CR/Quests/Dialogue/{QuestStateConditionEvaluator,
 QuestObjectivePendingConditionEvaluator,QuestAcceptActionHandler,QuestClaimActionHandler,
@@ -483,20 +483,26 @@ pure mapping from a bark's `DialogueStartResult` to whether the fight starts:
 
 ## How a TalkToNpc talk is recorded
 
-`NpcInteractionRouting.RecordsTalkProgress(route)` decides, per route, whether
-`NpcInteractionBehaviour` itself records the interaction for quest progress:
+Talking is a client **intent** (`QuestManager.TalkToNpcAsync`, routed through `INpcTalkService` to the
+server online or the offline DLL talk service) — the authority, not the client, decides whether it
+advances a `TalkToNpc` objective. `NpcInteractionRouting.RecordsTalkProgress(route)` decides, per route,
+whether `NpcInteractionBehaviour` itself sends that intent for a bare Interact press:
 
-- **On the CR backend**, nothing but an authored `quest.recordTalk` action records a talk. A dialogue
-  linked to an NPC that never reaches a `quest.recordTalk` node means the quest objective can NEVER
-  progress through that NPC — no error appears anywhere; the audit rule described in [Dialogue
+- **On the CR backend**, nothing but an authored `quest.recordTalk` action sends the talk (via
+  `IQuestService.TalkToNpcAsync`, `QuestRecordTalkActionHandler`). A dialogue linked to an NPC that
+  never reaches a `quest.recordTalk` node means the quest objective can NEVER progress through that
+  NPC — no error appears anywhere; the audit rule described in [Dialogue
   Authoring](?page=unity/32-dialogue-authoring) exists specifically to catch this before it ships.
-- **On the Plugin backend**, `QuestDialogueBridge` records the talk when the conversation *completes*
-  (see [Dialogue System Integration](?page=unity/11-dialogue-integration)).
-- **When the route is a swallowed press** (`IgnoredConversationBusy`, or either `Dialogue*` route),
-  `NpcInteractionBehaviour` records nothing itself — recording here too would double-count a talk the
-  conversation (or the busy-refusal) will handle, or has already handled, on its own.
-- **When the NPC has nothing to do at all** (route `None`), the press still counts as a talk — this
-  is how a `TalkToNpc` objective completes against an NPC with no conversation configured.
+- **On the Plugin backend**, `QuestDialogueBridge` sends the talk intent when the conversation
+  *completes*, using the actor's `content_key` field, not its display name (see [Dialogue System
+  Integration](?page=unity/11-dialogue-integration)).
+- **When the route is a swallowed press** (`IgnoredConversationBusy`, `TrainerBarkPlugin`, or either
+  `Dialogue*` route), `NpcInteractionBehaviour` sends nothing itself — sending here too would
+  double-count a talk the conversation (or the busy-refusal, or the bark) will handle, or has already
+  handled, on its own. `TrainerBarkPlugin` counts as a conversation for this purpose: `QuestDialogueBridge`
+  sends its talk when the bark completes, same as any other Plugin conversation.
+- **When the NPC has nothing to do at all** (route `None`), the press still sends the talk intent —
+  this is how a `TalkToNpc` objective completes against an NPC with no conversation configured.
 
 ## Status
 

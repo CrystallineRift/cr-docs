@@ -110,6 +110,36 @@
     "path": "backend/21-dialogue-domain"
   },
   {
+    "section": "Backend",
+    "title": "Trainer Progression (Phase 1: Trainer Level)",
+    "path": "backend/22-trainer-progression"
+  },
+  {
+    "section": "Backend",
+    "title": "Progress Dispatcher (server-derived progress)",
+    "path": "backend/23-progress-dispatcher"
+  },
+  {
+    "section": "Backend",
+    "title": "Location Discoveries v2 (per-location XP, discovery quests, the ledger)",
+    "path": "backend/24-location-discoveries"
+  },
+  {
+    "section": "Backend",
+    "title": "Talents (Phase 2)",
+    "path": "backend/25-talents"
+  },
+  {
+    "section": "Backend",
+    "title": "Capture Missions (Bond Trial, Phase 3)",
+    "path": "backend/26-capture-missions"
+  },
+  {
+    "section": "Backend",
+    "title": "Idempotency Keys",
+    "path": "backend/27-idempotency-keys"
+  },
+  {
     "section": "Introduction",
     "title": "Changelog",
     "path": "changelog"
@@ -303,5 +333,20 @@
     "section": "Unity",
     "title": "UI Theme (global styling)",
     "path": "unity/33-ui-theme"
+  },
+  {
+    "section": "Unity",
+    "title": "Trainer Progression in Unity",
+    "path": "unity/34-trainer-progression"
+  },
+  {
+    "section": "Unity",
+    "title": "World Map",
+    "path": "unity/35-world-map"
+  },
+  {
+    "section": "Unity",
+    "title": "Talents UI (Unity)",
+    "path": "unity/36-talents-ui"
   }
 ]

@@ -5,8 +5,9 @@ mutation audited in the same transaction that applies it. `CR.Moderation.*` owns
 (`account_moderation`, `admin_action`) and composes the Auth, Trainer, Creature, Item and Market
 domains through their repository/service interfaces — it never touches their tables directly.
 
-The operator UI is Crystalline Rift Studio's **LIVE OPS** rail group (Players and Marketplace tabs, plus the
-admin-key row in the Auth tab); this page is the server contract it talks to.
+The operator UI is Crystalline Rift Studio's **LIVE OPS** rail group (Players and Marketplace tabs; the key
+they use is saved per environment in SYSTEM → Server & Keys, whose *LIVE OPS — can Studio get an admin
+token?* check verifies it); this page is the server contract it talks to.
 
 ## Data model
 
@@ -21,8 +22,10 @@ added to `Convenience/CR.Data.Migrations` (the baked offline floor), so no `acco
 ever ships inside `game-data.bytes`.
 
 `AdminActionKind`: `ShadowBan`, `LiftShadowBan`, `RemoveListing`, `AdjustCurrency`, `GrantItem`,
-`RemoveItem`, `Note` (unused in v1), `GrantExperience`, `GrantCreature`. Members are appended, never
-renumbered — the integer is persisted in `admin_action.kind`, so reordering rewrites history.
+`RemoveItem`, `Note` (unused in v1), `GrantExperience`, `GrantCreature`, … `GrantTrainerXp` (16),
+`SetTalentRank` (17), `RespecTalents` (18), `GrantAchievement` (19), `RevokeAchievement` (20).
+Members are appended, never renumbered — the integer is persisted in `admin_action.kind`, so
+reordering rewrites history.
 
 ## Repositories
 
@@ -53,6 +56,7 @@ SpawnGrant }` rather than as exceptions, so the caller always learns *which rule
 | `InvalidSearchTerm` | A search term too short to be worth running against the player table (REST-side; <2 characters). |
 | `InvalidArgument` | A well-formed request carrying a value the operation cannot act on — most visibly a shadow-ban expiry already in the past. |
 | `NoSpawnCandidate` | The spawner exists but has no pool holding an active template — either it is empty, or the pool the operator named is. |
+| `WouldOverspendTalents` | A negative trainer XP grant would leave `SpentPoints > newLevel − 1` — the take-back would drop the trainer below what their talent spend needs. Retry with `respec: true` (see below). |
 
 ### The reason rule
 
@@ -66,7 +70,7 @@ worse than no action at all, which is why `admin_action.reason` is `NOT NULL`.
 | Method | Rules |
 |---|---|
 | `SearchPlayersAsync(term, limit)` | Straight delegation to `IPlayerSearchRepository`, limit clamped. |
-| `GetPlayerDossierAsync(accountId)` | One read for the whole picture: account + provider links, moderation state (a *clear default* when the account has never been moderated — the absence of a row is not an error), every trainer with team / creature storage / backpack / item storage / active listings, and the last 20 `admin_action` rows. Listings come from the **operator** browse (`IMarketService.AdminBrowseListingsAsync(Active, accountId, …)`), which filters to `Active` in SQL and includes the listings a shadow ban hides from players — the seller-facing read clamps at 100 rows and would have silently truncated a busy account. `null` when the account does not exist. |
+| `GetPlayerDossierAsync(accountId)` | One read for the whole picture: account + provider links, moderation state (a *clear default* when the account has never been moderated — the absence of a row is not an error), every trainer with team / creature storage / backpack / item storage / active listings, and the last 20 `admin_action` rows. Listings come from the **operator** browse (`IMarketService.AdminBrowseListingsAsync(Active, accountId, …)`), which filters to `Active` in SQL and includes the listings a shadow ban hides from players — the seller-facing read clamps at 100 rows and would have silently truncated a busy account. `null` when the account does not exist. Each `TrainerDossier.progress` carries that trainer's `TrainerProgress` (level, XP, XP into/for next level, spent/available talent points, `NeedsRespec`, and the raw `Allocations`/`Modifiers`/`QuestLockedTalentIds` a dossier UI joins against talent tree content — see [Talents](25-talents.md)) — null when it cannot be read, never a failed dossier. |
 | `SetShadowBanAsync(accountId, reason, expiresAtUtc, actor)` | An `expiresAtUtc` already in the past → `InvalidArgument`, because a ban nothing would ever enforce must not be recorded as one the operator will believe is in force. Unknown account → `NotFound`. Idempotent: re-banning updates reason/expiry on the same row rather than creating a second one, and records a second audit entry. Metadata `{"expiresAt":…}`. |
 | `LiftShadowBanAsync(accountId, reason, actor)` | `NotFound` when the account does not exist — saying `NotBanned` would read as confirmation that the operator looked at the right player. Otherwise `NotBanned` for an account with no row, an unflagged row, **or a ban that already lapsed** — an expired ban needs no lifting. |
 | `RemoveListingAsync(listingId, reason, actor)` | Delegates to `IMarketService.AdminRemoveListingAsync`, which owns both the creature transfer and its audit row, and maps `MarketOperationReason` → `ModerationReason`. Exactly **one** `admin_action` row is written, by Market, not two. |
@@ -75,6 +79,9 @@ worse than no action at all, which is why `admin_action.reason` is `NOT NULL`.
 | `RemoveItemAsync(trainerId, itemId, quantity, reason, actor)` | Entry missing → `NotFound`; more than held → `InsufficientQuantity`; the whole stack clears the slot, less reduces it. Reads in-transaction like the grant, so the audited `after` is the committed one. Same metadata shape. |
 | `GrantExperienceAsync(generatedCreatureId, amount, reason, actor)` | Amount ≤ 0 → `InvalidQuantity`; unknown creature → `NotFound`. Applies the **exact** amount through `ICreatureProgressionService.ApplyExperienceAsync`, not the growth-profile-scaled `ApplyEarnedExperienceAsync` — an operator typed the number and should get the number. Real progression, so level-ups, ability unlocks and the evolution check all happen exactly as they do in play. |
 | `GrantCreatureFromSpawnerAsync(trainerId, spawnerContentKey, poolName?, level?, reason, actor)` | Rolls a spawn pool and hands the trainer what came out. A level outside 1..100 → `InvalidQuantity`; unknown trainer **or** unknown `spawnerContentKey` → `NotFound`; a spawner (or named pool) with no active template → `NoSpawnCandidate`. All three are refused *before* anything is generated. The roll goes through `ICreatureSpawnDomainService.SpawnCreaturesAsync` — the same weighted pool draw, template draw and `CreateFromSpawnerAtLevelAsync` generation a wild encounter and a trainer team go through — then places the creature with `ICreatureInventoryService.AddToTeamOrStorageAsync`. Metadata `{"spawnerContentKey":…,"poolName":…,"generatedCreatureId":"…","speciesContentKey":…,"speciesName":…,"level":L,"placedIn":"Team"|"Storage","slotNumber":S}`. |
+| `GrantTrainerXpAsync(trainerId, amount, reason, actor, respec = false)` | See [Talents](25-talents.md#admin) — a negative amount that would leave the trainer's talent spend above what the resulting level allows is refused `WouldOverspendTalents` unless `respec` is true, in which case the trainer is respecced first (free) and the grant then applied; metadata gains `respecced: true`. |
+| `SetTalentRankAsync(trainerId, talentId, rank, reason, actor)` | Takes `ITalentService.SetRankAsync` — see [Talents → Admin](25-talents.md#admin). The outer `ModerationResult.Success` is true once the call ran; a nested `TalentSpendResult` refusal (an out-of-range rank, or a lost race) rides in `TalentSpend` and writes no audit row. Never blocked by `NeedsRespec`. Metadata `{talentId, talentKey, rankBefore, rankAfter}`. |
+| `RespecTalentsAsync(trainerId, reason, actor)` | Always succeeds for a real trainer — free, no refusal. See [Talents → Admin](25-talents.md#admin). Metadata `{spentBefore}`. |
 | `ListActionsAsync(filter)` | The audit log, newest first. |
 
 :::note Why the creature grant reuses the spawn path instead of building a creature
@@ -181,7 +188,10 @@ sets it (and `AdminActorName`) through its environment or secret store, never in
 | POST | `/trainers/{trainerId}/items` | `ItemChangeRequest { itemId, quantity, reason }` | `TrainerDossier` (refreshed) | 400, 404, 409 `StorageFull` |
 | DELETE | `/trainers/{trainerId}/items` | `ItemChangeRequest` | `TrainerDossier` (refreshed) | 400, 404, 409 `InsufficientQuantity` |
 | POST | `/creatures/{generatedCreatureId}/experience` | `GrantExperienceRequest { amount, reason }` | `GrantExperienceResponse` (below) | 400 `InvalidReason`/`InvalidQuantity`, 404 |
+| POST | `/trainers/{trainerId}/xp` | `{ amount, reason, respec? }` — trainer XP through the progression funnel as `TrainerXpSource.Admin` (no talent modifiers; negative takes XP back, never below 0; `trainer_level` is set, the one non-monotonic write) | `TrainerProgressResult` | 400 `InvalidReason`/`InvalidQuantity`, 404, 409 `WouldOverspendTalents`; audit `GrantTrainerXp` (16) |
 | POST | `/trainers/{trainerId}/creatures/from-spawner` | `GrantCreatureFromSpawnerRequest { spawnerContentKey, poolName?, level?, reason }` | `GrantCreatureFromSpawnerResponse` (below) | 400 `InvalidReason`/`InvalidQuantity`, 404, 409 `NoSpawnCandidate`/`StorageFull` |
+| PUT | `/trainers/{trainerId}/talents/{talentId}` | `SetTalentRankRequest { rank, reason }` — see [Talents](25-talents.md#admin) | `TrainerProgress` | 400 `InvalidReason`, 404; audit `SetTalentRank` (17); 409 `{ error: TalentSpendError, progress }` — **not** the flat `{error, reason}` shape every other route here uses |
+| POST | `/trainers/{trainerId}/talents/respec` | `ReasonRequest` | `TrainerProgress` | 400 `InvalidReason`, 404; audit `RespecTalents` (18) |
 | GET | `/market/listings?state=&sellerAccountId=&offset=&limit=` | | `MarketListingView[]` — hidden rows **included**, `sellerShadowBanned` set | |
 | DELETE | `/market/listings/{id}` | `ReasonRequest` | `MarketListingView` (post-removal, `state = Cancelled`) | 400, 404, 409 `AlreadySold`/`StorageFull` |
 | GET | `/actions?accountId=&trainerId=&listingId=&offset=&limit=` | | `AdminAction[]`, newest first | |
@@ -337,7 +347,7 @@ database).
 |---|---|
 | `Moderation/CR.Moderation.Data.Postgres.Test` | Repository round-trips, the four ways a ban fails to be active (missing / deleted / unflagged / lapsed), audit filtering + limit clamp + ordering, the `MaxShadowBannedIds` bound on the banned-id read, and every search branch (prefix, email, account GUID, trainer GUID, no match, deleted trainer excluded, and a `%`/`_` in the term matched literally). |
 | `Moderation/CR.Moderation.Domain.Services.Test` | The service against real Postgres: dossier contents, ban idempotency, refusals writing nothing, currency metadata, 1-based backpack slot allocation and `StorageFull`, that a grant reads the backpack through the in-transaction path (proved with a recording repository decorator), a past shadow-ban expiry → `InvalidArgument`, a lift on an unknown account → `NotFound`, that a dossier carries active listings only including ones a shadow ban hides, item removal arithmetic, and that a listing removal produces exactly one audit row. The spawn-pool grant is wired to the **real** spawn, generation and inventory services against the floor-seeded `starter-wild-zone`: the roll's species and level, the creature really existing and owned by that trainer, a forced level the template's band could not have produced, a full team falling back to storage, unknown trainer/spawner, a named pool that holds nothing → `NoSpawnCandidate` with nothing rolled, and exactly one audit row carrying the spawner, species and level. |
-| `Convenience/CR.Api.IntegrationTests/AdminEndpointsHttpTests` | The routes end-to-end through the real AIO host: all eleven refuse an anonymous caller (401), a `content:write` token (403) **and an ordinary player's session token (403)**, then — with an admin token — search, dossier, a shadow ban that genuinely hides a listing from another *player's* `GET /api/v1/market/listings` while `/api/v1/market/mine` still shows it, double-lift → 409 `NotBanned`, currency credit and overdraw, item grant/remove and over-removal, the admin feed carrying `sellerShadowBanned`, a removal that puts the creature back in the seller's storage, a second removal → 409 `AlreadySold`, a blank reason → 400 with no row written, `/actions` newest-first, and a spawn-pool grant that rolls `starter-wild-zone`, lands a real Cindris on the trainer's team at the forced level and audits once (plus its 404/400/409 refusals, each leaving no creature behind). |
+| `Convenience/CR.Api.IntegrationTests/AdminEndpointsHttpTests` | The routes end-to-end through the real AIO host: all sixteen (`AdminRoutes()`) refuse an anonymous caller (401), a `content:write` token (403) **and an ordinary player's session token (403)**, then — with an admin token — search, dossier, a shadow ban that genuinely hides a listing from another *player's* `GET /api/v1/market/listings` while `/api/v1/market/mine` still shows it, double-lift → 409 `NotBanned`, currency credit and overdraw, item grant/remove and over-removal, the admin feed carrying `sellerShadowBanned`, a removal that puts the creature back in the seller's storage, a second removal → 409 `AlreadySold`, a blank reason → 400 with no row written, `/actions` newest-first, and a spawn-pool grant that rolls `starter-wild-zone`, lands a real Cindris on the trainer's team at the forced level and audits once (plus its 404/400/409 refusals, each leaving no creature behind). |
 
 ## Related
 
@@ -346,4 +356,5 @@ database).
 - [Trainer Currency](12-trainer-currency.md) — the balance `AdjustCurrencyAsync` moves.
 - [Item Spawner & Merchant Stock](11-item-spawner.md) — the `items` catalogue `GrantItemAsync` grants from.
 - [Spawner System](03-spawner-system.md) — the pools, templates and weighted draw `GrantCreatureFromSpawnerAsync` rolls.
+- [Talents](25-talents.md) — `SetTalentRankAsync`/`RespecTalentsAsync`, the `respec` flag on `GrantTrainerXpAsync`, and `WouldOverspendTalents`.
 - [Creature Generation](04-creature-generation.md) — `CreateFromSpawnerAtLevelAsync` and what a template decides.

@@ -135,6 +135,64 @@ Both modes are read by the client, not enforced server-side beyond the columns e
 about auto-granting a quest touches its giver), but `ReturnToGiver` reads it to decide whether there
 is anywhere to return to.
 
+## Quest categories and area key
+
+Every quest has a **category** and an optional **area key**. Both are metadata only: no gate, grant,
+requirement, reward or talent unlock reads them. Spec: `cr-api-unity/docs/superpowers/specs/2026-09-27-quest-categories-design.md`.
+
+| Int | `QuestCategory` | Slug | Meaning |
+|---|---|---|---|
+| 0 | `Bonus` (default) | `bonus` | Side or optional content. Anything unauthored or legacy reads as Bonus, never as Main Story. |
+| 1 | `MainStory` | `main_story` | The main story line. |
+| 2 | `Exploration` | `exploration` | Reach places, find things. |
+| 3 | `Battle` | `battle` | Win battles, defeat creatures or trainers. |
+| 4 | `Talent` | `talent` | Unlocks or advances the talent tree, or teaches or shows a talent. |
+
+The ints and slugs are permanent (`QuestCategoryValuesTests`). The player's display order is Main Story,
+Exploration, Battle, Bonus, Talent. It lives in the clients (`QuestCategoryDisplay`, admin-web
+`QUEST_CATEGORY_OPTIONS`), never in the ints.
+
+**Columns.** `quest_template.category INTEGER NOT NULL DEFAULT 0` (M17001) and `quest_template.area_key VARCHAR(64) NULL`
+(M17003). There is no CHECK constraint and no index. `area_key` holds an `AreaDefinition.areaKey` (`Meadow`, `Cave`, …), the same
+key space as `world_location.area_key`. It is stored trimmed and compared case-insensitively. Both migrations guard `ADD COLUMN`
+with `Column(...).Exists()` because SQLite's `Down()` keeps the column.
+
+**Write rule (`PUT /api/v1/quests/templates/bulk`).** `category` and `areaKey` are nullable on the wire.
+- `null` keeps what is stored. A new row gets Bonus / no area. This lets an older Studio or admin-web build push without resetting anything.
+- An undefined category returns 400 `Undefined category {n} on template '{key}'.`
+- `areaKey` is trimmed. `""` clears it, and more than 64 characters returns 400.
+- The reads (`GET /templates`, `…/by-content-key/{k}`) return `category` as an **int** and `areaKey` as a string or null.
+
+**Backfill (M17002).** It runs `UPDATE … SET category = n WHERE content_key = … AND category = 0`, so it is idempotent and never overwrites. On SQLite it is a no-op, because quest seeds skip SQLite and the SOs carry the same values.
+
+| content_key | Category |
+|---|---|
+| `quest-welcome-to-cr`, `quest-first-battle`, `quest-runaway-cargo` (Meadow Merchant Act 1) | Main Story |
+| `quest-road-to-shore`, `quest-into-the-dark`, `quest-windbitten-climb`, `quest-sunbleached` | Exploration |
+| `quest-meadow-hunt`, `quest-tidewrack-trials` | Battle |
+| `quest-first-capture`, `quest-hearthmere-supplies` | Bonus |
+
+There is no counter backfill for quests claimed before this release (the game is not live).
+
+**Completion outcome.** The completion CAS emits `QuestCompleted` (#1 phase B). It carries
+`Facts[Category]` (the slug) and, when set, `Facts[AreaKey]`, both read from the **server's** template row
+(`ProgressOutcomeQuestFactsExtensions.WithQuestTemplateFacts`). A deleted template, or a stored category that
+is not one of the five, adds no category fact — that completion still counts in `quests_completed`, just not
+in any `quests_completed_cat_*` counter. The `LifetimeStatProjector` then writes `quests_completed` +1 and,
+when the category fact is present, `quests_completed_cat_{slug}` +1 (`stat_event.source = "quest_complete"`),
+once per won CAS, never at claim. See [Stats](08-stats-system.md) and [Achievements](15-achievements.md).
+
+**Authoring.** Categories are set on the `QuestDefinition` SO (Category dropdown, and an Area popup over the World Location
+Catalog's area keys) and pushed by Crystalline Rift Studio. The Studio Quests tab filters by category. Admin web edits both (Category
+select, free-text Area key). The Content Audit window reports `quest-area-unknown` for an area key no catalog location
+uses. A `VisitLocation` objective's target is likewise picked from `ContentPicker.WorldLocations()` (a
+`QuestDefinitionEditor` popup, never free text) — a target missing from the catalog fires the separate
+`visit-location-target-uncatalogued` audit rule, since the authority advances nothing for a key it cannot
+resolve; see [Location Discoveries](?page=backend/24-location-discoveries).
+
+**Supersedes checklist step 0b's `quest_kind`.** Main Story means "main", and every other category is a side quest. Only
+`quest_line` / `line_step` remain planned.
+
 ## The shipped quest chain
 
 Eight quests (M7014) follow the habitat level ladder, so "where do I go next" is answered by a quest
@@ -176,6 +234,14 @@ Three things this chain depends on, each of which was a trap:
   if it is not there yet it warns and stores **null**, which reads as "no prerequisite". The order of
   `ContentDefinitionProvider.quests` is therefore load-bearing; the chain is registered in dependency
   order.
+- **The server resolves the same key on push (2026-10-01).** `PUT /api/v1/quests/templates/bulk` used to
+  keep only what `Guid.TryParse` accepted and store **null** for a QuestCompleted requirement authored
+  as a content key — which `ConditionEvaluator` compares against completed template ids, so Runaway
+  Cargo and First Battle 409'd `requirements_not_met` for every online player. `QuestEndpoints.
+  ResolveRequirementsAsync` now resolves a QuestCompleted key to the template id — this push's authored
+  ids first (order on the wire does not matter), then the stored row — and an unresolvable key refuses
+  the whole push with `400 invalid_requirement` instead of silently storing a gate nobody can open.
+  Other requirement types still take a Guid reference as before.
 - **The seed ids are UUIDv5 of the content key**, matching what the authored assets carry. A seed
   with an id of its own is discarded the moment Crystalline Rift Studio pushes the asset — the unique index is
   on `content_key`, so the row already exists and every objective and reward hangs off a template
@@ -342,58 +408,31 @@ VALUES
 
 ## How to Advance a Quest Objective from Unity
 
-The Unity client calls `POST /api/v1/quests/progress` after any game event that might satisfy an objective. The call should be fire-and-forget from the game logic perspective — it records the event and the backend handles matching it against active quests.
+:::caution `POST /api/v1/quests/progress` is retired (Phase E, 410 `route_retired`)
+This section used to describe the pre-server-authority `POST /api/v1/quests/progress` contract. Phase
+E deleted the whole compat vertical — `IQuestDomainService.RecordProgressEventAsync`/
+`ForwardTalkAsync`/`ForwardVisitLocationAsync`, `QuestProgressCompat`, and (cr-api-unity)
+`IQuestRepository.RecordProgressAsync`/`IQuestClient.RecordProgressAsync` and their
+`QuestClientUnityHttp`/`QuestOnlineOfflineRepository` implementations — there is no client method left
+that calls this, and the route itself answers 410 regardless of `objectiveType`. Every objective now
+advances through the real intent that produces it, never a client-reported progress event:
+- `TalkToNpc` → the talk intent, `NpcTalkService` (via `POST /api/v1/trainers/{t}/npcs/{npcKey}/talk`)
+- `VisitLocation` → `POST /api/v1/trainers/{t}/world-locations/enter`
+  (`LocationEntryService.EnterAsync`) — see [Location Discoveries](?page=backend/24-location-discoveries)
+- Every battle/defeat/capture/item/quest-completion type → produced by the authority itself
+  (`BattleDomainService`, `ItemUseDomainService`, `QuestDomainService.ClaimRewardsAsync`, …) and
+  reported via [Progress Dispatcher](?page=backend/23-progress-dispatcher), never posted by the client
 
-```csharp
-// In the battle system, after a win
-await _questClient.RecordProgressAsync(new QuestProgressRequest
-{
-    AccountId    = _session.AccountId,
-    TrainerId    = _session.TrainerId,
-    ObjectiveType = QuestObjectiveType.WinBattles,   // int value 3
-    Amount        = 1,
-    ReferenceId   = null,   // not needed for WinBattles
-});
-```
+`ProgressReportQuestExtensions.ToQuestProgressResultAsync` and the `QuestProgressResult`/
+`QuestProgressEvent` DTOs below are the one piece of the old vertical still standing — kept because
+`ClaimRewardsAsync` still uses them to shape its own response, not because anything posts progress
+through them any more.
+:::
 
-The HTTP call:
+If every required objective is now complete, `newStatus` becomes `"Completed"` and `isCompleted` becomes `true`. The Unity client inspects `newStatus` to trigger the quest-complete celebration animation and enable the reward claim button.
 
-```bash
-curl -s -X POST http://localhost:5000/api/v1/quests/progress \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "accountId":     "aaaaaaaa-...",
-    "trainerId":     "bbbbbbbb-...",
-    "objectiveType": 3,
-    "amount":        1,
-    "referenceId":   null
-  }'
-```
-
-Response:
-```json
-{
-  "updatedInstances": [
-    {
-      "instanceId": "cccccccc-...",
-      "newStatus":  "InProgress",
-      "objectives": [
-        {
-          "objectiveTemplateId": "22222222-...",
-          "currentCount": 1,
-          "targetCount":  3,
-          "isCompleted":  false
-        }
-      ]
-    }
-  ]
-}
-```
-
-If the third win occurs, `newStatus` becomes `"Completed"` and `isCompleted` becomes `true`. The Unity client inspects `newStatus` to trigger the quest-complete celebration animation and enable the reward claim button.
-
-The same `RecordProgressEventAsync` call also writes the `battles_won` lifetime stat regardless of whether any quest matched.
+A battle win, a capture, an item use or a quest completion is never reported this way — see the compat
+translator section below for what each objective type now does.
 
 ## Reading Quests from Unity (the quest journal)
 
@@ -409,6 +448,10 @@ Read surface used by the player menu's **Quests** tab (`Assets/CR/UI/Quests/Ques
 | `GetCompletedQuestsAsync(ct)` | `IQuestRepository.GetCompletedQuestsAsync` | Completed instances. |
 | `GetTemplateAsync(templateId, ct)` | `IQuestRepository.GetQuestTemplateAsync` | Name, description, objective texts, rewards. |
 | `AbandonQuestAsync` / `ClaimRewardsAsync` | as before | Unchanged lifecycle calls. |
+
+The Quests tab groups both sections (Active and Completed) by category in display order and hides empty groups. Each header
+reads, for example, "Main Story · 2", and each group keeps the section's own order. The HUD tracker shows the category as a small
+label above each card's title (`quest-tracker__category`). The tracker's order is unchanged (authored `SortOrder`).
 
 `QuestManager` also exposes `AccountId`, `TrainerId`, and `HasSession` so a UI can decline to load
 before world init has run rather than throwing out of `AssertSession`.
@@ -471,6 +514,36 @@ resolved the template from the local DB and sent the server a minted id it had n
 400 Bad Request and a quest that never started. An empty caller id keeps the old
 keep-existing/mint-new behavior.
 
+### The accept intent is keyed by `content_key`, never by template id
+
+Authored ids *should* match, but the game must not depend on it: production's
+`quest-runaway-cargo` row was minted under `c241235f…` while every client bakes the SO id
+`7c3e9a1d…` from `Runaway Cargo.asset`, and the id-keyed accept answered
+`400 "Quest template 7c3e9a1d-… not found."` for a quest the server plainly had. The fix lives on
+both sides of the seam:
+
+- **Server:** `POST /api/v1/quests/by-content-key/{contentKey}/accept` →
+  `IQuestDomainService.AcceptQuestByContentKeyAsync`. Same guard (`RequirePlayerTrainer`), same
+  idempotency key, same rules as the id route (requirements evaluated, idempotent, abandoned instance
+  restarts); the server resolves *its own* row by key. The id route stays for tooling and wire
+  compatibility.
+- **Client:** `IQuestService.AcceptQuestAsync(string questContentKey)` is the only accept. Every
+  caller already holds the key — `QuestGranterBehaviour` (the SO's `contentKey`), `QuestAutoGranter`
+  (the server's available list), `QuestAcceptActionHandler` (the dialogue arg), `PickupBehaviour`
+  (the reward's `ReferenceKey`). The legacy Lua hook (`QuestDialogueBridge`) resolves its UUID to a
+  template first. `QuestOnlineOfflineRepository.AcceptQuestAsync` sends the key online and hands the
+  same key to the local `QuestDomainService` offline — the same boundary, the same code.
+- **Reads:** an online instance names the *server's* template id. When the local content has no row
+  under that id, `QuestOnlineOfflineRepository.GetQuestTemplateAsync` answers from the server via
+  `ServerQuestTemplateIndex` (one `GET /templates` per session for id → key, then
+  `GET /templates/by-content-key/{key}` for the full template, every answer cached) — in the
+  server's id namespace, objective ids included, so the journal, tracker and reward dispatcher join
+  instance ↔ template ↔ objective progress whatever the ids are. Nothing local is rewritten.
+- **Studio push realigns prod:** `UpsertQuestTemplateRequest.Id` (nullable, last) carries the SO's id;
+  `QuestEditorSyncHelper.BuildUpsertBody` sends it. The repository re-keys a minted row as described
+  above (instances follow, no FKs), so one "Push" of a diverged quest from Studio makes the server's
+  id match the content's. Pushes without an id (older Studio, cr-admin-web) keep the stored id.
+
 ### Quest endpoints are token-authoritative for the account
 
 Every trainer-facing quest handler derives the account from the Bearer token
@@ -509,6 +582,16 @@ A `QuestInstance` carries only IDs, status and counts. Objective *text* lives on
 `QuestObjectiveTemplate`, so the journal pairs each `QuestObjectiveProgress` row to its template by
 `ObjectiveTemplateId`. An objective with no progress row yet (progress never recorded) still renders,
 at zero — so the player sees the full task list the moment they accept.
+
+The instance repositories select instance columns only, so `QuestDomainService` attaches the rows on
+every instance read — `GetActiveQuestsAsync`, `GetCompletedQuestsAsync` and `GetQuestInstanceAsync`
+all populate `QuestInstance.ObjectiveProgress` (via `GetObjectiveProgressRelinkedAsync`) before
+returning. Online, the Unity router mirrors exactly what `GET /api/v1/quests/active` and
+`GET /api/v1/quests/{instanceId}` return into the local cache, so a read that leaves the list empty
+renders every objective at 0/N even though the authority already counted it (post-launch fix,
+2026-10-01: the Runaway Cargo capture was logged `1/3` by the projector while both reads answered
+`"objectiveProgress": []`). If the template read fails for one instance, that instance is returned as
+stored (empty list) and the trainer's other quests are unaffected.
 
 Roll-up maths and the "may this quest be claimed" rule are **not** in the view: they live in the
 engine-free `CR.UI.Logic` assembly (`QuestProgressCalculator`, `QuestActionPolicy`) and are unit
@@ -593,7 +676,7 @@ When `is_repeatable = true`, a trainer can accept the same template again after 
 | `CaptureCreature` | 4 | Capture a specific creature (matched by `target_reference_id`) |
 | `CaptureAnyCreature` | 5 | Capture any creature; `target_reference_id` is ignored |
 | `DealDamage` | 6 | Deal any amount of damage |
-| `HealAmount` | 7 | Heal any amount |
+| `HealAmount` | 7 | **Retired** (phase B): nothing produces heals; the template route and Studio refuse it |
 | `ReachCreatureLevel` | 8 | Raise a creature to a specific level |
 | `DefeatCreaturesFromList` | 9 | Defeat N DISTINCT species from `target_reference_ids` (each listed species counts once; `target_count` defaults to the list length, "all of them") |
 | `VisitLocation` | 10 | Travel to a named location |
@@ -603,6 +686,7 @@ When `is_repeatable = true`, a trainer can accept the same template again after 
 | `DefeatTrainer` | 40 | Win against a specific trainer (`target_reference_id` = trainer battle content key; rematches count, a blank target means any trainer) |
 | `DefeatAnyTrainer` | 41 | Win any trainer battle |
 | `DefeatTrainersFromList` | 42 | Defeat N DISTINCT trainers from `target_reference_ids` |
+| `ReachTalentRank` | 50 | Reach a rank in a talent (the "teach a talent" gate, [Talents §8.3](25-talents.md#quest-tie-in)); `target_reference_id` = talent content key, blank matches the highest rank on any talent |
 
 **List objectives (9, 42)** store their targets as a JSON array in `quest_objective_template.target_reference_ids`
 and the targets already counted in `quest_objective_progress.counted_reference_ids` (M7018, both engines,
@@ -675,25 +759,37 @@ public class QuestProgressEvent
 }
 ```
 
-### Stat Side-Effects of `RecordProgressEventAsync`
+### Progress is derived server-side, not reported (server-authority phase B → Phase E)
 
-Every progress event also increments a lifetime stat regardless of whether any quest objective matched. The
-client sends the specific, the list and the "any" event for one defeat or capture, so **only the "any" event of a
-family writes the stat** (and fires the achievement trigger, see `AchievementTriggerMapper`); before 2026-09-26
-`DefeatCreature` + `DefeatAnyCreature` each wrote it, double-counting every wild defeat with a known species.
-Totals inflated that way are not backfilled.
+Progress is derived by the server from outcomes it produced — see [Progress Dispatcher](?page=backend/23-progress-dispatcher).
+`POST /api/v1/quests/progress` went through two stages: phase B narrowed its reportable set to
+`VisitLocation`/`TalkToNpc` (everything else already `400 server_derived`), then **Phase E retired the
+route outright (410)** and deleted `RecordProgressEventAsync`/`ForwardVisitLocationAsync`/
+`ForwardTalkAsync`/`QuestProgressCompat` — there is no compat translator left. `VisitLocation` now only
+ever arrives through `LocationEntryService.EnterAsync` (the BFF `POST .../world-locations/enter` route)
+— it claims the discovery ledger, awards per-location XP (a flat rule amount or the location's own
+override), grants a discovery quest if one is authored, and emits `LocationEntered` — see [Location
+Discoveries](?page=backend/24-location-discoveries); `TalkToNpc` only ever arrives through the talk
+intent (`NpcTalkService`, `POST /api/v1/trainers/{t}/npcs/{npcKey}/talk`). Every battle-outcome type —
+`WinBattles`, `DefeatCreature`, `DefeatAnyCreature`, `DefeatCreaturesFromList`, `DefeatTrainer`,
+`DefeatAnyTrainer`, `DefeatTrainersFromList` — moved server-side once `BattleDomainService` itself
+started emitting `BattleWon`/`CreatureDefeated`/`TrainerDefeated` (including on a forfeit win —
+opponent Run 3x or an owed swap 3x) as part of resolving the battle action, batched through one
+`SafeRecordAllAsync` call per action so achievements evaluate once. Every other type is likewise
+produced server-side — captures, collected items, item use and quest completion. `quests_completed` is counted when
+the quest **completes** (the completion compare-and-set), not when its rewards are claimed; a **claim**
+still pays no `quests_completed` credit, but `ClaimRewardsAsync` now runs one achievement evaluation pass
+after its reward grants (so a points-earning reward can push a `TrainerLevelReached` achievement over the
+line at claim time) and returns any newly-unlocked achievements on `QuestClaimResult.Progress.NewlyUnlocked`
+— see [Achievements — Evaluation](?page=backend/15-achievements#evaluation). Talk and visit objectives count
+**distinct** keys per quest instance, and a targeted talk/visit objective must have Count 1.
 
-| ObjectiveType | Stat written | Operator |
-|---------------|-------------|---------|
-| `WinBattles` | `battles_won` | Increment |
-| `DefeatAnyCreature` | `creatures_defeated_total` | Increment |
-| `DefeatAnyTrainer` | `trainers_defeated_total` | Increment |
-| `DefeatCreature`, `DefeatCreaturesFromList`, `DefeatTrainer`, `DefeatTrainersFromList`, `CaptureCreature` | none (the family's "any" event writes it) | — |
-| `CaptureAnyCreature` | `creatures_captured_total` | Increment |
-| `DealDamage`, `DealDamageOfType` | `damage_dealt_total` | Increment |
-| `HealAmount` | `damage_healed_total` | Increment |
-| `CollectItem` | `items_collected_total` | Increment |
-| `ReachCreatureLevel` | `creature_level_{referenceId}` (content key) AND `highest_creature_level` | Max |
+`ReachTalentRank` (50) is the one type that is **not** count-up-to-target: `TalentService` raising a
+rank (a spend, or an admin set-rank that raises) emits a `TalentRankReached` outcome whose `Quantity`
+is the new rank, and `QuestObjectiveProjector` sets — never adds — `current_count` to that quantity,
+clamped to `target_count` and never lowered (`ObjectiveCounting.Max`, a new case alongside the
+default count-up-to-target rule every other type uses). An admin *lowering* a rank (a correction, not
+play) emits nothing — see [Talents → Quest tie-in](25-talents.md#quest-tie-in).
 
 Quest-scoped progress resets with each instance. Lifetime stats never reset.
 
@@ -727,11 +823,13 @@ All quest endpoints are prefixed `/api/v1/quests`.
 | `GET` | `/api/v1/quests/available` | List available quest templates for a trainer |
 | `GET` | `/api/v1/quests/active` | List InProgress quest instances for a trainer |
 | `GET` | `/api/v1/quests/{instanceId}` | Get a specific quest instance by ID |
-| `POST` | `/api/v1/quests/accept` | Accept a quest and create an instance |
+| `POST` | `/api/v1/quests/{templateId}/accept` | Accept a quest by template id (tooling / wire compatibility) |
+| `POST` | `/api/v1/quests/by-content-key/{contentKey}/accept` | Accept a quest by `content_key` — the route the game client uses; the server resolves its own template row |
 | `POST` | `/api/v1/quests/abandon` | Abandon an active quest instance |
-| `POST` | `/api/v1/quests/progress` | Record a progress event against active quests |
+| `POST` | `/api/v1/quests/progress` | **Retired (410).** See [How to Advance a Quest Objective from Unity](#how-to-advance-a-quest-objective-from-unity) above |
 | `POST` | `/api/v1/quests/claim` | Claim rewards for a completed quest |
-| `PUT` | `/api/v1/quests/templates/bulk` | Bulk create-or-update quest templates by `content_key` (Crystalline Rift Studio sync) |
+| `PUT` | `/api/v1/quests/templates/bulk` | Bulk create-or-update quest templates by `content_key` (Crystalline Rift Studio sync). Optional `id` per template = the authored SO id; a stored row under another id is re-keyed to it |
+| `GET` | `/api/v1/quests/templates` | Every template, no children (player-readable). The client's `ServerQuestTemplateIndex` reads it once per session to map a server template id to its `content_key` |
 | `GET` | `/api/v1/quests/templates/by-content-key/{contentKey}` | One template with objectives, rewards and requirements; 404 on unknown key. The Unity `QuestTemplateOnlineOfflineRepository` calls this only when a `content_key` misses the local `quest_template` cache, then upserts the result locally |
 
 ### Query parameters (GET endpoints)
@@ -764,27 +862,15 @@ POST /api/v1/quests/accept
 
 ```json
 POST /api/v1/quests/progress
-{
-  "accountId":     "00000000-...",
-  "trainerId":     "00000000-...",
-  "objectiveType": 3,
-  "amount":        1,
-  "referenceId":   null
-}
+{ "accountId": "00000000-...", "trainerId": "00000000-...", "objectiveType": 3, "amount": 1 }
 
-→ 200 OK  (QuestProgressResult)
-{
-  "updatedInstances": [
-    {
-      "instanceId": "cccccccc-...",
-      "newStatus":  "InProgress",
-      "objectives": [
-        { "objectiveTemplateId": "22222222-...", "currentCount": 1, "targetCount": 3, "isCompleted": false }
-      ]
-    }
-  ]
-}
+→ 410 Gone
+{ "error": "route_retired" }
 ```
+
+Every `objectiveType` gets the same 410 now, regardless of whether it used to be forwarded or was
+already `400 server_derived` — see the caution block above for what advances each objective type
+instead.
 
 ```json
 POST /api/v1/quests/claim
@@ -805,6 +891,15 @@ POST /api/v1/quests/claim
 | `SpawnedCreatureIds` | `Guid[]` | Creature IDs spawned by `RewardType.Creature` rewards — consumers must place these into the trainer's team or storage |
 
 On the Unity client, `QuestManager.ClaimRewardsAsync` deserializes this result and forwards it to `QuestRewardDispatcher`, which places spawned creatures, fires `OnRewardsDispatched`, and routes through the event-wiring system (see `docs/unity/15-event-wiring.md`). Stat writes (`TrainerExperiencePoints`, `QuestsCompleted`) are performed by the backend during `ClaimRewardsAsync` — the Unity side must not double-write them.
+
+`QuestManager.ClaimOnceAsync` applies `result.Progress` via the same `ApplyServerProgress` entry point the
+battle turn loop uses (M1-F2u, cr-api-unity `107ce9d2`), instead of calling `ReportTrainerProgress`
+directly. A claim produces no quest/objective progress of its own (the completion already counted the
+`quests_completed` credit), but the achievement re-evaluation pass `ClaimRewardsAsync` runs after paying
+rewards (see "Server authority hardening" below) can carry a genuinely new unlock — e.g. a
+`TrainerLevelReached` achievement crossed by this claim's XP — and routing it through
+`ApplyServerProgress` is what gets that unlock to the achievement toast. `ReportUnlocks`/
+`ReportTrainerProgress` now have exactly one call site each, inside `ApplyServerProgress`.
 
 ### Crystalline Rift Studio sync: `PUT /api/v1/quests/templates/bulk`
 
@@ -915,6 +1010,36 @@ sort order before the push landed. **Never renumber a surviving objective's `sor
 that already has live instances** — add new objectives at the end, or accept that reordering existing
 ones needs a data migration, not just a Studio push. See
 [Dialogue Authoring](?page=unity/32-dialogue-authoring) for the same warning from the authoring side.
+
+### Objective ids are deterministic, and orphaned progress rows self-heal
+
+An objective that arrives **without an authored id** (a `QuestDefinition` SO via
+`LocalQuestTemplateSyncClient`, or a Studio push) is inserted under
+`QuestObjectiveTemplateIds.Derive(questTemplateId, sortOrder)` — a UUID v5 of the same
+`(template, sort_order)` key the upsert matches on — never `Guid.NewGuid()`. An objective that
+arrives **with** an authored id (the online back-fill writing the server's template into the local
+cache) is inserted under it, and if the sort-order-matched row was born under a different id the row
+is re-keyed to the authored one (`RekeyObjectiveIdAsync`, mirroring the template re-key above). A
+removed-then-re-added objective revives its soft-deleted row instead of colliding with it.
+
+Why this matters: Unity keeps quest templates in **game-data** and quest progress in **player-data**,
+two SQLite files. `GameDataAdopter` wipes game-data on every bundled-content update and the SOs
+re-seed it. With minted ids every re-seed gave each objective a new id while `quest_objective_progress`
+kept the old ones — the projector found no row for the current objective and counted nothing, and the
+journal (which joins progress to objectives on id) rendered `0/N` for progress the authority had
+already counted (post-launch "capture quest shows 0/3" bug). Derived ids make the re-seed land on
+the ids the rows were accepted under.
+
+For instances accepted before this fix (or any other way a row ends up pointing at an objective the
+template no longer has), the authority repairs its own derived state:
+`OrphanedObjectiveProgress.Pair` pairs orphan rows (creation order) with row-less objectives (sort
+order) **only when the counts agree**, and
+`IQuestInstanceRepository.GetObjectiveProgressRelinkedAsync` moves them
+(`RelinkObjectiveProgressAsync`). It runs in `QuestObjectiveProjector` before an outcome is applied
+and in every `QuestDomainService` instance read (`GetActiveQuestsAsync`, `GetCompletedQuestsAsync`,
+`GetQuestInstanceAsync`) before the client reads progress, so a healed row
+keeps its count and the next relevant outcome advances it. A count mismatch (an objective added or
+removed since acceptance) is ambiguous and is left alone.
 
 ## Reward Claiming
 
@@ -1051,12 +1176,15 @@ server-side accept heals on the next read.
   membership in `target_reference_ids`; an empty list can never complete, which is why the Unity quest editor
   refuses to push one. Sending the same listed key again is a no-op by design (distinct counting).
 - **Firing `DefeatCreature` instead of `DefeatAnyCreature`.** `DefeatCreature` matches objectives where `target_reference_id` equals the event's `ReferenceId`. `DefeatAnyCreature` matches all defeat-type objectives regardless of `ReferenceId`. Sending the wrong type means progress is never recorded.
-- **Looking up a defeated wild creature after the faint.** The battle domain soft-deletes an uncaptured
-  wild creature in the same call that returns the killing blow, so a `GetCreature` made afterwards returns
-  null. Unity's `BattleCoordinator` used to do exactly that and silently skipped `OnCreatureDefeated` —
-  "First Battle" (Defeat any creature) never completed; only `WinBattles` fired. Now
-  `DefeatedOpponentReporter` remembers each opponent's species when it is identified and always reports
-  the defeat; `QuestManager.OnCreatureDefeated(null)` still sends `DefeatAnyCreature`.
+- **Looking up a defeated wild creature after the faint (historical, now moot).** The battle domain
+  soft-deletes an uncaptured wild creature in the same call that returns the killing blow, so a
+  `GetCreature` made afterwards returns null. Unity's `BattleCoordinator` used to look the species up that
+  way and silently skip reporting a defeat — "First Battle" (Defeat any creature) never completed; only
+  `WinBattles` fired. The client-side fix was `DefeatedOpponentReporter`, which remembered each opponent's
+  species when it was identified and always reported the defeat. As of M1-F2u (cr-api-unity `107ce9d2`)
+  both it and `QuestManager.OnCreatureDefeated` are deleted: `BattleDomainService` now produces
+  `CreatureDefeated` itself, species and all, while the row still exists, so there is no
+  lookup-after-soft-delete left to get wrong.
 - **Setting `stat_key` on a `HasItem` requirement.** The `HasItem` evaluator reads `reference_id` for the item UUID — `stat_key` is ignored. Putting the item ID in `stat_key` will cause the check to always fail silently.
 - **Calling `ClaimRewardsAsync` twice.** The method throws if `rewards_claimed` is already true. The game layer must guard against double-claim. Retrying a failed claim request should first check the instance's current `rewards_claimed` state.
 - **Forgetting `giver_npc_content_key` in the migration.** If the template has no `giver_npc_content_key`, it will not appear when the NPC's quest list is queried with `npcContentKey`. Set it to match the NPC's `content_key` exactly, or leave it NULL for world quests.
@@ -1064,6 +1192,7 @@ server-side accept heals on the next read.
 
 ## Related Pages
 
+- [Progress Dispatcher](?page=backend/23-progress-dispatcher)
 - [Stats and Lifetime Tracking](?page=backend/08-stats-system) — the Stats domain that `RecordProgressEventAsync` writes to as a side-effect
 - [NPC System](?page=backend/02-npc-system) — NPCs are the quest givers; `giver_npc_content_key` links templates to NPC content keys
 - [Backend Architecture](?page=backend/01-architecture) — DI registration patterns, dual-DB, keyed/non-keyed repos
@@ -1071,3 +1200,18 @@ server-side accept heals on the next read.
 - [Dialogue System](?page=unity/31-dialogue-system) — the `quest.accept`/`quest.claim`/`quest.state`/`quest.objectivePending` dialogue vocabulary that reads and writes grant mode and reward claim mode
 - [Dialogue Authoring](?page=unity/32-dialogue-authoring) — the audit rules that check a dialogue's `quest.*` actions agree with a quest's grant/claim mode
 - [Dialogue Server Domain](?page=backend/21-dialogue-domain) — the sibling content domain that shares the `RequireContentWrite` auth pattern
+- [Talents](?page=backend/25-talents) — `ReachTalentRank` (50) and the `TalentRankReached` outcome that drives it
+
+## Server authority hardening (A2, 2026-09-27)
+
+- **Claim-before-pay.** `ClaimRewardsAsync` spends the claim with one conditional UPDATE
+  (`IQuestInstanceRepository.TryClaimRewardsAsync`: `rewards_claimed` false→true on a live Completed row) *before* granting
+  anything. Of any number of parallel claims exactly one pays; the rest get the usual 400 "already been claimed".
+  A grant that fails after the claim loses that reward (logged) — never pays twice.
+- **Completion CAS.** Completing an instance is `TryCompleteInstanceAsync` (InProgress→Completed); only the event whose
+  UPDATE won lists the quest in `CompletedQuests`.
+- **Accept checks requirements.** `AcceptQuestAsync` evaluates the template's requirements for a new or restarted instance
+  and throws `QuestRequirementsNotMetException` → `POST /api/v1/quests/{templateId}/accept` answers **409**
+  `{ "error": "requirements_not_met" }`. Re-accepting a quest already held returns it without a check.
+- **Server grants.** `IQuestDomainService.GrantQuestAsync(accountId, trainerId, templateKey, reason, ct)` creates (or returns)
+  an instance without the requirement check. It has no route; server features (location discovery quests) call it.

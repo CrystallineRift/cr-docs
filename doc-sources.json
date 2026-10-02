@@ -42,7 +42,8 @@
     "repos": {
       "cr-api": [
         "Npcs/**/*.cs",
-        "Npcs/**/*.csproj"
+        "Npcs/**/*.csproj",
+        "Game/CR.Game.Model/Npcs/*.cs"
       ],
       "cr-data": [
         "Assets/Scripts/Npcs/**/*NpcCreatureGrantBehaviour*.cs",
@@ -52,10 +53,14 @@
         "Assets/CR/Npcs/Runtime/Repository/Implementation/NpcOnlineOfflineRepository.cs",
         "Assets/CR/Npcs/Runtime/Http/NpcClientUnityHttp.cs",
         "Assets/CR/Game/World/Behaviours/NpcTrainerBehaviour.cs",
-        "Assets/CR/Npcs/Runtime/Http/INpcClient.cs"
+        "Assets/CR/Game/World/Behaviours/NpcCreatureGrantBehaviour.cs",
+        "Assets/CR/Npcs/Runtime/Http/INpcClient.cs",
+        "Assets/CR/Npcs/Talk/*.cs",
+        "Assets/CR/Npcs/Gift/**/*.cs",
+        "Assets/CR/Core/DI/NpcGiftOfflineBindings.cs"
       ]
     },
-    "description": "NPC CRUD, team management, domain service, REST endpoints, NpcCreatureSlotSpec; NPC content globalization via ContentWorldId sentinel and M2010GlobalizeNpcContent; battle_trainer_id minting (M2012) + NPC battle-item use endpoint (use-battle-item)"
+    "description": "NPC CRUD, team management, domain service, REST endpoints, NpcCreatureSlotSpec; NPC content globalization via ContentWorldId sentinel and M2010GlobalizeNpcContent; battle_trainer_id minting (M2012) + NPC battle-item use endpoint (use-battle-item); receive-gift intent (M16007 gift_template_id) superseding ensure-creature-team/give-creature for gift NPCs"
   },
   "backend/03-spawner-system": {
     "docPath": "docs/backend/03-spawner-system.md",
@@ -93,7 +98,9 @@
         "Game/CR.Game.Model/Spawner/AbilityProgressionSetEntry.cs",
         "Spawner/CR.Spawner.Data.Migration/M5019AddUnlockQuestToAbilityProgressionSetEntry.cs",
         "Creatures/CR.Creatures.Data.Migration/M10017SeedAbilitySoundKeys.cs",
-        "Game/CR.Game.Service.BFF/Endpoints/CreatureBatchEndpoints.cs"
+        "Game/CR.Game.Service.BFF/Endpoints/CreatureBatchEndpoints.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/WildCreatureEndpoints.cs",
+        "Spawner/CR.Spawner.Data/Implementation/BaseCreatureSpawnerTemplateRepository.cs"
       ],
       "cr-data": []
     },
@@ -139,7 +146,12 @@
         "Quests/CR.Quests.Data.Migration/M7018AddObjectiveTargetLists.cs",
         "Quests/CR.Quests.Data/Enums/QuestGrantMode.cs",
         "Quests/CR.Quests.Data/Enums/QuestRewardClaimMode.cs",
-        "Quests/CR.Quests.Data/Model/QuestObjectiveTargets.cs"
+        "Quests/CR.Quests.Data/Model/QuestObjectiveTargets.cs",
+        "Quests/CR.Quests.Data.Migration/M17001AddCategoryToQuestTemplate.cs",
+        "Quests/CR.Quests.Data.Migration/M17002BackfillQuestCategories.cs",
+        "Quests/CR.Quests.Data.Migration/M17003AddAreaKeyToQuestTemplate.cs",
+        "Quests/CR.Quests.Data/Enums/QuestCategory.cs",
+        "Quests/CR.Quests.Data/Extensions/QuestCategoryExtensions.cs"
       ],
       "cr-data": [
         "Assets/CR/Core/Data/Logic/QuestObjectiveValidation.cs",
@@ -151,7 +163,8 @@
         "Assets/CR/UI/Logic/Tests/QuestTracker*.cs",
         "Assets/CR/UI/Logic/QuestTracker*.cs",
         "Assets/CR/UI/Quests/QuestTrackerPresenter.cs",
-        "Assets/CR/Quests/**/*.cs"
+        "Assets/CR/Quests/**/*.cs",
+        "Assets/CR/Core/Data/Logic/QuestAreaKeys.cs"
       ]
     },
     "description": "Quest system: templates, objectives, rewards, instances, progress events, requirements, condition evaluation; grant mode / reward claim mode (M7017), AcceptQuestAsync restarts an abandoned/failed instance, content:write on template PUT/DELETE, objectives upserted by sort_order and the re-parenting risk"
@@ -227,14 +240,16 @@
         "Assets/Scripts/**/*NpcMerchantBehaviour*.cs",
         "Assets/CR/Game/World/Behaviours/NpcDialogueBehaviour.cs",
         "Assets/CR/Game/World/Behaviours/NpcInteractionBehaviour.cs",
+        "Assets/CR/Game/World/Behaviours/NpcCreatureGrantBehaviour.cs",
         "Assets/CR/Game/World/Behaviours/NpcInteractionIndicator.cs",
         "Assets/CR/Game/World/Behaviours/NpcInteractionRouting.cs",
         "Assets/CR/Game/World/Behaviours/NpcInteractionRoute.cs",
         "Assets/CR/Game/World/Behaviours/NpcTrainerBarkPolicy.cs",
-        "Assets/CR/Game/World/Behaviours/DialogueBackend.cs"
+        "Assets/CR/Game/World/Behaviours/DialogueBackend.cs",
+        "Assets/CR/Npcs/Gift/**/*.cs"
       ]
     },
-    "description": "Composable NPC interaction: NpcInteractionBehaviour dispatch, NpcBattleRequest, OnBattleRequested event, grant vs battle vs merchant vs dialogue flow; two dialogue backends (Plugin/Cr) and NpcInteractionRouting's pure decision table, trainer bark gating on DialogueOutcome.Completed"
+    "description": "Composable NPC interaction: NpcInteractionBehaviour dispatch, NpcBattleRequest, OnBattleRequested event, grant vs battle vs merchant vs dialogue flow; two dialogue backends (Plugin/Cr) and NpcInteractionRouting's pure decision table, trainer bark gating on DialogueOutcome.Completed; GiveCreatureAsync now calls the receive-gift intent (INpcGiftService), not INpcWorldRepository"
   },
   "unity/05-http-clients": {
     "docPath": "docs/unity/05-http-clients.md",
@@ -405,7 +420,16 @@
         "Assets/CR/Core/Sync/Logic/CacheScope.cs",
         "Assets/CR/Core/Data/Cache/PlayerStateCache.cs",
         "Assets/CR/Npcs/Runtime/Merchant/Logic/NpcMerchantOnlineOfflineService.cs",
-        "Assets/CR/Npcs/Runtime/Repository/Implementation/NpcOnlineOfflineRepository.cs"
+        "Assets/CR/Npcs/Runtime/Repository/Implementation/NpcOnlineOfflineRepository.cs",
+        "Assets/CR/Core/Data/Repository/Implementation/TrainerInventoryRepositories/TrainerInventoryOnlineRepository.cs",
+        "Assets/CR/Core/Data/Repository/Implementation/Creatures/GeneratedCreatureRepositories/GeneratedCreatureOnlineRepository.cs",
+        "Assets/CR/Core/Data/Repository/Implementation/TrainerItemInventoryRepositories/TrainerItemInventoryOnlineRepository.cs",
+        "Assets/CR/Core/Session/AccountBootstrapper.cs"
+      ],
+      "cr-api": [
+        "Trainers/CR.Trainers.Data/Interface/ITrainerInventoryRepository.cs",
+        "Trainers/CR.Trainers.Data/Implementation/BaseTrainerInventoryRepository.cs",
+        "Trainers/CR.Trainers.Data.Sqlite.Test/TrainerInventoryRepositoryMirrorTests.cs"
       ]
     },
     "description": "IDomainSync pattern: BattleSync (SOAP bridge via events), TeamSync (world-scoped team cache), InventorySync (world-scoped backpack cache), Zenject bindings; cache-first policy: content (pickup/achievement defs, quest templates) local-first with server on content_key miss, terminal player state (collected pickups, unlocks, completed quests, trainer defeats) local-first with session-once server reconcile, in-progress state server-when-online"
@@ -544,7 +568,13 @@
         "Assets/CR/Game/World/Editor/AbilityEditorSyncHelper.cs",
         "Assets/CR/Game/World/Editor/QuestEditorSyncHelper.cs",
         "Assets/CR/Game/World/Logic/SyncFieldMerge.cs",
-        "Assets/CR/Core/Data/Editor/StudioAuthPanel.cs",
+        "Assets/CR/Core/Data/Editor/StudioConfigurationPanel*.cs",
+        "Assets/CR/Core/Data/Logic/ServerKeys*.cs",
+        "Assets/CR/Core/Data/Logic/ActiveKeyCheck.cs",
+        "Assets/CR/Core/Data/Logic/BackendKeyVault.cs",
+        "Assets/CR/Core/Data/Logic/AdminAuthGate.cs",
+        "Assets/CR/Core/Data/Logic/Tests/ServerKeys*Tests.cs",
+        "Assets/CR/Core/Data/Logic/Tests/ActiveKeyCheckTests.cs",
         "Assets/CR/Game/World/Editor/EditorServiceAuth.cs",
         "Assets/CR/Core/Data/Logic/EditorAuthStatus.cs",
         "Assets/CR/Core/Data/Registry/Definitions/BattleMissionDefinition.cs",
@@ -689,7 +719,8 @@
         "Game/CR.Game.Model/Npcs/PurchaseResult.cs",
         "Game/CR.Game.Model/Npcs/SellResult.cs",
         "Npcs/CR.Npcs.Domain.Services/Implementation/NpcMerchantService.cs",
-        "Quests/CR.Quests.Domain.Services/Implementation/QuestDomainService.cs"
+        "Quests/CR.Quests.Domain.Services/Implementation/QuestDomainService.cs",
+        "Npcs/CR.Npcs.Data/Implementation/BaseNpcInventoryRepository.cs"
       ],
       "cr-data": [
         "Assets/CR/Core/Data/Repository/Implementation/TrainerRepositories/TrainerOnlineOfflineRepository.cs",
@@ -732,16 +763,19 @@
         "Game/CR.Game.Service.BFF/Endpoints/CreatureStatusEndpoints.cs",
         "Game/CR.Game.Domain.Services/Implementation/Item/ItemUseDomainService.cs",
         "Items/CR.Items.Data.Migration/M6020SeedCreatureConsumables.cs",
-        "Items/CR.Items.Data.Migration/M6022BackfillItemIconAssetKey.cs"
+        "Items/CR.Items.Data.Migration/M6022BackfillItemIconAssetKey.cs",
+        "Trainers/CR.Trainers.Service.REST/Endpoints/TrainerCreatureIntentEndpoints.cs"
       ],
       "cr-data": [
         "Assets/CR/Core/Data/Repository/GameConfigurationKeys.cs",
         "Assets/CR/UI/PlayerMenuWindow.cs",
         "Assets/CR/UI/PlayerTeamView.cs",
         "Assets/CR/UI/BagScreenHandler.cs",
+        "Assets/CR/Trainers/Inventory/**/*.cs",
         "Assets/CR/UI/BagScreen.uss",
         "Assets/CR/UI/Quests/**/*.cs",
-        "Assets/CR/UI/Journal/**/*.cs",
+        "Assets/CR/UI/Achievements/**/*.cs",
+        "Assets/CR/UI/Resources/AchievementsView.uss",
         "Assets/CR/UI/Logic/**/*.cs",
         "Assets/CR/UI/PlayerInputGate.cs",
         "Assets/CR/UI/Input/**/*.cs",
@@ -762,10 +796,14 @@
         "Assets/CR/UI/Logic/SpeciesInfo.cs",
         "Assets/CR/UI/Logic/StatusBadge.cs",
         "Assets/CR/Content/Defs/Items/*.asset",
-        "Assets/CR/Quests/NpcDisplayNameResolver.cs"
+        "Assets/CR/Quests/NpcDisplayNameResolver.cs",
+        "Assets/CR/UI/WorldMap/WorldMapTab.cs",
+        "Assets/CR/UI/Logic/QuestCategory*.cs",
+        "Assets/CR/UI/Logic/QuestJournalGroup*.cs",
+        "Assets/CR/UI/Theme/CrTheme.uss"
       ]
     },
-    "description": "Player menu UI: 5-tab overlay (Team/Bag/Quests/Journal/System) wired to real domain data — PlayerTeamView squad sheet, BagScreenHandler backpack with BagItemPolicy filtering, QuestJournalView active/completed quests, JournalView achievements + stat records, CR.UI.Logic pure rules, input wiring via UICoordinator; Quests tab 'Return to {giver}' status for a ReturnToGiver quest awaiting the player"
+    "description": "Player menu UI: 8-tab overlay (Team/Bag/Storage/Quests/Map/Talents/Achievements/System) wired to real domain data — PlayerTeamView squad sheet, BagScreenHandler backpack with BagItemPolicy filtering, QuestJournalView active/completed quests, AchievementsView rail (Summary/categories/Statistics) over AchievementBoardProjection, CR.UI.Logic pure rules, input wiring via UICoordinator; Quests tab 'Return to {giver}' status for a ReturnToGiver quest awaiting the player"
   },
   "backend/09-battle-persistence": {
     "docPath": "docs/backend/09-battle-persistence.md",
@@ -779,8 +817,7 @@
         "Game/CR.Game.Data/Implementation/BaseBattleMissionTemplateRepository.cs",
         "Game/CR.Game.Data/Model/BattleMissionTemplateUpsertRequest.cs",
         "Game/CR.Game.Data/Validation/BattleMissionTemplateValidation.cs",
-        "Game/CR.Game.Data/Constants/BattleMissionTypes.cs",
-        "Game/CR.Game.Data/Constants/BattleMissionRewardTypes.cs",
+        "Game/CR.Game.Data.Migration/M20001AddGuaranteedCaptureReadyToBattle.cs",
         "Game/CR.Game.Service.BFF/Endpoints/BattleMissionTemplateEndpoints.cs",
         "Game/CR.Game.Data.Test/BattleMissionTemplateValidationTests.cs",
         "Game/CR.Game.Data.Postgres.Test/BattleMissionTemplateRepositoryPostgresTests.cs",
@@ -845,14 +882,19 @@
         "Convenience/CR.Data.Migrations.Test/ElementalReactionTableSeedSqliteTests.cs",
         "Convenience/CR.Data.Migrations.Test/ReactionReachabilitySqliteTests.cs",
         "Convenience/CR.Api.IntegrationTests/ElementalReactionHttpTests.cs",
-        "Convenience/CR.Api.IntegrationTests/ElementalDamageHttpTests.cs"
+        "Convenience/CR.Api.IntegrationTests/ElementalDamageHttpTests.cs",
+        "Game/CR.Game.Data.Migration/M16003AddBattleKnockOutAndOwedSwap.cs",
+        "Game/CR.Game.Model/Battle/BattleRecord.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Creature/TeamHealService.cs"
       ],
       "cr-data": [
         "Assets/CR/Game/Battle/BattleHttpDomainAdapter.cs",
-        "Assets/CR/Game/Battle/OnlineOfflineBattleDomainService.cs"
+        "Assets/CR/Game/Battle/OnlineOfflineBattleDomainService.cs",
+        "Assets/CR/Game/Battle/Missions/BattleMissionConductor.cs",
+        "Assets/CR/Game/Battle/BattleCoordinator.cs"
       ]
     },
-    "description": "Battle DB tables (battle with active creature IDs, battle_round, battle_round_input, battle_action_log), persistent HP/conditions on generated_creature_current_stats + generated_creature_status_conditions, IBattleRepository, IGeneratedCreatureRepository, BattleDomainService, BattleHttpDomainAdapter, REST endpoints, DI wiring, ability progression, animation_key + VFX/SFX keys on abilities; trainer battles (battle_type Wild/Trainer, minted battle trainer via npcs.battle_trainer_id, run refused without turn cost, heal-on-start, 1.5x XP / 2x currency, TrainerBattleAIDomainService swap→heal→attack, opponent_content_key M8017, M10020 Meadow demo trainer); elemental reactions as authored content (elemental_reaction table M12006, IElementalReactionRepository, /api/v1/elemental-reactions, resolver injection + ActionOutcome.ReactionLogLine) and the versioned elemental_damage matrix (/api/v1/elemental-damage, active-version pointer honoured with a has-rows fallback, M12007 Radiant self-multiplier fix + DECIMAL(4,2) widening)"
+    "description": "Battle DB tables (battle with active creature IDs, mission_state, guaranteed_capture_ready, battle_round, battle_round_input, battle_action_log), persistent HP/conditions on generated_creature_current_stats + generated_creature_status_conditions, IBattleRepository, IGeneratedCreatureRepository, BattleDomainService, BattleHttpDomainAdapter, REST endpoints, DI wiring, ability progression, animation_key + VFX/SFX keys on abilities; trainer battles (battle_type Wild/Trainer, minted battle trainer via npcs.battle_trainer_id, run refused without turn cost, heal-on-start, 1.5x XP / 2x currency, TrainerBattleAIDomainService swap→heal→attack, opponent_content_key M8017, M10020 Meadow demo trainer); elemental reactions as authored content (elemental_reaction table M12006, IElementalReactionRepository, /api/v1/elemental-reactions, resolver injection + ActionOutcome.ReactionLogLine) and the versioned elemental_damage matrix (/api/v1/elemental-damage, active-version pointer honoured with a has-rows fallback, M12007 Radiant self-multiplier fix + DECIMAL(4,2) widening); server-tracked battle missions (#1 C2) and the capture-mission pool (#7, M20001) — see backend/26-capture-missions"
   },
   "unity/11-dialogue-integration": {
     "docPath": "docs/unity/11-dialogue-integration.md",
@@ -906,7 +948,8 @@
         "Assets/CR/Content/Defs/Items/*.asset",
         "Assets/CR/Content/Defs/StatusConditions/*.asset",
         "Assets/CR/Core/Data/Registry/Definitions/DialogueDefinition.cs",
-        "Assets/CR/Content/Defs/Dialogues/*.asset"
+        "Assets/CR/Content/Defs/Dialogues/*.asset",
+        "Assets/CR/Core/Data/Editor/QuestDefinitionEditor.cs"
       ]
     },
     "description": "All ScriptableObject types: what each does, every field, which sync to the backend and via which endpoint, ContentDefinitionProvider registry wiring, BattleCameraProfile cinematic-camera feel SO, CreatureReactionProfile shared body-reaction SO (animation+cry+feedback per beat, baseProfile inheritance/override for evolutions, Resolve() flatten; referenced by CreatureDefinition.reactionProfile; offensive VFX comes from AbilityConfig), Dialogue Database note, ElementalReactionDefinition (primer condition + detonator element -> multiplier/applied condition, snake_case content key, seed-migration export) and ElementalDamageMatrixConfig (one asset per matrix version, 100 completed cells, isActive mirrors battle_system_version); DialogueDefinition SO (id rule, hidden documentJson), QuestDefinition gains grantMode/rewardClaimMode and loses conversationTitle/conversationId, ContentDefinitionProvider.quests/dialogues corrected"
@@ -945,7 +988,9 @@
         "Items/CR.Items.Data.Migration/M6006AddCaptureModifierToItem.cs",
         "Items/CR.Items.Data.Migration/M6007SeedCaptureCrystals.cs",
         "Game/CR.Game.Model/Items/BaseItem.cs",
-        "Game/CR.Game.Domain.Services/Implementation/Item/CaptureChanceCalculator.cs"
+        "Game/CR.Game.Domain.Services/Implementation/Item/CaptureChanceCalculator.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Item/CaptureAttemptService.cs",
+        "Creatures/CR.Creatures.Data/Interface/ICreatureCaptureClaim.cs"
       ],
       "cr-data": [
         "Assets/CR/Game/Battle/Events/BattleEvents.cs",
@@ -954,7 +999,8 @@
         "Assets/CR/Core/Data/Repository/GameConfigurationKeys.cs",
         "Assets/CR/Game/Battle/Offline/OfflineItemUseService.cs",
         "Assets/CR/UI/Battle/BattleBagPanelHandler.cs",
-        "Assets/CR/UI/Battle/BattleHUD.cs"
+        "Assets/CR/UI/Battle/BattleHUD.cs",
+        "Assets/CR/Core/DI/ServerAuthorityBindingsExtensions.cs"
       ]
     },
     "description": "Capture crystal tiers (Shard/Standard/Fine/Radiant), capture formula, capture_modifier property, Backend IItemEffectHandler wiring, BattleEvents.RaiseCreatureCaptured, USS visual indicators; shared CaptureChanceCalculator + OfflineItemUseService capture mirror + opponent-id resolution from battle record"
@@ -1046,7 +1092,12 @@
         "Pickups/**/*.cs",
         "Game/CR.Game.Service.BFF/Endpoints/PickupEndpoints.cs"
       ],
-      "cr-data": []
+      "cr-data": [
+        "Assets/CR/Core/Data/Logic/PickupPlacementScan.cs",
+        "Assets/CR/Core/Data/Editor/Pickups/*.cs",
+        "Assets/CR/Game/World/Editor/PickupPlacementEditorSyncHelper.cs",
+        "Assets/CR/Core/Data/Editor/ContentStudioTool.PickupPlacements.cs"
+      ]
     },
     "description": "World pickups: pickup_definition (rewards JSON) + pickup_collected (per-trainer, revive-on-write upsert), one-time persistent grants, consumer-routed Quest rewards, M7200-M7202"
   },
@@ -1055,26 +1106,37 @@
     "repos": {
       "cr-api": [
         "Achievements/**/*.cs",
+        "Game/CR.Game.Model/Achievements/**/*.cs",
+        "Game/CR.Game.Model/Progression/TrainerXpAward.cs",
+        "Game/CR.Game.Model/Progression/TrainerXpSource.cs",
+        "Game/CR.Game.Model/Progression/TrainerXpSourceExtensions.cs",
+        "Moderation/CR.Moderation.Domain.Services/Implementation/ModerationService.cs",
+        "Moderation/CR.Moderation.Domain.Services/Interfaces/IModerationService.cs",
+        "Moderation/CR.Moderation.Model.REST/AdminActionKind.cs",
+        "Moderation/CR.Moderation.Model.REST/EarnedAchievementSummary.cs",
+        "Moderation/CR.Moderation.Model.REST/TrainerAchievements.cs",
+        "Moderation/CR.Moderation.Model.REST/TrainerDossier.cs",
         "Quests/CR.Quests.Domain.Services/Interface/QuestProgressResult.cs",
         "Quests/CR.Quests.Domain.Services/Interface/QuestClaimResult.cs",
-        "Quests/CR.Quests.Domain.Services/Implementation/AchievementTriggerMapper.cs"
+        "Quests/CR.Quests.Domain.Services/Implementation/ProgressDispatcher.cs",
+        "Quests/CR.Quests.Domain.Services/Extensions/ProgressOutcomeQuestFactsExtensions.cs"
       ],
       "cr-data": [
         "Assets/CR/Core/Notifications/Adapters/QuestGrantToastAdapter.cs",
         "Assets/CR/Core/Notifications/ToastRequest.cs",
         "Assets/CR/Quests/Manager/QuestManager.cs",
         "Assets/CR/Quests/Manager/IQuestService.cs",
-        "Assets/CR/Achievements/IAchievementService.cs",
-        "Assets/CR/Achievements/AchievementService.cs",
+        "Assets/CR/Achievements/**/*.cs",
         "Assets/CR/Progression/IProgressionNotifier.cs",
         "Assets/CR/Core/Notifications/INotificationService.cs",
         "Assets/CR/Core/Notifications/NotificationService.cs",
-        "Assets/CR/Journal/IJournalService.cs",
         "Assets/CR/UI/Achievements/**/*.cs",
+        "Assets/CR/UI/Logic/Achievement*.cs",
+        "Assets/CR/Core/Data/Logic/Achievement*Read.cs",
         "Assets/CR/Game/World/Behaviours/LocationTriggerBehaviour.cs"
       ]
     },
-    "description": "Achievements: achievement_definition + achievement_reward (child) content + achievement_unlocked (per-trainer, did-I-win-the-insert upsert), Stats-driven threshold eval rides the quest funnel via optional IAchievementDomainService, QuestProgressResult.NewlyUnlocked, M7300-M7303 + M9993 content bump; Unity toast + LocationTriggerBehaviour"
+    "description": "Achievements v2: achievement_category + achievement_definition (category/points/sort_order/required_criteria_count) + achievement_criterion (child, AchievementCriterionType 0-16) + achievement_reward (child) content + achievement_unlocked (per-trainer, did-I-win-the-insert upsert); IAchievementEvaluator (CR.Game.Model) evaluate-all-unearned + meta chains, points paid as TrainerXpSource.AchievementEarned; PUT /achievements/bulk content push + validation, GET .../achievements/board, admin grant/revoke (AdminActionKind 19/20) + dossier TrainerAchievements; M18001-M18007; Unity IAchievementService online/offline board router (CacheScope.AchievementBoard), toast points shield, Achievements tab, cr-admin-web achievement-categories/achievements resources + dossier grant/revoke UI"
   },
   "unity/19-account-mode-startup": {
     "docPath": "docs/unity/19-account-mode-startup.md",
@@ -1097,7 +1159,9 @@
         "Assets/CR/UI/Resources/MainMenu.uxml",
         "Assets/main-menu.uss",
         "Assets/CR/UI/Common/UiFocusRecovery.cs",
-        "Assets/CR/UI/Logic/**"
+        "Assets/CR/UI/Logic/**",
+        "Assets/CR/Core/Data/Logic/OnlineSessionIdentity.cs",
+        "Assets/CR/UI/CharacterSelectController.cs"
       ]
     },
     "description": "Mode-gated account/startup: one device-bound account, boot-time EnsureLocalAccountAsync (mode-neutral) so an account always exists, mode-first menu (Continue/Play Online/Play Offline) via the existing MainMenuController (IUIScreen 'MainMenu'), connectivity-gated online entry via IConnectivityProbe (reuses version-check), no reconciliation between offline/online worlds, characters mode-locked via IsOnlineTrainer; supporting fixes: ByteArrayTypeHandler + M0008NormalizeEmptySalt for legacy salt rows, NpcMerchantService NotifyBackpackChanged post-commit so InventorySync refreshes"
@@ -1293,7 +1357,9 @@
         "Assets/CR/Core/Data/Editor/BattleMissionSeedMigrationExporter.cs",
         "Assets/CR/Game/Battle/Missions/BattleMissionTemplateRoutedSource.cs",
         "Assets/CR/Core/DI/LocalDevGameInstaller.cs",
-        "Assets/CR/Game/World/Behaviours/DialogueWorldBehaviour.cs"
+        "Assets/CR/Game/World/Behaviours/DialogueWorldBehaviour.cs",
+        "Assets/CR/Core/Data/Editor/Pickups/*.cs",
+        "Assets/CR/Core/Data/Editor/Build/PickupPlacementPipelineCommands.cs"
       ]
     },
     "description": "Runtime content pull-through cache: ServerContentSyncService fetch+paging, ContentSyncWriter SQL rules (no id rewrites, lowercase GUIDs, named-column upserts, derived junction ids, per-domain transactions), ContentSyncReport version-recording rule, deletion safety, and the dotnet round-trip tests."
@@ -1308,11 +1374,14 @@
         "Game/CR.Game.Domain.Services/Models/TeamSlotEntry.cs",
         "Game/CR.Game.Domain.Services.Test/Creature/TeamSlotsTests.cs",
         "Game/CR.Game.Model/Spawner/AbilityProgressionSetEntry.cs",
-        "Spawner/CR.Spawner.Data.Migration/M5019AddUnlockQuestToAbilityProgressionSetEntry.cs"
+        "Spawner/CR.Spawner.Data.Migration/M5019AddUnlockQuestToAbilityProgressionSetEntry.cs",
+        "Trainers/CR.Trainers.Service.REST/Endpoints/TrainerCreatureIntentEndpoints.cs"
       ],
       "cr-data": [
         "Assets/CR/UI/Storage/Logic/**/*.cs",
         "Assets/CR/UI/PlayerStorageView.cs",
+        "Assets/CR/UI/PlayerTeamView.cs",
+        "Assets/CR/Trainers/Inventory/**/*.cs",
         "Assets/CR/UI/PlayerMenuWindow.cs",
         "Assets/CR/UI/Resources/PlayerMenuWindow.uxml",
         "Assets/CR/UI/Resources/PlayerMenuWindow.uss",
@@ -1404,7 +1473,7 @@
       ],
       "cr-data": []
     },
-    "description": "Personal API keys: account_api_key table (M0014, global VersionInfo namespace), IAccountApiKeyRepository, /account/keys + /api/v1/admin/accounts/{accountId}/keys routes, personal-key branch of POST /auth/service-token, scopes resolved from roles at exchange time, AdminActionKind.RevokeApiKey. cr-admin-web is not a tracked repo in this file — Studio web lives at src/pages/account/** (your account (header) -> API keys), src/api/hooks/useApiKeys.ts, src/pages/system/ApiKeysPanel.tsx (System -> Accounts panel). Unity: SYSTEM -> Configuration -> environment card -> Key row (see unity/08-content-registry)."
+    "description": "Personal API keys: account_api_key table (M0014, global VersionInfo namespace), IAccountApiKeyRepository, /account/keys + /api/v1/admin/accounts/{accountId}/keys routes, personal-key branch of POST /auth/service-token, scopes resolved from roles at exchange time, AdminActionKind.RevokeApiKey. cr-admin-web is not a tracked repo in this file — Studio web lives at src/pages/account/** (your account (header) -> API keys), src/api/hooks/useApiKeys.ts, src/pages/system/ApiKeysPanel.tsx (System -> Accounts panel). Unity: SYSTEM -> Server & Keys -> environment card -> Your key for this server -> Personal API key row (see unity/08-content-registry)."
   },
   "unity/28-creature-market": {
     "docPath": "docs/unity/28-creature-market.md",
@@ -1440,7 +1509,8 @@
         "Convenience/CR.Api.IntegrationTests/CreatureStatusEndpointsHttpTests.cs",
         "Items/CR.Items.Data.Migration/M6022BackfillItemIconAssetKey.cs",
         "Creatures/CR.Creatures.Data.Migration/M12013BackfillContentIconAssetKey.cs",
-        "Convenience/CR.Data.Migrations.Test/IconAssetKeyRoundTripSqliteTests.cs"
+        "Convenience/CR.Data.Migrations.Test/IconAssetKeyRoundTripSqliteTests.cs",
+        "Trainers/CR.Trainers.Data/Interface/IItemEntryGuardedWrites.cs"
       ],
       "cr-data": [
         "Assets/CR/Game/Battle/Offline/OfflineItemUseService.cs",
@@ -1622,9 +1692,221 @@
         "Assets/CR/UI/Common/MessageDialog.cs",
         "Assets/CR/Tests/Editor/CrThemeTests.cs",
         "Assets/CR/UI/Panel Settings.asset",
-        "Assets/CR/Resources/Evolution/EvolutionPanelSettings.asset"
+        "Assets/CR/Resources/Evolution/EvolutionPanelSettings.asset",
+        "Assets/CR/UI/Resources/WorldMapTab.uss",
+        "Assets/CR/UI/Resources/AchievementsView.uss"
       ]
     },
-    "description": "Global UI theme: CrTheme.tss on both runtime PanelSettings, CrTheme.uss design tokens (paper/glass/hud/accent/status colours, font/radius/spacing scales), shared .cr-window/.cr-scrim/.cr-hud-card classes, ScaledWindow USS-driven frame sizing under UI Scale, CrThemeTests guard"
+    "description": "Global UI theme: CrTheme.tss on both runtime PanelSettings, CrTheme.uss design tokens (paper/glass/hud/accent/status colours, font/radius/spacing scales, --cr-achievement-* points shield/row/bar/criterion tokens), shared .cr-window/.cr-scrim/.cr-hud-card classes, ScaledWindow USS-driven frame sizing under UI Scale, CrThemeTests guard"
+  },
+  "backend/22-trainer-progression": {
+    "docPath": "docs/backend/22-trainer-progression.md",
+    "repos": {
+      "cr-api": [
+        "Talents/**/*.cs",
+        "Talents/**/*.csproj",
+        "Game/CR.Game.Model/Progression/**/*.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Item/CaptureAttemptService.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Reward/RewardGrantService.cs",
+        "Quests/CR.Quests.Domain.Services/Implementation/ConditionEvaluator.cs",
+        "Convenience/CR.Api.IntegrationTests/TrainerProgressionHttpTests.cs",
+        "Convenience/CR.REST.AIO/TalentDatabaseFallbackExtensions.cs",
+        "Convenience/CR.Data.Migrations.Test/TalentSeedSample/**/*.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Battle/BattleDomainService.cs",
+        "Pickups/CR.Pickups.Domain.Services/Implementation/PickupDomainService.cs"
+      ],
+      "cr-data": []
+    },
+    "description": "Trainer progression: Talents domain (world_location, trainer_level_requirement, trainer_xp_rule, trainer_location_discovery ledger, M15001-M15003 + M15010-M15011), the XP funnel and sources, derived level readers, trainerProgress on results, routes, admin XP grant, floor seed, TalentDatabase connection string (falls back to StatDatabase); location discovery XP/quest and the ledger gate now live in backend/24-location-discoveries"
+  },
+  "backend/24-location-discoveries": {
+    "docPath": "docs/backend/24-location-discoveries.md",
+    "repos": {
+      "cr-api": [
+        "Talents/**/*Discovery*.cs",
+        "Talents/CR.Talents.Data.Migration/M15010AddWorldLocationDiscoveryRewards.cs",
+        "Talents/CR.Talents.Data.Migration/M15011CreateTrainerLocationDiscoveryTable.cs",
+        "Game/CR.Game.Model/Exploration/**/*.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Exploration/**/*.cs",
+        "Game/CR.Game.Domain.Services/Interfaces/Exploration/**/*.cs",
+        "Game/CR.Game.Domain.Services/Models/Exploration/**/*.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/WorldLocationEntryEndpoints.cs",
+        "Convenience/CR.Api.IntegrationTests/WorldLocationEntryHttpTests.cs"
+      ],
+      "cr-data": [
+        "Assets/CR/Progression/Discovery/**/*.cs",
+        "Assets/CR/Progression/WorldMapDiscoveryReader.cs",
+        "Assets/CR/Core/Data/Editor/TrainerProgression/WorldLocationEntryDrawer.cs",
+        "Assets/CR/Core/Data/Logic/WorldLocationTuningSync.cs",
+        "Assets/CR/Core/Data/Logic/LocationDiscoveryAudit.cs"
+      ]
+    },
+    "description": "Location Discoveries v2: world_location discovery_xp/discovery_quest_key (M15010), trainer_location_discovery ledger (M15011), WorldLocationDiscoveryService, the LocationEntryService orchestrator, discovery quest grant (GrantQuestAsync Created flag), enter/discoveries routes, idempotency table, VisitLocation forwarding, Unity discovery router/registry/toast, WorldMapDiscoveryReader (P2), Studio pull/drift and content audit rules"
+  },
+  "backend/23-progress-dispatcher": {
+    "docPath": "docs/backend/23-progress-dispatcher.md",
+    "repos": {
+      "cr-api": [
+        "Game/CR.Game.Model/Progression/Progress*.cs",
+        "Game/CR.Game.Model/Progression/IProgressOutcome*.cs",
+        "Game/CR.Game.Model/Achievements/*.cs",
+        "Game/CR.Game.Model/Npcs/*Talk*.cs",
+        "Quests/CR.Quests.Domain.Services/Implementation/ProgressDispatcher.cs",
+        "Quests/CR.Quests.Domain.Services/Implementation/LifetimeStatProjector.cs",
+        "Quests/CR.Quests.Domain.Services/Implementation/QuestObjectiveProjector.cs",
+        "Quests/CR.Quests.Domain.Services/Implementation/ProgressOutcomeObjectiveMap.cs",
+        "Quests/CR.Quests.Domain.Services/Implementation/TriggerAchievementStep.cs",
+        "Quests/CR.Quests.Domain.Services/Implementation/QuestProgressCompat.cs",
+        "Quests/CR.Quests.Data.Migration/M16004CreateQuestObjectiveCountedRef.cs",
+        "Npcs/CR.Npcs.Domain.Services/Implementation/NpcTalkService.cs",
+        "Npcs/CR.Npcs.Service.REST/Endpoints/NpcTalkEndpoints.cs",
+        "Stats/CR.Stats.Domain.Services.Test/StatWriterRegistryTests.cs"
+      ],
+      "cr-data": [
+        "Assets/CR/Core/DI/ProgressBindings.cs",
+        "Assets/CR/Npcs/Talk/*.cs",
+        "Assets/CR/Quests/Manager/QuestManager.cs",
+        "Assets/CR/Game/Battle/OnlineOfflineItemDomainService.cs"
+      ]
+    },
+    "description": "Server-authority phase B: the progress dispatcher (outcomes → lifetime stats, quest objectives, completion, achievements), producers, counted-ref table M16004, talk intent, compat /quests/progress, the stat-writer registry, Unity ApplyServerProgress"
+  },
+  "unity/34-trainer-progression": {
+    "docPath": "docs/unity/34-trainer-progression.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [
+        "Assets/CR/Progression/**/*.cs",
+        "Assets/CR/Core/Notifications/Adapters/TrainerLevelUpToastAdapter.cs",
+        "Assets/CR/Core/Data/Editor/TrainerProgression/**/*.cs",
+        "Assets/CR/Core/Data/Editor/ContentStudioTool.TrainerProgression.cs",
+        "Assets/CR/Core/Data/Editor/Build/TrainerProgressionPipelineCommands.cs",
+        "Assets/CR/Core/Data/Logic/WorldLocation*.cs",
+        "Assets/CR/Core/Data/Logic/TalentContentSeedMigrationGenerator.cs",
+        "Assets/CR/Core/Data/Registry/Definitions/WorldLocationCatalog.cs",
+        "Assets/CR/Game/World/Editor/TrainerProgressionEditorSyncHelper.cs",
+        "Assets/CR/UI/PlayerTeamView.cs"
+      ]
+    },
+    "description": "Unity trainer progression: DLL bindings, trainerProgress reporting + level-up toast, TrainerProgress cache scope and reader, XP bar, Studio Trainer Progression tab (scan/push/export/pull), CLI commands, location-discovery router/registry/toast and the world-map discovery reader (see backend/24-location-discoveries)"
+  },
+  "unity/35-world-map": {
+    "docPath": "docs/unity/35-world-map.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [
+        "Assets/CR/UI/WorldMap/**",
+        "Assets/CR/UI/Resources/WorldMapTab.uss",
+        "Assets/CR/Core/Data/Registry/Definitions/WorldMapDefinition.cs",
+        "Assets/CR/Core/Data/Logic/WorldMap*.cs",
+        "Assets/CR/Core/Data/Logic/AreaSceneContentScan.cs",
+        "Assets/CR/Core/Data/Editor/WorldMapDefinitionEditor.cs",
+        "Assets/CR/Core/Data/Editor/TrainerProgression/WorldMapTools.cs",
+        "Assets/CR/Progression/*WorldMapDiscoveryReader.cs",
+        "Assets/CR/Content/Defs/WorldMap/**"
+      ]
+    },
+    "description": "World map: client-only WorldMapDefinition (nodes, routes, art addresses, unknown-area switch), Studio scan/validate/fix tooling and CLI, CR.UI.WorldMap.Logic (state builder, layout, navigator, quest targets), the player menu Map tab and canvas, the discovery reader seam (P2: real WorldMapDiscoveryReader over the shared LocationDiscoveries cache)"
+  },
+  "unity/36-talents-ui": {
+    "docPath": "docs/unity/36-talents-ui.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [
+        "Assets/CR/UI/Talents/**",
+        "Assets/CR/UI/Resources/TalentsTab.uss",
+        "Assets/CR/Core/Data/Registry/Definitions/TalentTreeDefinition.cs",
+        "Assets/CR/Core/Data/Registry/Definitions/TalentEntry.cs",
+        "Assets/CR/Core/Data/Registry/Definitions/TalentEffectEntry.cs",
+        "Assets/CR/Core/Data/Editor/TalentTreeDefinitionEditor.cs",
+        "Assets/CR/Core/Data/Logic/Talent*.cs",
+        "Assets/CR/Progression/*Talent*",
+        "Assets/CR/Content/Defs/Talents/**",
+        "Assets/CR/Game/World/Editor/TalentTreeEditorSyncHelper.cs",
+        "Assets/CR/Progression/TrainerModifierApplier.cs",
+        "Assets/CR/Core/Movement/Runtime/TrainerMoveSpeedLogic.cs"
+      ]
+    },
+    "description": "Talents UI (Phase 2 Unity lane): TalentTreeDefinition authoring SO + custom inspector calling cr-api's real TalentTreeValidation, Studio push/export + CLI, the three starter trees, the Talents tab (TalentNodeStateBuilder over the real TalentRules/TrainerProgress), ITalentProgressReader/ITalentActions wired to the real server/offline TalentService (TalentOnlineOfflineRouter, TalentClientUnityHttp); movement-speed is a real client-applied effect (TrainerModifierApplier + TrainerMoveSpeedLogic pushing MalbersMovementController.SetSpeed)"
+  },
+  "backend/25-talents": {
+    "docPath": "docs/backend/25-talents.md",
+    "repos": {
+      "cr-api": [
+        "Talents/**/*.cs",
+        "Talents/**/*.csproj",
+        "Game/CR.Game.Model/Progression/TalentSpendError.cs",
+        "Game/CR.Game.Model/Progression/TalentAllocation.cs",
+        "Game/CR.Game.Model/Progression/TalentModifierValue.cs",
+        "Game/CR.Game.Model/Progression/TalentSpendResult.cs",
+        "Game/CR.Game.Model/Progression/TalentEffectType.cs",
+        "Game/CR.Game.Model/Progression/ITalentService.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Item/CaptureAttemptService.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Item/ItemUseDomainService.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Battle/BattleDomainService.cs",
+        "Loot/CR.Loot.Domain.Services/**/*.cs",
+        "Pickups/CR.Pickups.Domain.Services/Implementation/PickupDomainService.cs",
+        "Spawner/CR.Spawner.Domain/Services/CreatureSpawnDomainService.cs",
+        "Spawner/CR.Spawner.Domain/Services/RareEncounterWeighting.cs",
+        "Convenience/CR.Game.Compat/**/CreatureSnapshot.cs",
+        "Moderation/CR.Moderation.Domain.Services/Implementation/ModerationService.cs",
+        "Moderation/CR.Moderation.Model.REST/AdminActionKind.cs",
+        "Moderation/CR.Moderation.Domain.Services/Models/ModerationReason.cs",
+        "Quests/CR.Quests.Data/Extensions/QuestCompletionExtensions.cs",
+        "Quests/CR.Quests.Domain.Services/Implementation/QuestObjectiveProjector.cs"
+      ],
+      "cr-data": []
+    },
+    "description": "Talents Phase 2: talent_tree/talent/trainer_talent/trainer_talent_lock (M15101-M15104), TalentBuild/TalentRules/TalentTreeValidation (pure, Compat), TalentService spend/respec/admin-set-rank, the player + content REST routes, every effect consumer (crystal save, loot, pickup currency, rare encounters, damage, creature XP/exp share, Mentor), the quest gate + ReachTalentRank/TalentRankReached tie-in, and the admin SetTalentRank/RespecTalents routes + WouldOverspendTalents"
+  },
+  "backend/26-capture-missions": {
+    "docPath": "docs/backend/26-capture-missions.md",
+    "repos": {
+      "cr-api": [
+        "Game/CR.Game.Model/Battle/BattleMissionTypes.cs",
+        "Game/CR.Game.Model/Battle/BattleMissionRewardTypes.cs",
+        "Game/CR.Game.Model/Battle/BattleMissionStatus.cs",
+        "Game/CR.Game.Data.Migration/M20001AddGuaranteedCaptureReadyToBattle.cs",
+        "Convenience/CR.Game.Compat/Battle/Missions/**/*.cs",
+        "Convenience/CR.Game.Compat.Test/CaptureMissionFeasibilityTests.cs",
+        "Convenience/CR.Game.Compat.Test/CaptureMissionDrawTests.cs",
+        "Convenience/CR.Game.Compat.Test/BattleMissionTrackerTests.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Battle/BattleDomainService.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Item/CaptureAttemptService.cs",
+        "Game/CR.Game.Data.Migration/M12005SeedBattleMissions_20260903.cs",
+        "Convenience/CR.Data.Migrations.Test/BattleMissionSeedSqliteTests.cs"
+      ],
+      "cr-data": [
+        "Assets/CR/Game/Battle/Missions/BattleMissionConductor.cs",
+        "Assets/CR/Game/Battle/Events/BattleEvents.cs",
+        "Assets/CR/Game/Battle/Logic/CaptureChanceLabel.cs",
+        "Assets/CR/UI/Battle/BattleBagPanelHandler.cs",
+        "Assets/CR/UI/Battle/BattleHUD.cs",
+        "Assets/CR/Core/Data/Registry/Definitions/BattleMissionDefinition.cs",
+        "Assets/CR/Core/Data/Editor/BattleMissionDefinitionEditor.cs",
+        "Assets/CR/Content/Defs/BattleMissions/capture_trial_*.asset"
+      ]
+    },
+    "description": "Capture missions (Bond Trial, #7 Phase 3): the GuaranteedCapture reward pool sharing #1 C2's server-tracked mission design — HitsWithoutSwitch/BelowHpWithoutKo mission types, CaptureMissionFeasibility + CaptureMissionDraw (pure, filter-before-draw), battle.guaranteed_capture_ready (M20001), CaptureAttemptService.IsGuaranteedAsync bypassing the normal 5-95% clamp, the nine capture_trial_* starter missions in M12005, the Unity conductor's GuaranteedCapture branch + BattleEvents.CaptureReady, the HUD badge and the bag's Sure catch label"
+  },
+  "backend/27-idempotency-keys": {
+    "docPath": "docs/backend/27-idempotency-keys.md",
+    "repos": {
+      "cr-api": [
+        "Auth/CR.Auth.Data.Migration/M16009CreateIdempotencyRecordTable.cs",
+        "Auth/CR.Auth.Data/Model/IdempotencyRecord.cs",
+        "Auth/CR.Auth.Data/Interface/IIdempotencyRecordRepository.cs",
+        "Auth/CR.Auth.Data/Implementation/BaseIdempotencyRecordRepository.cs",
+        "Auth/CR.Auth.Data.Postgres/IdempotencyRecordRepository.cs",
+        "Auth/CR.Auth.Data.Sqlite/IdempotencyRecordRepository.cs",
+        "Auth/CR.Auth.Data.Sqlite.Test/IdempotencyRecordRepositoryTests.cs",
+        "Auth/CR.Auth.Service.REST/Security/IdempotencyKeyMiddleware.cs",
+        "Auth/CR.Auth.Service.REST.Test/IdempotencyKeyMiddlewareTests.cs",
+        "Convenience/CR.Api.IntegrationTests/IdempotencyKeyHttpTests.cs",
+        "Convenience/CR.REST.AIO/appsettings.json"
+      ],
+      "cr-data": []
+    },
+    "description": "Server idempotency keys: the Idempotency-Key header on player write-intent routes, the idempotency_record dedup ledger, and the shared UseIdempotencyKeys middleware that claims/replays/rejects a retried request"
   }
 }

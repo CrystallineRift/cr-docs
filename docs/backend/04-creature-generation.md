@@ -658,3 +658,11 @@ should not be used to derive it — see the level-source-of-truth note.
 takes `{ "ids": [...] }` (1–200) and returns the generated creatures the trainer currently owns. The trainer must
 belong to the token's account (404 otherwise); ids the trainer does not own are omitted silently. Team and storage
 reads only — a listed creature belongs to the market escrow trainer and is absent here by design.
+
+## Wild mints from server content (A2, 2026-09-27)
+
+`POST /creature/generated` (shipped clients' wild opponent) now lives in the Game BFF (`WildCreatureEndpoints`) and reads only
+`creature.baseCreatureId` and `creature.level`. `IWildCreatureMintService` picks an active template of that species on an active
+spawner (`ICreatureSpawnerTemplateRepository.GetActiveTemplatesForSpeciesAsync`), clamps the level into the templates' bands
+(`ChooseWildMint`), and generates the creature with `CreateFromSpawnerAtLevelAsync` owned by the wild trainer — stats,
+abilities and natures are the server's. A species in no active template answers 400 `species_not_spawnable`.

@@ -1,5 +1,377 @@
 # Changelog
 
+## 2026-10-01 — Studio: World Locations and Pickup Placements are their own WORLD tabs
+
+- **Why:** after editing a location and pressing Refresh, the Studio showed no push option: the catalog lived
+  inside *Trainer Progression* (a tab named for the level curve), and it was not a content tab, so the header
+  work pill said "In sync", the Review window listed nothing and Push All skipped it. Nothing in the rail was
+  hidden or filtered — `ContentSectionCatalog` has no gating — the push simply sat under the wrong name and
+  outside the unpushed-edit accounting.
+- **cr-api-unity:** `ContentSectionCatalog` gains `pickup-placements` and `world-locations` (WORLD group, in that
+  order after Item Spawners; 26 sections). Studio tabs 25 (World Locations: catalog rows, Scan areas, ⬆ Push
+  locations, ⬇ Pull tuning, drift line) and 26 (Pickup Placements: Scan areas, ⬆ Push placements, scan list).
+  World Locations joins `_allContentTabs`: the catalog asset is stamped like any definition, so the work pill,
+  Review and Push All count an unpushed catalog edit (Push All sends it whole with replace + drift line; Pull All
+  routes to Pull tuning; Revert is not offered). Trainer Progression keeps Export floor seed, talent trees and the
+  world map row and links to World Locations; Item Spawners drops the pickup strip. One `RunCatalogAction`
+  helper behind all three tabs. Selecting `WorldLocations.asset` deep-links to World Locations.
+- **Tests:** `ContentSectionCatalogTests` (count + order), `ContentStudioToolWorldLocationsTabMappingTests`,
+  `ContentStudioToolPickupPlacementsTabMappingTests`, `WorldMapToolsTests` mapping split.
+- **Tooling:** `cr_edit_tests_status` report now carries `perAssembly` pass/fail/skip counts for multi-assembly runs.
+
+## 2026-10-01 — Online session identity + online cache mirrors (post-launch fixes)
+
+- **Root cause (client):** `AccountBootstrapper.PlayOnlineAsync` reused the offline helper (`EnsureAnonymousAccountAsync`
+  → `GetAccountsPaginatedAsync`, which always reads the local auth DB), so an online session ran under the device's
+  LOCAL anonymous account (`34dd0b10…`) while the server token and every server/online-cache row carried the server
+  account (`bc51456e…`). Account-scoped online-cache reads missed, remote reads re-inserted rows, and the trainer list
+  came back empty after a reload. Separately `CharacterSelectController` hard-coded `SetTrainerAsync(id, false)`, so
+  online sessions logged `Online=False` / `online=False`.
+- **cr-api-unity:** `PlayOnlineAsync` walks the token ladder (`IGameAuthRepository.TryGetAccessToken`) and adopts the
+  server's account id (`OnlineSessionIdentity.Resolve`, pure + tested; `AccountBootstrapperOnlineIdentityTests`);
+  refuses to start under a stand-in account when no token is issued. Offline unchanged. Character select passes
+  `IsPlayingOnline` as the trainer's online flag. `TrainerInventoryOnlineRepository` mirrors containers verbatim;
+  `GeneratedCreatureOnlineRepository` mirrors `CurrentHitPoints`; `TrainerItemInventoryOnlineRepository` refuses the
+  cache-only remove/set-quantity writes online.
+- **cr-api:** `ITrainerInventoryRepository.MirrorInventoryAsync(Inventory)` — verbatim update-then-insert by id, both
+  engines; `TrainerInventoryRepositoryMirrorTests` (SQLite). No server deploy needed (DLL consumed by Unity only).
+- **One-time cleanup:** delete the online caches once so rows cached under the old account/ids go away —
+  `trainerOnline.bytes`, `trainerInventoryOnline.bytes`, `trainerCreatureInventoryOnline.bytes`,
+  `trainerItemInventoryOnline.bytes`, `generatedCreatureOnline.bytes` (and `authOnline.bytes`) under
+  `Application.persistentDataPath`. They are caches of server responses and are rebuilt on the next online read.
+  See `unity/19-account-mode-startup.md` → "Online session identity", `unity/16-domain-sync-pattern.md` → "Mirror
+  writes are verbatim".
+
+## 2026-10-01 — Online trainer cache: "Trainer … not found" on bag sync
+
+- **Root cause (client):** `TrainerOnlineRepository` mirrored server trainer rows into the SQLite online cache through
+  the authority writes `CreateTrainer`/`UpdateTrainer`. `CreateTrainer` mints its own id, so the server's trainer was
+  stored under a random id; `GetTrainerById(serverId)` always missed, every remote read inserted another duplicate
+  row, and the first cache-served (`LocalFresh`) read failed `ItemInventoryService.GetItemsAsync` /
+  `InventorySync.RefreshAsync` with "Trainer … not found". The server's `GET /trainer/{id}` returned 200 every time.
+- **cr-api:** `ITrainerRepository.MirrorTrainerAsync(Trainer)` — verbatim update-then-insert by id of every column
+  (account, currency, location, timestamps, deleted), both engines; `TrainerRepositoryMirrorTests` (SQLite).
+- **cr-api-unity:** every cache store in `TrainerOnlineRepository` is a mirror; cache reads key by trainer id (the
+  online session's account id is the device's local account, not the server's). See
+  `unity/16-domain-sync-pattern.md` → "Mirror writes are verbatim".
+
+## 2026-09-30 — Server idempotency keys (server half; client half deferred)
+
+- **cr-api:** New `Idempotency-Key` header support on a curated set of player write-intent routes
+  (battle start, battle actions submit, receive-gift, talk, world-location entry, talent spend/respec,
+  and the trainer creature move/swap/discard group) — the same routes already carrying
+  `RateLimitPolicies.PlayerIntent`/`BattleStart`. A retry with the same key and the same request
+  (method + resolved path + query + body) replays the first call's stored response
+  (`Idempotent-Replayed: true`); a different request under the same key is `422`; a still-`InProgress`
+  claim is `409` with `Retry-After`. Implemented as middleware (`IdempotencyKeyMiddleware`,
+  `CR.Auth.Service.REST`), not a per-route endpoint filter, since it must hash the raw body before
+  minimal-API model binding consumes it. New `idempotency_record` table (`M16009`, Auth domain) with a
+  bounded lazy-cleanup sweep of expired claims. Config switch `Idempotency:RequireKey` (default
+  `false`: missing header accepted + logged) — flip alongside the client's `MinClientVersion` gate bump
+  once every shipped client attaches the header (**user step**, not yet done).
+  → [Idempotency Keys](?page=backend/27-idempotency-keys), [Auth & Accounts](?page=backend/06-auth-and-accounts)
+- **Deferred to a follow-up:** the client side (shared web layer attaching one key per logical action,
+  Polly retrying on network error/timeout/5xx/429/409) and extending the same coverage to the
+  remaining `RequirePlayer` write routes outside this curated set (market listing create/cancel,
+  evolution trigger, pickups collect) — not done in this pass.
+
+## 2026-09-30 — M2 close, L7: battle-active creature move/swap guard
+
+- **cr-api:** `CreatureInventoryService` gained an `IBattleRepository` dependency and now refuses
+  `MoveBetweenInventoriesAsync` (so `MoveToTeamAsync`/`MoveToStorageAsync`), `SwapTeamAndStorageAsync`,
+  and `SwapSlotsAsync` (team inventory only) with `Success = false` before opening a transaction
+  whenever a creature involved is the active combatant of a still-Active battle
+  (`IsCreatureActiveInAnotherBattleAsync`) — the fix lives in the DLL service so online and offline
+  share it, per the server-authority core rule (offline calls `ICreatureInventoryService` directly,
+  bypassing `TrainerCreatureIntentEndpoints`). `TrainerCreatureIntentHttpTests` gained a Docker/Postgres
+  409 test through the real `team-storage-swap` route. → [Creature Storage & Team Exchange](?page=unity/26-creature-storage)
+- **cr-api:** `NpcDomainService.GiveNpcCreatureToTrainerStorageAsync` — unreachable since L6 deleted its
+  only Unity caller — is deleted outright, along with its private helpers
+  (`EnsureFiledInStorageAsync`/`ReleaseClaimSafelyAsync`/`IsCreatureAlreadyStoredViolation`), its
+  `INpcDomainService` interface member, its two `NpcGiftRulesTests` cases, and the entire
+  `NpcGiftResumabilityTests.cs` file. → [NPC System](?page=backend/02-npc-system), [Starter Creature Flow](?page=backend/05-starter-creature-flow)
+
+## 2026-09-29 — Capture Missions Phase 3 (Bond Trial), round 2
+
+- **cr-api:** `ResolveItemActionAsync`'s non-capture branch (a heal, or a failed capture throw) now
+  populates `TargetFinalHp`/`TargetMaxHp` on the outcome, so a `BelowHpWithoutKo` mission progresses on
+  a missed capture throw and not just on an Ability action (R8). The legacy
+  `CR.Game.Data.Constants.BattleMissionTypes`/`BattleMissionRewardTypes` — superseded by
+  `CR.Game.Model.Battle` (R7) — are deleted; a grep confirmed no remaining consumers. The nine starter
+  `capture_trial_*` missions are hand-merged into `M12005SeedBattleMissions_20260903` (preserving its
+  existing `IntroducedKeys` rollback safety net rather than a mechanical regeneration), with a new
+  reader test pinning that the offline floor carries all nine. →
+  [Capture Missions](?page=backend/26-capture-missions), [Battle Persistence](?page=backend/09-battle-persistence)
+- **Unity:** `BattleMissionConductor` gains the `GuaranteedCapture` completion branch and re-raises the
+  new `BattleEvents.CaptureReady` while `ActionOutcome.GuaranteedCaptureReady` stays true; `BattleHUD`
+  shows a persistent "Capture ready" badge, and the completion banner drops "  unlocked!" for a reward
+  with no ability. `BattleBagPanelHandler` swaps the crystal row's chance for "Sure catch" through the
+  new pure `CaptureChanceLabel` (`CR.Game.Battle.Logic`). `PlayerTeamView`'s mission picker now excludes
+  capture missions. Studio's `BattleMissionDefinitionEditor` moves off the deleted
+  `CR.Game.Data.Constants` onto `CR.Game.Model.Battle`, hides the ability picker and filters the
+  mission-type popup for a `GuaranteedCapture` reward, and labels the threshold "HP %" for
+  `BelowHpWithoutKo`. The nine capture-mission SOs are authored under
+  `Assets/CR/Content/Defs/BattleMissions/` (not pushed to any server this round — see USER STEPS). →
+  [Battle Extensions](?page=unity/24-battle-extensions), [Capture Mechanic](?page=unity/14-capture-mechanic),
+  [Battle Bag Panel](?page=unity/13-battle-bag-ui)
+- **cr-admin-web:** The battle-missions descriptor gains `HitsWithoutSwitch`/`BelowHpWithoutKo` and the
+  `GuaranteedCapture` reward, mirroring `BattleMissionTemplateValidation`'s three added rules in zod. →
+  [Capture Missions — cr-admin-web](?page=backend/26-capture-missions)
+- **Docs:** New page [Capture Missions](?page=backend/26-capture-missions). Fixed two stale notes:
+  [Talents UI](?page=unity/36-talents-ui)'s movement-speed section (it landed on
+  `feature/trainer-progression` task 13, not still pending), and
+  [Moderation](?page=backend/18-moderation)'s admin anonymous-route count (sixteen routes in
+  `AdminEndpointsHttpTests.AdminRoutes()`, not eleven).
+
+## 2026-09-29 — Talents Phase 2
+
+- **cr-api:** New `Talents.*` tables (`talent_tree`, `talent`, `trainer_talent`, `trainer_talent_lock`,
+  M15101-M15104) and the pure `TalentBuild`/`TalentRules`/`TalentTreeValidation` (shipped in Compat, so
+  Unity runs the same rules the server does). `TrainerProgress` gains real `SpentPoints`,
+  `AvailablePoints`, `NeedsRespec`, `Allocations`, `Modifiers` and `QuestLockedTalentIds` —
+  `NoTalentModifierProvider` is deleted everywhere. `TalentService` (spend/respec/admin set-rank) and
+  its player + content REST routes (`POST .../talents/{id}/spend`, `.../respec`,
+  `GET/PUT /api/v1/talents/trees*`). Every effect consumer is wired: crystal save (`ItemUseResult.ItemRetained`),
+  loot drop chance, pickup currency, rare-encounter weighting, battle damage, creature XP/exp share, and
+  the Mentor creature-level-up→trainer-XP bonus (widened to every KO turn, not just the winning one). A
+  talent may gate on a quest (`unlock_quest_key`); spending one raises `QuestObjectiveType.ReachTalentRank`
+  (50, MAX semantics) via a new `TalentRankReached` outcome. Admin: `AdminActionKind.SetTalentRank` (17)/
+  `RespecTalents` (18), and a negative XP grant that would overspend a trainer's talents is refused
+  `WouldOverspendTalents` unless `respec: true` (respec-then-grant). →
+  [Talents](?page=backend/25-talents), [Trainer Progression](?page=backend/22-trainer-progression),
+  [Moderation](?page=backend/18-moderation), [Quest System](?page=backend/07-quest-system),
+  [Loot System](?page=backend/13-loot-system), [Spawner System](?page=backend/03-spawner-system)
+- **Unity:** The Talents tab's authoring SOs, validation, Studio push (`PUT .../talents/trees/bulk`),
+  offline floor seed export, and the tab's DI (`ITalentProgressReader`/`ITalentActions` rebound off their
+  Phase 1 stand-ins onto the real server/offline `ITalentService`) all landed — the whole lane is
+  feature-complete except the one client-applied effect, movement speed
+  (`TrainerModifierApplier`/`MalbersMovementController.SetSpeed`), which is not started. Level-up toast
+  now names the talent point(s) granted. → [Talents UI](?page=unity/36-talents-ui),
+  [Trainer Progression (Unity)](?page=unity/34-trainer-progression),
+  [Capture Mechanic](?page=unity/14-capture-mechanic)
+- **cr-admin-web:** Player Dossier gains a Progression panel (spent/available points, `NeedsRespec`
+  badge, per-tree allocations with drawback/exclusive/quest-lock markers) and Set-rank/Respec dialogs;
+  the Grant XP dialog's "respec if needed" checkbox appears after a `WouldOverspendTalents` refusal; a
+  new `talent-trees` content resource mirrors the Studio authoring flow; quest editors gain
+  `ReachTalentRank`. → [Talents — cr-admin-web](?page=backend/25-talents#cr-admin-web)
+
+## 2026-09-28 — Milestone 1 review fixes
+
+- **cr-api:** Battle outcomes (`BattleWon`, `CreatureDefeated`, `TrainerDefeated`, including forfeit wins —
+  opponent Run 3×, or an owed swap 3×) are now produced by `BattleDomainService` itself, batched through one
+  `SafeRecordAllAsync` call per action; `POST /api/v1/quests/progress` refuses **every** `WinBattles`/defeat
+  objective type with `400 server_derived` — its reportable set is down to `VisitLocation`/`TalkToNpc`.
+  `ActionOutcome` gains a `Progress` field (mirrors `ItemUseResult.Progress` et al.). `ClaimRewardsAsync` now
+  runs one achievement-evaluation pass after its reward grants and returns unlocks on
+  `QuestClaimResult.Progress.NewlyUnlocked` (a claim's own reward XP can now cross a `TrainerLevelReached`
+  threshold in the same call). `species_captured_{id}` moved from `TrainerProgressionService` to
+  `LifetimeStatProjector` (fed by the new `ProgressFacts.BaseCreatureId` fact) — `TrainerProgressionService`
+  now only reads it as the first-of-species gate. A capture made through item use now records one
+  `CreatureCaptured` outcome (via `ItemUseResult.PendingOutcomes`, folded into `ItemUseDomainService`'s own
+  `RecordAllAsync` call) instead of two, so achievements evaluate once per capture, not twice. New migration
+  `M18008` backs-fills `quests_completed` for quest instances that completed-but-were-unclaimed before the
+  at-completion counting scheme existed. `TrainerInventoryEndpoints` POST/PUT now always use a server-decided
+  `DefaultMaxSlots` (20), ignoring any `maxSlots` in the body; `PUT /trainer/{id}` restores the trainer's
+  existing inventory ids after binding, so a body can never redirect them. →
+  [Quest System](?page=backend/07-quest-system), [Stats](?page=backend/08-stats-system),
+  [Achievements](?page=backend/15-achievements), [Trainer Progression](?page=backend/22-trainer-progression),
+  [Progress Dispatcher](?page=backend/23-progress-dispatcher)
+- **cr-api (stale-docs catch-up):** the starter-creature gift flow (`GiveNpcCreatureToTrainerStorageAsync`,
+  `EnsureNpcCreatureTeamAsync`) gained a gift ledger (`INpcGiftLedger`, server-authority A2.4 — one
+  client-named gift creature per trainer/NPC, a resumable claim-then-transfer sequence) and a team-spawner
+  slot gate (A2.5 — a team slot's template must belong to that NPC's own `"{key}-team"` spawner). New
+  `IWildCreatureMintService` (A2.6, `POST /api/v1/creature/generated`) picks a live spawner template for a
+  requested species (excluding team spawners, with a content-key fallback for a stale template id) and mints
+  under it, rather than trusting client-supplied stats. New `IPlayerTrainerGuard`/`RequirePlayerTrainer`
+  (`Auth/CR.Auth.Service.REST/Security/PlayerTrainerGuardExtensions.cs`) replaces several inlined
+  account-only ownership checks (evolution, stats, market list/buy) with one guard that also refuses an
+  NPC battle-trainer identity. `RateLimitPolicies.PlayerIntent` partitions the talk route (and future
+  location-entry/talent-spend routes) per account, and `UseRateLimiter()` moved after
+  `UseAuthentication()`/`UseAuthorization()` in `Program.cs` so that partition actually has an account to
+  read. `ItemSpawnerEndpoints`'s `sync-config` route is now `RequireContentWrite`-gated. Loot/reward
+  `Experience` grants route through the trainer XP funnel when wired. →
+  [Starter Creature Flow](?page=backend/05-starter-creature-flow),
+  [Auth and Accounts](?page=backend/06-auth-and-accounts), [Spawner System](?page=backend/03-spawner-system),
+  [Loot System](?page=backend/13-loot-system), [Item Spawner](?page=backend/11-item-spawner),
+  [Creature Market](?page=backend/17-creature-market), [Backend Architecture](?page=backend/01-architecture)
+- **Unity (M1-F1/M1-F2u):** offline item use now binds to the same DLL `ItemUseDomainService` + effect
+  handlers the server runs (`ItemUseOfflineBindings.Install`, called from `LocalDevGameInstaller`) instead
+  of the old hand-rolled `OfflineItemUseService` (deleted) — this is what gives an offline potion its
+  `ItemUsed` progress outcome and `items_used_total` stat write. `QuestManager.OnCreatureDefeated`/
+  `OnTrainerDefeated`/`OnBattleWon`, the matching `IQuestService` members, and `DefeatedOpponentReporter`
+  are deleted (cr-api-unity `107ce9d2`, `8aac92b1`): `BattleCoordinator`'s turn loop now applies each
+  action's `outcome.Progress` via `_questManager.ApplyServerProgress` right after `SubmitActionAsync`
+  returns, one call site for both the online HTTP and offline DLL `BattleDomainService` paths (the offline
+  binding resolves the same `IProgressOutcomeSink` `ProgressBindings` installs, proven by
+  `BattleOfflineProgressSinkWiringTests`). `QuestManager.ClaimOnceAsync` applies `result.Progress` through
+  the same `ApplyServerProgress` entry point instead of calling `ReportTrainerProgress` directly, so a
+  claim's own newly re-evaluated achievement unlocks reach the toast. →
+  [Battle System](?page=unity/07-battle-system), [Quest System](?page=backend/07-quest-system)
+
+## 2026-09-27 — Location Discoveries v2
+
+- **cr-api:** `world_location` gains `discovery_xp` (M15010, null → the flat `LocationDiscovered` rule, 0
+  pays nothing) and `discovery_quest_key` (a quest granted once on first discovery). New
+  `trainer_location_discovery` ledger (M15011, `UNIQUE(trainer_id, location_key)`, insert-if-absent gate) —
+  the per-trainer, per-location first-discovery gate replaces the old `location_discovered_{key}` stat flag
+  entirely; that stat and `locations_visited_total` are now pure `LifetimeStatProjector` projections of a new
+  `LocationEntered` outcome. New orchestrator `LocationEntryService.EnterAsync` (`CR.Game.Domain.Services`):
+  claims the ledger, awards XP, grants the discovery quest (`IQuestDomainService.GrantQuestAsync`, now
+  returning `(Instance, Created)`), and emits `LocationEntered`. New player routes `POST
+  /api/v1/trainers/{trainerId}/world-locations/enter` and `GET .../world-locations`; the compat route `POST
+  /api/v1/quests/progress` with `VisitLocation` now forwards into the same orchestrator instead of the old
+  Talents-only path. → [Location Discoveries](?page=backend/24-location-discoveries)
+- **Unity:** `Assets/CR/Progression/Discovery/` — `ILocationEntryRouter` (online/offline), the online HTTP
+  client, and `IDiscoveredLocationRegistry` (memoised discoveries, a "Discovered: {name}" toast).
+  `QuestManager.OnLocationVisited` sends the enter intent through the router instead of the old
+  `RecordProgress` call. `WorldLocationEntryDrawer` (Studio catalog + Trainer Progression tab) authors
+  `discoveryXp`/`discoveryQuestKey` per location, with a server pull (`cr_world_locations_pull`) and a
+  push/pull drift line. New Content Audit rules for a missing or repeatable discovery quest, and for a
+  `VisitLocation` target outside the catalog (now a picker, not free text). World Map's P2 lands:
+  `WorldMapDiscoveryReader` replaces the P1 `EmptyWorldMapDiscoveryReader` stand-in, reading the same cache
+  key the discovery registry does. → [Trainer Progression in Unity](?page=unity/34-trainer-progression),
+  [Runtime Content Sync](?page=unity/27-content-sync), [World Map](?page=unity/35-world-map)
+
+## 2026-09-27 — Achievements v2
+
+- **cr-api:** categories (`achievement_category`, one level of nesting), multi-criterion achievements
+  (`achievement_criterion`, `AchievementCriterionType` 0–16), `points`, `required_criteria_count` (N-of-M),
+  and meta chains (`AchievementEarned` criterion) replace the v1 single trigger/threshold model.
+  `IAchievementEvaluator` (`CR.Game.Model.Achievements`) evaluates every live, unearned achievement per
+  root call and repeats until nothing new unlocks; points pay as trainer XP
+  (`TrainerXpSource.AchievementEarned = 9`, a normal `trainer_xp_rule` row). New REST: `GET
+  /achievements/categories`, `PUT /achievements/bulk` (validated content push), `GET
+  /trainers/{id}/achievements/board` (authority-computed progress), admin `POST`/`DELETE
+  /admin/trainers/{id}/achievements/{contentKey}` (`AdminActionKind` 19/20, audited, idempotent grant).
+  Removed: the client-reported unlock POST and the query-param trainer GET. The admin dossier gains
+  `Achievements { TotalPoints, Earned[] }`. Migrations `M18001`–`M18007` (legacy triggers backfilled into
+  criteria; the five starter achievements seeded a category + 10 points, never overriding an authored
+  value; `M18007` Postgres-only back-fills `quest_completed_{key}` stats).
+- **Unity:** `IAchievementService` is now the online/offline router for the board itself (`CacheScope.
+  AchievementBoard`, fresh-failure-throws — Ruling R12, `AchievementsView` gets a Retry button), and
+  `Unlocked`/`ReportUnlocks` carry `AchievementUnlockNotice` (points included) instead of the legacy
+  definition type. The Achievements tab reads real categories/criteria/points/board end to end — the
+  interim single-"General"-category, zero-points lane is gone. The unlock toast shows a points shield
+  when `Points > 0`.
+- **Admin web:** new Content Studio resources **Achievement Categories** and **Achievements** (sync-all
+  against the bulk-push route, each excludes the other from its own prune), criterion/reward reference
+  pickers matching the resolver/reward-grant mapping, and a Player Dossier Achievements panel with
+  Grant/Revoke buttons.
+- See [Achievements](?page=backend/15-achievements) for the full model.
+
+## 2026-09-27 — Quest categories
+
+- **cr-api:** `quest_template.category` (M17001, `QuestCategory`: Bonus 0, Main Story 1, Exploration 2, Battle 3, Talent 4)
+  and `quest_template.area_key` (M17003). M17002 backfills the shipped quests (Act 1 → Main Story). On the bulk upsert, a null
+  category or area keeps what is stored, an undefined category is 400, and `areaKey` is trimmed ("" clears; over 64 → 400).
+  `QuestCompleted` carries the category slug and area key, and the progress dispatcher's `LifetimeStatProjector` writes
+  `quests_completed_cat_{slug}` next to `quests_completed` at completion (never at claim). Metadata only: nothing gates on it.
+- **Unity:** the Quests tab is grouped by category, tracker cards show a category label, and Records lists "{Category} quests
+  completed". Studio has a Category field, an Area popup (World Location Catalog area keys), a Quests-tab category filter
+  and the `quest-area-unknown` audit. The floor is rebaked. **Deploy:** push the three Act 1 quests from Studio (they carry
+  Main Story + Meadow).
+- **Admin web:** the quest editor has a Category select and Area key field, plus a Category list column.
+
+## 2026-09-27 — Server authority, phase B: server-derived progress
+
+- **cr-api: one progress dispatcher.** `IProgressOutcomeSink` → `ProgressDispatcher` (Quests) is now the only
+  path from an outcome to lifetime stats, quest objectives, quest completion and achievements. Producers:
+  capture, pickup collect, item use, quest completion, and the new talk intent. Achievements evaluate once per
+  root call. M16004 `quest_objective_counted_ref` (back-filled) makes talk/visit/list counting distinct and every
+  objective counter atomic.
+- **Talk intent:** `POST /api/v1/trainers/{trainerId}/npcs/{npcKey}/talk` (unknown NPC → 404). `npcs_talked_to_total`
+  now counts **distinct** NPCs. `quests_completed` counts at **completion**, not claim; new `quest_completed_{key}`.
+- **Compat route:** `/api/v1/quests/progress` refuses `CaptureCreature`, `CaptureAnyCreature`, `CollectItem` (and the
+  types A1 refused) with 400 `server_derived`; its specific/list defeat events count nothing.
+- **Retired:** `damage_healed_total` and `HealAmount` objectives (nothing produces heals).
+- **Unity:** capture, collect, heal, damage and level reporters deleted; talk is an intent; every item-use, pickup
+  and talk response is applied through `QuestManager.ApplyServerProgress`; a capture is not a battle win; the stat
+  router writes nothing online; no client-posted achievement unlocks; claim in-flight guard. Floor 16004.
+- **Deploy:** push the NPC registry (Content Studio) **before** the API deploy — a talk to an unregistered NPC is
+  a 404 online. No new environment variables. Old clients keep playing (their capture/collect reports are refused
+  and logged; the server counts from its own producers).
+
+## 2026-09-27 — Server authority A2: hardening the shipped client survives (hotfix)
+
+- **cr-api:** quest claim-before-pay and completion CAS; accept checks requirements (409 `requirements_not_met`) and
+  `GrantQuestAsync` for server grants; pickup placement registry (M16001) with `Pickups:PlacementCheck` Off/Observe/Enforce
+  (default Observe) and Content routes; NPC gift ledger (M16002) and server-owned NPC teams; `POST /creature/generated` mints
+  from spawner-template bounds; capture bound to the caller's live wild battle with an ownership CAS; item use consume-first
+  with refund and bound targets; merchant guarded stock/sell writes; battle end CAS, KO-once and owed swap (M16003); heal only
+  after a whiteout. **Deploy gates:** every gift NPC in the production NPC registry; every trainer NPC's `{key}-team` pushed.
+- **Unity:** offline binds the capture CAS, guarded bag writes and gift ledger; Studio → Item Spawners → World pickup
+  placements (scan/push) + CLI; floor rebaked (16003).
+
+## 2026-09-27 — Achievements, Unity-only lane: Achievements tab replaces Journal (real data, no server model yet)
+
+- **Unity: Achievements tab** replaces the Journal tab in the player menu — a WoW-style rail (Summary,
+  categories, Statistics) with points shield, per-category progress bars, a recent-unlocks list, criteria
+  checklists and search, over a new pure projection (`AchievementBoardProjection`, replaces
+  `AchievementProgressCalculator`). The Records list is now the Statistics rail entry, reading
+  `IStatService` directly. `IJournalService`/`JournalService`/`JournalSnapshot`/`JournalView` are retired.
+- **Real data, not fabricated demo content.** `AchievementCatalogReader` and `AchievementBoardReader` are
+  adapters over the EXISTING `IAchievementService` (the same `GetAllDefinitionsAsync`/`GetUnlockedAsync`
+  calls the old Journal tab made) and `IStatService` — no new server route, no server change. Every
+  achievement is filed under one "General" category with one criterion built from its legacy
+  threshold/stat, and points are always 0, because the `achievement_category`/`achievement_criterion`
+  tables and the `points` column don't exist until the Achievements v2 server phase (Phase A) ships. The
+  board shows the trainer's real unlocks and real per-criterion progress today.
+- Toast points and the real server-authoritative board/catalog land with the Achievements v2 server phase;
+  this lane's two reader interfaces rebind to the real implementations with no view code change.
+
+## 2026-09-27 — Talents, Unity-only lane: authoring + tab (fake data, no server yet)
+
+- **Unity: Talents tab** in the player menu (after Map). Tree selector, tier grid, detail pane with
+  spend/respec — all wired to a fully faked seam (`EmptyTalentProgressReader`, `NoOpTalentActions`) that
+  swaps to the real server/DLL bindings with no UI code change once the Talents server phase lands. Node
+  states come from `TalentNodeStateBuilder`, an explicitly display-only, temporary stand-in — it never
+  gates a spend.
+- **Unity: authoring.** `TalentTreeDefinition` SO + custom inspector (tier grid, effect dropdowns, inline
+  validation, totals-at-max), at `Assets/CR/Content/Defs/Talents/`. The three starter trees (Exploration,
+  Capture minus Bond Trial, Battle) are authored and registered.
+- No cr-api Talents domain work in this lane — no new tables, no `TalentService`, no REST routes.
+
+## 2026-09-27 — World map, Phase P1: layout, Studio tooling, Map tab
+
+- **Unity: Map tab** in the player menu (after Quests). A stylised node map of the six areas, the current one
+  named and pinned, and d-pad navigation between areas. Discoveries read through `IWorldMapDiscoveryReader`, which
+  P1 binds to an empty stand-in, so every other area reads "???" until Phase P2 wires sub-project 2's discovery
+  read. Read-only: no intent, no outcome.
+- **Studio:** World Map asset (`Assets/CR/Content/Defs/WorldMap/WorldMap.asset`) built by **Scan map areas**
+  (area scenes + doors, never prunes). The inspector has a live preview, drag/resize, drift validation with
+  one-click fixes, and art fields that make sprites Addressable at `map/…`. CLI commands:
+  `cr_world_map_scan`, `cr_world_map_validate`, `cr_world_map_starter_layout`.
+- **Theme:** `--cr-map-*` tokens.
+
+## 2026-09-26 — Trainer progression, Phase 1: trainer level
+
+- **cr-api: trainer XP and levels.** New `Talents` domain (M15001 `world_location`, M15002 `trainer_level_requirement` seeded L1–30,
+  M15003 `trainer_xp_rule`; the floor seed is not shipped yet — Studio → Trainer Progression → Export floor seed writes it, as M15004, with a Studio content key). `ITrainerProgressionService` (in `CR.Game.Model/Progression`) grants XP for rewards,
+  wild/trainer wins, captures (+ first of species), authored location discoveries and pickups; level derives from `trainer_xp`
+  (`TrainerLevel` requirements included). `IStatService.IncrementAsync` returns the value after. Results carry `trainerProgress`.
+  One `CaptureAttemptService` for online and offline capture (place before claim — a full storage fails the throw instead of
+  leaving the creature owned-but-unlisted). New routes: `GET /api/v1/trainers/{id}/progression`, world locations / level curve /
+  XP rules content routes, admin `POST /api/v1/admin/trainers/{id}/xp`. `POST /quests/progress` is now ownership-checked. The
+  player-facing stat write routes (`POST /api/v1/stats/increment|max|set`) now refuse server-owned keys — `trainer_xp`,
+  `trainer_level`, `location_discovered_*`, `species_captured_*` — with 403. The "locations visited" lifetime stat (and the
+  `explorer` achievement) now counts only genuine first-time discoveries of an *authored* location. No recount, no
+  backfill: old inflated totals stay, and a place visited before this release counts again (+25 XP, +1 visited) on its
+  first revisit. XP failures never fail the owning operation (reward XP falls back to a raw `trainer_xp` increment;
+  post-commit awards ignore request cancellation); a capture whose placement fails returns the creature to the wild.
+  A missing `ConnectionStrings:TalentDatabase` falls back to `StatDatabase` (logged once). **Deploy: push world
+  locations to Production before or with this deploy** — otherwise location XP, `explorer`, and the Journal's
+  "locations visited" count all stay frozen with no error.
+- **Unity:** offline XP through the same DLL; level-up toast; XP bar on the team screen; Crystalline Rift Studio → Trainer Progression
+  (scan location triggers, push, export floor seed) and CLI commands; floor rebaked.
+- **Admin web:** World Locations (read / rename only — a Studio push replaces the list), Trainer Level Curve and Trainer XP Rules editors; dossier level and Grant XP.
+- **Follow-up fixes (2026-09-27):** a trainer-modifier outage no longer fails a capture throw (rolls with none);
+  a location discovery's "locations visited" count no longer depends on its XP grant, and a failed count rolls
+  the discovery flag back so the next visit counts it once; an admin XP take-back always sets
+  `trainer_level` from its own post-increment total (a read only ever repairs it up); `low_level_factor` / `multiplier` reject NaN and infinities; rule
+  awards that grant 0 return null; server-owned stat keys match trimmed and the player stat write routes
+  refuse padded keys (400); the admin XP take-back refusal says the total can't go below 0; the Studio
+  location scan reports duplicate catalog rows instead of dropping them silently.
+
 ## 2026-09-26 — Defeat objectives: trainers and lists
 
 - **cr-api: four `QuestObjectiveType` values** — `DefeatCreaturesFromList` (9), `DefeatTrainer` (40),

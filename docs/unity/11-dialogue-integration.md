@@ -21,7 +21,7 @@ PixelCrushersDialogueHandler   ←── IDialogueHandler
         │ (OnConversationCompleted)          │ (OnQuestAcceptedFromDialogue)
         ▼                                    ▼
   QuestDialogueBridge ──────────────────────────
-        │ (OnNpcInteracted)    │ (AcceptQuestAsync)
+        │ (TalkToNpcAsync)     │ (AcceptQuestAsync)
         ▼                      ▼
     QuestManager           QuestManager
 ```
@@ -46,13 +46,26 @@ PixelCrushersDialogueHandler   ←── IDialogueHandler
 
 The Pixel Crushers `conversationEnded` event fires for **both** normal completion and cancellation. There is no parameter to distinguish them. The `DialogueSystemEvents` component exposes `onConversationCancelled`, which fires only on cancel, BEFORE `conversationEnded`. `PixelCrushersDialogueHandler` sets a `_wasAborted` flag in the cancel handler and reads it in the ended handler to route the event correctly.
 
-## Critical Convention: Actor Names as NPC Content Keys
+## Critical Convention: a dedicated `content_key` Actor Field
 
-> **This convention is not enforced at compile time. Violating it silently breaks TalkToNpc quest progress.**
+> **This convention is not enforced at compile time. Violating it silently drops the talk (a warning is logged).**
 
-Every NPC actor in the Dialogue System database must have its `Name` field set to the NPC's `content_key` as it appears in the backend database. `QuestDialogueBridge` calls `IDialogueHandler.GetConversationActorName(id)` to retrieve this name and passes it directly to `QuestManager.OnNpcInteracted(actorName)`.
+This used to require the actor's **Name** field to equal the NPC's `content_key`. That convention is
+gone (audit B4): every NPC actor in the Dialogue System database must instead have a **`content_key`
+Text field** set to the NPC's `content_key` as it appears in the backend database — the actor's display
+`Name` is free to be a human-readable label. `QuestDialogueBridge` calls
+`IDialogueHandler.GetConversationActorContentKey(id)` (`PixelCrushersDialogueHandler.cs`, reading the
+actor's `content_key` field via `Field.LookupValue`) and sends `QuestManager.TalkToNpcAsync(npcKey)` with
+whatever it returns. Unlike the old `GetConversationActorName`, there is **no fallback to the display
+name** — an actor with no `content_key` field sends no talk at all, and `QuestDialogueBridge` logs a
+warning naming the conversation.
 
-Example: An NPC with backend `content_key = "npc_elder_rowan"` must have **Name = `npc_elder_rowan`** in the Dialogue System actor database.
+Example: An NPC with backend `content_key = "npc_elder_rowan"` must have an actor field
+**content_key = `npc_elder_rowan`**; its Name field can be `"Elder Rowan"`.
+
+`GetConversationActorName` (Name-based, with its own fallback behaviour) still exists on
+`IDialogueHandler` for other lookups (e.g. `DialogueHandlerTest`), but no production caller uses it to
+resolve the NPC content key anymore — that is `GetConversationActorContentKey`'s job.
 
 ## IDialogueHandler API
 
@@ -60,7 +73,8 @@ Example: An NPC with backend `content_key = "npc_elder_rowan"` must have **Name 
 // Actor lookups
 string GetNpcById(int id);               // by numeric actor ID
 string GetNpcById(string id);            // by actor name
-string GetConversationActorName(int conversationId); // primary actor name for a conversation
+string GetConversationActorName(int conversationId);        // primary actor's Name field
+string GetConversationActorContentKey(int conversationId);  // primary actor's content_key field (no fallback) — what talk uses
 
 // Conversation lookups
 int    GetConversationId(string conversationTitle);
@@ -113,9 +127,9 @@ Setup on a dialogue NPC GameObject:
 On the **player**, disable or remove the `ProximitySelector` (and `Selector`) components —
 otherwise both systems respond to E and conversations fire while shopping.
 
-The dialogue branch deliberately does **not** call `QuestManager.OnNpcInteracted`
-directly: `QuestDialogueBridge` records the interaction when the conversation
-*completes*, so recording at trigger time would double-count (and would count
+The dialogue branch deliberately does **not** call `QuestManager.TalkToNpcAsync`
+directly: `QuestDialogueBridge` sends the talk intent when the conversation
+*completes*, so sending it at trigger time would double-count (and would count
 aborted conversations).
 
 ## TalkToNpc Quest Objectives
@@ -129,13 +143,22 @@ aborted conversations).
 
 ### Runtime Flow
 
+Talk is a client **intent**, never a client-reported outcome (server-authority CORE RULE): the client
+only says "the player talked to this NPC," and the authority — the server online, the offline DLL
+`NpcTalkOnlineOfflineService` otherwise — decides what that counts toward.
+
 When a player completes a conversation:
 1. `PixelCrushersDialogueHandler.OnConversationCompleted` fires with the conversation ID.
-2. `QuestDialogueBridge` calls `GetConversationActorName(id)` → resolves actor name (= NPC content key).
-3. `QuestManager.OnNpcInteracted(actorName)` is called.
-4. The backend records `TalkToNpc` progress against any active objective whose `targetReferenceId` matches the actor name.
+2. `QuestDialogueBridge` calls `GetConversationActorContentKey(id)` → the NPC's `content_key` (see the
+   convention above — no fallback to the display name).
+3. `QuestManager.TalkToNpcAsync(npcKey)` is called, which routes through `INpcTalkService`
+   (`Assets/CR/Npcs/Talk/`) to the server (online) or the DLL talk service (offline).
+4. An unrecognised `npcKey` comes back `NpcTalkStatus.UnknownNpc` and counts nothing (a warning is
+   logged); otherwise the authority returns a `ProgressReport`, which `QuestManager.ApplyServerProgress`
+   applies — updated objectives, any newly completed quest, achievement unlocks and trainer XP/level, all
+   from the one report. This is the same entry point `OnLocationVisited` and item use funnel through.
 
-Aborted conversations do not advance any objective.
+Aborted conversations do not advance any objective (no talk is sent at all).
 
 ## Quest Acceptance from Dialogue
 

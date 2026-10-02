@@ -551,9 +551,12 @@ in-memory keys rather than failing — the API must never fail to boot over key 
 
 ### Migration order is one list
 
-`Convenience/CR.REST.AIO/MigrationOrder.cs` holds `All` — the fourteen domain migrators and the
-order they run in. `Program.cs` and the integration-test fixture both iterate it; neither keeps its
-own copy (they used to, and the copies had already drifted apart).
+`Convenience/CR.REST.AIO/MigrationOrder.cs` holds `All` — the domain migrators (fourteen at
+extraction, sixteen now that Achievements-categories and Talents have joined) and the order they run
+in. `Program.cs` and the integration-test fixture both iterate it; neither keeps its own copy (they
+used to, and the copies had already drifted apart). Talent sits right before Market/Moderation — it
+reads nothing another domain creates, so its only ordering requirement is staying ahead of the two
+domains this list pins last.
 
 Two things about that order are load-bearing, and neither is obvious from reading a single domain:
 

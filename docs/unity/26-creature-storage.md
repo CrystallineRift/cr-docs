@@ -41,6 +41,16 @@ has fainted, or a wipe would be unrecoverable.
 Refusals travel with the disabled card. A greyed-out slot with no explanation reads as a bug;
 "Ignis Fang is your last creature able to battle" reads as a rule.
 
+**A creature that is the active combatant of a still-Active battle cannot move, swap, or be
+team-storage-swapped, online or offline.** `CreatureInventoryService` checks
+`IBattleRepository.IsCreatureActiveInAnotherBattleAsync` before `MoveBetweenInventoriesAsync`,
+`SwapTeamAndStorageAsync`, and `SwapSlotsAsync` (team inventory only) touch anything, and refuses
+with `Success = false` before opening a transaction. The battle row references its active creature by
+id; letting that id leave the team (or get reordered out from under a slot-based reference) desyncs
+the fight. The check lives in the DLL service itself, not the REST endpoint, so offline play — which
+calls `ICreatureInventoryService` directly, bypassing `TrainerCreatureIntentEndpoints` — gets the same
+refusal.
+
 ## The swap is one transaction
 
 `ICreatureInventoryService.SwapTeamAndStorageAsync` — **not** `MoveToStorage` followed by
@@ -60,6 +70,26 @@ UI asks for something impossible and gets a refusal rather than a half-applied w
 
 `TeamStorageSwapResult` is its own type because `InventorySwapResult` describes two slots inside a
 single inventory and carries one `InventoryId`. This operation spans two.
+
+## The write goes through an intent, not the DLL directly (Phase D)
+
+`PlayerTeamView` and `PlayerStorageView` still read through `ICreatureInventoryService`
+(`GetTeamAsync`, `GetStorageAsync`, `GetTeamSlotsAsync`, ...) — those are unaffected. But
+`SwapTeamSlotsAsync`, `MoveToStorageAsync`, `MoveToTeamAsync` and `SwapTeamAndStorageAsync` now go
+through `ITrainerCreatureIntentService` (`Assets/CR/Trainers/Inventory/`), not
+`ICreatureInventoryService` directly. Before Phase D, `ICreatureInventoryService` was bound straight
+to the local `CreatureInventoryService` DLL with no online/offline branch — meaning an online
+player's team edits never reached the server at all, only the local SQLite cache.
+
+`TrainerCreatureIntentOnlineOfflineService` is the router: online it calls the matching
+`POST /api/v1/trainers/{t}/creatures/{c}/move`, `.../team/swap` or
+`.../creatures/team-storage-swap` route (`TrainerCreatureIntentEndpoints.cs`, cr-api) and — because
+the endpoint answers a business-rule refusal (409, e.g. last-team-creature) with a message body, not
+the result object — rebuilds a `Success = false` result in the exact shape the offline DLL call
+returns, so the two views need no online/offline branch of their own. Offline, the router calls the
+same unqualified `ICreatureInventoryService` instance directly. `ITrainerItemIntentService`
+(`Assets/CR/UI/BagScreenHandler.cs`'s discard button) is the same pattern for
+`IItemInventoryService.RemoveFromBackpackAsync`.
 
 ## Gamepad
 

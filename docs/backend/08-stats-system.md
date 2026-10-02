@@ -111,8 +111,8 @@ Task<long> GetAsync(Guid accountId, Guid trainerId, string statKey, Cancellation
 // Read all stats for a trainer as a flat dictionary
 Task<IReadOnlyDictionary<string, long>> GetAllAsync(Guid accountId, Guid trainerId, CancellationToken ct);
 
-// Add `amount` to current value; creates the row if it doesn't exist
-Task IncrementAsync(Guid accountId, Guid trainerId, string statKey, long amount, string source, CancellationToken ct);
+// Add `amount` to current value; creates the row if it doesn't exist; returns the value AFTER the increment
+Task<long> IncrementAsync(Guid accountId, Guid trainerId, string statKey, long amount, string source, CancellationToken ct);
 
 // Update only if `value` > current; creates the row if it doesn't exist
 Task MaxAsync(Guid accountId, Guid trainerId, string statKey, long value, string source, CancellationToken ct);
@@ -132,7 +132,7 @@ public class StatService : IStatService
     private readonly IStatRepository _repository;
     private readonly ILogger<StatService> _logger;
 
-    public Task IncrementAsync(Guid accountId, Guid trainerId, string statKey,
+    public Task<long> IncrementAsync(Guid accountId, Guid trainerId, string statKey,
         long amount, string source, CancellationToken ct = default)
     {
         _logger.LogDebug("IncrementAsync: trainerId={TrainerId} stat={Stat} amount={Amount}",
@@ -145,11 +145,17 @@ public class StatService : IStatService
 
 Every write method is transactional: the `trainer_stat` upsert and the `stat_event` insert run inside the same database transaction.
 
+- `IncrementAsync` returns the stat's value **after** the increment (Postgres `RETURNING`, SQLite re-select in the same transaction). Trainer progression relies on it: a level-up is detected by comparing the level before and after one increment, and a first-time award fires when a per-key counter comes back as exactly 1.
+
 ## How to Record a Stat from Unity
 
-The intended path is **not** direct HTTP calls to the Stats endpoint — stats are written as a side-effect of quest progress events. The Unity client fires `POST /api/v1/quests/progress` after any game event, and the Quest domain service writes stats as part of that call.
+The intended path is **not** direct HTTP calls to the Stats endpoint, and — since Phase E retired
+`POST /api/v1/quests/progress` outright — it is also no longer a side effect of a client-reported quest
+progress event. Every lifetime stat is now written by `LifetimeStatProjector` from an outcome the
+authority itself produced (a talk, a location entry, a battle resolution, …), never from anything the
+Unity client posts — see [Progress Dispatcher](?page=backend/23-progress-dispatcher).
 
-However, if a domain that does not use quests needs to write a stat (e.g., the Trainer domain writing `trainer_level`), it injects `IStatService` and calls it directly server-side. There is no client-facing endpoint for stat writes.
+If a domain that does not use quests needs to write a stat (e.g., the Trainer domain writing `trainer_level`), it injects `IStatService` and calls it directly server-side. There is no client-facing endpoint for stat writes.
 
 **From the server side (e.g., in a domain service):**
 
@@ -167,23 +173,15 @@ await _statService.SetAsync(
     accountId, trainerId, StatKey.TrainerLevel, newLevel, "trainer_level_up", ct);
 ```
 
-**From Unity (via the quest progress endpoint):**
-
-```bash
-# Record a battle win — this writes both quest progress AND the battles_won stat
-curl -s -X POST http://localhost:5000/api/v1/quests/progress \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "accountId":     "aaaaaaaa-...",
-    "trainerId":     "bbbbbbbb-...",
-    "objectiveType": 3,
-    "amount":        1,
-    "referenceId":   null
-  }'
-```
-
-The `battles_won` stat is incremented as a side effect of `objectiveType = 3` (`WinBattles`), whether or not any active quest has a `WinBattles` objective.
+:::caution
+`POST /api/v1/quests/progress` is retired (Phase E, 410 `route_retired`) — no stat is reachable through
+it any more, for any objective type. `battles_won` is written by `BattleDomainService` itself, through
+the progress dispatcher, the moment it resolves the winning action (or a forfeit win) server-side;
+`VisitLocation`/`TalkToNpc` (the last two types the old compat route still forwarded) now only ever
+arrive through `POST .../world-locations/enter` and the talk intent respectively. See [Progress
+Dispatcher](?page=backend/23-progress-dispatcher) and [Quest System — the retired compat
+route](?page=backend/07-quest-system).
+:::
 
 ## How to Query the Audit Log
 
@@ -276,20 +274,48 @@ Defined in `CR.Stats.Data.Constants.StatKey`. Use these constants rather than in
 
 | Constant | String Value | Operator | Written By |
 |----------|-------------|---------|-----------|
-| `BattlesWon` | `"battles_won"` | Increment | `QuestDomainService` on `WinBattles` event |
-| `BattlesLost` | `"battles_lost"` | Increment | Battle system (future) |
-| `DamageDealtTotal` | `"damage_dealt_total"` | Increment | `QuestDomainService` on `DealDamage` / `DealDamageOfType` events |
-| `DamageHealedTotal` | `"damage_healed_total"` | Increment | `QuestDomainService` on `HealAmount` events |
-| `CreaturesCapturedTotal` | `"creatures_captured_total"` | Increment | `QuestDomainService` on `CaptureAnyCreature` events only (one write per capture; the specific event no longer writes it) |
-| `CreaturesDefeatedTotal` | `"creatures_defeated_total"` | Increment | `QuestDomainService` on `DefeatAnyCreature` events only (one write per defeat) |
-| `TrainersDefeatedTotal` | `"trainers_defeated_total"` | Increment | `QuestDomainService` on `DefeatAnyTrainer` events |
-| `ItemsCollectedTotal` | `"items_collected_total"` | Increment | `QuestDomainService` on `CollectItem` events |
-| `QuestsCompleted` | `"quests_completed"` | Increment | `QuestDomainService.ClaimRewardsAsync` |
-| `HighestCreatureLevel` | `"highest_creature_level"` | Max | `QuestDomainService` on `ReachCreatureLevel` events |
-| `TrainerLevel` | `"trainer_level"` | Set | Trainer domain on level-up |
-| `CreatureLevelKey(id)` | `"creature_level_{id:N}"` | Max | `QuestDomainService` on `ReachCreatureLevel` events |
+| `BattlesWon` | `"battles_won"` | Increment | `LifetimeStatProjector` on `BattleWon` |
+| `BattlesLost` | `"battles_lost"` | Increment | `LifetimeStatProjector` on `BattleLost` (produced from C2) |
+| `DamageDealtTotal` | `"damage_dealt_total"` | Increment | none until C2 |
+| `CreaturesCapturedTotal` | `"creatures_captured_total"` | Increment | `LifetimeStatProjector` on `CreatureCaptured` (the server's capture) |
+| `CreaturesDefeatedTotal` | `"creatures_defeated_total"` | Increment | `LifetimeStatProjector` on `CreatureDefeated` |
+| `TrainersDefeatedTotal` | `"trainers_defeated_total"` | Increment | `LifetimeStatProjector` on `TrainerDefeated` |
+| `ItemsCollectedTotal` | `"items_collected_total"` | Increment (+quantity) | `LifetimeStatProjector` on `ItemCollected` (pickups; loot from C2) |
+| `QuestsCompleted` | `"quests_completed"` | Increment | `LifetimeStatProjector` on `QuestCompleted` — at completion, not claim |
+| `QuestCompletedKey(key)` | `"quest_completed_{key}"` | Increment | `LifetimeStatProjector` on `QuestCompleted` (key trimmed, lower-case) |
+| `NpcsTalkedToTotal` | `"npcs_talked_to_total"` | Increment | `LifetimeStatProjector` on the **first** talk to each NPC (distinct NPCs) |
+| `NpcMetKey(key)` | `"npc_met_{key}"` | Increment | `NpcTalkService` — per-NPC talk counter; 1 = first talk |
+| `LocationsVisitedTotal` | `"locations_visited_total"` | Increment | `LifetimeStatProjector` on `LocationEntered`, `Facts[FirstTime] == true` only |
+| `HighestCreatureLevel` | `"highest_creature_level"` | Max | none until C2 |
+| `TrainerLevel` | `"trainer_level"` | Set/Max | `TrainerProgressionService` (see [Trainer Progression](?page=backend/22-trainer-progression)) |
+| `CreatureLevelKey(id)` | `"creature_level_{id:N}"` | Max | none until C2 |
+| `StatKey.LocationDiscoveredKey(key)` | `"location_discovered_{key}"` | Max 1 | `LifetimeStatProjector` on `LocationEntered` — a **projection**, not a gate; the real first-time gate is the `trainer_location_discovery` ledger, see [Location Discoveries](?page=backend/24-location-discoveries) |
+| `StatKey.SpeciesCapturedKey(baseCreatureId)` | `"species_captured_{id:N}"` | Increment | `LifetimeStatProjector`, fed by `ProgressFacts.BaseCreatureId` (stamped on `CreatureCaptured` by `CaptureAttemptService`) — `TrainerProgressionService.AwardAsync` only *reads* the counter now (0 = first-of-species) to decide the first-capture XP bonus; it no longer writes it |
+| `BattleMissionsCompleted` | `"battle_missions_completed"` | Increment | `LifetimeStatProjector` on `BattleMissionCompleted` — emitted by `BattleDomainService.ApplyMissionsAsync` for **both** mission pools (an `AbilityUnlock` completion and a `GuaranteedCapture`/Bond Trial completion alike, #7 R12); the tracker and `BattleDomainService` never write the stat directly |
+| *(none yet)* | `"trainers_defeated_distinct"` | none until #1 C2 | `AchievementCriterionResolver` reads this key as a raw string literal for `AchievementCriterionType.DistinctTrainersDefeated` (16) — no `StatKey` constant and no writer exist yet, so this criterion never satisfies. See [Achievements](15-achievements.md) |
 
-`CreatureLevelKey` is a helper method that formats the creature UUID using `{id:N}` (no hyphens) to keep the key short and consistent.
+`damage_healed_total` is **retired** (phase B): nothing produces heals server-side, so the constant is gone and
+no code writes it. Every key in this table is server-owned — see the stat-writer registry on
+[Progress Dispatcher](?page=backend/23-progress-dispatcher); the player write routes refuse them, and Unity's stat
+router writes nothing while online.
+
+### Per-category quest completions
+
+`StatKey.QuestsCompletedInCategoryKey(slug)` gives `quests_completed_cat_{slug}` (prefix
+`StatKey.QuestsCompletedCategoryPrefix = "quests_completed_cat_"`, with its own `cat_` token so the family never
+includes `quests_completed` itself). The slugs are `bonus`, `main_story`, `exploration`, `battle` and `talent`
+(`QuestCategoryExtensions.ToSlug`).
+
+| Key | Sole writer | When |
+|---|---|---|
+| `quests_completed_cat_{slug}` | `LifetimeStatProjector` | `QuestCompleted` outcome, at the completion CAS, only when the outcome's category fact is one of the five slugs (source `quest_complete`) |
+
+Like every stat since #1 A1, these keys are not client-writable. Invariant: the five counters sum to the
+`quests_completed` increments made after the release (an undefined stored category on a hand-edited row is the
+one exception — see [Quest System](07-quest-system.md#quest-categories-and-area-key)). The Journal's Records
+list shows them right after "Quests Completed" as "{Category} quests completed" (`StatKeyFormatter`), because
+they sort alphabetically next to it — see the Records ordering note on
+[Player Menu UI](?page=unity/10-player-menu-ui#achievements-tab-achievementsview).
 
 ## `source` Field Values
 
@@ -362,6 +388,18 @@ and writes. A write's body still carries an `accountId` field for wire compatibi
 client, but it is never read — the account written is always the token's, so a forged body value
 cannot write another account's counters. Either group answers `401 Unauthorized`, not a 500, for a
 token that carries no usable account claim.
+
+The three write routes (`increment`, `max`, `set`) additionally refuse **server-owned** keys with
+`403 Forbidden`, checked before the ownership lookup: `trainer_xp`, `trainer_level`, and any
+`location_discovered_*` / `species_captured_*` key (`ServerOwnedStatKeys.Contains`, trimmed,
+case-insensitive, exact match or prefix). Before that, a key with leading or trailing whitespace is
+refused with `400` — it would be stored as its own row that no reader looks up. These four feed trainer
+progression's level derivation and `species_captured_*`'s first-time XP gate; `location_discovered_*` is
+now a projection of the `trainer_location_discovery` ledger, not a gate itself — see
+[Trainer Progression](?page=backend/22-trainer-progression) and
+[Location Discoveries](?page=backend/24-location-discoveries) — and only server-side code (the
+progression funnel, the admin XP grant) may write them; a player client has no legitimate reason to
+call these routes with those keys.
 
 ## DI Registration
 

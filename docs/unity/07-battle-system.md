@@ -16,10 +16,39 @@ The battle system connects scene-level events (NPC interaction, wild encounter t
 
 ### Resolution vs Close — two lifecycle moments
 
-- `EndBattle(winner, reason)` marks the battle resolved and raises `OnBattleEnded` / `BattleEvents.BattleEnded`. The arena is **not** exited; the post-battle summary screen shows.
+- `EndBattle(winner, reason)` marks the battle resolved and raises `OnBattleEnded` / `BattleEvents.BattleEnded`. The arena is **not** exited; the post-battle summary screen shows. `reason` is one of the named string constants on `BattleEndReason` (`Capture`, plus the existing `"loop_complete"`/`"force_close"` literals), not a bare literal at call sites like `BattleBagPanelHandler`.
 - `CloseBattle()` is called by `BattleSummaryScreen` on OK (or auto-dismiss for `ran_away`). Restores camera + trainer position via `BattleStager.ExitArenaAsync` and raises `OnBattleClosed` / `BattleEvents.BattleClosed`.
 
 Gameplay systems (input gates, ambient audio) release on `BattleClosed`, not `BattleEnded`, so the world doesn't unlock behind the summary modal.
+
+**A capture is not a battle win (spec B7).** `EndBattle` computes `playerWon` from the winning side, but
+`BattleEndReason.ReportsBattleWon(reason, playerWon)` additionally excludes `Capture`: catching the wild
+creature ends the battle without a `BattleWon`/`TrainerDefeated` outcome. The capture's
+own progress (`CreatureCaptured`, and the crystal's `ItemUsed`) comes back on the item-use result and is
+applied through `IQuestService.ApplyServerProgress` from `OnlineOfflineItemDomainService` — the client
+never reports the capture as a separate quest/achievement event. `BattleBagPanelHandler`'s capture branch
+no longer looks up the captured creature's base content key or calls a reporter itself; it just ends the
+battle with `BattleEndReason.Capture` and lets the item-use response's progress apply. Offline item use
+(potions in and out of battle, capture crystals) now binds to the same DLL `ItemUseDomainService` +
+effect handlers the server runs (`ItemUseOfflineBindings.Install`, called from
+`LocalDevGameInstaller`) instead of the old hand-rolled `OfflineItemUseService` (deleted, M1-F1,
+cr-api-unity `8aac92b1`) — this is what gives an offline potion its `ItemUsed` progress outcome (a
+`UsedItem` quest objective) and its `items_used_total` stat write, which the old mirror never produced.
+
+**Client battle-outcome reporters are gone (M1-F2u, cr-api-unity `107ce9d2`).**
+`QuestManager.OnCreatureDefeated`/`OnTrainerDefeated`/`OnBattleWon`, the matching `IQuestService`
+members, and `DefeatedOpponentReporter` (which used to remember a fainted opponent's species before its
+row was soft-deleted) are deleted — the server, or the same DLL `BattleDomainService` offline, now
+produces the `BattleWon`/`CreatureDefeated`/`TrainerDefeated` outcomes itself as part of resolving the
+battle action, so the client has no member left that could report them. `BattleCoordinator`'s turn loop
+applies each action's `outcome.Progress` via `_questManager.ApplyServerProgress` right after
+`SubmitActionAsync` returns — one call site covers both the online HTTP response and the offline DLL
+response, since both return the same `ActionOutcome`; the call is a no-op on a non-deciding turn
+(`Progress` is null there). The offline `IBattleDomainService` binding resolves its `IProgressOutcomeSink`
+from the same `ProgressBindings` install the rest of the offline stack uses, so an offline battle
+produces and applies progress through the identical path as online play —
+`BattleOfflineProgressSinkWiringTests` proves the DI actually resolves it, since the sink's constructor
+parameter is optional and a broken binding would otherwise compile silently.
 
 ### Installer Binding
 
@@ -227,6 +256,15 @@ The heal + teleport run on `OnBattleClosed` (not `OnBattleEnded`) because the ar
 
 XP is awarded **server-side** on a knockout (see *Battle Experience* on the backend battle-persistence page for the 90/10 fighter/bench split and EXP-share). `BattleCoordinator.FireOutcomeEvents` reads `ActionOutcome.ExperienceAwards` and raises `BattleEvents.ExpGained(creatureId, amount, leveledUp)` (plus `LevelUp` when a creature levels). The **battle summary** collects these into its XP section and "LEVEL UP" chip — the client does no XP math, it only renders what the outcome reports.
 
+**Trainer XP is a separate award on the same outcome.** Every `ActionOutcome` (win award, loot, any
+XP-granting turn — online and offline alike) also carries `TrainerProgress` (level/XP for the trainer,
+not the creature). `OnlineOfflineBattleDomainService.SubmitActionAsync` reads it off every action result
+and hands it to `IProgressionNotifier.ReportTrainerProgress` (`TrainerLevelUpToastAdapter` toasts a level
+up; `PlayerTeamView`'s XP bar reads the memoised `TrainerProgress` cache scope this invalidates). This is
+the same reporting path pickups, item use and talk funnel their trainer XP through — see [Domain Sync
+Pattern](?page=unity/16-domain-sync-pattern) for the `TrainerProgress` cache scope and its invalidation
+table.
+
 ## `BattleSession`
 
 `BattleSession` is the payload of `OnBattleStarted`. It is a snapshot — it does not update as the battle progresses.
@@ -373,7 +411,7 @@ On `OnTriggerEnter` (Player tag), a coroutine `EncounterDelayRoutine` is started
 
 ## Wild Battle AI
 
-`BattleCoordinator` injects `IWildBattleAIDomainService` (the DLL interface). The same `WildBattleAIDomainService` runs both client-side (offline) and server-side (via the `/wild-turn` endpoint in online mode).
+`IWildBattleAIDomainService` is a DLL interface, not something `BattleCoordinator` calls directly any more — the same `WildBattleAIDomainService` runs offline (bound locally) and server-side, but online the server now runs it inline inside `BattleTurnDomainService.SubmitTurnAsync` as part of resolving the player's own submitted action (server-authority C2), not through a separate endpoint. The old `/wild-turn` endpoint Unity used to call after every player turn is retired (410); see [Battle Persistence → Wild Turn Endpoint](?page=backend/09-battle-persistence#wild-turn-endpoint-retired).
 
 Decision priority:
 1. 20% random chance → use a Status-category ability if one exists
@@ -914,12 +952,20 @@ rejected, and on Enter alone the pickup would never be reconsidered while the pl
 Collection now raises `WorldToast` ("You picked up 50 Coins"), named from the granted reward rather
 than the content key, which is an authoring detail.
 
+`PickupBehaviour` no longer loops over `result.GrantedRewards` calling `IQuestService.OnItemCollected`
+itself — that client-reported-outcome reporter is gone. The server (or the offline DLL pickup service)
+already produced whatever quest/achievement progress and XP the collect earned, and returns it on the
+result as a `ProgressReport`; `PickupBehaviour` just hands it to `IQuestService.ApplyServerProgress`
+(falling back to `IProgressionNotifier.ReportTrainerProgress` only if the result carries no report, e.g.
+an older offline save).
+
 ### WorldToast
 
 A static bus in `CR.Core.Notifications`: gameplay raises, UI listens, and nothing in it knows what a
 toast looks like. `AchievementToastPresenter` shows both achievements and these. It keeps its
 achievement-specific name because the UI rig references it by class name from a scene — worth
-renaming when someone is in the Editor anyway.
+renaming when someone is in the Editor anyway. Its achievement toasts now also show the unlock's point
+value (`"+{points} pts"`, hidden when 0/null) via a new `ToastRequest.Points` carried through to `ShowOne`.
 
 ## A Failed Encounter Re-Arms Itself, and Tries to Fix the Spawner
 
@@ -1001,6 +1047,8 @@ Stale rows surviving one extra sync is the recoverable failure. The deletion is 
 **A trainer's team must not also exist as a `SpawnerDefinition`.** `npc-trainer-meadow-scout-team.asset` did, and `SpawnerDefinitionSyncBehaviour` re-synced it into the local database on every world load — silently reverting whatever had just been pushed. The asset is deleted and Crystalline Rift Studio now excludes `<trainerKey>-team` spawners from the Spawners tab entirely (see [Content Registry](?page=unity/08-content-registry)).
 
 **`BattleHUD` IDs are now `Guid`, not `string`.** Comparisons inside the HUD use `Guid` equality; HpChanged events arriving before `CreaturesIdentified` are cached in `_hpCache` and replayed when the IDs land. Out-of-order or dropped events no longer leave the opponent panel blank.
+
+**Opponent card read `??? Lv0` at the end of every wild battle.** When a wild battle ends the authority retires the uncaptured wild creature (soft delete) and the by-id read filters deleted rows, so the next `GetBattleStateAsync` has a player creature and no opponent. `BattleCoordinator.ReidentifyActivesIfChanged` used to compare active ids only, read "no opponent" as "opponent changed to nobody", and re-raised `CreaturesIdentified` with an empty id, `???` and level 0 (Editor.log: `CreaturesIdentified ... opponent=???(Lv0,)`). The decision now lives in `CR.Game.Battle.Logic.ActiveIdentityRefresh` (pure, tested): a side with no active creature in the state carries its last `IdentifiedSide` forward and never counts as a change; a creature that *is* in the state but has no name entry still reads `???`, because that is a real content gap.
 
 ## Related Pages
 

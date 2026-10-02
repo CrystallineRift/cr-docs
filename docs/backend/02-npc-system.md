@@ -202,6 +202,10 @@ GET /api/v1/npc/dddddddd-.../items
 
 ### Step 5 — Player receives the creature
 
+This step shows the (now-deleted, M2 close L7) `GiveNpcCreatureToTrainerStorageAsync` DLL method's
+historical behavior — the HTTP route below is retired (410); every real caller now goes through
+`receive-gift` (see the Phase D/E notes above and [Starter Creature Flow](05-starter-creature-flow.md)).
+
 ```
 POST /api/v1/npc/dddddddd-.../give-creature
 {
@@ -361,28 +365,17 @@ Internally:
 1. Calls `EnsureNpcAsync(accountId, trainerId, contentKey)` — ensures the NPC row exists (defaults to `NpcType.Npc`)
 2. Calls `EnsureNpcCreatureTeamAsync(npc.Id, accountId, trainerId, [new NpcCreatureSlotSpec(starterCreatureContentKey, 1)])` — fills slot 1 if empty
 
-### `GiveNpcCreatureToTrainerStorageAsync`
+### `GiveNpcCreatureToTrainerStorageAsync` — deleted (M2 close, L7)
 
-Transfers the first creature from the NPC's team into the trainer's storage inventory. Fails if the NPC has no creatures.
-
-```csharp
-Task<GeneratedCreature> GiveNpcCreatureToTrainerStorageAsync(
-    Guid npcId,
-    Guid accountId,
-    Guid trainerId,
-    CancellationToken ct = default);
-```
-
-Internally:
-1. Fetches the NPC's team — throws `InvalidOperationException` if empty
-2. Takes `team.First()` (slot 1 in practice)
-3. Removes the creature from the NPC's team
-4. Gets or creates the trainer's `Creature` storage inventory (creates a 100-slot inventory named `"Storage"` if none exists)
-5. Determines the next available slot (`existingSlots.Max(c => c.SlotNumber) + 1`, or 1 if empty)
-6. Adds the creature to the trainer's storage inventory
-7. Updates the creature's `CurrentTrainerId` to the receiving trainer
-
-**Failure mode:** If the trainer's storage inventory is full (more than 100 creatures), slot assignment continues incrementally beyond `MaxSlots`. There is currently no hard enforcement of `MaxSlots` at the repository level — it is advisory metadata.
+Used to transfer the first creature from the NPC's team into the trainer's storage inventory. Its
+only caller was Unity's `INpcWorldRepository.GiveCreatureAsync` client for the already-410'd
+`give-creature` route, deleted in an earlier pass (L6) — once that client was gone the DLL method was
+unreachable dead code, so it and its dedicated tests (`NpcGiftRulesTests`' two give-creature cases,
+the whole `NpcGiftResumabilityTests.cs` file) were removed outright. `EnsureFiledInStorageAsync`,
+`ReleaseClaimSafelyAsync` and `IsCreatureAlreadyStoredViolation` went with it — they had no other
+caller. The real, still-live equivalent is `INpcGiftService.ReceiveGiftAsync` via
+`POST /api/v1/trainers/{trainerId}/npcs/{npcKey}/receive-gift` (see the Phase D/E notes below and
+[Starter Creature Flow](05-starter-creature-flow.md)).
 
 ### Other Operations
 
@@ -411,22 +404,40 @@ All list methods accept `offset` and `limit` for pagination. The default limit i
 
 All NPC endpoints are prefixed `/api/v1/npc`. Player-facing routes take the acting account from the
 validated token, never from the request body/query — a client-sent `accountId` is tolerated but
-ignored (`use-battle-item`, `trainer-defeats`). `use-battle-item` additionally refuses any target
-creature not owned by the NPC's own battle team or the calling trainer. The content-registry routes
+ignored (`trainer-defeats`). The content-registry routes
 (`GET`/`PUT`/`DELETE /api/v1/npc/content-registry*`) and `POST /api/v1/npc/reset-teams` read and
 write every account's data at once, so — unlike the player-facing routes above — they require
 `AuthorizationPolicies.RequireContentWrite` (the scope `/auth/service-token` mints for the editor),
 not just any authenticated player.
 
+:::caution Phase E retired four of these routes (410 `route_retired`)
+`ensure-creature-team`, `use-battle-item`, `ensure-items` and `give-creature` are gone from
+`NpcEndpoints.cs` — a caller gets the shared `{ "error": "route_retired" }` / 410 shape
+(`RetiredRouteEndpoints`), the same as every other Phase E retirement. Nothing in Unity called them
+any more by the time they were retired (`StartEncounterAsync` builds a Trainer NPC's team/items
+itself at battle start; `receive-gift` replaced `give-creature` for every gift-giving NPC — see the
+two notes further down). The underlying `INpcDomainService` methods
+(`EnsureNpcCreatureTeamAsync`/`EnsureNpcItemsAsync`/`UseNpcBattleItemAsync`) are still real,
+still-called DLL surface — only the HTTP door is gone. `GiveNpcCreatureToTrainerStorageAsync` was the
+exception: M2 close (L6) deleted its only caller, Unity's `INpcWorldRepository.GiveCreatureAsync` /
+`NpcOnlineOfflineRepository.GiveCreatureAsync` / `INpcClient.GiveCreatureAsync` (dead client for an
+already-retired route), leaving the DLL method itself unreachable — a later pass (L7) deleted the
+method and its dedicated tests outright. The rows below and the walkthrough/curl examples that follow
+describe historical DLL behavior; treat any request against the routes marked **retired** as 410, not
+as shown.
+:::
+
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/api/v1/npc/ensure-starter` | `EnsureStarterNpc` — idempotent upsert with slot 1 creature |
 | `POST` | `/api/v1/npc/ensure` | `EnsureNpc` — idempotent bare NPC creation (no creatures). Accepts `npcType` field (default `Npc`) |
-| `POST` | `/api/v1/npc/{npcId}/ensure-creature-team` | `EnsureNpcCreatureTeam` — idempotent multi-slot team seeding |
-| `POST` | `/api/v1/npc/{npcId}/ensure-items` | `EnsureNpcItems` — idempotent item inventory seeding |
+| `POST` | `/api/v1/npc/{npcId}/ensure-creature-team` | **Retired (410).** `EnsureNpcCreatureTeam` — idempotent multi-slot team seeding; DLL method still called internally, see note below |
+| `POST` | `/api/v1/npc/{npcId}/ensure-items` | **Retired (410).** `EnsureNpcItems` — idempotent item inventory seeding; DLL method still called internally |
+| `POST` | `/api/v1/npc/{npcId}/use-battle-item` | **Retired (410).** A trainer NPC's own in-battle item use is decided and applied entirely server-side now, inside `BattleTurnDomainService.SubmitTurnAsync` — see [Battle Extensions](?page=unity/24-battle-extensions) |
 | `GET` | `/api/v1/npc/{npcId}/items` | `GetNpcItems` — fetch NPC's current item inventory |
 | `GET` | `/api/v1/npc/{npcId}/creature-team` | `GetNpcCreatureTeam` — fetch the NPC's creatures. The write side answers with a count, so an online client needs this to read back a team the server just created |
-| `POST` | `/api/v1/npc/{id}/give-creature` | Give NPC's creature to trainer storage |
+| `POST` | `/api/v1/npc/{id}/give-creature` | **Retired (410).** Give NPC's creature to trainer storage — superseded by `receive-gift` below |
+| `POST` | `/api/v1/trainers/{trainerId}/npcs/{npcKey}/receive-gift` | `NpcGiftService.ReceiveGiftAsync` — generates the NPC's authored `gift_template_id` creature straight into storage, at most once per (trainer, NPC). See the note below. |
 | `GET` | `/api/v1/npc/{id}` | Get NPC by ID |
 | `GET` | `/api/v1/npc` | List NPCs for trainer |
 | `POST` | `/api/v1/npc` | Create NPC |
@@ -435,8 +446,113 @@ not just any authenticated player.
 | `GET` | `/api/v1/npc/content-registry` | Returns the global NPC content definitions — `(contentKey, npcType)` pairs from the `ContentWorldId` rows — for editor sync tooling |
 | `PUT` | `/api/v1/npc/content-registry` | `UpsertContentRegistryNpc` — creates or updates a global NPC template. Body: `{ contentKey, npcType, itemSpawnerContentKey?, isRematchable? }` |
 | `DELETE` | `/api/v1/npc/content-registry/{contentKey}` | Soft-deletes a global NPC template |
+| `PUT` | `/api/v1/npc/content-registry/{contentKey}/battle-item-loadout` | `UpsertNpcBattleItemLoadout` — idempotent upsert of a trainer NPC's authored battle-item stock (`npc_battle_item_loadout`). Body: `{ items: [{ itemContentKey, quantity }] }`. Content Studio push leg (`SyncTrainerBattle`) |
 | `GET` | `/api/v1/npc/trainer-defeats` | Every `npc_content_key` the account has defeated (`offset` / `limit` bounded). Unity's `TrainerDefeatCache` reads the local PlayerData `trainer_defeat` table first and calls this once per account per session to mirror any server-only defeats into it; a trainer-battle win reaches the cache through `BattleResult.DefeatedNpcContentKey`, not a re-fetch |
 | `POST` | `/api/v1/npc/reset-teams` | `ResetNpcTeams` — discards the cached creature teams of every NPC with the given `contentKey`, across all accounts. Body: `{ contentKey }`. Returns `{ contentKey, npcsReset }` |
+
+:::note Server-authoritative Trainer battle start supersedes ensure-creature-team / ensure-items
+`POST /api/v1/battles` (`IBattleEncounterDomainService.StartEncounterAsync`, `EncounterKind.Trainer`)
+now builds the NPC's team from its `{key}-team` spawner templates and seeds its battle items from
+`npc_battle_item_loadout` itself, at the moment a battle actually starts — the client no longer
+calls `ensure-creature-team` / `ensure-items` as a pre-warm at world load (`NpcTrainerBehaviour`
+only reads the team/items back, for UI). **Phase E retired both HTTP routes outright (410
+`route_retired`)** now that nothing calls them any more; the DLL methods
+(`EnsureNpcCreatureTeamAsync`/`EnsureNpcItemsAsync`) are still real — `StartEncounterAsync` calls
+them internally, and the offline router still reaches them against local SQLite —
+there is just no HTTP door to either any more. `M16050SeedMeadowScoutBattleIdentity` seeds the
+Meadow Scout's content-registry `Trainer` row and a `npc_battle_item_loadout` entry so the offline
+floor has one to test against.
+:::
+
+:::note Wild encounters seed the exact creature the encounter spawned or reused — not "newest wild anywhere"
+`IBattleDomainService.StartBattleAsync` now takes an explicit `Guid? wildCreatureId`, threaded down
+from `BattleEncounterDomainService`'s own spawn result or its reused-candidate pick
+(`TryFindReusableWildCreatureAsync`, which excludes any candidate already active in another `Active`
+battle via `IBattleRepository.IsCreatureActiveInAnotherBattleAsync`). Before this fix, seeding picked
+"the newest wild creature anywhere" — usually right by accident, but not once reuse legitimately picks
+an older creature, which could seed one wild encounter with a *different* encounter's wild opponent.
+A related fix landed in the same pass: the battle's trainer-snapshot builder used to query every
+live wild-owned creature in the database for its "wild team" snapshot instead of just the battle's own
+active creature, which could leak an unrelated battle's wild creature into a state read; it is now
+scoped to `activeCreatureId` like every non-wild trainer's team read already was.
+
+A residual race on that same fix: the reused candidate can pass `TryFindReusableWildCreatureAsync`'s
+exclusion check and still lose the *atomic* claim inside `StartBattleAsync`
+(`IBattleRepository.TryClaimWildCreatureAsync`) to a concurrent encounter that claimed it first. A
+lost claim now throws `WildCreatureClaimLostException` — `SeedForTrainerAsync` never falls back to a
+different wild creature (that fallback was itself the H2 bug, just on the race path). `StartBattleAsync`
+abandons the battle row it had already created and rethrows; `BattleEncounterDomainService
+.StartEncounterAsync` catches it and returns `EncounterStartStatus.EncounterUnavailable`, the same
+refusal the pre-claim exclusion check already used.
+:::
+
+:::note A thrown exception inside the AI turn loop forfeits the AI side, not the whole battle
+`BattleTurnDomainService.SubmitTurnAsync`'s AI step (decide → NPC item use → submit) now runs inside a
+try/catch; any exception forfeits the AI side via the same `ForfeitAiSideAsync` the step-cap path
+already used (`EndReason = "Forfeit"`), instead of the exception propagating out and stranding the
+battle Active with no further turns possible. The forfeit call itself is guarded too
+(`ForfeitAiSideSafelyAsync`), in case the failed step had already ended the battle before throwing.
+
+That guard is also why a bug in the AI step shows up as a free player win rather than a 500 — watch for
+`EndReason = "Forfeit"` on turn 1. Production hit exactly that on 2026-10-01: `BaseNpcRepository.
+GetNpcByBattleTrainerIdAsync` compared the varchar(64) `battle_trainer_id` column (M2012) straight
+against a Guid parameter, which Postgres refuses (`42883: operator does not exist: character varying =
+uuid`) and SQLite's text affinity accepted, so every trainer battle's first AI step threw and forfeited.
+The lookup now compares as text per dialect (`CAST(@battleTrainerId AS text)` on Postgres,
+`LOWER(...) = LOWER(...)` on SQLite), the same shape `BaseTrainerRepository`'s battle-trainer exclusion
+already used, pinned by `NpcBattleTrainerLookupRepositoryTests` on a real Postgres container.
+
+Once the player's own action has committed, everything `SubmitTurnAsync` does next — the AI loop
+(decide/submit/forfeit) and the final-state reads after it — runs on `CancellationToken.None`, not the
+request's own token. A client that disconnects mid-AI-step must not abandon a forfeit/end write
+partway through; the request's cancellation only applies up to and including the player's own
+`SubmitActionAsync`, the same "once it started, it finishes" rule `SafeRecordAllAsync` uses for
+progress outcomes.
+
+`BattleTurnDomainService.RunOpeningStepsAsync` — the AI-first opening loop `BattleEncounterDomainService
+.StartEncounterAsync` runs when a faster opponent wins the turn-1 speed check — follows the same rule.
+By the time it is called, `StartBattleAsync` has already committed the battle row, so there is no
+"before the side effect started" window to protect: the whole method (its round read and the AI loop)
+runs on `CancellationToken.None`, never the caller's token.
+:::
+
+:::note Server-authority Phase D: receive-gift supersedes ensure-creature-team / give-creature for gift NPCs
+A gift NPC now carries a `gift_template_id` (M16007, a base creature id) directly on its `npcs`
+content-registry row, authored in Content Studio — not a list of team-slot specs. `NpcGiftService
+.ReceiveGiftAsync` generates that base creature (mirroring `StarterCreatureService`'s pattern: first
+growth profile + first ability set, level from config key `gift_creature_level`, default 5), claims it
+in the `npc_gift_grant` ledger (`INpcGiftLedger`, at most one gift per (trainer, NPC) ever — a live
+claim on entry is replayed by creature id, never re-generated), and files it in trainer storage. One
+call does the whole grant; there is no separate "ensure" step to pre-warm.
+
+Unity's `NpcCreatureGrantBehaviour` / `NpcInteractionBehaviour.GiveCreatureAsync` (`Assets/CR/Game/
+World/Behaviours/`) call this through `INpcGiftService` (`CR.Npcs.Gift`, an online/offline router
+built like `NpcTalkOnlineOfflineService`) instead of `EnsureNpcCreatureTeamAsync` / `GiveCreatureAsync`
+for any NPC configured as a gift-giver — including the starter NPC, see [Starter Creature
+Flow](05-starter-creature-flow.md). **Phase E retired the `give-creature` HTTP route outright (410)**:
+every content NPC's gift now goes through `gift_template_id`/`receive-gift`, so nothing called it any
+more by the time it was retired. `NpcCreatureGrantBehaviour`'s `_slots` list is now only a
+scene-authored "this NPC offers a gift" toggle; the actual Granted / NotAGiftNpc / UnknownNpc
+decision is the server's, from `gift_template_id`, never client-side.
+
+**Replay checks live ownership, not the ledger claim alone.** A replayed `receive-gift` call (the
+ledger row already exists) re-reads the granted creature's *current* owner before reporting anything:
+if it still belongs to the claiming trainer, replay reports `Granted` again (idempotent, no re-write);
+if ownership has since moved on (sold to a market, given away) it reports `AlreadyReceived` and makes
+**no** write — it never reassigns `current_trainer_id` back to the claimant, which would have silently
+stolen the creature back from wherever it went. A genuine storage failure on the *first* grant attempt
+(distinct from the "already filed for this trainer" case, which still reports `Granted`) reports the
+new `NpcGiftStatus.StorageFailed` instead of a false `Granted`.
+
+**Authoring `gift_template_id` from Content Studio.** `PUT /api/v1/npc/content-registry` accepts an
+optional `giftTemplateCreatureContentKey` (a base creature's `content_key`), resolved server-side to
+the `Guid` `gift_template_id` the row already stored — the same content-key-to-id pattern spawner
+templates use for `CreatureContentKey`; an unknown key is a `400`, and nothing upserts. In Unity,
+`NpcDefinition.giftTemplateCreatureContentKey` is authored via a Gift section in
+`NpcDefinitionEditor` (a `ContentPicker.Creatures()` field), and `ContentCreatorSyncHelper.SyncNpc`
+sends it on push. This only adds the authoring path — no gift NPC content has been re-authored through
+it yet; push each gift NPC from Content Studio to actually set its `gift_template_id`.
+:::
 
 ### `POST /api/v1/npc/reset-teams` — ResetNpcTeams
 
@@ -754,3 +870,26 @@ GET /api/v1/merchants/ffee9012-.../price/buy/cccccccc-...
 ```
 
 Returns 404 if the NPC or item does not exist.
+
+## Server authority hardening (A2, 2026-09-27)
+
+- **Gift ledger** — `npc_gift_grant` (M16002, `UNIQUE(trainer_id, npc_content_key)`, revive-on-write), `INpcGiftLedger`.
+  `give-creature` records the gift first and transfers only when that insert won: one creature per NPC per trainer, ever.
+  A repeat or parallel give answers **409** `{ "error": "already_received" }`; a Trainer/Merchant or unregistered NPC answers 404.
+- **Server-owned teams** (`ensure-creature-team`): a slot naming a `SpawnerTemplateId` is accepted only when the template is an
+  active template of the NPC's own `{contentKey}-team` spawner (species and level from the template; the body's `Level` is ignored).
+  A species-only slot is a one-time gift: accepted only for a gift giver (not Trainer/Merchant) whose gift is unspent, only when
+  the team is empty, and only one per request. Refused slots are skipped and logged at Warning — the response's `teamCount`
+  is the truth, so shipped clients simply show "nothing to give".
+- **Giver type.** On the server it is the content-registry type (`INpcContentRegistryReader`) — an invented NPC key gives
+  nothing, so **every gift NPC must be pushed to the registry** (Studio → NPCs). Offline, where Unity does not sync the
+  registry, the NPC row's own type decides; the ledger applies in both modes.
+
+## Talk intent (server-authority phase B)
+
+`POST /api/v1/trainers/{trainerId}/npcs/{npcKey}/talk` (player token, the trainer must be a player trainer of
+the account, rate limit `cr-player-intent`) is how the client says "the player talked to this NPC".
+`NpcTalkService` checks the key against the NPC content registry (unknown → 404 `unknown_npc`, nothing counted),
+increments `npc_met_{key}` (1 = first talk) and emits `NpcTalked` through the progress dispatcher; the response is
+an `NpcTalkResult` with the `ProgressReport`. Offline Unity runs the same service with the registry check off.
+Every talkable NPC must be pushed to the registry before a server deploy.

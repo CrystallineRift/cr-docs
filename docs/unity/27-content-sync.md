@@ -149,6 +149,13 @@ existing upsert and prune logic. Crystalline Rift Studio's editor push is unaffe
 re-pulls the single spawner from the server when reachable, and falls back to the authored floor
 otherwise.
 
+The server side of Studio's push (`POST /api/v1/spawners/sync-config`, both for a `SpawnerDefinition`
+and for a `TrainerBattleDefinition`'s `-team` spawner) replaces pools and templates in **one
+transaction** since 2026-10-01 — a battle start that reads the spawner mid-push sees the old team or
+the new one, never none — and **refuses a payload with no templates** (`400`, names `allowEmpty`)
+rather than emptying the spawner. Studio never sends `allowEmpty`; a trainer with no authored slots
+is a push error to fix in the Editor, not a server state.
+
 ## Elemental reactions and the damage matrix
 
 Both are authored content as of 2026-09-03, and both are read by the **offline**
@@ -270,3 +277,30 @@ Three files in that project are worth knowing by name:
 - `TargetType` has no real enum in cr-api; it is a bare string whose only spec is an XML comment.
   The client whitelists against that comment.
 - A first-run bulk pull has no progress indication.
+
+## World locations: catalog is the source of truth, tuning pulls back (2026-09-27)
+
+Unlike the domains above, world locations do not go through `ServerContentSyncService`'s pull-and-reconcile
+loop at all. The Studio's **WorldLocations.asset** catalog is the authored source of truth for the whole
+row (key, area, name, `discoveryXp`, `discoveryQuestKey`); **Push locations** sends it whole with
+`replace: true`, retiring anything the catalog doesn't name — this is a Studio push, not a runtime pull, and
+never runs at boot.
+
+A **pull** exists only for the tuning fields an admin might have edited server-side after the last push:
+**⬇ Pull tuning from server** (Studio WORLD → World Locations tab) / `cr_world_locations_pull` copies
+`name`/`discoveryXp`/`discoveryQuestKey` from the server into the catalog for every key that exists in
+both, reports which fields changed, and never adds or removes rows (only Scan does that, from the area
+scenes). Push and Pull both print a drift line afterward — the field-by-field difference between catalog
+and server for keys in both — so an unpulled admin tweak, or an unpushed catalog edit, is visible
+immediately rather than silently overwritten by the next push. See
+[Location Discoveries — Admin / authoring](?page=backend/24-location-discoveries#admin-authoring) and the
+`cr-world-locations` skill.
+
+## World pickup placements (A2, 2026-09-27)
+
+Content Studio → WORLD → **Pickup Placements** (its own tab since 2026-10-01; it used to be a strip at the top of Item Spawners): **Scan areas** reads every `PickupBehaviour` in
+`Assets/CR/Scenes/Areas` straight from the scene YAML (`PickupPlacementScan` — prefab-instance overrides, falling back to the
+prefab's own values) and validates the list as the server will (duplicate ids, missing keys); **Push placements** sends it to
+`PUT /api/v1/pickups/placements/bulk` on the configured server and reads the list back. Pushing only adds. CLI:
+`cr_pickup_placements_scan`, `cr_pickup_placements_push`. There is no catalog asset and no floor copy — offline play does not
+check placements.

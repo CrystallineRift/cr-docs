@@ -2,6 +2,23 @@
 
 This document describes the complete end-to-end flow from Unity world boot through the player receiving their first creature. Understanding this flow is valuable both for debugging problems in the field and for building analogous systems (e.g., quest-giver NPCs that hand out items using the same pattern).
 
+:::caution `give-creature` is retired (410) — the starter NPC now hands over through `receive-gift`
+Steps 5-6 below, the "How to Test" curl script's step 5, and the `give-creature returns 500`
+section describe the pre-Phase-D flow against `POST /api/v1/npc/{npcId}/give-creature`. That route
+is gone (Phase E, 410 `route_retired`). The starter NPC carries a `gift_template_id` like any other
+gift-giver and `NpcInteractionBehaviour.GiveCreatureAsync` (the Unity method, same name, different
+call) now calls `INpcGiftService.ReceiveGiftAsync` → `POST /api/v1/trainers/{trainerId}/npcs/{npcKey}
+/receive-gift` instead — see the two Phase D/E notes on [NPC System](02-npc-system.md#rest-endpoints).
+`ensure-starter` itself is unaffected and still used to seed the NPC and read `hasCreatureToGive`.
+The narrative below is kept for the underlying idempotency/ledger design, which `receive-gift` still
+follows, but treat every `give-creature` call in it as historical. `NpcDomainService
+.GiveNpcCreatureToTrainerStorageAsync` itself (steps 5-6 below) was deleted outright (M2 close, L7):
+its only caller was the already-410'd Unity give-creature client, deleted in an earlier pass, so the
+method had been unreachable dead code with only its own unit tests exercising it — see
+[NPC System](02-npc-system.md#step-5--player-receives-the-creature) for the still-live
+`receive-gift` equivalent.
+:::
+
 ## Why This Flow?
 
 The starter creature flow encapsulates two important design decisions:
@@ -66,12 +83,13 @@ NpcInteractionBehaviour (player walks into trigger radius)
   │
   ▼
 NpcDomainService.GiveNpcCreatureToTrainerStorageAsync(...)
-  ├─ GetNpcTeamAsync  →  find first creature (slot 1)
-  ├─ RemoveCreatureFromNpcTeamAsync
-  ├─ Get or create trainer storage inventory (InventoryType.Creature, 100 slots)
-  ├─ Determine next slot (max existing slot + 1)
-  ├─ AddCreatureToInventory(storageInventory.Id, creatureId, nextSlot)
-  └─ UpdateCreature (CurrentTrainerId = trainerId)
+  ├─ (server-authority A2.4, when INpcGiftLedger is wired — it is, in Program.cs)
+  │    the gift ledger claims WHICH creature this trainer gets from this NPC, once,
+  │    before anything is moved — see "The gift ledger" below
+  ├─ GetNpcTeamAsync  →  is the claimed creature still on the team? (the completion signal)
+  ├─ (1) UpdateCreature (CurrentTrainerId = trainerId), if not already
+  ├─ (2) Get-or-create trainer storage inventory, file the creature there if not already filed
+  └─ (3) RemoveCreatureFromNpcTeamAsync, if still on the team
   │
   │  6. Response: { creatureId, creatureName }
   │
@@ -129,16 +147,54 @@ The `IWorldContext` passed to each `InitializeAsync` carries:
 
 If both conditions are true, `ShowPrompt(true)` is called. When the player presses **E** while the prompt is active, `GiveCreatureAsync` is called.
 
-**Concurrency edge case:** If two clients simultaneously press E on the same NPC (which should not be possible in the current single-player design, but could happen in a future multiplayer mode), both would call `give-creature`. The second call would receive `InvalidOperationException("NPC has no creatures to give.")` from the backend. The first client would succeed. Plan for this in the multiplayer architecture.
+**Concurrency edge case:** If two clients simultaneously press E on the same NPC (which should not be possible in the current single-player design, but could happen in a future multiplayer mode), both call `give-creature`. With the gift ledger wired (below), the loser of the claim race gets the winner's own claimed creature id and proceeds — both calls converge on the same one creature, transferred exactly once (the second call's writes are all idempotent no-ops). Without a ledger (legacy wiring), the second call raced `GetNpcTeamAsync`/`RemoveCreatureFromNpcTeamAsync` directly and could throw `InvalidOperationException("NPC has no creatures to give.")`.
 
 ### Step 6 — Transfer Creature
 
 `GiveNpcCreatureToTrainerStorageAsync` handles the transfer. Key details:
 
-- It takes `team.First()` — always slot 1 in practice. If slot 1 is empty and the creature is in slot 3, this will still take the first creature returned by `GetNpcTeamAsync` which sorts by slot number.
+- Without a gift ledger it still takes `team.First()` — always slot 1 in practice, sorted by slot number.
 - The trainer's storage inventory is created on-demand if it does not exist. This is a "lazy create" pattern — the inventory only comes into existence when the first creature is received.
 - `CurrentTrainerId` on the `generated_creature` row is updated to `trainerId` after the transfer. `FirstCaughtByTrainerId` is not changed — it always reflects the original owner.
 - `HasCreatureToGive` is set to `false` on the Unity side immediately after the call succeeds (without re-fetching from the backend). If the client crashes before this assignment, the next `ensure-starter` call will correctly return `hasCreatureToGive: false` because the NPC's team is already empty on the server.
+
+#### The gift ledger (server-authority A2.4)
+
+`INpcGiftLedger` (optional ctor param on `NpcDomainService`; Program.cs wires it to
+`NpcGiftGrantRepository`) makes a species-only, client-named gift **at most one creature per
+(trainer, NPC)**, and makes the transfer itself **resumable** across a partial failure:
+
+1. **Claim.** `GetClaimedCreatureIdAsync` — if this (trainer, NPC) already has a claim (a prior call,
+   possibly one that failed partway through), that exact creature id is reused; a retry never
+   re-derives a different one from the NPC's current team, which an earlier partial failure may
+   already have changed. Otherwise `TryRecordGiftAsync` claims the team's first creature; a race loss
+   here means a concurrent call already claimed one, so `GetClaimedCreatureIdAsync` is re-read for the
+   winner's id.
+2. **Gate.** Only a registered **gift-giver** NPC gives at all — `GiftGiverTypeAsync` (via
+   `INpcContentRegistryReader` server-side, so an unregistered/invented content key gives nothing; the
+   NPC row's own `NpcType` offline, where the registry isn't synced) must resolve to neither `Trainer`
+   nor `Merchant`. A giver with no unspent claim, or the wrong type, throws
+   `NpcGiftNotAllowedException`; a claim that's already been fully transferred (the creature is no
+   longer on the NPC's team) throws `NpcGiftAlreadyReceivedException`.
+3. **Completion signal.** Whether the claimed creature is *still on the NPC's team* decides whether
+   this call has anything left to do. While it's still there, the three transfer steps (ownership →
+   filed in storage → removed from the NPC team) each individually check their own already-done state
+   before writing, so re-running all three from any partial state is safe. Step 2 (filing in storage)
+   additionally catches the trainer's own partial UNIQUE index violation on a live `creature_id` as
+   "already filed" rather than an error — a concurrent completion can win that specific race.
+4. **Unrecoverable claim.** If the claimed creature id no longer exists as a `generated_creature` row
+   at all (not "already given" — actually gone), the claim is released (`ReleaseGiftAsync`, logged and
+   swallowed on its own failure) so a future call isn't permanently stuck claiming a dead id, and the
+   original failure is rethrown.
+
+Team-slot generation (`EnsureNpcCreatureTeamAsync`) gets a parallel rule (server-authority A2.5): a
+slot naming a `SpawnerTemplateId` must belong to that NPC's own `"{contentKey}-team"` spawner
+(resolved via `ISpawnerRepository`/`ICreatureSpawnerTemplateRepository`, both optional — without them
+any template id is accepted) — a mismatched template is skipped with a warning, not an error, and a
+species-only (client-named) slot goes through the same gift-giver-type-and-unspent-claim check as
+above, limited to **one** species-only slot per call. All of this is opt-in: every new dependency is
+an optional constructor parameter, so wiring that predates A2.4/A2.5 (or offline, where some of these
+repositories aren't registered) keeps the old unchecked behaviour.
 
 ## Trainer Creation Owns the Inventories
 
