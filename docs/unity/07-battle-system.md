@@ -884,7 +884,7 @@ The push **recomputes** each slot id from the content key at push time rather th
 stored string, and refuses when the two disagree — a renamed content key would otherwise write the
 team under new ids and orphan the rows the definition still points at — then restamps the asset on
 success. Leg-by-leg detail lives in
-[Content Registry — a trainer battle push is four writes](?page=unity/08-content-registry).
+[Content Registry — a trainer battle push is five writes](?page=unity/08-content-registry).
 
 M10020 remains the **fresh-database seed**: a trainer still has to exist in a database nobody has
 pushed to, which is what "Server hand-off" and *Copy for server* are still for.

@@ -453,8 +453,8 @@ foreach (var key in _registry.CreatureKeys)
 | `SyncCreature(def)` | `PUT /api/v1/creatures/by-content-key/{contentKey}` | Pushes all base stat fields |
 | `SyncSpawner(def)` | `PUT /api/v1/spawners/by-content-key/{contentKey}` | Pushes spawner metadata + `battleArenaKey` only |
 | `SyncSpawnerFull(def)` | `POST /api/v1/spawners/sync-config` | Pushes metadata **and** pools + templates atomically — this is what **Push All** uses for spawners |
-| `SyncNpc(def)` | `PUT /api/v1/npc/content-registry` | Upserts the NPC content-registry row (`contentKey`, `npcType`, `itemSpawnerContentKey`). It sends no `isRematchable`, and no longer needs to: the server's field is nullable, so an omitted flag is *preserved* rather than reset — an NPC-tab push can no longer switch a trainer's rematch off |
-| `SyncTrainerBattle(def)` | four calls, below | Pushes a `TrainerBattleDefinition`'s team, its cached-team reset and the trainer's identity — see *A trainer battle push is four writes* |
+| `SyncNpc(def)` | `PUT /api/v1/npc/content-registry`, then (no gift authored) `DELETE /api/v1/npc/content-registry/{contentKey}/gift-creature` | Upserts the NPC content-registry row (`contentKey`, `npcType`, `itemSpawnerContentKey`, `giftTemplateCreatureContentKey`). It sends no `isRematchable`, and no longer needs to: the server's field is nullable, so an omitted flag is *preserved* rather than reset — an NPC-tab push can no longer switch a trainer's rematch off. A null gift on the PUT also means *keep*, so when the asset authors **no** gift creature the push follows up with the idempotent gift `DELETE` (`NpcGiftClearUrl`) — clearing the field in the Studio clears it on the server. Pull fills the field back (below), so Pull → Push round-trips a gift instead of deleting it |
+| `SyncTrainerBattle(def)` | five calls, below | Pushes a `TrainerBattleDefinition`'s team, its cached-team reset, the trainer's identity and its battle-item loadout — see *A trainer battle push is five writes* |
 
 **Delete methods** — call the soft-delete backend endpoints; return `(ok, message)` where `ok = false` means the server rejected the delete (surfaces the error text to the user):
 
@@ -721,9 +721,9 @@ buttons:
 
 | Button | What it does |
 |--------|--------------|
-| **Diff** | Fetches the server's copy, applies it to a throwaway clone of the asset with the same routine Pull All uses, serialises both with `EditorJsonUtility` and lists the fields that differ (`FieldDiff.Compare`, engine-free, Newtonsoft-flattened `a.b[2].c` paths; `m_*` Unity bookkeeping skipped). "Not on server" and fetch failures are shown in place of the list. For a Progression Set (tab 5) the server fetch is only top-level fields (`name`/`description`/`isActive`) — entries are not fetched — so the comparison is marked **partial**: "no differences" reads as "no differences among the fields that can be compared", not "matches the server", and the footer says entries were not diffed. Quests are partial too (objectives, rewards and requirements are pushed but not read back), and so is an NPC with a gift creature (pushed as a content key, read back as a template id). The clone is built inside `SyncFieldMerge.ForComparison()`: a pull keeps the asset's value where the server's is blank, a comparison takes the blank as it is, and keys the push derives or defaults (ability FX/icon keys, creature/item/condition icons) are compared against what the push would send (`SyncFieldMerge.PullDerivedKey`). Abilities compare every pushed field including the six FX keys, camera cue, FX timing and their condition links (name/target/chance, order-free — `AbilityConditionLinkMatch`); status conditions compare their VFX/SFX keys. Until 2026-10-01 none of those were applied to the clone, so a row whose FX differed on the server read as matching and Diff cleared its flag. |
+| **Diff** | Fetches the server's copy, applies it to a throwaway clone of the asset with the same routine Pull All uses, serialises both with `EditorJsonUtility` and lists the fields that differ (`FieldDiff.Compare`, engine-free, Newtonsoft-flattened `a.b[2].c` paths; `m_*` Unity bookkeeping skipped). "Not on server" and fetch failures are shown in place of the list. For a Progression Set (tab 5) the server fetch is only top-level fields (`name`/`description`/`isActive`) — entries are not fetched — so the comparison is marked **partial**: "no differences" reads as "no differences among the fields that can be compared", not "matches the server", and the footer says entries were not diffed. Quests are partial too (objectives, rewards and requirements are pushed but not read back), An NPC's gift creature is pushed as a content key and read back as a base-creature id; the diff maps it back through the server creature list (`ContentCreatorSyncHelper.ApplyGiftToNpc` / `CreatureKeyByIdLookup`) and is partial only when that id resolves to no creature. **Trainer Battles** (tab 13) have Diff but not Revert (`ReviewRow.CanDiff`, defaulting to `CanRevert`): the diff reads the battle-item loadout through `GET …/battle-item-loadout` and is always partial — team, loot, bark and arena are not read back. Authored item order is kept with the server's quantities, server-only items are appended (an item with no local `ItemDefinition` shows as an unassigned row), and a `404` shows "Not on server" (`ParseBattleItemLoadoutResponse`). The clone is built inside `SyncFieldMerge.ForComparison()`: a pull keeps the asset's value where the server's is blank, a comparison takes the blank as it is, and keys the push derives or defaults (ability FX/icon keys, creature/item/condition icons) are compared against what the push would send (`SyncFieldMerge.PullDerivedKey`). Abilities compare every pushed field including the six FX keys, camera cue, FX timing and their condition links (name/target/chance, order-free — `AbilityConditionLinkMatch`); status conditions compare their VFX/SFX keys. Until 2026-10-01 none of those were applied to the clone, so a row whose FX differed on the server read as matching and Diff cleared its flag. |
 | **Push** | Sends just that asset through the same `StudioIteratorJob` path as Push All (`ContentStudioTool.PushOne`). Items, which normally go up in one bulk call, are sent one at a time here. The tab is *not* stamped — one asset says nothing about the rest. If the asset cannot be pushed (no plan step for it, or the same push already queued), a "Could not push" dialog appears pointing at the Studio's status line. |
-| **Revert** | Confirm-gated. Overwrites the asset with the server's copy (`RevertOne` → the same per-type apply as Pull All), saves it and stamps it pushed. Unavailable for Trainer Battles, which have no pull. |
+| **Revert** | Confirm-gated. Overwrites the asset with the server's copy (`RevertOne` → the same per-type apply as Pull All), saves it and stamps it pushed. Unavailable for Trainer Battles: only their loadout reads back, so there is nothing whole to revert to. |
 
 (Rows on tabs whose content type has no content key show the asset name alone, with no key column text.)
 
@@ -947,11 +947,11 @@ profiles (which spawner templates resolve by name). Both would claim one server 
 push would retire the first's entries. `DuplicateNameRule` (pure, 7 tests) refuses the colliding
 assets at push time and lets the rest through.
 
-#### A trainer battle push is four writes
+#### A trainer battle push is five writes
 
 **Trainer Battles** (tab 13) syncs like every other tab — a `⬆ Push` on each row, a `⬆ Push` in the
 top bar, counted by the header's pending-edits pill, and included in **Push All Content** (ordered
-last, above). `ContentCreatorSyncHelper.SyncTrainerBattle(def)` then makes four calls and stops at
+last, above). `ContentCreatorSyncHelper.SyncTrainerBattle(def)` then makes five calls and stops at
 the first that fails, reporting which leg it was:
 
 | # | Call | What it writes |
@@ -960,6 +960,7 @@ the first that fails, reporting which leg it was:
 | B | `POST /api/v1/spawners/sync-config` | the team itself — one template per slot, `minLevel = maxLevel = level`, growth profile and progression set sent **by name** and resolved server-side |
 | C | `POST /api/v1/npc/reset-teams` | discards every account's cached copy of that trainer's team so the new one takes effect |
 | D | `PUT /api/v1/npc/content-registry` | the trainer's identity: `npcType: Trainer`, and `isRematchable` from `allowRematch` |
+| E | `PUT /api/v1/npc/content-registry/{contentKey}/battle-item-loadout` | the trainer's battle items, `{ items: [{ itemContentKey, quantity }] }` (`NpcBattleItemLoadoutEntry`, camelCase). A **replace**: items dropped from the list are soft-deleted server-side. Always sent — an empty list goes out as `items: []` with `?allowEmpty=true` (`BuildBattleItemLoadoutPut`), so clearing a trainer's items clears them on the server |
 
 **Leg B's template ids are deterministic, and that is the whole point.** A battle resolves its
 opponent by `creature_spawner_template.id`, so slot *n* is written under
@@ -980,7 +981,7 @@ this exists to close.
 accepted it. `TrainerBattleOfflineWriter` builds the SQLite repositories from the `game_config`
 connection strings and calls the **real** `SpawnerConfigSyncService` for the templates in game-data
 (a hand-written editor mirror would be a second set of matching rules, and they drift), plus a
-repo-level replica of the team sweep against player-data — the two live in different files, because
+repo-level replica of the team sweep against player-data, plus the battle-item loadout into player-data with one `INpcBattleItemLoadoutRepository.ReplaceForNpcAsync` call (`TrainerBattleOfflineSync.WriteBattleItemLoadout`; the same replace as the server, empty list included) — the two databases are different files, because
 templates are content and cached teams are player state. Designers playtest offline, so this closes
 their loop without a floor re-bake; a missing `database_path_*` is reported in the push message
 rather than turned into a failed push.

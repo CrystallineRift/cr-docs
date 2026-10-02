@@ -446,20 +446,19 @@ as shown.
 | `GET` | `/api/v1/npc/content-registry` | Returns the global NPC content definitions — `(contentKey, npcType)` pairs from the `ContentWorldId` rows — for editor sync tooling |
 | `PUT` | `/api/v1/npc/content-registry` | `UpsertContentRegistryNpc` — creates or updates a global NPC template. Body: `{ contentKey, npcType, itemSpawnerContentKey?, isRematchable? }` |
 | `DELETE` | `/api/v1/npc/content-registry/{contentKey}` | Soft-deletes a global NPC template |
-| `PUT` | `/api/v1/npc/content-registry/{contentKey}/battle-item-loadout` | `UpsertNpcBattleItemLoadout` — **replaces** a trainer NPC's authored battle-item stock (`npc_battle_item_loadout`) in one transaction: the NPC's live rows are soft-deleted and the entries sent are upserted (reviving a row in place). Body: `{ items: [{ itemContentKey, quantity }] }`. An empty list is refused with `400` unless `?allowEmpty=true` is passed, because Content Studio never sends one (`ContentCreatorSyncHelper` skips the push when the list is empty) — so an accidental empty push cannot wipe a loadout, and a deliberate clear has to say so. Content Studio push leg (`SyncTrainerBattle`) |
+| `PUT` | `/api/v1/npc/content-registry/{contentKey}/battle-item-loadout` | `UpsertNpcBattleItemLoadout` — **replaces** a trainer NPC's authored battle-item stock (`npc_battle_item_loadout`) in one transaction: the NPC's live rows are soft-deleted and the entries sent are upserted (reviving a row in place). Body: `{ items: [{ itemContentKey, quantity }] }`. An empty list is refused with `400` unless `?allowEmpty=true` is passed — an accidental empty body cannot wipe a loadout, and a deliberate clear has to say so. Content Studio sends the flag exactly when the authored list is empty. Content Studio push leg (`SyncTrainerBattle`) |
 | `GET` | `/api/v1/npc/content-registry/{contentKey}/battle-item-loadout` | `GetNpcBattleItemLoadout` — reads the loadout the PUT above wrote back: `{ contentKey, items: [{ itemContentKey, quantity }] }`, ordered by `itemContentKey` so a Studio diff is stable. `items` is empty when nothing has been pushed yet; `404` for an unknown or soft-deleted NPC, matching the gift DELETE. Same `RequireContentWrite` policy as the sibling content-registry GET — there is no separate content-read policy |
-| `DELETE` | `/api/v1/npc/content-registry/{contentKey}/gift-creature` | `ClearContentRegistryNpcGift` — sets `gift_template_id` to `NULL` on the content-registry row. Idempotent (200 even if already unset), 404 for an unknown `contentKey`. A separate route because `PUT /api/v1/npc/content-registry`'s `giftTemplateCreatureContentKey` already treats null/missing as "keep the stored value" (see the gift-authoring note below), so there is no way to clear it through the PUT. `npc_gift_grant` (the per-trainer grant ledger) is untouched |
+| `DELETE` | `/api/v1/npc/content-registry/{contentKey}/gift-creature` | `ClearContentRegistryNpcGift` — sets `gift_template_id` to `NULL` on the content-registry row. Content Studio's `SyncNpc` calls it after the PUT whenever the NPC asset authors no gift creature; Pull maps `giftTemplateId` back to the creature content key (unresolvable ids leave the asset's gift alone and warn), so Pull → Push does not delete a gift. Idempotent (200 even if already unset), 404 for an unknown `contentKey`. A separate route because `PUT /api/v1/npc/content-registry`'s `giftTemplateCreatureContentKey` already treats null/missing as "keep the stored value" (see the gift-authoring note below), so there is no way to clear it through the PUT. `npc_gift_grant` (the per-trainer grant ledger) is untouched |
 | `GET` | `/api/v1/npc/trainer-defeats` | Every `npc_content_key` the account has defeated (`offset` / `limit` bounded). Unity's `TrainerDefeatCache` reads the local PlayerData `trainer_defeat` table first and calls this once per account per session to mirror any server-only defeats into it; a trainer-battle win reaches the cache through `BattleResult.DefeatedNpcContentKey`, not a re-fetch |
 | `POST` | `/api/v1/npc/reset-teams` | `ResetNpcTeams` — discards the cached creature teams of every NPC with the given `contentKey`, across all accounts. Body: `{ contentKey }`. Returns `{ contentKey, npcsReset }` |
 
-:::caution Clearing a whole loadout needs `?allowEmpty=true` — and the two client writers still skip empty lists
-The PUT is a real replace, so an item dropped from the editor's list is removed on the next push.
-The one case it cannot cover on its own is a trainer whose list is emptied entirely: Content Studio
-(`ContentCreatorSyncHelper`, online push) and `TrainerBattleOfflineSync.WriteBattleItemLoadout`
-(offline, calls the repository's per-row `UpsertAsync` in a loop) both skip the write when the list
-is empty, so the server and the local SQLite keep the old items. Studio should send the empty list
-with `?allowEmpty=true`, and the offline writer should move to `ReplaceForNpcAsync` after the next
-package rebuild — both tracked as follow-ups.
+:::note Clearing a whole loadout needs `?allowEmpty=true`
+The PUT is a real replace, so an item dropped from the editor's list is removed on the next push. A
+trainer whose list is emptied entirely is sent as `items: []` with `?allowEmpty=true` by Content
+Studio (`ContentCreatorSyncHelper.BuildBattleItemLoadoutPut`), and the offline mirror
+(`TrainerBattleOfflineSync.WriteBattleItemLoadout`) writes the same list with one
+`ReplaceForNpcAsync` call — so the server and the designer's local SQLite both end up with no items.
+The Studio's Review window reads the loadout back through the GET for its trainer Diff.
 :::
 
 :::note Server-authoritative Trainer battle start supersedes ensure-creature-team / ensure-items
