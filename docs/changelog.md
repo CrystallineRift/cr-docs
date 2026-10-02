@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-10-02 — Studio: trainer loadouts and NPC gifts clear on push; trainer Diff
+
+- **Why:** cr-api #64 made the loadout PUT a real replace, added a loadout GET and a gift-clear DELETE, but
+  the Studio skipped empty loadouts and sent a null gift (= "keep"), so clearing either in the editor never
+  reached the server.
+- **cr-api-unity:** `SyncTrainerBattle` always sends leg E (loadout PUT); an empty list goes as `items: []`
+  with `?allowEmpty=true`. The offline mirror writes the loadout with one `ReplaceForNpcAsync`. The Review
+  window's Diff now covers Trainer Battles (loadout via the GET, always partial; Revert still off; `404` →
+  "Not on server"). `SyncNpc` follows its PUT with `DELETE …/gift-creature` when no gift is authored, and
+  Pull fills `giftTemplateCreatureContentKey` from the server's gift id via the creature list (an
+  unresolvable id leaves the field and ends Pull with a warning), so Pull → Push round-trips.
+- **Tests:** `NpcLoadoutAndGiftPushTests`, `TrainerBattleOfflineSyncTests` (replace + empty), `ContentReviewRowsTests` (CanDiff).
+- **Deploy order:** the Studio needs cr-api ≥ 7261d2a on whatever server it targets; do not point it at
+  Production before prod runs that build. Pushing an NPC with no authored gift clears a gift set in the web
+  Studio unless Pull ran first.
+  → [Content Registry](?page=unity/08-content-registry), [NPC System](?page=backend/02-npc-system)
+
 ## 2026-10-01 — Studio: World Locations and Pickup Placements are their own WORLD tabs
 
 - **Why:** after editing a location and pressing Refresh, the Studio showed no push option: the catalog lived
