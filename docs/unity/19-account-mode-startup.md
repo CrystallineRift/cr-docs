@@ -91,7 +91,9 @@ cannot sign the player's own device out.
 ## Link Email
 
 A **Link Email** button on the main menu, shown under the same connectivity rule as Play Online
-(server unreachable: it explains and does nothing), opens the `LinkAccount` screen. The state logic is
+(server unreachable: it explains and does nothing), performs the entry login and only then opens the
+`LinkAccount` screen. The screens (`LinkAccount`, `SignedOutDialog`) live in the boot scene
+`Assets/CR/Scenes/Core.unity`. The state logic is
 the pure `LinkAccountFlow` (`CR.Core.Data.Logic`, with `LinkAccountState` / `LinkAccountView`); the
 controller only binds it to UI Toolkit (`CrTheme` tokens, no inline styles).
 
@@ -126,8 +128,9 @@ On Steam Deck text entry uses the Steam on-screen keyboard (playtest-verified, n
 When a request is answered `401` with
 `WWW-Authenticate: Bearer error="invalid_token", error_description="session_superseded"`,
 `SimpleWebClient` recognises the marker (`SupersededResponse`), does not retry and does not walk the
-token ladder. The token manager latches "signed out", `SessionSupersededHandler` raises the event and
-`PlayerStateCache` is cleared. The notice reads:
+token ladder. The signed-out gate (`OnlineSessionGate`) is latched by `SimpleWebClient` and
+`GameAuthRepository`; `OnlineSessionGate` raises `SignedOut`, and `SessionSupersededHandler` reacts to
+it: it clears `PlayerStateCache` and shows the notice. The notice reads:
 
 > You were signed out because this account started playing on another device.
 

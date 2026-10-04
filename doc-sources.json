@@ -1165,14 +1165,18 @@
         "Assets/CR/UI/Logic/**",
         "Assets/CR/Core/Data/Logic/OnlineSessionIdentity.cs",
         "Assets/CR/UI/CharacterSelectController.cs",
-        "Assets/CR/Core/Data/Logic/LinkAccount*.cs",
+        "Assets/CR/Core/Data/Logic/LinkAccountFlow.cs",
         "Assets/CR/Core/Data/Logic/OnlineSessionGate.cs",
         "Assets/CR/Core/Data/Logic/AuthTokenLadder.cs",
+        "Assets/CR/Core/Data/Logic/SingleFlight.cs",
+        "Assets/CR/Core/Data/Repository/Implementation/GameCore/GameAuthRepository.cs",
         "Assets/CR/Core/Session/SessionSupersededHandler.cs",
         "Assets/CR/UI/SignedOutDialogController.cs",
         "Assets/CR/UI/Resources/SignedOutDialog.uxml",
-        "Assets/CR/UI/LinkAccount*.cs",
-        "Assets/CR/UI/Resources/LinkAccount*.uxml"
+        "Assets/CR/UI/LinkAccountController.cs",
+        "Assets/CR/UI/LinkAccountPresenter.cs",
+        "Assets/CR/UI/Resources/LinkAccount.uxml",
+        "Assets/CR/UI/Resources/LinkAccount.uss"
       ]
     },
     "description": "Mode-gated account/startup: one device-bound account, boot-time EnsureLocalAccountAsync (mode-neutral) so an account always exists, mode-first menu (Continue/Play Online/Play Offline) via the existing MainMenuController (IUIScreen 'MainMenu'), connectivity-gated online entry via IConnectivityProbe (reuses version-check), no reconciliation between offline/online worlds, characters mode-locked via IsOnlineTrainer; supporting fixes: ByteArrayTypeHandler + M0008NormalizeEmptySalt for legacy salt rows, NpcMerchantService NotifyBackpackChanged post-commit so InventorySync refreshes; entry login (nothing logs in at boot; Play Online/Continue/Link Email mint the session, post-entry content re-sync), Link Email screen (LinkAccountFlow), signed-out-by-another-device notice and in-world Quit Game dialog"
