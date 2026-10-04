@@ -100,17 +100,19 @@ controller only binds it to UI Toolkit (`CrTheme` tokens, no inline styles).
 | Enter address | Email field, "Send code" → `POST /account/email/code` |
 | Enter code | 6-digit field, "Verify" → `POST /account/email/verify`, "Resend" (disabled until `resendAfterSeconds`, or the `Retry-After` of a `429`, has elapsed), "Use a different address" |
 | Linked | The address the server reports (`GET /account/me`), no form |
+| Unavailable | "Email linking is unavailable right now." |
 
 Both calls send an `Idempotency-Key`. Opening the screen performs the entry login first. Messages
 come from the server's answer:
 
 | Answer | Player sees |
 |---|---|
-| `attached` / `noop` | Linked state with the server-reported address |
-| `switched` | "Signed in — your characters are here". The client discards its tokens, logs in again with its device id (now the email account), stores the new account id and clears `PlayerStateCache`; character select shows that account's characters |
+| `attached` / `noop` | "Email linked." Linked state with the server-reported address |
+| `switched` | "Signed in. Your characters are here." The client discards its tokens, logs in again with its device id (now the email account), stores the new account id and clears `PlayerStateCache`; character select shows that account's characters |
 | `400` (address) | "That doesn't look like an email address." |
 | `400` (code) | "That code didn't work. Check it or request a new one." |
-| `409` | "This account can't be linked right now." |
+| `409` (send code) | "This account can't be linked here." The screen reloads the account (`GET /account/me`) |
+| `409` (verify) | "This account can't be linked right now." |
 | `429` | "Please wait a moment before trying again." |
 | `503` | "Email linking is unavailable right now." |
 

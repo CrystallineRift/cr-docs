@@ -146,12 +146,12 @@ curl -s -X POST https://api.crystallinerift.com/account/email/verify \
 
 | Route | Answers |
 |---|---|
-| `POST /account/email/code` `{email}` | `202 {expiresInSeconds, resendAfterSeconds}`; `400` malformed address; `409` the caller already holds an address or a role; `429` with `Retry-After` over a limit; `503` mail not configured (nothing written) |
-| `POST /account/email/verify` `{email, code}` | `200 AccountLinkResponse` with `action` `attached`, `noop` or `switched`; `400` wrong, expired or exhausted code (one indistinguishable answer); `409` cannot be linked right now, **no detail**; `429` |
+| `POST /account/email/code` `{email}` | `202 {expiresInSeconds, resendAfterSeconds}`; `400` malformed address; `409` the caller already holds an address, a role or a password; `429` with `Retry-After` over a limit; `503` mail not configured (nothing written) |
+| `POST /account/email/verify` `{email, code}` | `200 AccountLinkResponse` with `action` `attached`, `noop` or `switched`; `400` wrong, expired or exhausted code, or any other refusal (one indistinguishable answer); `409` cannot be linked right now, **no detail**; `429` |
 
 **Address rules.** Trimmed and compared case-insensitively (stored lower-case). Printable ASCII only,
-at most 254 characters, exactly one `@`, a dot in the domain, no whitespace, quotes, commas or angle
-brackets; the domain must not start or end with `.` or contain `..`. Anything else is `400`.
+at most 254 characters, exactly one `@`, a dot in the domain, no whitespace, and none of
+`" , ; < >` (an apostrophe is allowed); the domain must not start or end with `.` or contain `..`. Anything else is `400`.
 
 **The code.** 6 digits from a cryptographic RNG, valid 10 minutes, burned after 5 attempts. Stored in
 `account_email_code` (Auth migration `M0017`) as the SHA-256 hex of `"{id}:{code}"`; the plaintext is
@@ -198,9 +198,11 @@ password, and an account's address cannot be changed in this version.
 | `Email__DailySendCap` | global daily send cap, default 500 |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | IAM user `cr-api-ses` |
 
-`LogEmailSender` (writes the message, code included, to the log) is used only when
-`ASPNETCORE_ENVIRONMENT` is exactly `Development` — that is how local development gets a code. With
-no sender configured the routes answer `503`; startup does not fail. The AWS SDK lives only in
+`Email__Provider=ses` needs `Email__FromAddress` too; when SES is configured it always wins.
+`LogEmailSender` (writes the message, code included, to the log) is used only when SES is **not**
+configured **and** `ASPNETCORE_ENVIRONMENT` is exactly `Development` — that is how local development
+gets a code. With no sender, `POST /account/email/code` answers `503` (verify never does); startup
+does not fail. The AWS SDK lives only in
 `CR.Auth.Service.REST` and never ships to Unity. Setup steps: `cr-ops/README.md`, "Email (Amazon SES)".
 
 ## Devices and one login
@@ -538,8 +540,8 @@ All auth-related clients use `GameConfigurationKeys.AuthServerHttpAddress` as th
 | `POST` | `/auth/token/refresh` | Exchange a refresh token for a new access token |
 | `POST` | `/auth/service-token` | Exchange a pre-shared service key for a scoped, account-less token (`admin` or `content:write`) |
 | `POST` | `/account/link` | Attach a credential to the signed-in account, merging its account in if it has one (player) |
-| `POST` | `/account/email/code` | Email a 6-digit code for `{email}` (player, `PlayerIntent` rate limit, `Idempotency-Key`). `202 {expiresInSeconds, resendAfterSeconds}`; `400` malformed; `409` caller already has an address or a role; `429` + `Retry-After`; `503` mail not configured |
-| `POST` | `/account/email/verify` | Prove `{email, code}` (player, `PlayerIntent`, `Idempotency-Key`). `200 AccountLinkResponse` (`attached` / `noop` / `switched`); `400` wrong, expired or exhausted code; `409` cannot be linked right now (no detail); `429` |
+| `POST` | `/account/email/code` | Email a 6-digit code for `{email}` (player, `PlayerIntent` rate limit, `Idempotency-Key`). `202 {expiresInSeconds, resendAfterSeconds}`; `400` malformed; `409` caller already holds an address, a role or a password; `429` + `Retry-After`; `503` mail not configured |
+| `POST` | `/account/email/verify` | Prove `{email, code}` (player, `PlayerIntent`, `Idempotency-Key`). `200 AccountLinkResponse` (`attached` / `noop` / `switched`); `400` wrong, expired or exhausted code, or any other refusal (one indistinguishable answer); `409` cannot be linked right now (no detail); `429` |
 | `POST` | `/api/v1/admin/accounts/{id}/merge` | Fold one account into another; reason required (admin) |
 | `GET`  | `/api/v1/admin/accounts/{id}/merges` | Every merge this account took part in, newest first (admin) |
 
