@@ -69,6 +69,74 @@ and never reach for a token — online and offline trainers stay separate worlds
 so an online session persisted `IsOnlineTrainer = false`, `GameInitializer` logged `online=False` and
 `WorldContext.IsOnlineTrainer` / `SessionStateBridge` told every consumer the trainer was local).
 
+## Entry login: nothing logs in at boot
+
+Boot never mints a session. Before the player chooses, the token ladder may use a live token or spend
+a refresh token, but never runs the anonymous bootstrap; a rejected token before entry returns no token
+without latching anything. Boot content sync that cannot authenticate is skipped (floor/local content
+is used).
+
+The **entry login** is the deliberate press of **Play Online**, **Continue** (online) or **Link Email**:
+it clears any signed-out latch and performs a fresh device login (`/auth/game`), even if a cached token
+looks valid. That login signs out whichever other device was playing the account (see
+[Auth and Accounts — Devices and one login](?page=backend/06-auth-and-accounts)). After a successful
+entry login, `AccountBootstrapper` runs one shared post-entry step: if boot content sync could not
+authenticate, content sync re-runs once (status "Syncing content…").
+
+After the entry login the bootstrap rung of `AuthTokenLadder` is closed: a refresh the server rejects
+(`400`/`401`) latches "signed out" instead of silently creating a new session. Unreachable server,
+`429` and `5xx` are not rejections. Refresh is single-flight (`SingleFlight`), so two failing requests
+cannot sign the player's own device out.
+
+## Link Email
+
+A **Link Email** button on the main menu, shown under the same connectivity rule as Play Online
+(server unreachable: it explains and does nothing), opens the `LinkAccount` screen. The state logic is
+the pure `LinkAccountFlow` (`CR.Core.Data.Logic`, with `LinkAccountState` / `LinkAccountView`); the
+controller only binds it to UI Toolkit (`CrTheme` tokens, no inline styles).
+
+| State | Shows |
+|---|---|
+| Enter address | Email field, "Send code" → `POST /account/email/code` |
+| Enter code | 6-digit field, "Verify" → `POST /account/email/verify`, "Resend" (disabled until `resendAfterSeconds`, or the `Retry-After` of a `429`, has elapsed), "Use a different address" |
+| Linked | The address the server reports (`GET /account/me`), no form |
+
+Both calls send an `Idempotency-Key`. Opening the screen performs the entry login first. Messages
+come from the server's answer:
+
+| Answer | Player sees |
+|---|---|
+| `attached` / `noop` | Linked state with the server-reported address |
+| `switched` | "Signed in — your characters are here". The client discards its tokens, logs in again with its device id (now the email account), stores the new account id and clears `PlayerStateCache`; character select shows that account's characters |
+| `400` (address) | "That doesn't look like an email address." |
+| `400` (code) | "That code didn't work. Check it or request a new one." |
+| `409` | "This account can't be linked right now." |
+| `429` | "Please wait a moment before trying again." |
+| `503` | "Email linking is unavailable right now." |
+
+If the verify answer is lost on the network the screen performs the entry login again and re-reads
+the account, so a completed switch is picked up. The displayed address is never client state.
+
+On Steam Deck text entry uses the Steam on-screen keyboard (playtest-verified, not automated).
+
+## Signed out by another device
+
+When a request is answered `401` with
+`WWW-Authenticate: Bearer error="invalid_token", error_description="session_superseded"`,
+`SimpleWebClient` recognises the marker (`SupersededResponse`), does not retry and does not walk the
+token ladder. The token manager latches "signed out", `SessionSupersededHandler` raises the event and
+`PlayerStateCache` is cleared. The notice reads:
+
+> You were signed out because this account started playing on another device.
+
+- At the main menu or character select (no current trainer, or the UI context is PreGame) it shows on
+  the menu's status line.
+- In the world it is the blocking `SignedOutDialog` (`SignedOutDialogController`) whose only button is
+  **Quit Game** — the game has no return-to-title path today.
+
+The device takes the session back only when the player presses Play Online, Continue or Link Email
+again, which signs the other device out in turn.
+
 ## Connectivity probe
 
 `IConnectivityProbe.IsServerReachableAsync()` is a lightweight, timeboxed reachability check. The default
@@ -95,9 +163,10 @@ guard is needed; an offline character is structurally never offered in online mo
 ## Not built (intentional)
 
 - No reconcile / merge / push / pull of player progress between offline and online.
-- No login gate — online is silent guest; email / login-link is an optional later "secure your account"
-  upgrade (reuses the retired `LoginView` UI), never a boot requirement.
-- No multi-device support.
+- No login gate — online is a guest account; **Link Email** (emailed code, no password) is the optional
+  "secure your account" step, never a boot requirement.
+- Two devices playing one account at the same moment: by design a new login signs the other out.
+- Listing or removing linked devices in game (ops runbook only), changing a linked address.
 - The `ContentUpdateRequired` background content sync remains a separate concern (still a TODO), untouched here.
 
 ## Auth `salt` column compatibility

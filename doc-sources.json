@@ -129,10 +129,13 @@
         "Auth/**/*.csproj"
       ],
       "cr-data": [
-        "Assets/Scripts/Auth/**/*.cs"
+        "Assets/Scripts/Auth/**/*.cs",
+        "Assets/CR/Core/Auth/TokenManager.cs",
+        "Assets/CR/Core/Data/Client/Implementation/SimpleWebClient.cs",
+        "Assets/CR/Core/Data/Logic/SupersededResponse.cs"
       ]
     },
-    "description": "Auth system: JWT, OAuth linking, account management"
+    "description": "Auth system: JWT, OAuth linking, account management, email-code account link (POST /account/email/code + /verify, SES/Log email sender, limits), many Game device links per account (M0018), one login at a time (auth_session provider + revoked_reason, session_superseded 401 marker)"
   },
   "backend/07-quest-system": {
     "docPath": "docs/backend/07-quest-system.md",
@@ -1161,10 +1164,18 @@
         "Assets/CR/UI/Common/UiFocusRecovery.cs",
         "Assets/CR/UI/Logic/**",
         "Assets/CR/Core/Data/Logic/OnlineSessionIdentity.cs",
-        "Assets/CR/UI/CharacterSelectController.cs"
+        "Assets/CR/UI/CharacterSelectController.cs",
+        "Assets/CR/Core/Data/Logic/LinkAccount*.cs",
+        "Assets/CR/Core/Data/Logic/OnlineSessionGate.cs",
+        "Assets/CR/Core/Data/Logic/AuthTokenLadder.cs",
+        "Assets/CR/Core/Session/SessionSupersededHandler.cs",
+        "Assets/CR/UI/SignedOutDialogController.cs",
+        "Assets/CR/UI/Resources/SignedOutDialog.uxml",
+        "Assets/CR/UI/LinkAccount*.cs",
+        "Assets/CR/UI/Resources/LinkAccount*.uxml"
       ]
     },
-    "description": "Mode-gated account/startup: one device-bound account, boot-time EnsureLocalAccountAsync (mode-neutral) so an account always exists, mode-first menu (Continue/Play Online/Play Offline) via the existing MainMenuController (IUIScreen 'MainMenu'), connectivity-gated online entry via IConnectivityProbe (reuses version-check), no reconciliation between offline/online worlds, characters mode-locked via IsOnlineTrainer; supporting fixes: ByteArrayTypeHandler + M0008NormalizeEmptySalt for legacy salt rows, NpcMerchantService NotifyBackpackChanged post-commit so InventorySync refreshes"
+    "description": "Mode-gated account/startup: one device-bound account, boot-time EnsureLocalAccountAsync (mode-neutral) so an account always exists, mode-first menu (Continue/Play Online/Play Offline) via the existing MainMenuController (IUIScreen 'MainMenu'), connectivity-gated online entry via IConnectivityProbe (reuses version-check), no reconciliation between offline/online worlds, characters mode-locked via IsOnlineTrainer; supporting fixes: ByteArrayTypeHandler + M0008NormalizeEmptySalt for legacy salt rows, NpcMerchantService NotifyBackpackChanged post-commit so InventorySync refreshes; entry login (nothing logs in at boot; Play Online/Continue/Link Email mint the session, post-entry content re-sync), Link Email screen (LinkAccountFlow), signed-out-by-another-device notice and in-world Quit Game dialog"
   },
   "unity/20-ability-workbench": {
     "docPath": "docs/unity/20-ability-workbench.md",

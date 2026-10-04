@@ -1,6 +1,6 @@
 # Auth and Accounts
 
-Authentication uses a **Bearer token** model. The Unity client obtains a token at login and attaches it to every subsequent HTTP request via the `Authorization: Bearer <token>` header. The system supports both email/password login and Discord OAuth as an identity provider.
+Authentication uses a **Bearer token** model. The Unity client obtains a token at login and attaches it to every subsequent HTTP request via the `Authorization: Bearer <token>` header. Players sign in with their **device id** (`POST /auth/game`) and can tie an email address to that account with an **emailed 6-digit code** (see "Email code link"); no player password is ever created. Email + password (`POST /auth/basic`) remains for Crystalline Rift Studio and operator accounts. Discord OAuth is also supported as an identity provider.
 
 ## Why This Design?
 
@@ -41,8 +41,9 @@ An account can have multiple trainers (`accounts` → `trainers` one-to-many). T
 
 The shipped client is **anonymous-first**: online play never asks for credentials. A device
 registers itself, gets a session-backed JWT, and richer providers (Steam ticket verification,
-OAuth) *link onto the same account id later* via `third_party_account_links`. No passwords are
-stored for this flow.
+OAuth, an emailed code) *link onto the same account id later* via `third_party_account_links` or
+`accounts.email`. No passwords are stored for this flow, and the email-code link does not create one
+either: email + password is the Studio/operator path, not a player path.
 
 ```bash
 # 1. Register the device (idempotent — an already-linked device gets its existing account id back)
@@ -95,7 +96,7 @@ curl -X POST https://api.crystallinerift.com/account/link \
 
 | action | meaning |
 |---|---|
-| `attached` | The credential belonged to nobody. It now belongs to the caller — this is the registration upgrade an anonymous account uses to gain an email and password. |
+| `attached` | The credential belonged to nobody. It now belongs to the caller — used by Studio/operator credentials. Players gain an address through the emailed code instead (see "Email code link"). |
 | `noop` | The credential already belonged to the caller. |
 | `merged` | The credential belonged to another account, which has been folded in and soft-deleted. |
 
@@ -121,7 +122,120 @@ Operators do the same thing from Studio with `POST /api/v1/admin/accounts/{targe
 required, written to `admin_action` as `MergeAccount`) and read the ledger back with
 `GET /api/v1/admin/accounts/{id}/merges`.
 
+## Email code link
+
+A player on a guest (device) account can tie it to an email address they own, from inside the game,
+without a password. The address then signs the same account in on a reinstall or another device.
+The client sends two intents; the server decides every outcome and identity comes from the token,
+never the body. Both routes require `RequirePlayer` (a service-key token is refused), sit behind the
+per-account `PlayerIntent` rate policy, and honour an `Idempotency-Key` header.
+
+```bash
+# 1. Ask for a code (any well-formed, in-limit request answers the same 202)
+curl -s -X POST https://api.crystallinerift.com/account/email/code \
+  -H "authorization: Bearer $GAME_TOKEN" -H "Idempotency-Key: $(uuidgen)" \
+  -H 'content-type: application/json' -d '{"email":"me@example.com"}'
+# → 202 {"expiresInSeconds":600,"resendAfterSeconds":60}
+
+# 2. Prove it
+curl -s -X POST https://api.crystallinerift.com/account/email/verify \
+  -H "authorization: Bearer $GAME_TOKEN" -H "Idempotency-Key: $(uuidgen)" \
+  -H 'content-type: application/json' -d '{"email":"me@example.com","code":"123456"}'
+# → 200 {"accountId":"...","action":"attached"}
+```
+
+| Route | Answers |
+|---|---|
+| `POST /account/email/code` `{email}` | `202 {expiresInSeconds, resendAfterSeconds}`; `400` malformed address; `409` the caller already holds an address or a role; `429` with `Retry-After` over a limit; `503` mail not configured (nothing written) |
+| `POST /account/email/verify` `{email, code}` | `200 AccountLinkResponse` with `action` `attached`, `noop` or `switched`; `400` wrong, expired or exhausted code (one indistinguishable answer); `409` cannot be linked right now, **no detail**; `429` |
+
+**Address rules.** Trimmed and compared case-insensitively (stored lower-case). Printable ASCII only,
+at most 254 characters, exactly one `@`, a dot in the domain, no whitespace, quotes, commas or angle
+brackets; the domain must not start or end with `.` or contain `..`. Anything else is `400`.
+
+**The code.** 6 digits from a cryptographic RNG, valid 10 minutes, burned after 5 attempts. Stored in
+`account_email_code` (Auth migration `M0017`) as the SHA-256 hex of `"{id}:{code}"`; the plaintext is
+never stored and never logged outside Development. A new request supersedes the caller's earlier
+unconsumed code. Rows older than 24 hours are hard-deleted by a throttled sweep on the request path.
+
+**Limits** (counted from `account_email_code` rows; over any limit is `429` + `Retry-After`):
+
+| Scope | Limit |
+|---|---|
+| Per account | 1 per 60 s, 5 per hour, 10 per day |
+| Per address (all callers) | 5 per hour, 10 per day |
+| Global | `Email:DailySendCap` sends per day (default 500) |
+
+**Protected accounts are never reachable by code.** An account holding any role grant or a password
+is protected. A request for its address writes a code row with an unusable hash and mails nothing;
+the `202`, the rows written and the timing match a free address, so the route reveals nothing about
+who owns an address. Verify against a protected address is `400`. A caller that holds a role or a
+password is itself refused (`409` on request).
+
+**Outcomes on verify** (the code is consumed before ownership is resolved again):
+
+| action | meaning |
+|---|---|
+| `attached` | The address belonged to nobody; it is now the caller's. |
+| `noop` | The address was already the caller's. |
+| `switched` | The address belongs to another account. The caller's guest account is merged **into** that account (`AccountMergeService`, reason "email code sign-in"); `accountId` is the email account. The address gets a "New device signed in" notice. |
+
+If the merge is refused (a moderation restriction, or a merge already running) the code is released
+for retry and the answer is `409` with no detail — the reason could reveal a restriction on the other
+account. After `switched` the caller's token is dead (its account was folded in); the client logs in
+again with its device id, which now resolves to the email account. Nothing in this feature creates a
+password, and an account's address cannot be changed in this version.
+
+### Mail configuration
+
+`IEmailSender` is chosen at startup from configuration (environment in `/opt/cr/.env`):
+
+| Key | Meaning |
+|---|---|
+| `Email__Provider` | `ses` selects `SesEmailSender` (`AWSSDK.SimpleEmailV2` over HTTPS) |
+| `Email__FromAddress` | e.g. `no-reply@crystallinerift.com` |
+| `Email__Ses__Region` | `us-east-1` |
+| `Email__DailySendCap` | global daily send cap, default 500 |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | IAM user `cr-api-ses` |
+
+`LogEmailSender` (writes the message, code included, to the log) is used only when
+`ASPNETCORE_ENVIRONMENT` is exactly `Development` — that is how local development gets a code. With
+no sender configured the routes answer `503`; startup does not fail. The AWS SDK lives only in
+`CR.Auth.Service.REST` and never ships to Unity. Setup steps: `cr-ops/README.md`, "Email (Amazon SES)".
+
+## Devices and one login
+
+**Many devices per account.** An account may hold any number of live `Game` links in
+`third_party_account_links` (Auth migration `M0018` rebuilds the account + provider unique index to
+exclude `Game`); every other provider stays one per account, and a device id still maps to exactly one
+account. A merge moves every `Game` link of the source to the survivor. Each device needs the email
+code once; after that it signs in with its device id. Removing a device is an ops runbook step today
+(`cr-ops/README.md`, "Remove a device from an account").
+
+**One login at a time.** `auth_session` records which login minted it (`provider`: `Game`, `Basic`,
+…; personal-key and service-token sessions use `ServiceKey`) and why it was revoked (`revoked_reason`).
+
+- `POST /auth/game` revokes the account's other live `Game` sessions (and legacy rows with no
+  provider) with reason `superseded`. Sessions from other logins — Studio's `Basic`, `ServiceKey` —
+  survive.
+- `POST /auth/token/refresh` revokes only sessions of its own provider (plus provider-less rows).
+- Password change and admin revokes still end every session.
+- A request carrying a token whose session was superseded gets:
+
+  ```
+  HTTP/1.1 401 Unauthorized
+  WWW-Authenticate: Bearer error="invalid_token", error_description="session_superseded"
+  ```
+
+  Every other auth failure keeps the bare `401`. The client shows "You were signed out because this
+  account started playing on another device." and does not retry or re-authenticate on its own.
+
+The device that most recently started online play owns the session; taking it back is always a
+deliberate player action (see [Account Mode & Startup](?page=unity/19-account-mode-startup)).
+
 ## Auth Flow — Full Login Walkthrough
+
+> This walkthrough shows the email + password routes, which today serve Studio and operator accounts. Players use the device login plus the email-code link above.
 
 ### Step 1: Register
 
@@ -416,14 +530,16 @@ All auth-related clients use `GameConfigurationKeys.AuthServerHttpAddress` as th
 | `GET`  | `/account/me` | Who the presented token is for: account id, identity, roles, scopes, expiry. Any authenticated caller; a service-key token gets the accountless `"service"` identity. `401` if the token names an account that has been soft-deleted |
 | `GET`  | `/account/{provider}/{id}` | The account id linked to a provider identity. Allows anonymous callers (pre-token bootstrap) |
 | `POST` | `/account/password` | Change the signed-in account's password (`player` scope). Revokes every other session |
-| `POST` | `/auth/game` | Device login with a game installation id → access + refresh tokens |
-| `POST` | `/auth/basic` | Email/password login → access + refresh tokens. The only login the browser admin app can perform |
+| `POST` | `/auth/game` | Device login with a game installation id → access + refresh tokens. Supersedes the account's other `Game` sessions (one login at a time) |
+| `POST` | `/auth/basic` | Email/password login → access + refresh tokens. The only login the browser admin app (Studio) can perform; players do not use it |
 | `POST` | `/auth/oauth` | Exchange a third-party OAuth token for CR tokens |
 | `POST` | `/auth/oauth/link` | Link an OAuth provider identity to the signed-in account (player). The target account is always the caller's own token account, never the request body — a body `accountId` naming a different account is `403`; a service-key token (no account claim) is `403` |
 | `GET`  | `/auth/oauth/link` | The provider links on the signed-in account |
 | `POST` | `/auth/token/refresh` | Exchange a refresh token for a new access token |
 | `POST` | `/auth/service-token` | Exchange a pre-shared service key for a scoped, account-less token (`admin` or `content:write`) |
 | `POST` | `/account/link` | Attach a credential to the signed-in account, merging its account in if it has one (player) |
+| `POST` | `/account/email/code` | Email a 6-digit code for `{email}` (player, `PlayerIntent` rate limit, `Idempotency-Key`). `202 {expiresInSeconds, resendAfterSeconds}`; `400` malformed; `409` caller already has an address or a role; `429` + `Retry-After`; `503` mail not configured |
+| `POST` | `/account/email/verify` | Prove `{email, code}` (player, `PlayerIntent`, `Idempotency-Key`). `200 AccountLinkResponse` (`attached` / `noop` / `switched`); `400` wrong, expired or exhausted code; `409` cannot be linked right now (no detail); `429` |
 | `POST` | `/api/v1/admin/accounts/{id}/merge` | Fold one account into another; reason required (admin) |
 | `GET`  | `/api/v1/admin/accounts/{id}/merges` | Every merge this account took part in, newest first (admin) |
 
