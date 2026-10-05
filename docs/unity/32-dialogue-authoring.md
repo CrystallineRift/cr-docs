@@ -89,8 +89,10 @@ hub uses most goes unnamed; any other type is prefixed so it stands out (`Talk O
 Welcome To CR · Kael`). Hover a port for every condition in full, with arg names, display names and
 keys (`DialogueCaseLabels`). In the Inspector each case and option card, and the Else note, carries
 its line's colour as a left stripe and title, its header repeats the case's label, and hovering a
-card lights that line's conversation on the canvas exactly as hovering the line does. An unconnected
-port has no line, so its card stays untinted.
+card lights that line's conversation on the canvas exactly as hovering the line does. The **eye** on
+a card keeps that path highlighted while you read or edit (it pins the trace as clicking the line
+does, but stays on the Inspector tab); press it again, click empty canvas or press Esc to clear it.
+An unconnected port has no line, so its card stays untinted and its eye is disabled.
 
 **Following a line.** Every connection is drawn in its own colour, behind the nodes, so a line
 crossing a node it has nothing to do with never covers that node's text. Colours follow the
