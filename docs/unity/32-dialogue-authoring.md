@@ -82,6 +82,16 @@ The width is kept through moves, duplicates and Arrange, which spaces its column
 positions, the width lives in the document's `layout` (`DialogueNodeLayout.Width`, omitted when
 unset) and travels with a push or pull.
 
+**Reading a hub.** A Branch node's case ports say what each case tests, not just the condition
+type: `Thin the Meadow · ReadyToTurnIn` rather than `quest.state`, with quest, NPC and item keys
+shown by their display names (the raw key when the pick lists do not know it). The condition type a
+hub uses most goes unnamed; any other type is prefixed so it stands out (`Talk Objective Pending:
+Welcome To CR · Kael`). Hover a port for every condition in full, with arg names, display names and
+keys (`DialogueCaseLabels`). In the Inspector each case and option card, and the Else note, carries
+its line's colour as a left stripe and title, its header repeats the case's label, and hovering a
+card lights that line's conversation on the canvas exactly as hovering the line does. An unconnected
+port has no line, so its card stays untinted.
+
 **Following a line.** Every connection is drawn in its own colour, behind the nodes, so a line
 crossing a node it has nothing to do with never covers that node's text. Colours follow the
 conversation: a fork (a hub's cases, a choice's options) starts a new colour per port, and a node
