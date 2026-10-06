@@ -10,7 +10,7 @@
 > | Dialogue lines and choice options | **Translatable** (keys `dlg.{dialogueKey}.{nodeId}[.{optionId}]`) |
 > | NPC display names | **Translatable** (refresh on the next area load) |
 > | Item, creature, ability and status names, quest text, UI chrome | **Not translatable yet.** The YAML tables exist (English only) but nothing reads them. |
-> | `TryGetText(key, out text)` (no language) | **A stub.** Do not call it. |
+> | `TryGetText(key, out text)` (no language) | An **English** lookup. Pass a language to `TryGetText(language, key, out text)` for anything else. |
 > | `quests.yaml` | **Removed (2026-09-21).** Quest text is authored on the `QuestDefinition`. |
 >
 > A translation that is missing, empty, or whose language pack is gone falls back to the authored
@@ -87,15 +87,17 @@ first, then user. There is no hot reload, so **restart the game after adding or 
 Settings → Player Menu → System → Game has a **Language** dropdown: English first, then installed
 packs by name ("Name — Author"), an **Open folder** button and a hint. The choice is saved. A saved
 language whose pack is gone shows English and keeps the saved setting, so the pack works again when it
-comes back.
+comes back. If two packs would show the same label, each gets " (code)" appended. A pack with no
+usable rows is skipped with a "no translations found" warning in the log (check the delimiter and the
+`translation` column).
 
 Dialogue lines, choice options and NPC display names follow the setting. NPC names refresh on the next
 area load.
 
 ### Modder how-to
 
-1. In the Editor run **CR → Localization → Export Translation Template…** (or get `template.csv` from
-   the project). It lists every translatable string with an empty `translation`.
+1. In the Editor run **CR → Localization → Export Translation Template…** (or the `cr_loc_export`
+   command) and share the file. It lists every translatable string with an empty `translation`.
 2. Fill the `translation` column; set `_meta.language_name` and optionally `_meta.author`.
 3. Save as **CSV UTF-8** (Excel: "CSV UTF-8 (Comma delimited)"), named `<code>.csv`.
 4. Drop it in the user Localization folder.
