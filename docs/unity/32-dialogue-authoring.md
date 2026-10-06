@@ -389,10 +389,12 @@ Repeated here for cross-reference: `missing-required-arg` and `unknown-arg` (see
 - **Pull does not page past 500 rows.** The Studio's dialogue pull reads one page at the server's
   own cap; a dialogue table larger than that would silently lose rows past the first page on Pull
   All.
-- **Localization is wired but empty.** The game looks every line up in the localization table first
-  (see [Dialogue System → Status](?page=unity/31-dialogue-system#status)) and no `dlg.*` key exists,
-  so the player sees the document's own text. Nothing in the authoring tools writes or reads a
-  translation table yet; the Dialogue Editor and its Preview are source-language only.
+- **Localization is by language pack, and no translations ship yet.** The game looks every line up in
+  the localization table first (see [Dialogue System → Status](?page=unity/31-dialogue-system#status));
+  players and modders add CSV packs as described in [Localization](?page=unity/06-localization). With
+  no pack, the player sees the document's own text. The Dialogue Editor and its Preview stay
+  source-language, but the editor now reports translation findings as Warnings: `loc.summary`,
+  `loc.node` and `loc.placeholder`, recomputed on open and on Refresh Pick Lists.
 - **The server migration M14002 is behind the Unity content.** It still seeds the six parked
   dialogues and gives the ten quests their pre-parking givers (Welcome and First Battle now belong
   to the merchant in Unity). See

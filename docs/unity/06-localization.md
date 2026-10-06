@@ -1,26 +1,165 @@
 # Localization
 
-> **Status, checked 2026-09-21. Read this before relying on the rest of the page.** The page below
-> describes the intended design. What the code actually does today:
+> **Status, updated 2026-10-05.** Player-facing translation now works through CSV **language packs**
+> (below). The older per-domain YAML tables further down still exist but almost nothing reads them.
 >
 > | Part | State |
 > |---|---|
-> | Loader: per-domain YAML under `Resources/configuration/localization/`, language from the file suffix (`npcs.fr.yaml` → `fr`), English when there is none | **Works** |
-> | `TryGetText(language, key, out text)` | **Works** |
-> | `TryGetText(key, out text)` (no language) | **A stub.** It returns the literal text "Open LocalizationRepository.cs and implement this. Line 86". Do not call it. |
-> | `GameConfiguration.DisplayLanguage` / `display_language` | **Does not exist.** There is no language setting anywhere; callers pass `"en"`. |
-> | Files present | `abilities`, `creatures`, `items`, `npcs`, `statuses` (English only) |
-> | Runtime readers | **One:** `NpcDisplayNameResolver` (the giver's name in "Return to {giver}"). Nothing renders creature, item, ability or status text from these files yet. |
-> | `quests.yaml` | **Removed (2026-09-21).** Nothing ever read it. Quest names, descriptions and objective text are authored on the `QuestDefinition`, pushed to the server and rendered from the quest template. The `quest_*` keys used as examples below are illustrations of the naming convention only. |
+> | Language packs (CSV) in `StreamingAssets/Localization` and `persistentDataPath/Localization` | **Works** |
+> | Settings → Player Menu → System → Game → **Language** dropdown, saved as the display language | **Works** |
+> | Dialogue lines and choice options | **Translatable** (keys `dlg.{dialogueKey}.{nodeId}[.{optionId}]`) |
+> | NPC display names | **Translatable** (refresh on the next area load) |
+> | Item, creature, ability and status names, quest text, UI chrome | **Not translatable yet.** The YAML tables exist (English only) but nothing reads them. |
+> | `TryGetText(key, out text)` (no language) | **A stub.** Do not call it. |
+> | `quests.yaml` | **Removed (2026-09-21).** Quest text is authored on the `QuestDefinition`. |
 >
-> **Dialogue text** does not use hand-named keys at all. A dialogue document keeps its
-> source-language text (so authoring in the Dialogue Editor stays WYSIWYG), and a translation is
-> looked up by a key DERIVED from where the line lives: `dlg.{dialogueContentKey}.{nodeId}` for a
-> line, `dlg.{dialogueContentKey}.{nodeId}.{optionId}` for a choice option
-> (`CR.Dialogue.Runtime.DialogueTextSource.Key`, `LocalizedDialogueTextResolver`). No translation
-> falls back to the authored text. Node and option ids survive rewording, so nobody maintains a key
-> list by hand and nothing drifts. If quest text is localized later it should follow the same model
-> (`quest.{contentKey}.name`, source text on the template as the fallback), not a parallel YAML list.
+> A translation that is missing, empty, or whose language pack is gone falls back to the authored
+> (English) text. Stale translations (the English changed after the pack was written) still show.
+
+## Language Packs
+
+A pack is one UTF-8 CSV file. The file name (without `.csv`) is the language code, for example
+`fr.csv` or `pt-br.csv`. The code is validated: no path characters, so the file cannot reach outside
+the Localization folder.
+
+### Format
+
+UTF-8 with or without a BOM (Excel writes one), RFC 4180, CRLF or LF. The delimiter, `,` or `;`, is
+auto-detected from the first non-blank record, because Excel in EU locales saves `;`. A header row is
+required. Columns are matched **by header name**, case-insensitively, in any order.
+
+| Column | Meaning | Required |
+|---|---|---|
+| `key` | Localization key, for example `dlg.merchant-meadow.offer.accept`. Lookup is case-insensitive. | yes |
+| `translation` | The translated text. Empty means not translated and the row is ignored. | yes |
+| `source` | English text at export or update time. For the translator; the game never reads it. | no |
+| `source_hash` | First 8 hex chars of SHA-256 of the normalized source (trimmed, LF, NFC). Drives stale detection. | no |
+| `context` | Who speaks and where, for example `Meadow Merchant · Line · speaker: Kael`. | no |
+| `status` | Written by Update Pack: `ok`, `stale`, `new`, `orphaned`. The game ignores it. | no |
+
+Unknown columns are ignored, so translators can add a notes column. At most 64 columns are read; any
+extra are dropped.
+
+**Metadata rows** are ordinary rows with reserved keys, so they survive a spreadsheet round-trip:
+`_meta.language_name` (the label in Settings, defaults to the code) and `_meta.author` (optional,
+shown after the name as "Name — Author"). The value goes in `translation`.
+
+```csv
+key,source,translation,source_hash,context,status
+_meta.language_name,,Français,,,
+_meta.author,,Camille,,,
+dlg.merchant-meadow.progress-first-battle,"The tall grass is where they hide. Win one battle and you'll feel the difference.","Les hautes herbes, c'est là qu'ils se cachent. Gagne un combat et tu sentiras la différence.",3fa91c02,Meadow Merchant · Line,ok
+npc_demo_merchant_area_1_display,Meadow Merchant,Marchand du Pré,9b1e44d7,NPC display name,ok
+```
+
+Keep placeholders such as `{player}` in the translation. Brace substitution runs after the
+translation is chosen.
+
+### Limits
+
+Packs are untrusted input and never crash or block the game. Bad rows are skipped and logged as one
+warning per file (counts plus the first five reasons).
+
+- File size at most 5 MB (an oversized file is refused whole), 50,000 rows, 2,000 characters per field.
+- A duplicate key keeps its last row. A row with an empty key or empty translation is skipped silently.
+- An empty file (0 bytes, which also covers named pipes) is skipped with a warning.
+- Up to 64 columns; extra columns are dropped.
+
+### Where packs live
+
+| Folder | Path |
+|---|---|
+| Official | `<game>/<Product>_Data/StreamingAssets/Localization/` (macOS: inside the `.app` bundle, `Contents/Resources/Data/StreamingAssets/Localization/`) |
+| User, macOS | `~/Library/Application Support/<Company>/<Product>/Localization/` |
+| User, Steam Deck / Linux | `~/.config/unity3d/<Company>/<Product>/Localization/` |
+
+The user folder is created if missing. The **Open folder** button in Settings opens it, which is the
+easiest way to find it (on Steam Deck, in desktop mode). If the same language code exists in both
+folders, the user pack wins **per key**.
+
+### Loading
+
+Packs load once, on the first localization read (inside `LocalizationRepository`): official folder
+first, then user. There is no hot reload, so **restart the game after adding or editing a pack**.
+
+### Choosing the language
+
+Settings → Player Menu → System → Game has a **Language** dropdown: English first, then installed
+packs by name ("Name — Author"), an **Open folder** button and a hint. The choice is saved. A saved
+language whose pack is gone shows English and keeps the saved setting, so the pack works again when it
+comes back.
+
+Dialogue lines, choice options and NPC display names follow the setting. NPC names refresh on the next
+area load.
+
+### Modder how-to
+
+1. In the Editor run **CR → Localization → Export Translation Template…** (or get `template.csv` from
+   the project). It lists every translatable string with an empty `translation`.
+2. Fill the `translation` column; set `_meta.language_name` and optionally `_meta.author`.
+3. Save as **CSV UTF-8** (Excel: "CSV UTF-8 (Comma delimited)"), named `<code>.csv`.
+4. Drop it in the user Localization folder.
+5. Restart the game and pick the language in Settings.
+
+### Updating a pack
+
+When the game's text changes, run **CR → Localization → Update Pack…** and choose the existing pack.
+It rewrites the file in place, keeping the previous one as a `.bak` next to it (overwritten each run),
+and sets each row's `status`:
+
+| Status | Meaning |
+|---|---|
+| `ok` | Source hash matches; the translation is current. |
+| `stale` | The English changed. The old translation is kept, source and hash are refreshed. Re-check it. |
+| `new` | A string with no translation yet. |
+| `orphaned` | The pack has the key but the game no longer does. Kept at the bottom, never dropped. |
+
+The summary lists counts per status plus placeholder problems (a `{token}` missing from or added in
+the translation), dialogues skipped, NPC names that could not be read, and rows not carried over.
+Parked dialogues (`Content/Defs/_Parked`) are excluded from export and update.
+
+Both commands also run headless as `cr_loc_export` and `cr_loc_update` (`CrLocalizationCommands`),
+with the file path in `--args`.
+
+### In the Dialogue Editor
+
+Findings appear as Warnings (there is no Info severity) with codes `loc.summary`, `loc.node` and
+`loc.placeholder`, recomputed when the editor opens and on **Refresh Pick Lists**. See
+[Dialogue Authoring](?page=unity/32-dialogue-authoring).
+
+### Code map
+
+- `Assets/CR/Localization/Logic/` (no-engine assembly `CR.Localization.Logic`): `CsvReader`, `CsvWriter`,
+  `LocalizationPackParser`, `LocalizationSourceHash`, `LocalizationLanguageCode`, `LocalizationPackMerge`,
+  `LocalizationLanguageOptions`, `LocalizationStringSource`, `LocalizationPackUpdate`,
+  `LocalizationPlaceholderCheck`, `LocalizationPackCsv`.
+- `Assets/CR/Localization/Runtime/`: `LocalizationTable`, `LocalizationPackLoader`, `LocalizationPackFolders`,
+  `ILanguageSetting`, `LanguageSetting`.
+- `Assets/CR/Localization/Editor/`: `LocalizationEditorSources`, `LocalizationMenu`.
+- `Assets/CR/Dialogue/Editing/`: `DialogueLocalizationLines`, `DialogueLocalizationFacts`, `DialogueLocalizationDiagnostics`.
+
+### Known gaps
+
+- **Item, creature, ability and status names** (and quest text) are not translatable yet; they have no pack reader.
+- **No rename tracking.** Renaming a dialogue content key or node id changes the derived key; the old rows show as `orphaned` and the new ones as `new`.
+- **RTL and CJK fonts** are not handled; the game's fonts and layout are Latin-script left-to-right.
+- **No hot reload**, pack browser or Steam Workshop distribution.
+
+## Dialogue keys
+
+A dialogue document keeps its source-language text, and a translation is looked up by a key DERIVED
+from where the line lives: `dlg.{dialogueContentKey}.{nodeId}` for a line,
+`dlg.{dialogueContentKey}.{nodeId}.{optionId}` for a choice option
+(`CR.Dialogue.Runtime.DialogueTextSource.Key`, `LocalizedDialogueTextResolver`). No translation falls
+back to the authored text. Node and option ids survive rewording, so nobody maintains a key list by
+hand.
+
+## Legacy YAML tables
+
+> The rest of this page describes the older per-domain YAML loader. It works as described, but the
+> tables are English only, `display_language` in `game_config.yaml` does not exist (the language is
+> the saved Settings choice), and only `NpcDisplayNameResolver` reads them.
+
 
 All user-facing strings in CR — quest names, objective text, ability names, creature descriptions, item tooltips, status effect names — live in YAML files loaded at runtime by `LocalizationRepository`. The database `name`/`description` columns are retained as canonical fallbacks for server-side tooling, but the client always renders from localization files.
 
