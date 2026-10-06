@@ -160,7 +160,7 @@ UXML text is keyed automatically: `ui.<uxml asset>.<element name>[.label|.toolti
 
 - Nested template elements are keyed by the template file they live in.
 - `text` binds only on `TextElement` types (Label, Button and so on). `.label` binds only on `BaseField`
-  types (Toggle, TextField, Slider, DropdownField and so on). `.tooltip` binds the tooltip.
+  types (Toggle, TextField, Slider, DropdownField and so on) and on `Tab` headers. `.tooltip` binds the tooltip.
 - Add the class `loc-skip` to exclude an element and its whole subtree.
 - Elements named `unity-*` are Unity internals and are skipped.
 - An element with no name cannot be keyed. Export and the checks report it, so name every text element.
@@ -187,10 +187,10 @@ Runtime (`Assets/CR/Localization/Runtime`):
 
 | Catalogue | Keys | Where |
 |---|---|---|
-| `MenuText` | `ui.menu.*` | `Assets/CR/UI/Text` |
-| `SettingsText` | `ui.settings.*` | `Assets/CR/UI/Text` |
-| `DialogText` | `ui.dialog.*` | `Assets/CR/UI/Text` |
-| `ErrorText` | `ui.error.*` | `CR.Core.Data.Logic` (`Assets/CR/Core/Data/Logic/Text`) |
+| `MenuText` | `ui.menu.*` | `Assets/CR/UI/Text/MenuText.cs` |
+| `SettingsText` | `ui.settings.*` | `Assets/CR/UI/Text/SettingsText.cs` |
+| `DialogText` | `ui.dialog.*` | `Assets/CR/UI/Common/Text/DialogText.cs` |
+| `ErrorText` | `ui.error.*` | `CR.Core.Data.Logic` (`Assets/CR/Core/Data/Logic/Text/ErrorText.cs`) |
 
 `PlayerErrorText` and `ServerErrorMessage` keep their API. Server message bodies pass through
 untranslated. `ServerErrorMessage.From`, the wording for authors and logs, stays English.
@@ -199,7 +199,7 @@ untranslated. `ServerErrorMessage.From`, the wording for authors and logs, stays
 
 1. Name every text element in the UXML.
 2. Put strings set by code in a `[LocCatalogue]` class.
-3. Call `uiDocument.Localize()` once, where the tree exists. For screens that re-clone on `SetActive`, call it inside `Bind()`.
+3. Call `uiDocument.Localize()` once, where the tree exists. For screens that re-clone on `SetActive`, call it inside `Bind()`. If a screen re-clones its tree (SetActive/OnEnable, reassigning visualTreeAsset), call `Localize()` again after each rebuild (as `SignedOutDialogController.Bind` does).
 4. Use the `VisualElement` extensions for code-set text: `Localize`, `LocalizeFormat`, `LocalizeLabel`, `LocalizeTooltip`, `LocalizeChoices` (keeps the selected index) and `OnLanguageChanged` (idempotent per element).
 5. Add the screen to `LocalizationUxmlScope.Enforced`.
 6. Run **CR → Localization → Check UI Strings**.
