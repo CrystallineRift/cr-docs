@@ -69,11 +69,11 @@ warning per file (counts plus the first five reasons).
 
 | Folder | Path |
 |---|---|
-| Official | `<game>/<Product>_Data/StreamingAssets/Localization/` (macOS: inside the `.app` bundle, `Contents/Resources/Data/StreamingAssets/Localization/`) |
-| User, macOS | `~/Library/Application Support/<Company>/<Product>/Localization/` |
-| User, Steam Deck / Linux | `~/.config/unity3d/<Company>/<Product>/Localization/` |
+| Official | The build's `StreamingAssets/Localization` folder, for example `<install>/<name>_Data/StreamingAssets/Localization/` on Linux and Windows players, or `Crystalline Rift.app/Contents/Resources/Data/StreamingAssets/Localization/` on macOS |
+| User, macOS | `~/Library/Application Support/CR/Crystalline Rift/Localization/` |
+| User, Steam Deck / Linux | `~/.config/unity3d/CR/Crystalline Rift/Localization/` |
 
-The user folder is created if missing. The **Open folder** button in Settings opens it, which is the
+The user folder is created if missing. The in-game **Open folder** button in Settings opens it, which is the
 easiest way to find it (on Steam Deck, in desktop mode). If the same language code exists in both
 folders, the user pack wins **per key**.
 
