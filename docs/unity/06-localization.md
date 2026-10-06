@@ -9,7 +9,8 @@
 > | Settings → Player Menu → System → Game → **Language** dropdown, saved as the display language | **Works** |
 > | Dialogue lines and choice options | **Translatable** (keys `dlg.{dialogueKey}.{nodeId}[.{optionId}]`) |
 > | NPC display names | **Translatable** (refresh on the next area load) |
-> | Item, creature, ability and status names, quest text, UI chrome | **Not translatable yet.** The YAML tables exist (English only) but nothing reads them. |
+> | UI text (Phase 1 screens, see [UI text](#ui-text)) | **Translatable** |
+> | Item, creature, ability and status names, quest text, other UI chrome | **Not translatable yet.** The YAML tables exist (English only) but nothing reads them. |
 > | `TryGetText(key, out text)` (no language) | An **English** lookup. Pass a language to `TryGetText(language, key, out text)` for anything else. |
 > | `quests.yaml` | **Removed (2026-09-21).** Quest text is authored on the `QuestDefinition`. |
 >
@@ -146,6 +147,97 @@ Findings appear as Warnings (there is no Info severity) with codes `loc.summary`
 - **No rename tracking.** Renaming a dialogue content key or node id changes the derived key; the old rows show as `orphaned` and the new ones as `new`.
 - **RTL and CJK fonts** are not handled; the game's fonts and layout are Latin-script left-to-right.
 - **No hot reload**, pack browser or Steam Workshop distribution.
+
+## UI text
+
+Screen text (labels, buttons, tooltips, dropdown choices, error messages) is translatable through the
+same language packs. **Phase 1** covers the core, the adapters, export, the checks and the first
+screens; the rest of the screens follow in Phase 2.
+
+### Keys
+
+UXML text is keyed automatically: `ui.<uxml asset>.<element name>[.label|.tooltip]`, all lowercase.
+
+- Nested template elements are keyed by the template file they live in.
+- `text` binds only on `TextElement` types (Label, Button and so on). `.label` binds only on `BaseField`
+  types (Toggle, TextField, Slider, DropdownField and so on). `.tooltip` binds the tooltip.
+- Add the class `loc-skip` to exclude an element and its whole subtree.
+- Elements named `unity-*` are Unity internals and are skipped.
+- An element with no name cannot be keyed. Export and the checks report it, so name every text element.
+
+Text set by code lives in a `[LocCatalogue]` class (below), with keys like `ui.menu.*`.
+
+### Core types
+
+`Assets/CR/Localization/Logic` (no engine):
+
+- `LocString(key, english)`: a key plus its authored English. The key is lowercased; DEBUG and Editor builds validate it.
+- `LocFormatString(key, english, params placeholders)`: the same with named placeholders. In the Editor a mismatch between the English and the declared placeholders throws.
+- `LocFormat`: `{name}` substitution, invariant culture. An unknown placeholder is left as written.
+- `ILocalizer`, `EnglishLocalizer`, and the static `Loc` (`Get`, `Format`, `Changed`, `Install`, `Reset`). `Loc` is English until a localizer is installed. `Install` raises `Changed` once; `Reset` is silent.
+- `[LocCatalogue]` marks a class whose `LocString` fields are exported. `UiTextKey` and `UiTextProperty` build and name the UXML keys.
+
+Runtime (`Assets/CR/Localization/Runtime`):
+
+- `Localizer` resolves current language, then `en`, then the authored English. It caches the language and warms the repository on the main thread.
+- `LocalizerInstallation` installs the localizer into `Loc` for the lifetime of the Core SceneContext, and resets only if it is still the current one.
+- `UxmlTextAdapter` backs `uiDocument.Localize()`. `LocalizedElementRegistry` re-applies text live.
+
+### Catalogues
+
+| Catalogue | Keys | Where |
+|---|---|---|
+| `MenuText` | `ui.menu.*` | `Assets/CR/UI/Text` |
+| `SettingsText` | `ui.settings.*` | `Assets/CR/UI/Text` |
+| `DialogText` | `ui.dialog.*` | `Assets/CR/UI/Text` |
+| `ErrorText` | `ui.error.*` | `CR.Core.Data.Logic` (`Assets/CR/Core/Data/Logic/Text`) |
+
+`PlayerErrorText` and `ServerErrorMessage` keep their API. Server message bodies pass through
+untranslated. `ServerErrorMessage.From`, the wording for authors and logs, stays English.
+
+### Authoring a screen
+
+1. Name every text element in the UXML.
+2. Put strings set by code in a `[LocCatalogue]` class.
+3. Call `uiDocument.Localize()` once, where the tree exists. For screens that re-clone on `SetActive`, call it inside `Bind()`.
+4. Use the `VisualElement` extensions for code-set text: `Localize`, `LocalizeFormat`, `LocalizeLabel`, `LocalizeTooltip`, `LocalizeChoices` (keeps the selected index) and `OnLanguageChanged` (idempotent per element).
+5. Add the screen to `LocalizationUxmlScope.Enforced`.
+6. Run **CR → Localization → Check UI Strings**.
+
+### Live switching
+
+Changing the language in Settings re-applies text at once, no restart. An element that detaches goes
+dormant and re-applies when it attaches again. **Code wins**: if code changed an element's text after
+the localizer set it, the registry leaves that text alone, so code-set text must go through
+`LocalizeFormat` or `OnLanguageChanged` to follow the language.
+
+Dialogue and pack loading are unchanged: packs still load once, so adding a pack still needs a restart.
+
+### Export
+
+One **Export Translation Template** now includes dialogue, NPC names, UXML and catalogue rows. The
+summary reports unnamed UI elements, catalogue errors and unreadable UXML. Editor and admin UXML are
+excluded (`Editor/` folders plus the `LocalizationUxmlScope.Excluded` list).
+
+### Checks
+
+- An EditMode project test runs over `LocalizationUxmlScope.Enforced`. Phase 1 list: **MainMenu, PlayerMenuWindow, SignedOutDialog**.
+- **CR → Localization → Check UI Strings** is report-only and covers every player screen.
+
+### Phase status
+
+| Phase | Scope |
+|---|---|
+| 1 (done) | Core, adapters, export, checks, Main Menu, Player Menu and Settings, MessageDialog, SignedOutDialog, error texts |
+| 2 (per screen) | Market, Bag, Team, Storage, Battle HUD and summary, Quest journal, tracker and achievements, Character select and create, Link Email, dialogue screen chrome, world map, area banner, evolution, level-up toast, the remaining `*Text` classes, toasts (`NoticeText`) |
+| 3 | Content names, server error codes, fonts (CJK and RTL), a text-length layout pass |
+
+### Known limits
+
+- Fonts are Latin only; CJK and RTL text will not render correctly yet.
+- A dropdown whose translated choices are duplicates may shift the selected index on a language change.
+- Server message bodies are not translated.
+- Screens outside the Phase 1 list stay English until their Phase 2 pass.
 
 ## Dialogue keys
 
