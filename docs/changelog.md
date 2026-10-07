@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-10-04 — Email-code account link, many devices, one login at a time
+
+- **Why:** a guest (device) account had no in-game way to gain an email address, so a reinstall or a
+  second device could not reach it. Players never get a password; email + password stays Studio-only.
+- **cr-api:** `POST /account/email/code` and `POST /account/email/verify` (`RequirePlayer`,
+  `PlayerIntent`, `Idempotency-Key`): 6-digit code, 10 min, 5 attempts; limits per account
+  1/60 s, 5/h, 10/day, per address 5/h, 10/day, global `Email:DailySendCap` (500). Protected accounts
+  (role or password) are never reachable by code. Verify answers `attached` / `noop` / `switched`
+  (guest merged into the email account). `account_email_code` (M0017); many `Game` device links per
+  account and `auth_session.provider` / `revoked_reason` (M0018). `/auth/game` supersedes the
+  account's other Game sessions; refresh revokes only its own provider; `ServiceKey` sessions survive;
+  superseded tokens get `WWW-Authenticate: Bearer error="invalid_token", error_description="session_superseded"`.
+  Mail via Amazon SES (`Email__*`, `AWS_*`); `LogEmailSender` only in Development; unconfigured → `503`.
+- **cr-api-unity:** nothing logs in at boot; Play Online / Continue / Link Email perform the entry login
+  (content sync re-runs after it if boot sync could not authenticate); Link Email screen
+  (`LinkAccountFlow`); signed-out notice "You were signed out because this account started playing on
+  another device." on the menu, a Quit Game dialog in the world.
+- **Ops:** SES identity, DNS, IAM user and `.env` lines are owner-run — `cr-ops/README.md`, "Email
+  (Amazon SES)"; device removal by hand — "Remove a device from an account".
+  → [Auth and Accounts](?page=backend/06-auth-and-accounts), [Account Mode & Startup](?page=unity/19-account-mode-startup)
+
 ## 2026-10-02 — Studio: trainer loadouts and NPC gifts clear on push; trainer Diff
 
 - **Why:** cr-api #64 made the loadout PUT a real replace, added a loadout GET and a gift-clear DELETE, but
