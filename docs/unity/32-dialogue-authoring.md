@@ -82,6 +82,18 @@ The width is kept through moves, duplicates and Arrange, which spaces its column
 positions, the width lives in the document's `layout` (`DialogueNodeLayout.Width`, omitted when
 unset) and travels with a push or pull.
 
+**Reading a hub.** A Branch node's case ports say what each case tests, not just the condition
+type: `Thin the Meadow · ReadyToTurnIn` rather than `quest.state`, with quest, NPC and item keys
+shown by their display names (the raw key when the pick lists do not know it). The condition type a
+hub uses most goes unnamed; any other type is prefixed so it stands out (`Talk Objective Pending:
+Welcome To CR · Kael`). Hover a port for every condition in full, with arg names, display names and
+keys (`DialogueCaseLabels`). In the Inspector each case and option card, and the Else note, carries
+its line's colour as a left stripe and title, its header repeats the case's label, and hovering a
+card lights that line's conversation on the canvas exactly as hovering the line does. The **eye** on
+a card keeps that path highlighted while you read or edit (it pins the trace as clicking the line
+does, but stays on the Inspector tab); press it again, click empty canvas or press Esc to clear it.
+An unconnected port has no line, so its card stays untinted and its eye is disabled.
+
 **Following a line.** Every connection is drawn in its own colour, behind the nodes, so a line
 crossing a node it has nothing to do with never covers that node's text. Colours follow the
 conversation: a fork (a hub's cases, a choice's options) starts a new colour per port, and a node
@@ -377,10 +389,12 @@ Repeated here for cross-reference: `missing-required-arg` and `unknown-arg` (see
 - **Pull does not page past 500 rows.** The Studio's dialogue pull reads one page at the server's
   own cap; a dialogue table larger than that would silently lose rows past the first page on Pull
   All.
-- **Localization is wired but empty.** The game looks every line up in the localization table first
-  (see [Dialogue System → Status](?page=unity/31-dialogue-system#status)) and no `dlg.*` key exists,
-  so the player sees the document's own text. Nothing in the authoring tools writes or reads a
-  translation table yet; the Dialogue Editor and its Preview are source-language only.
+- **Localization is by language pack, and no translations ship yet.** The game looks every line up in
+  the localization table first (see [Dialogue System → Status](?page=unity/31-dialogue-system#status));
+  players and modders add CSV packs as described in [Localization](?page=unity/06-localization). With
+  no pack, the player sees the document's own text. The Dialogue Editor and its Preview stay
+  source-language, but the editor now reports translation findings as Warnings: `loc.summary`,
+  `loc.node` and `loc.placeholder`, recomputed on open and on Refresh Pick Lists.
 - **The server migration M14002 is behind the Unity content.** It still seeds the six parked
   dialogues and gives the ten quests their pre-parking givers (Welcome and First Battle now belong
   to the merchant in Unity). See
