@@ -230,15 +230,71 @@ excluded (`Editor/` folders plus the `LocalizationUxmlScope.Excluded` list).
 |---|---|
 | 1 (done) | Core, adapters, export, checks, Main Menu, Player Menu and Settings, MessageDialog, SignedOutDialog, error texts |
 | 2 (per screen) | Market, Bag, Team, Storage, Battle HUD and summary, Quest journal, tracker and achievements, Character select and create, Link Email, dialogue screen chrome, world map, area banner, evolution, level-up toast, the remaining `*Text` classes, toasts (`NoticeText`) |
-| 3 | Content names, server error codes, fonts (CJK and RTL), a text-length layout pass |
+| 3 (done) | Content names and descriptions, server error codes, font fallback settings, pseudo-locale |
 
 ### Known limits
 
-- Fonts are Latin only; CJK and RTL text will not render correctly yet.
+- Fonts are Latin only: no CJK, Arabic or Hebrew font ships, so those packs show missing glyphs until fonts are added (see *Fonts and right-to-left text*).
 - A dropdown whose translated choices are duplicates may shift the selected index on a language change.
-- Server message bodies are not translated.
-- Not yet translated: the legacy startup views (`LoginView`, `StarterSelectionView`, `TrainerSelectionView` — `StartupFlowController` takes its title from them), the Market element-filter dropdown (enum names compared by value), and content data (item/creature/ability/status/quest names — Phase 3).
+- Server messages without a known `code` fall back to the untranslated server text.
+- Not yet translated: the legacy startup views (`LoginView`, `StarterSelectionView`, `TrainerSelectionView` — `StartupFlowController` takes its title from them), the Market element-filter dropdown (enum names compared by value), and battle mission names (they have no content kind).
 - Some code-composed messages are cached when shown and only re-translate the next time they are set (link-account messages, character-create status, battle log lines, shop status, transient toasts).
+
+## Content text
+
+Content names and descriptions (creatures, items, abilities, statuses, quests, objectives,
+achievements, talents, areas) are translated through `ContentText` in `CR.Localization.Logic`.
+Most display sites have no content key (battle DTOs carry names only, statuses have no key, seeded
+ids differ between server and offline), so keys derive from **kind + English text**:
+
+| Call | Key |
+|---|---|
+| `ContentText.Name(ContentTextKind.Item, "Potion")` | `content.item.potion` |
+| `ContentText.Description(ContentTextKind.Item, "Potion", "Restores 20 HP.")` | `content.item.potion.description` |
+
+- The slug is lowercase a–z, 0–9 and `-`, at most 48 characters. When it is trimmed, or drops any
+  character other than whitespace and `-`, an 8-hex SHA-256 suffix keeps distinct English apart.
+  Case-only differences share a key.
+- Missing translation, or an empty name → the English shows unchanged (`Loc.Get(key, english)`).
+- **Renaming content orphans its translation**; *Update Pack* lists the orphaned row.
+- Wrap only at display. Never wrap ids, content keys or anything compared for logic, and wrap a
+  string exactly once (a handler returns raw English, the view wraps). Player nicknames are not content.
+
+**Export:** `ContentStringSource` (Editor) adds content rows to *Export Translation Template*. It reads
+the definition assets, `WorldMapDefinition.areas[].displayName`, `AreaDefinition.displayName` from area
+scenes (scanned as YAML text by `AreaSceneYaml`, no scene opened), and the game-data floor
+(`Assets/StreamingAssets/CR/game-data.bytes`, read-only): items, achievements and categories, quests,
+objective descriptions, talents and world locations. When one key gets two different English texts,
+the export logs an error and keeps the first.
+
+## Server error codes
+
+cr-api error responses carry a stable kebab-case `code` beside the human `message`. The client reads
+it into `ServerRequestException.Code` (`ServerErrorMessage.CodeFrom`). `PlayerErrorText` and
+`ServerErrorMessage.ForPlayer` map a known code through `ErrorText.TryGetServer` to
+`ui.error.server.<code>`. An unknown or missing code falls back to the server message, so old and new
+servers both work. To add one: give the server error a `code`, then add the matching
+`ErrorText` catalogue entry.
+
+## Fonts and right-to-left text
+
+`Assets/CR/UI/Theme/CrPanelTextSettings.asset` is the `PanelTextSettings` for the player panels
+(`Panel Settings.asset`, `EvolutionPanelSettings.asset`). Its fallback font list is empty.
+Supporting a new script:
+
+1. Import a Noto Sans font for the script (CJK, Arabic, Hebrew, roughly 10–20 MB each; the owner decides on size).
+2. Create a font asset and add it to `CrPanelTextSettings` → fallback fonts.
+3. For right-to-left or complex shaping, enable `-unity-text-generator: advanced;` in `CrTheme.uss`
+   (on `:root`, or on a panel or element selector). It is off by default: it changes how all text
+   renders and gives nothing without the fonts.
+
+## Pseudo-locale
+
+**CR → Localization → Generate Pseudo-Locale Pack** (or `cr_loc_pseudo`) writes `qps.csv` ("Pseudo")
+into the user pack folder from the full export: accented letters, about 40% padding, wrapped in
+`[ ]`, `{placeholders}` untouched. Pick *Pseudo* in Settings: plain text means a string is not
+localized, and a missing `]` means text is clipped. The first pass (main menu, dialogue) found no
+real overflow, but other screens were not checked.
 
 ## Dialogue keys
 
