@@ -294,10 +294,15 @@
       ],
       "cr-data": [
         "Assets/CR/Core/Data/Repository/Implementation/GameCore/LocalizationRepository.cs",
-        "Assets/CR/Resources/configuration/localization/*.yaml"
+        "Assets/CR/Resources/configuration/localization/*.yaml",
+        "Assets/CR/Localization/**/*.cs",
+        "Assets/CR/Core/Data/Editor/Build/CrLocalizationCommands.cs",
+        "Assets/CR/Dialogue/Editing/DialogueLocalizationLines.cs",
+        "Assets/CR/Dialogue/Editing/DialogueLocalizationFacts.cs",
+        "Assets/CR/Dialogue/Editing/DialogueLocalizationDiagnostics.cs"
       ]
     },
-    "description": "Per-domain per-language YAML localization files, LocalizationRepository loading, key naming convention"
+    "description": "CSV language packs, Settings language, Update Pack tooling; legacy per-domain YAML localization files, LocalizationRepository loading, key naming convention"
   },
   "unity/07-battle-system": {
     "docPath": "docs/unity/07-battle-system.md",
