@@ -444,7 +444,7 @@ Read surface used by the player menu's **Quests** tab (`Assets/CR/UI/Quests/Ques
 
 | `QuestManager` method | Routes to | Notes |
 |---|---|---|
-| `RefreshActiveQuestsAsync(ct)` | `IQuestRepository.GetActiveQuestsAsync` | Re-reads InProgress instances and replaces the in-memory list seeded by `QuestWorldBehaviour`. |
+| `RefreshActiveQuestsAsync(ct)` | `IQuestRepository.GetActiveQuestsAsync` | Re-reads InProgress instances, replaces the in-memory list seeded by `QuestWorldBehaviour`, then raises `OnActiveQuestsRefreshed`. |
 | `GetCompletedQuestsAsync(ct)` | `IQuestRepository.GetCompletedQuestsAsync` | Completed instances. |
 | `GetTemplateAsync(templateId, ct)` | `IQuestRepository.GetQuestTemplateAsync` | Name, description, objective texts, rewards. |
 | `AbandonQuestAsync` / `ClaimRewardsAsync` | as before | Unchanged lifecycle calls. |
@@ -543,6 +543,18 @@ both sides of the seam:
   `QuestEditorSyncHelper.BuildUpsertBody` sends it. The repository re-keys a minted row as described
   above (instances follow, no FKs), so one "Push" of a diverged quest from Studio makes the server's
   id match the content's. Pushes without an id (older Studio, cr-admin-web) keep the stored id.
+- **Objective ids (M7019):** templates realign by push, objective rows never did — the upsert keeps
+  the live row at a sort order and never rewrites its id, so a prod objective minted before
+  `QuestObjectiveTemplateIds.Derive(templateId, sortOrder)` kept its old id while every client's
+  local template carries the derived one. The template ids matched, so the server-template fallback
+  above never kicked in, and every progress report named an objective the client's template did not
+  have: the HUD tracker stayed at 0/N after a capture (Runaway Cargo) until a journal refresh let the
+  local re-link heal the row. `M7019AlignObjectiveTemplateIdsToDerived` (Quests, both engines,
+  `ObjectiveTemplateIdAlignment`) re-keys every live objective row to its derived id and repoints
+  `quest_objective_progress.objective_template_id`; a soft-deleted row squatting on the derived id
+  is moved aside first, a live one is skipped with a `[M7019] WARNING` line. Idempotent; one
+  `[M7019]` line per re-key. Later seeds (M14002) address objectives by content key + sort order,
+  so the re-key does not strand them. Pinned by `ObjectiveTemplateIdAlignmentTests` (SQLite + Postgres).
 
 ### Quest endpoints are token-authoritative for the account
 
@@ -1117,9 +1129,13 @@ what to do next, and how far along it is. Added 2026-09-26.
   `PickingMode.Ignore` throughout. Registers with `IUICoordinator` inside `Init` and shows only in
   `UIContext.Overworld`; hides while the shared `isMenuOpen` flag is up (player menu, shop, market,
   conversation) and when the System tab's **Quest Tracker** toggle is off.
-- **Data:** every `IQuestService` event (`OnSessionReady`, accepted, granted, objective updated,
-  completed, abandoned, rewards claimed) only marks the card stale; `Update` rebuilds on the main
-  thread from `ActiveQuests`, fetching each template once per session through `GetTemplateAsync`.
+- **Data:** every `IQuestService` event (`OnSessionReady`, `OnActiveQuestsRefreshed`, accepted,
+  granted, objective updated, completed, abandoned, rewards claimed) only marks the card stale;
+  `Update` rebuilds on the main thread from `ActiveQuests`, fetching each template once per session
+  through `GetTemplateAsync`. `OnActiveQuestsRefreshed` fires after `RefreshActiveQuestsAsync` swaps
+  in the authority's list (journal open, every dialogue snapshot) — without it the tracker kept the
+  counts it drew before the swap (HUD 0/3 while the journal showed 2/3). Pinned by
+  `QuestManagerRefreshTests`.
 - **Choice and wording** are pure (`Assets/CR/UI/Logic/QuestTracker*.cs`, `CR.UI.Logic`, no cr-api
   references, so the presenter flattens instances to `QuestTrackerCandidate` primitives):
   `QuestTrackerSelector.Choose` picks the in-progress quest with the lowest authored `SortOrder`
