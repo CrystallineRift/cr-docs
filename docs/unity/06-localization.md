@@ -9,7 +9,7 @@
 > | Settings → Player Menu → System → Game → **Language** dropdown, saved as the display language | **Works** |
 > | Dialogue lines and choice options | **Translatable** (keys `dlg.{dialogueKey}.{nodeId}[.{optionId}]`) |
 > | NPC display names | **Translatable** (refresh on the next area load) |
-> | UI text (Phase 1 screens, see [UI text](#ui-text)) | **Translatable** |
+> | UI text (all player screens, see [UI text](#ui-text)) | **Translatable** |
 > | Item, creature, ability and status names, quest text, other UI chrome | **Not translatable yet.** The YAML tables exist (English only) but nothing reads them. |
 > | `TryGetText(key, out text)` (no language) | An **English** lookup. Pass a language to `TryGetText(language, key, out text)` for anything else. |
 > | `quests.yaml` | **Removed (2026-09-21).** Quest text is authored on the `QuestDefinition`. |
@@ -151,8 +151,8 @@ Findings appear as Warnings (there is no Info severity) with codes `loc.summary`
 ## UI text
 
 Screen text (labels, buttons, tooltips, dropdown choices, error messages) is translatable through the
-same language packs. **Phase 1** covers the core, the adapters, export, the checks and the first
-screens; the rest of the screens follow in Phase 2.
+same language packs. **Phase 1** built the core, the adapters, export, the checks and the first
+screens; **Phase 2** (2026-10-06) migrated every remaining player screen and text class.
 
 ### Keys
 
@@ -221,7 +221,7 @@ excluded (`Editor/` folders plus the `LocalizationUxmlScope.Excluded` list).
 
 ### Checks
 
-- An EditMode project test runs over `LocalizationUxmlScope.Enforced`. Phase 1 list: **MainMenu, PlayerMenuWindow, SignedOutDialog**.
+- An EditMode project test runs over `LocalizationUxmlScope.Enforced`: MainMenu, PlayerMenuWindow, SignedOutDialog, MarketScreen, MarketListingRow, BagScreen, InventoryItem, TeamSlot, CreatureCard, BattleHUD, BattleSummary, BattleBagPanel, MerchantShopScreen, MerchantShopItemRow, DialogueScreen, CharacterSelect, CharacterCreate, LinkAccount, StartupFlow, LoginForm, VersionPanel, TrainerCard, ConfirmationDialog, ModalDialog, EvolutionOverlay. `LocalizationUxmlScope.ExcludedPaths` drops the unused duplicate `Assets/CR/UI/Battle/BattleBagPanel.uxml`.
 - **CR → Localization → Check UI Strings** is report-only and covers every player screen.
 
 ### Phase status
@@ -237,7 +237,8 @@ excluded (`Editor/` folders plus the `LocalizationUxmlScope.Excluded` list).
 - Fonts are Latin only; CJK and RTL text will not render correctly yet.
 - A dropdown whose translated choices are duplicates may shift the selected index on a language change.
 - Server message bodies are not translated.
-- Screens outside the Phase 1 list stay English until their Phase 2 pass.
+- Not yet translated: the legacy startup views (`LoginView`, `StarterSelectionView`, `TrainerSelectionView` — `StartupFlowController` takes its title from them), the Market element-filter dropdown (enum names compared by value), and content data (item/creature/ability/status/quest names — Phase 3).
+- Some code-composed messages are cached when shown and only re-translate the next time they are set (link-account messages, character-create status, battle log lines, shop status, transient toasts).
 
 ## Dialogue keys
 
