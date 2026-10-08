@@ -13,6 +13,7 @@ from `TalentBuild.Evaluate` every call. Spec: `cr-api-unity/docs/superpowers/spe
 | Domain | `Talents/` — `CR.Talents.Data(.Sqlite/.Postgres/.Migration/.Migration.Postgres)`, `.Domain.Services` (`TrainerProgressionService`, `TrainerLevelCurve`, `TrainerXpRuleMath`, `TrainerProgressionContentValidation`, `TalentBuildReader`, `TalentModifierProvider`, `TalentService`), `.Model.REST`, `.Service.REST`. `NoTalentModifierProvider` is deleted — `ITrainerModifierProvider` now always resolves to the real `TalentModifierProvider`, both online and offline. |
 | Connection string | `TalentDatabase`; when the key is absent the API uses the `StatDatabase` connection string and logs `[startup] ConnectionStrings:TalentDatabase is not set; …` once (`TalentDatabaseFallbackExtensions`, `CR.REST.AIO`) |
 | Migrations | M15001 `world_location`, M15002 `trainer_level_requirement` (+ L1–30 seed), M15003 `trainer_xp_rule` (+ 6 rules), M15010 `world_location.discovery_xp`/`discovery_quest_key`, M15011 `trainer_location_discovery` (the discovery ledger), M15012 `world_region` (+ 77 open-world region keys). The floor seed (M15004 at first export) is **not shipped yet** — see [Offline floor](#offline-floor) |
+- **M15013** seeds the six legacy area keys (Meadow, Village, Cave, Shore, Crags, Dunes) into `world_region` (parent `legacy`), so legacy-mode location saves validate offline too, where `world_location` has no rows.
 
 ## Data
 
