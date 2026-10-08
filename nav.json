@@ -373,5 +373,10 @@
     "section": "Unity",
     "title": "Talents UI (Unity)",
     "path": "unity/36-talents-ui"
+  },
+  {
+    "section": "Unity",
+    "title": "Open World",
+    "path": "unity/37-open-world"
   }
 ]
