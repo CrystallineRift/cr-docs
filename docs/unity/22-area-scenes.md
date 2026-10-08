@@ -822,13 +822,23 @@ online/offline like every other trainer call — the online path also mirrors in
 The write deliberately lives outside the profile-update SQL — a movement-cadence save and an
 appearance edit can never clobber each other.
 
-**Content dependency (L7 review, M2 close):** `PUT /trainer/{id}/location` refuses (400) any
-`AreaKey` that does not match an authored `world_location.area_key` row (`IWorldLocationDiscoveryService.AreaKeyExistsAsync`
-— see [Location Discoveries](?page=backend/24-location-discoveries)). An area whose scene ships
-without ever getting a `world_location` row pushed from Studio therefore has every location save
-in it silently fail — the tracker/AreaLoader writer above logs the failure, but there is no
-player-facing symptom besides "my position didn't resume" after the next session. Push at least
-one `world_location` per playable area before shipping it.
+**Area key rule (server-authoritative, both modes):** `TrainerDomainService.UpdateLastLocationAsync`
+refuses any `AreaKey` that is neither an authored `world_location.area_key` (the legacy areas — Meadow,
+Village, Cave, Shore, Crags, Dunes) nor a `world_region.key` (the open-world regions), throwing
+`UnknownAreaKeyException`; `PUT /trainer/{id}/location` maps it to `400 "AreaKey does not match a known
+world location or region."`. The check lives in the domain service, not the endpoint, so the offline
+path (the same DLL against local SQLite) enforces it too. A refused save is logged by the
+tracker/AreaLoader writer; the only player-facing symptom is "my position didn't resume" next session.
+
+- **Legacy areas:** push at least one `world_location` per playable area from Studio before shipping it.
+- **Open-world regions:** `world_region(key UNIQUE, name, parent?)` (Talents, cr-api
+  `M15012CreateWorldRegionTable`) is seeded from `cr-api-unity/Assets/CR/Game/OpenWorld/Data/Map/regions.json`
+  (`regions[].key`, `name`, `parent`; `""` parent → null) plus `techdemo` — 77 keys, fixed UUIDv5 ids,
+  insert-if-absent. It is **not** synced from the client: a region added to `regions.json` needs a new
+  seed migration in cr-api (and a package rebuild for offline) before its saves are accepted.
+
+See [Location Discoveries](?page=backend/24-location-discoveries) and
+[Trainer Progression](?page=backend/22-trainer-progression).
 
 ### Resuming
 
