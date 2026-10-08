@@ -24,7 +24,8 @@ decides whether the prompt shows.
 ## WorldBark
 
 `IBarkService.Say(anchor, text, seconds)`, impl `WorldBarkService`: a world-space bubble (USS class `world-bark`).
-`BarkRule.Allowed(...)` suppresses barks during dialogue, battle and the tech demo.
+`BarkRule.Allowed(...)` suppresses barks during dialogue, battle and the tech demo. `Say` returns `true` only when the
+line was shown, so a caller that remembers "said once" never burns that memory on a suppressed line.
 
 ## NpcEscort and EscortPlan
 
@@ -34,11 +35,20 @@ pausing when the player is farther than `waitDistance`. `BeginFrom(i)` / `PlaceA
 `EscortPhase` (`AtWagon`, `Escorting`, `AtFarm`) and a start waypoint, so a reloaded save puts the escort where the
 quest state says it should be.
 
+`EscortDirector` drives the escort from the quest authority's state and owns the bark table: lines on one waypoint
+play one after another (`_barkSeconds` + `_barkGap` apart — the bubble above him holds one line), and the wait
+grumble rotates through `_waitBarkKeys`. Its `Phase` also gives the open-world whiteout its safe point (below).
+
 ## OneShotWorldEvent
 
 Plays once per trainer (`event.<eventKey>` flag): optional dialogue (awaits its end), VFX prefab at `vfxAt`, then
 `enableOnPlay` / `disableOnPlay` toggles, then sets the flag. `triggerOnEnter` fires from a trigger volume.
 `OneShotRule.ShouldPlay(alreadyPlayed, blocked)`. Used for the pillar shattering and Ahksun rising.
+
+A restore (load, cell stream-in, trainer switch) shows the END state without replaying: after enabling an object it
+calls every `IOneShotAftermath` under it — `CrystalRise` jumps to its final pose, `LightFlash` stays dark. A trainer
+switch during the dialogue never starts the prelude; a switch during the prelude puts the new trainer's view back;
+a cell unloaded mid-prelude ends the beat unplayed. `PillarCharge` drops its tint whenever it is switched off.
 
 ## PrologueController and the gate
 
@@ -48,6 +58,10 @@ The prologue is its own scene (`Prologue_Earth`): letter, photo, guitar, then Ah
 spawn. `OpenWorldBootstrap`, before placing the player, suspends streaming, loads the prologue additively alone,
 awaits `Completed`, unloads, resumes streaming and continues placement. `world.placed` is set after the first
 successful placement.
+
+A run abandoned during the closing whiteout never raises `Completed`, and the bootstrap re-checks the UI context after
+the saved-location read: back at the title by then, the placement is dropped (no prologue under the menus) and the
+next Overworld entry gates again.
 
 ## Place flavour
 
@@ -103,16 +117,32 @@ After a rebuild run `cr_world_refresh_activatables --args c,r`, `cr_world_bake_p
   the collider at world init. The gaterbear zone opens after Welcome and closes after First Battle; the lesson
   zone opens after First Battle and closes after First Capture.
 - `ProximityBark` — one StoryText line when the player's root collider (tag `Player`) enters; once per trainer
-  under `event.<key>`; anchored on the player (Ahksun) or on a transform (Izzandra).
-- `BarnSleepInteraction` — readable-style prompt; `BarnSleepRule` locks it until Runaway Cargo paid out, then
-  bark → fade → morning: Izzandra moves to the gate spot, `event.barn-morning` flag.
+  under `event.<key>`, written only when the line was actually shown (a line suppressed by a conversation is retried
+  while the player stays inside); anchored on the player (Ahksun) or on a transform (Izzandra).
+- `BarnSleepInteraction` — readable-style prompt; `BarnSleepRule` locks it until Runaway Cargo is PAID OUT (completed
+  AND claimed — completed-but-unclaimed stays locked), then bark → fade → morning: Izzandra moves to the gate spot,
+  `event.barn-morning` flag. The flag is read back on load and trainer switch: Izzandra at the gate, barn `Closed`,
+  the night never replays.
+- `DialogueLineCue` — shows a presentation-only model beside the player when a conversation reaches given line nodes
+  (`IDialogueLineFeed.LineShown`, raised by `DialogueService` before each line) and hides it when the conversation
+  ends. The bond-line Hellcat (T6) on `help-bond` / `help-bond-explain` uses it; the real Hellcat is the server-granted
+  starter.
 - `CrystalRise`, `LightFlash`, `RiftFlicker` — presentation movers driven by `PresentationMath`.
+
+## Whiteout in the open world
+
+`PlayerWhiteoutHandler` asks `OpenWorldWhiteoutReturn` first. In open mode it moves the player with
+`IOpenWorldPlayer.Teleport` (movement controller, never a transform write) to `IWhiteoutSafePoint` — impl
+`EscortWhiteoutSafePoint`: beside the farm gate when the escort phase is `AtFarm`, the lesson spot when `Escorting`
+(`WhiteoutSafePointRule`), otherwise the `WorldLayout` start spawn. Legacy mode is unchanged (merchant teleport).
 
 ## Play-mode smoke
 
-`cr_story_smoke_start --args full|skip` (play mode, `world_mode: open`) runs `StorySmokeRunner`: it drives the
+`cr_story_smoke_start --args full|skip|runaway|hold|title|switch` (play mode, `world_mode: open`; Editor and
+development builds only — `#if UNITY_EDITOR || DEVELOPMENT_BUILD`) runs `StorySmokeRunner`: it drives the
 startup UI to a new offline trainer and walks every beat through the player's own entry points (readables,
-events, NPC conversations, `SubmitPlayerAction`, teleports through `IOpenWorldPlayer`). One line per step in
+events, NPC conversations, `SubmitPlayerAction` with `BattleActionParser.Serialise(BattleAction)`, teleports through
+`IOpenWorldPlayer`). One line per step in
 `Temp/i2/story_smoke.txt`; `cr_story_smoke_status` shows the phase. Offline, the gaterbear needs its creature
 row in the local game-data (the server content sync soft-deletes creatures the server does not have), so push
 `creature_gaterbear` before relying on the wagon fight.
