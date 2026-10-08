@@ -56,13 +56,13 @@ Branch `feature/opening-story` (cr-api-unity). Text drafted from the novel; cano
 | NPC display names: Philroe (`demo-merchant-area-1`), Izzandra (`npc-izzandra`) | NPC name plates, dialogue headers, quest giver | `npcs.yaml` keys `npc_demo_merchant_area_1_display`, Izzandra displayNameKey + server NPC name via push (staging `names.json`) | 2026-10-08 | 2026-10-08 | AI draft |
 | Creature name + description: Gaterbear (`creature_gaterbear`) | creature def, journal, battle | `Content/Defs/Creatures/gaterbear.asset` + creatures yaml + push (staging `names.json`) | 2026-10-08 | 2026-10-08 | AI draft |
 | "Hellcat" as the starter's story name (species stays Cindris) | Philroe graph, Izzandra graph, quest text, barn night line | dialogue assets + `quests.json` + StoryText | 2026-10-08 | 2026-10-08 | AI draft |
-| UI: `story.ui.skip` "Skip" | Prologue Skip button | `Assets/CR/Game/Story/Text/StoryText.cs` (SkipPrologue) | 2026-10-08 | 2026-10-08 | AI draft |
-| Barn: `story.ui.barn.sleep-prompt`, `story.ui.barn.locked`, `story.ui.barn.night` | barn Sleep interaction (2a) | StoryText.cs (BarnSleepPrompt, BarnLocked, BarnNight) | 2026-10-08 | 2026-10-08 | AI draft |
-| Morning: `story.ui.morning.ahksun`, `story.ui.morning.izzandra` ("Grandpa's taking the wagon to Mirandale. Coming?") | morning after the barn, Izzandra at the gate | StoryText.cs (MorningAhksun, MorningIzzandra) | 2026-10-08 | 2026-10-08 | AI draft |
-| Capture hints: `story.hint.capture-now` "Now — hold up the shard!", `story.hint.capture-broke-free` | CaptureLessonHints during the `story-capture-lesson` battle | StoryText.cs (HintCaptureNow, HintCaptureBrokeFree) | 2026-10-08 | 2026-10-08 | AI draft |
-| Philroe escort barks (11): pillars-dark, actuators, granddaughter, clothes, kings-colours, cess-pool, keep-up, wait, lesson, meadow, farm | NpcEscort waypoints wagon → switchback → lesson spot → Meadow edge → farm gate | StoryText.cs (`story.bark.philroe.*`) | 2026-10-08 | 2026-10-08 | AI draft |
-| Izzandra approach bark `story.bark.izzandra.gasp` | farm, on approach with Hellcat | StoryText.cs (BarkIzzandraGasp) | 2026-10-08 | 2026-10-08 | AI draft |
-| Ahksun trigger barks (3): mirandale-first-sight, descent, meadow | authored trigger volumes on the descent / Meadow edge | StoryText.cs (`story.bark.ahksun.*`) | 2026-10-08 | 2026-10-08 | AI draft |
+| UI: `ui.story.ui.skip` "Skip" | Prologue Skip button | `Assets/CR/Game/Story/Text/StoryText.cs` (SkipPrologue) | 2026-10-08 | 2026-10-08 | AI draft |
+| Barn: `ui.story.ui.barn.sleep-prompt`, `ui.story.ui.barn.locked`, `ui.story.ui.barn.night` | barn Sleep interaction (2a) | StoryText.cs (BarnSleepPrompt, BarnLocked, BarnNight) | 2026-10-08 | 2026-10-08 | AI draft |
+| Morning: `ui.story.ui.morning.ahksun`, `ui.story.ui.morning.izzandra` ("Grandpa's taking the wagon to Mirandale. Coming?") | morning after the barn, Izzandra at the gate | StoryText.cs (MorningAhksun, MorningIzzandra) | 2026-10-08 | 2026-10-08 | AI draft |
+| Capture hints: `ui.story.hint.capture-now` "Now — hold up the shard!", `ui.story.hint.capture-broke-free` | CaptureLessonHints during the `story-capture-lesson` battle | StoryText.cs (HintCaptureNow, HintCaptureBrokeFree) | 2026-10-08 | 2026-10-08 | AI draft |
+| Philroe escort barks (11): pillars-dark, actuators, granddaughter, clothes, kings-colours, cess-pool, keep-up, wait, lesson, meadow, farm | NpcEscort waypoints wagon → switchback → lesson spot → Meadow edge → farm gate | StoryText.cs (`ui.story.bark.philroe.*`) | 2026-10-08 | 2026-10-08 | AI draft |
+| Izzandra approach bark `ui.story.bark.izzandra.gasp` | farm, on approach with Hellcat | StoryText.cs (BarkIzzandraGasp) | 2026-10-08 | 2026-10-08 | AI draft |
+| Ahksun trigger barks (3): mirandale-first-sight, descent, meadow | authored trigger volumes on the descent / Meadow edge | StoryText.cs (`ui.story.bark.ahksun.*`) | 2026-10-08 | 2026-10-08 | AI draft |
 
 
 ## Earlier content — provenance audit pending

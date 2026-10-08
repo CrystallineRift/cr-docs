@@ -64,7 +64,7 @@ capture-failed events and only acts when the battle's spawner key is `story-capt
 ## StoryText
 
 `[LocCatalogue] static class StoryText` (`Assets/CR/Game/Story/Text/StoryText.cs`): `LocString`s for barks
-(`story.bark.*`), battle hints (`story.hint.*`) and UI such as Skip (`story.ui.*`) that are not dialogue graphs. They go
+(`ui.story.bark.*`), battle hints (`ui.story.hint.*`) and UI such as Skip (`ui.story.ui.*`) that are not dialogue graphs. They go
 through the normal localization export. Dialogue graphs, quest text and flavour are content assets.
 
 ## Script review page
