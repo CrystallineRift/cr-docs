@@ -59,6 +59,9 @@ spawn. `OpenWorldBootstrap`, before placing the player, suspends streaming, load
 awaits `Completed`, unloads, resumes streaming and continues placement. `world.placed` is set after the first
 successful placement.
 
+`ProloguePortal` completes the prologue only for the player's own collider (tag `Player`, then the Malbers tags):
+the rig's 10/20 m child trigger spheres share its Malbers tags and overlapped the volume the moment it activated.
+
 A run abandoned during the closing whiteout never raises `Completed`, and the bootstrap re-checks the UI context after
 the saved-location read: back at the title by then, the placement is dropped (no prologue under the menus) and the
 next Overworld entry gates again.
@@ -68,7 +71,9 @@ next Overworld entry gates again.
 `RegionProfile.flavourText` with `RegionProfileSet.FlavourFor(key, mask)` (key, then parent, then null) and
 `AreaBannerEvents.RaiseArrived(banner, flavour)`. `LocationFlavourSet` (`Resources/Story/LocationFlavour.asset`)
 holds `LocationFlavourEntry { locationContentKey, title, flavourText }` and `FlavourFor(locationKey)`; the journal
-shows them in a Places section.
+shows them in a Places section. Visited regions are per trainer: `RegionTracker` starts a fresh visit list (and forgets the
+debounced region) when the session's trainer differs from the one who walked them, so the next trainer's Places start
+empty and their first entry to a region still carries its flavour line.
 
 ## Capture-lesson hints
 
@@ -131,8 +136,10 @@ After a rebuild run `cr_world_refresh_activatables --args c,r`, `cr_world_bake_p
 
 ## Whiteout in the open world
 
-`PlayerWhiteoutHandler` asks `OpenWorldWhiteoutReturn` first. In open mode it moves the player with
-`IOpenWorldPlayer.Teleport` (movement controller, never a transform write) to `IWhiteoutSafePoint` — impl
+`PlayerWhiteoutHandler` awaits `OpenWorldWhiteoutReturn.TryReturnPlayerAsync()` first. In open mode it moves the
+player through `IOpenWorldRelocator` (impl `OpenWorldBootstrap`, Ruling S29) — the placement path: cover, warm the
+destination cell until Active, `IOpenWorldPlayer.Teleport` (movement controller, never a transform write), snap the
+region, reveal; the healed dialog waits for it. The target is `IWhiteoutSafePoint` — impl
 `EscortWhiteoutSafePoint`: beside the farm gate when the escort phase is `AtFarm`, the lesson spot when `Escorting`
 (`WhiteoutSafePointRule`), otherwise the `WorldLayout` start spawn. Legacy mode is unchanged (merchant teleport).
 
