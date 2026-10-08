@@ -64,7 +64,7 @@ capture-failed events and only acts when the battle's spawner key is `story-capt
 ## StoryText
 
 `[LocCatalogue] static class StoryText` (`Assets/CR/Game/Story/Text/StoryText.cs`): `LocString`s for barks
-(`ui.story.bark.*`), battle hints (`ui.story.hint.*`) and UI such as Skip (`ui.story.ui.*`) that are not dialogue graphs. They go
+(`ui.story.bark.*`), battle hints (`ui.story.hint.*`) and UI such as Skip (`ui.story.skip`), the barn (`ui.story.barn.*`) and the morning (`ui.story.morning.*`) that are not dialogue graphs. They go
 through the normal localization export. Dialogue graphs, quest text and flavour are content assets.
 
 ## Script review page
@@ -75,3 +75,44 @@ choice options, node id, asset path), plus StoryText, quest, region flavour and 
 "where to edit" column. The walk/format logic is `ScriptPageBuilder` (pure, `CR.Game.Story.Logic`) over plain DTOs.
 Dialogue keys are listed in `StoryScriptPageGenerator.DialogueKeys`; a missing asset is flagged NOT FOUND.
 Regenerate after editing text.
+
+## Placements: StorySceneBuilder
+
+`Assets/CR/Game/Story/Editor/StorySceneBuilder.cs` builds every opening-story placement from code so the
+blockout can be regenerated: `cr_story_build_scenes --args prologue|arrival|vista|descent|all`. Each part
+replaces its own `[Story …]` root and leaves hand-placed objects alone:
+
+- **prologue** — writes `Assets/CR/Scenes/Prologue/Prologue_Earth.unity` (room blockout, readables, the stone,
+  the portal volume, `PrologueController`, a `SceneContext` parented to `CoreContext`) and adds it to Build Settings.
+- **arrival** — `World_c0_r4`: the ruin inscription readable, the `arrival-ahksun-rises` event (crystal with
+  `CrystalRise`) and Ahksun's first-sight bark. Triggers sit on the ramp, outside the player rig's 20 m lock-on
+  sphere at the start spawn (a trigger nearer the edge fires the moment the game starts).
+- **vista** — `World.unity` (always loaded, so the pillar and the trigger can reference each other): the
+  Mirandale pillar + city lights at (354, 60, 758), the `arrival-pillar-shatters` event on the ramp with
+  `HCFX_Explosion_02`, a `LightFlash` and the `RiftFlicker` sky quads. Adds a `SceneContext` to World.unity.
+- **descent** — `World_c0_r3`: Philroe moved to the wagon, `NpcEscort` + `EscortDirector` with five waypoints
+  (all in this cell — Unity cannot serialise cross-scene references), the three story encounter zones, the two
+  place triggers, Ahksun's barks, the farm (gate, fence, barn, Izzandra, `BarnSleepInteraction`).
+
+After a rebuild run `cr_world_refresh_activatables --args c,r`, `cr_world_bake_proxy --args c,r` and `cr_world_validate`.
+
+## Small story components
+
+- `QuestGatedCollider` — keeps a trigger collider enabled only while `QuestGateRule` says so (required quest
+  complete, blocker not complete); re-checked every frame because `SpawnerEncounterBehaviour.Activate` re-enables
+  the collider at world init. The gaterbear zone opens after Welcome and closes after First Battle; the lesson
+  zone opens after First Battle and closes after First Capture.
+- `ProximityBark` — one StoryText line when the player's root collider (tag `Player`) enters; once per trainer
+  under `event.<key>`; anchored on the player (Ahksun) or on a transform (Izzandra).
+- `BarnSleepInteraction` — readable-style prompt; `BarnSleepRule` locks it until Runaway Cargo paid out, then
+  bark → fade → morning: Izzandra moves to the gate spot, `event.barn-morning` flag.
+- `CrystalRise`, `LightFlash`, `RiftFlicker` — presentation movers driven by `PresentationMath`.
+
+## Play-mode smoke
+
+`cr_story_smoke_start --args full|skip` (play mode, `world_mode: open`) runs `StorySmokeRunner`: it drives the
+startup UI to a new offline trainer and walks every beat through the player's own entry points (readables,
+events, NPC conversations, `SubmitPlayerAction`, teleports through `IOpenWorldPlayer`). One line per step in
+`Temp/i2/story_smoke.txt`; `cr_story_smoke_status` shows the phase. Offline, the gaterbear needs its creature
+row in the local game-data (the server content sync soft-deletes creatures the server does not have), so push
+`creature_gaterbear` before relying on the wagon fight.
