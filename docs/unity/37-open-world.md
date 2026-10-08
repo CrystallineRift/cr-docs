@@ -33,15 +33,23 @@ All game assets load through `IOpenWorldAssets`; the mode comes from `WorldModeS
 Hysteresis: unload only past ring radius + 32 m; Active demotes at 40 + 16 m. One load and one unload in flight at a time.
 `CellActivator` (one per cell scene) promotes (runs the cell's `IWorldInitializable`s once per visit, enables activatable
 behaviours and animators) and demotes (disables them, `CullCompletely`). A re-promotion re-runs world init, like today's
-per-load. If the player outruns streaming (resume, slow Deck) they are held at the cell edge behind a short fade until the
-destination is Active; the only fade left. Battles suspend streaming for their duration.
+per-load. **World init per visit:** `IWorldInitializable`s of a cell run on each promotion (merchant stock re-rolls per visit); a trainer switch mid-promotion restarts the cell's promote with the new context. A failed load retries with backoff (1, 2, 4 s) and does not block other cells.
+
+**Hold at edge.** If the player outruns streaming (resume, slow Deck) `WorldEdgeHold` covers the screen and gates gameplay input
+(`GameplayInputHolds`, which `PlayerInputGate` honours) while a built cell within ~4 m is not yet Active, then releases. After 5 s it
+toasts "still loading". Battles, cutscenes, placement, tech demo and suspend hand control to their own flow. Battles also freeze streaming for their duration.
 
 ### Region identity
 
 `RegionTracker` samples the mask about 4 Hz; a new key must hold 0.5 s (`RegionDebounce`) before `RegionChanged(from, to)`.
 On change: banner (boxes show their own name), music crossfade (`RegionAudioDirector`), sky/fog/ambient blend
 (`RegionEnvironmentDirector`, 3 s), and a forced trainer-location save. Location XP is unchanged (location-enter intent).
-`RegionTracker` is the `ICurrentLocationSource` in open mode (`AreaLoader` in legacy).
+`RegionTracker` is the `ICurrentLocationSource` in open mode (`AreaLoader` in legacy). A mask sample from a stale position
+(e.g. right after a tech-demo return) is ignored until the next `SnapTo`, so a bad region is never force-saved.
+
+**Region audio.** `RegionProfile` carries `musicKey` / `ambienceKey` played through `IGameAudio`; the AudioClip fields are secondary.
+The existing playlist crossfade (`CrMusicPlaylistCommand`) is unchanged (ruling R25); `RegionSoundtrack` crossfades its own two voices and
+cuts the outgoing one on a mid-fade change. A region with no profile uses its parent, then World defaults; an empty `ambienceKey` keeps the room tone.
 
 ### `world_mode`
 
@@ -62,20 +70,39 @@ so positions are saved in world space with no conversion. Cell (c, r) covers x i
 
 ## Editor tools
 
-Menu `CR/World/...`; each has a CLI command (`unity cmd <name> --args ...`, see the Unity CLI reference).
+Menu `CR/World/...`; every CLI command is `cr_world_*` and takes **one string** `args` (`--args "..."`).
 
-| CLI command | Does |
-|---|---|
-| `cr_world_import_map` | Reads `world-map.png` + `regions.json`, writes `RegionMask.asset` and `region-mask-debug.png`. Logs unknown colours with counts. |
-| `cr_world_create_cell --args c,r` | New cell scene with root `Cell_c{c}_r{r}`, blockout ground, `CellActivator`, `AreaWorldInitializer`; adds it to Build Settings and `WorldLayout.builtCells`. |
-| `cr_world_migrate_area --args Meadow,237,927` | Copies a legacy area scene's root objects (prefab links kept) into the right cell roots, offset so the area spawn lands at the given world x,z. The legacy scene is read, not saved. |
-| `cr_world_validate` | Objects outside their cell (+/- 2 m), built cells missing from Build Settings, regions with no profile (info), unresolved NPC keys, spawn points in the ocean. |
-| `cr_world_bake_proxy --args c,r` | Bakes `Proxy_c{c}_r{r}.prefab` from the cell's large renderers via `ICellProxyBaker` (built-in fallback: merged low-detail copies, shadows off; Amplify Impostors baker once the package is imported). |
-| `cr_world_add_lods` | Adds `LODGroup` to large props (mesh, then impostor when available, then culled); small clutter gets a cull distance. |
-| `cr_world_build_backdrop` | Builds the mountain ring + ocean plane in the World scene (never streamed). |
-| `cr_world_seed_profiles` | Seeds `RegionProfiles.asset` with a profile entry per region in the mask for the user to dress. |
+| CLI command | `args` | Does |
+|---|---|---|
+| `cr_world_import_map` | none | Reads `world-map.png` + `regions.json`, writes `RegionMask.asset` and `region-mask-debug.png` (stays in `Data/Map`). Logs unknown colours with counts. The map PNG itself lives at `Resources/OpenWorld/world-map.png` (imported as a Sprite for the world map UI). |
+| `cr_world_create_cell` | `"c,r"` | New cell scene `World_c{c}_r{r}`: root `Cell_c{c}_r{r}`, 256 m blockout ground, a `SceneContext` (parent contract `CoreContext`), `CellActivator`, `AreaWorldInitializer`; adds it to Build Settings and `WorldLayout.builtCells` (scene names). |
+| `cr_world_migrate_area` | `"Key,x,z"` e.g. `Meadow,250,880` | Copies a legacy area scene's content into the right cell(s), offset so the area default spawn lands at world (x, z). Doors are dropped. The legacy scene is read, never saved. |
+| `cr_world_refresh_activatables` | `"c,r"` or `""` (every built cell) | Re-collects a cell's activatables (see below) and saves the cell. |
+| `cr_world_validate` | none | Objects outside their cell (+/- 2 m, looks inside migrated containers), built cells missing from Build Settings, regions with no profile, unresolved NPC keys, ocean spawns. Summary `E error(s), W warning(s), I info`; checks skipped for a missing provider/mask/profile set show as warnings. |
+| `cr_world_bake_proxy` | `"c,r"` | Bakes the cell's far-field proxy to `Resources/OpenWorld/Proxies/Proxy_c{c}_r{r}.prefab` via `ICellProxyBaker` (built-in fallback baker: merged low-detail copies, shadows off; Amplify baker later). |
+| `cr_world_add_lods` | `"c,r"` | Adds `LODGroup`s to the cell's large renderers (grouped; small clutter gets a cull distance). Cell scene must exist; saves it. |
+| `cr_world_build_backdrop` | none | Builds the ocean plane + mountain ring blockout prefab (`OpenWorld/WorldBackdrop`), instanced in `World.unity`. |
+| `cr_world_seed_profiles` | none | Creates/refreshes `RegionProfiles.asset` from the legacy area scenes' audio + environment. Idempotent. |
 
-Also in the menu: Region overlay (Scene-view borders, roads, cell lines, "you are in 2b" readout).
+Menu only: Import World Map, Create Cell, Validate World, Migrate Legacy Area (wizard), and the Scene-view Region overlay (borders, roads, cell lines, "you are in 2b" readout).
+
+### Migration containers (idempotent)
+
+Migrated content goes under `[Migrated {area}]` containers beneath each cell root. Re-running `cr_world_migrate_area` for the
+same area deletes that area's containers in every built cell first, then copies again: no duplicates. Missing-scene and
+missing-root checks run before anything is modified. Doors inside prefab instances are unpacked and removed.
+
+### Activatables collector
+
+One collector (`CellActivatableExtensions.CellActivatables` / `Scene.RefreshActivatables()`) is used by Create Cell, Migrate and
+`cr_world_refresh_activatables`. It gathers spawners (`SpawnerWorldBehaviour`), NPC interaction/AI, encounter zones, pickups,
+location triggers, arenas and Animators into `CellActivator.SetActivatables`. Run the refresh after hand-adding such objects to a cell.
+
+### ArenaKeyTable
+
+Battle arenas are looked up by the encounter's own arena content key (spawner `_battleArenaKey` / trainer battle `battleArenaKey`),
+through `ArenaKeyTable`, so two areas migrated into one cell keep distinct arenas (Meadow `meadow-arena`, Village `starter-wild-zone`).
+Same-key unregister no longer drops a sibling's arena.
 
 ## `regions.json`
 
@@ -104,10 +131,27 @@ Unknown colours are reported, never guessed silently.
 
 ## Tech-demo areas
 
-Cave, Shore, Crags and Dunes have no place on the map. They stay as their legacy scenes, reachable only from a dev/Editor
-"Tech demo areas" entry (region key `techdemo`). `OpenWorldBootstrap.EnterTechDemoAsync` suspends the streamer and calls
-`AreaLoader.GoToAreaAsync`; `ReturnToWorldAsync` unloads the area, resumes streaming and returns to the remembered world pose.
+Cave, Shore, Crags and Dunes have no place on the map. They stay as their legacy scenes, reachable only from the player menu's
+dev/Editor "Tech demo areas" entry (System tab). The whole round trip is `TechDemoRoundTrip` (behind `ITechDemoHost`):
+
+- **Enter:** remembers the world pose, awaits `IWorldStreamer.SuspendAsync` (all cells unload) behind the fade, then `AreaLoader.GoToAreaAsync`. Region key `techdemo` is held on `RegionTracker`; the audio/environment directors stand down so the legacy `AreaAudio` / `AreaEnvironment` apply; proxies and backdrop hide. A suspend that exceeds 15 s aborts the entry and puts the player back (log only).
+- **Return:** unloads the area, resumes streaming, restores the remembered **return pose** and releases the region (instant change back to e.g. `2b`, directors take over). If the area will not unload the player stays in the tech demo and gets a toast.
+- **Trainer switch inside a tech demo:** leaves the area and resumes the world before placing the new trainer.
+
 Legacy keys map through `WorldLayout` (`Meadow` -> `2b`, `Village` -> `2a`, the four above -> `techdemo`).
+
+## Act 1 corridor (built)
+
+Four cells, blockout at real scale (user dresses): `World_c0_r4` (1a ruins plateau; start spawn **(208, 30.1, 1105)**), `World_c0_r3`
+(Meadow 2b + Village 2a content, migrated), `World_c1_r3`, `World_c1_r4` (blockout ground only). Meadow and Village spawns are ~63 m apart and
+their content overlaps in c0_r3 until re-dressed. The shipped assets are `WorldLayout`, `RegionMask`, `RegionProfiles`, `WorldBackdrop` and `World.unity`.
+
+## World map tab
+
+In open mode `OpenWorldMapLayoutSource` replaces the legacy node layout: every region (sub-regions included; not mountain, ocean or unassigned) is shown
+with `WorldMapUnknownAreaDisplay.AllVisible` (no fog; discovery of regions deferred). `WorldMapDefinition.backgroundSprite` draws `world-map.png` in a
+child element sized to the same canvas rect as the nodes (`WorldMapLayout.BackgroundRect`), and `IWorldMapMarkerSource` places an exact player marker from
+`IOpenWorldPlayer` (refreshed on tab open, not live). See [World Map](?page=unity/35-world-map).
 
 ## Story start and migration
 
