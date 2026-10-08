@@ -1852,6 +1852,16 @@
     },
     "description": "Talents UI (Phase 2 Unity lane): TalentTreeDefinition authoring SO + custom inspector calling cr-api's real TalentTreeValidation, Studio push/export + CLI, the three starter trees, the Talents tab (TalentNodeStateBuilder over the real TalentRules/TrainerProgress), ITalentProgressReader/ITalentActions wired to the real server/offline TalentService (TalentOnlineOfflineRouter, TalentClientUnityHttp); movement-speed is a real client-applied effect (TrainerModifierApplier + TrainerMoveSpeedLogic pushing MalbersMovementController.SetSpeed)"
   },
+  "unity/38-story-opening": {
+    "docPath": "docs/unity/38-story-opening.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [
+        "Assets/CR/Game/Story/**"
+      ]
+    },
+    "description": "Opening story client systems: IStoryFlags, LoreReadable, WorldBark, NpcEscort/EscortPlan, OneShotWorldEvent, PrologueController + gate, place flavour, capture-lesson hints, StoryText, and the cr_story_script_page review-page command"
+  },
   "backend/25-talents": {
     "docPath": "docs/backend/25-talents.md",
     "repos": {

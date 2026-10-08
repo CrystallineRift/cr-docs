@@ -378,5 +378,10 @@
     "section": "Unity",
     "title": "Talents UI (Unity)",
     "path": "unity/36-talents-ui"
+  },
+  {
+    "section": "Unity",
+    "title": "Opening Story (Unity)",
+    "path": "unity/38-story-opening"
   }
 ]
