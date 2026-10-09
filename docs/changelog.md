@@ -1,5 +1,42 @@
 # Changelog
 
+## 2026-10-09 — Talents floor seed M15040 and an authenticated floor bake (pending merge)
+
+- **Talents floor seed** (cr-api `content/talent-seed-2026-10-09`, pending merge): `M15040SeedTalentContent_20261009`,
+  exported from production by `cr_talent_content_export_seed`, carries the 8 world locations offline (the six areas
+  plus `story-switchback` and `story-philroes-farm`) as insert-if-absent rows with their authored ids on both engines,
+  and mirrors the level curve and the 7 XP rules into SQLite only. Until it merges and the floor is rebaked, offline
+  play has no world locations and earns no discovery XP. Pinned by `TalentContentSeedSqliteTests`; tests that
+  assumed `world_location` started empty now count only their own rows.
+- **Bake Floor From Server** (cr-api-unity `c2e3164f` on `feature/mountain-buildout`, pending merge): the bake now
+  authenticates its content sync with the Studio's service token (`EditorServiceTokenManager` over
+  `EditorServiceAuth`, the same exchange Studio push and pull use). Before, it sent no token, all 7 domains came back
+  unauthorized and the bake refused to publish. A failed exchange now fails the domain with its reason.
+- **Docs:** backend/22 (Offline floor), unity/27 (Baking a floor from the server), unity/34; `doc-sources.json`.
+
+## 2026-10-09 — Vocabulary consistency: talents, Wolf Pup, Astral Realm tab, Studio labels
+
+- **Why:** the opening-story vocabulary pass (krytori, Summoning Shard, Seeker, Astral Realm) had left text
+  in server-seeded talents, a creature flavour line, one menu tab, the Journal's stat labels, Studio
+  dropdowns and the reference docs. Content keys, ids, routes and code identifiers are unchanged.
+- **cr-api** (`feature/vocabulary-consistency`, pending merge): `M15200` rewrites seven talent descriptions
+  ("Crystal save" -> "Shard save", "thrown crystal" -> "thrown Summoning Shard", "Trainer XP" -> "Seeker XP") and
+  `M10023` Wolf Pup's flavour line; both are guarded (only rows still carrying the seed text change) and run on
+  both engines. Server refusal text now says "The Astral Realm is full", "Seeker does not have sufficient
+  quantity" and "That Seeker could not be found".
+- **cr-api-unity** (pending merge): the same talent and Wolf Pup text on the assets (so a Studio push does not revert the
+  migrations), the player-menu tab reads **Astral Realm**, the Journal shows "Seeker Level" / "Seeker XP" (NPC
+  counters such as "Trainers Defeated Total" keep their word), and the item inspector tooltip says Summoning Shard.
+- **cr-admin-web** (`feature/vocabulary-consistency`, pending merge): the item usage-flag label, the capture-modifier help, the talent effect "Shard save chance %"
+  and the Bond Trial reward text.
+- **Left alone on purpose:** the parked guide dialogues and area quests (re-worded when added back), the
+  "Trainer Progression" tool and API names (they name the data model, not the player), and every identifier.
+- **Docs:** unity/07, 10, 13, 14, 26, 32, 33; backend/09, 11, 15, 19, 25, 26; the AI content ledger; `doc-sources.json`.
+  Checked against the code on the way: the "shard survived" message the talents and capture pages described
+  does not exist (the client does not read `ItemRetained`), and First Battle pays six standard shards, not three.
+- **Needs doing:** Studio push (talents, Wolf Pup, the starter zone) and a floor rebake; the admin-web docs mirror
+  updates on its next `sync:docs`.
+
 ## 2026-10-09 — Deploy rollback guards (cr-ops live; cr-api CI pending deploy)
 
 - **Why:** production ran a cr-api commit from a feature branch that `main` did not contain, so the next

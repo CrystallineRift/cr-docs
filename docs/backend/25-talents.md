@@ -203,12 +203,12 @@ summing (`TalentRules.Caps`) into `TrainerModifiers`'s derived accessors:
 
 Unknown effect types in stored JSON are ignored and logged once per instance.
 
-- **Crystal save.** On a failed capture roll, `CaptureAttemptService` rolls `CrystalSaveChance` with
+- **Shard save** (`CrystalSaveChance`; the talent text and the Studio label say "Shard save chance", pending merge). On a failed capture roll, `CaptureAttemptService` rolls `CrystalSaveChance` with
   the same `ICaptureRoll`; a save sets `ItemUseResult.ItemRetained = true`. The consumption gate in
   `ItemUseDomainService` becomes `IsConsumable && !EvolutionTriggered && !ItemRetained` — a save
   refunds the item already taken under the claim-before-pay ordering, without changing that ordering.
-  Offline uses the same DLL service, so there is one gate. Unity shows "Your crystal survived" —
-  presentation only.
+  Offline uses the same DLL service, so there is one gate. The Unity client does not read `ItemRetained`
+  yet, so there is no "shard saved" message; the kept shard simply stays in the bag.
 - **Loot.** `LootRollService.Roll(entries, rng, dropChanceMultiplier = 1.0)`: each entry passes when
   `rng ≤ min(1, chance × m)`. `BattleDomainService` passes the player's `DropChanceMultiplier`.
 - **Pickup currency.** Each `RewardType.Currency` reward becomes `round(qty × PickupCurrencyMultiplier)`,

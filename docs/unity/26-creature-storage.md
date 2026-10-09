@@ -1,7 +1,8 @@
 # Creature Storage & Team Exchange
 
 The player menu's **Storage** tab: a paged box grid, a Data File panel for the selected creature,
-and a modal for exchanging it with a team member.
+and a modal for exchanging it with a team member. In the game the tab is the **Astral Realm** (its strings
+already say so; the tab label itself is pending merge); this page says storage for the inventory behind it.
 
 ## Where the rules live
 
@@ -134,7 +135,7 @@ So the view follows it:
 3. If `BoxIndexOf` returns `-1` the active element chip hides the creature — clear the chip and ask
    again, rather than paging to a box it is not on. This is the one path that can make a stored
    creature genuinely invisible.
-4. Confirm in words: *"Cindris moved to storage — Box 01."*
+4. Confirm in words: *"Cindris moved to the Astral Realm — Box 01."*
 
 `BoxIndexOf` returning `-1` for hidden and `-1` for absent is deliberate: both mean "the grid will
 not draw it", which is the only thing the caller acts on.

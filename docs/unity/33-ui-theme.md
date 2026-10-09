@@ -76,7 +76,7 @@ introduced, grouped by the family that owns them:
 | `--cr-status-*` | Paper menus' destructive (rose), done (emerald) and claimable (amber) states. `--cr-danger` (red) stays the generic status colour |
 | `--cr-type-*`, `--cr-hp-*` | Creature-class accents, HP bar states |
 | `--cr-glass-buy-*`, `--cr-glass-danger-*`, `--cr-glass-focus-ring` | Market / Shop buttons and gamepad focus ring |
-| `--cr-currency-*`, `--cr-market-*`, `--cr-bag-*`, `--cr-tier-*` | Wallet accents, Market, battle Bag (incl. capture-crystal rows), tier badges |
+| `--cr-currency-*`, `--cr-market-*`, `--cr-bag-*`, `--cr-tier-*` | Wallet accents, Market, battle Bag (incl. Summoning Shard rows), tier badges |
 | `--cr-evolution-*` | Evolution cutscene and the area banner |
 | `--cr-battle-*`, `--cr-condition-*`, `--cr-mission-*` | Battle HUD cards, status-condition badges, mission accents |
 | `--cr-dialogue-*`, `--cr-hud-*` | Dialogue panel; toasts + quest tracker share the hud family |

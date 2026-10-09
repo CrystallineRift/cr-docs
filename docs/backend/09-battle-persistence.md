@@ -812,9 +812,9 @@ NPC rows are scoped to the *player's* `(accountId, trainerId)` for world isolati
 
 `BattleActionType.Run` in a trainer battle is refused server-side **without consuming the turn**: the action is logged, the round is reopened for the *same* trainer, and the outcome returns `ActionOutcome.RunRefused = true` with `NextActiveTrainerId` still the fleeing trainer. The HUD hides the Run button and prints "You can't run from a trainer battle!" if it arrives anyway. This no longer loops forever: after `MaxConsecutiveRefusedRuns` (3) refused Runs in a row from the same trainer, the battle ends as that trainer's loss instead of continuing to reopen the round.
 
-### No capture crystals
+### No Summoning Shards
 
-`ItemUseDomainService.UseItemAsync` refuses any capture crystal (`IsCaptureCrystal`: effect type
+`ItemUseDomainService.UseItemAsync` refuses any Summoning Shard (`IsCaptureCrystal`: effect type
 `CaptureCreature` or the `CaptureCrystal` usage flag) when the battle's other trainer is not
 `WildTrainerId`, with `"Summoning Shards cannot be used in a trainer battle."` (`item-capture-not-in-trainer-battle`) — a 400 from
 `ItemEndpoints`, nothing consumed, turn not spent. The Unity bag greys the row and logs the refusal

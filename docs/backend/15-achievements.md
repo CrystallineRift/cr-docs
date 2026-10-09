@@ -179,7 +179,7 @@ Seeded by `M7303SeedAchievements` (unchanged since v1) and assigned a category +
 | content_key | category | points | criterion (from the legacy trigger) | reward |
 |---|---|---|---|---|
 | `first_victory` | Battle | 10 | BattlesWon ≥ 1 | Currency 100 |
-| `first_capture` | Collections | 10 | CreaturesCaptured ≥ 1 | Item (capture crystal) |
+| `first_capture` | Collections | 10 | CreaturesCaptured ≥ 1 | Item (Summoning Shard) |
 | `scavenger` | Exploration | 10 | ItemsCollected ≥ 10 | Currency 250 |
 | `explorer` | Exploration | 10 | LocationsDiscovered ≥ 3 | Experience 200 |
 | `questing_begins` | Quests | 10 | QuestsCompleted ≥ 1 | Item (heal potion) |

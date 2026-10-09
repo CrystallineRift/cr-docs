@@ -205,6 +205,16 @@ the floor into a scratch directory, runs the content sync against it, and publis
 `StreamingAssets/CR/game-data.bytes` **only** if no domain failed. An unreachable server leaves the
 shipped floor untouched. The Build Players window can run it as a pre-build step (off by default).
 
+**Authentication (pending merge, cr-api-unity `c2e3164f` on `feature/mountain-buildout`).** Every content
+route is behind the API's authorization policy, so the bake reads `GameServerHttpAddress` and gives
+`ServerContentSyncService` an `EditorServiceTokenManager` for that server: an `ITokenManager` over
+`EditorServiceAuth`, the same service-token exchange the Studio's push and pull use, with the Studio's stored
+content key for that server (Local or Production). A failed exchange throws with its reason
+(`EditorServiceAuth.BearerFor(url, out error)`), so the domain reports Failed with something to act on, and
+`RefreshAccessTokenAsync` drops the cached token so the next request exchanges afresh. No server address configured stops the bake with the
+existing floor untouched. Before this the bake sent no bearer, all 7 domains came back unauthorized and the
+bake refused to publish. Tests: `Assets/CR/Tests/Editor/EditorServiceTokenManagerTests`.
+
 Before this, the shipped floor was built purely from migration seed data and had never seen the
 live server.
 

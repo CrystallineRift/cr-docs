@@ -1052,7 +1052,7 @@
         "Assets/CR/Core/DI/ServerAuthorityBindingsExtensions.cs"
       ]
     },
-    "description": "Capture crystal tiers (Shard/Standard/Fine/Radiant), capture formula, capture_modifier property, Backend IItemEffectHandler wiring, BattleEvents.RaiseCreatureCaptured, USS visual indicators; shared CaptureChanceCalculator + OfflineItemUseService capture mirror + opponent-id resolution from battle record"
+    "description": "Summoning Shard tiers (Rough/Standard/Fine/Radiant), capture formula, capture_modifier property, Backend IItemEffectHandler wiring, BattleEvents.RaiseCreatureCaptured, USS visual indicators; shared CaptureChanceCalculator + OfflineItemUseService capture mirror + opponent-id resolution from battle record"
   },
   "unity/15-event-wiring": {
     "docPath": "docs/unity/15-event-wiring.md",
@@ -1428,10 +1428,13 @@
         "Assets/CR/Core/DI/LocalDevGameInstaller.cs",
         "Assets/CR/Game/World/Behaviours/DialogueWorldBehaviour.cs",
         "Assets/CR/Core/Data/Editor/Pickups/*.cs",
-        "Assets/CR/Core/Data/Editor/Build/PickupPlacementPipelineCommands.cs"
+        "Assets/CR/Core/Data/Editor/Build/PickupPlacementPipelineCommands.cs",
+        "Assets/CR/Core/Data/Editor/Build/GameDataFloorFromServerTool.cs",
+        "Assets/CR/Game/World/Editor/EditorServiceTokenManager.cs",
+        "Assets/CR/Tests/Editor/EditorServiceTokenManagerTests.cs"
       ]
     },
-    "description": "Runtime content pull-through cache: ServerContentSyncService fetch+paging, ContentSyncWriter SQL rules (no id rewrites, lowercase GUIDs, named-column upserts, derived junction ids, per-domain transactions), ContentSyncReport version-recording rule, deletion safety, and the dotnet round-trip tests."
+    "description": "Runtime content pull-through cache: ServerContentSyncService fetch+paging, ContentSyncWriter SQL rules (no id rewrites, lowercase GUIDs, named-column upserts, derived junction ids, per-domain transactions), ContentSyncReport version-recording rule, deletion safety, and the dotnet round-trip tests; Bake Floor From Server (GameDataFloorFromServerTool) authenticating the sync with the Studio service token (EditorServiceTokenManager)."
   },
   "unity/26-creature-storage": {
     "docPath": "docs/unity/26-creature-storage.md",
@@ -1785,7 +1788,8 @@
         "Convenience/CR.REST.AIO/TalentDatabaseFallbackExtensions.cs",
         "Convenience/CR.Data.Migrations.Test/TalentSeedSample/**/*.cs",
         "Game/CR.Game.Domain.Services/Implementation/Battle/BattleDomainService.cs",
-        "Pickups/CR.Pickups.Domain.Services/Implementation/PickupDomainService.cs"
+        "Pickups/CR.Pickups.Domain.Services/Implementation/PickupDomainService.cs",
+        "Convenience/CR.Data.Migrations.Test/TalentContentSeed*Tests.cs"
       ],
       "cr-data": []
     },
