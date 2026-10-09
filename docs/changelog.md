@@ -14,7 +14,7 @@
 
 ## 2026-10-09 — Starting kit at trainer creation; Welcome quest retired (pending deploy)
 
-- **Status:** pending deploy (cr-api feature/retire-welcome). Not merged, not deployed; the cr-api-unity half
+- **Status:** pending deploy (cr-api PR #70, feature/retire-welcome). Not merged, not deployed; the cr-api-unity half
   (offline binding, parking the Welcome asset) is pending.
 - **cr-api:** `ITrainerCreationService` / `TrainerCreationService` creates the trainer and, when its team is
   empty, grants one starter (`starter_creature_1_id` at `starter_creature_level`, ability-set fallback
@@ -35,11 +35,9 @@
 
 ## 2026-10-09 — M7019 objective-id alignment uses a two-phase re-key (pending deploy)
 
-- **Status:** pending deploy (cr-api feature/retire-welcome). M7019 is deployed nowhere yet. The two-phase
-  re-key (`99b283b`) is **only on feature/retire-welcome**. cr-api PR #69 (`fix/quest-objective-id-align`,
-  head `f274715`) is the earlier single-phase M7019, which mishandles chains and swaps: do not merge #69 on
-  its own. Supersede it with feature/retire-welcome, or push `99b283b` to `fix/quest-objective-id-align`
-  first.
+- **Status:** pending deploy (cr-api PR #70, `feature/retire-welcome`). M7019 is deployed nowhere yet. The
+  two-phase re-key (`99b283b`) ships in #70; the earlier single-phase PR #69 (`f274715`), which mishandled
+  chains and swaps, was closed as superseded.
 - **What M7019 does:** re-keys every live `quest_objective_template` row to
   `QuestObjectiveTemplateIds.Derive(template, sortOrder)` and repoints
   `quest_objective_progress.objective_template_id`. That fixes the HUD quest tracker staying at 0/N after a

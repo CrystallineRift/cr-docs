@@ -207,7 +207,7 @@ configured")` inside `CreatureInventoryService.GetTeamInventoryIdAsync`.
 
 ## The Starting Kit at Trainer Creation
 
-:::note Pending deploy (cr-api feature/retire-welcome)
+:::note Pending deploy (cr-api PR #70, feature/retire-welcome)
 Not merged to main and not deployed. Until it ships, production still grants the starter inline in
 `POST /trainer` and the potions through the Welcome quest's reward.
 :::

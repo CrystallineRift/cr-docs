@@ -290,7 +290,7 @@ This does two things a check-then-insert could not:
 
 ### `EnsureWorldNpcAsync` — the world NPC a player meets
 
-:::note Pending deploy (cr-api feature/retire-welcome)
+:::note Pending deploy (cr-api PR #70, feature/retire-welcome)
 Not merged to main and not deployed. The Unity offline router still calls `EnsureNpcAsync` with the Inspector-set type until its follow-up lands.
 :::
 
@@ -658,7 +658,7 @@ The account comes from the token (`context.GetAccountId()`), never the body. The
 
 **On cr-api main today** (since route lockdown round 1, `aac4e0d`): the handler resolves the type from the NPC content registry (`ResolveRegisteredNpcTypeAsync`) and **never reads the body's `npcType`**, so a client cannot mint a `Trainer` identity by claiming one. A key the registry does not know is ensured as a plain `Npc`, with a warning in the log. `EnsureNpcRequest.NpcType` stays on the record for wire compatibility only. The upsert's no-downgrade rule still applies to the registry's type: a generic `Npc` ensure never overwrites an existing type, and a registry type such as `Trainer` upgrades a row previously created as a generic `Npc`. A soft-deleted NPC is revived rather than re-created. Pinned by `RouteLockdownRound2HttpTests` (an unknown key sent with body `npcType = 1` comes back as type 2, `Npc`).
 
-**Pending deploy (cr-api feature/retire-welcome):**
+**Pending deploy (cr-api PR #70, feature/retire-welcome):**
 - The registry lookup moves into `EnsureWorldNpcAsync`, which also takes the NPC's **name** from the registry, and the upsert reconciles the name on conflict (see the `EnsureWorldNpcAsync` subsection above). `EnsureNpcRequest.NpcType` will be dropped with the Unity follow-up.
 - The route carries `RequireRateLimiting(RateLimitPolicies.PlayerIntent)`, like the talk and gift intents (`RateLimitCoverageHttpTests.The_npc_ensure_route_carries_the_player_intent_policy`).
 

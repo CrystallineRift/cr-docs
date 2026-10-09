@@ -294,7 +294,7 @@ this fix.
 
 ### Welcome is retired (M7020)
 
-:::note Pending deploy (cr-api feature/retire-welcome)
+:::note Pending deploy (cr-api PR #70, feature/retire-welcome)
 Not merged to main and not deployed. The Unity half (parking the Welcome asset, removing First
 Battle's requirement from its asset, offline trainer creation) is also pending.
 :::
@@ -609,9 +609,9 @@ both sides of the seam:
   `[M7019]` line per re-key. Later seeds (M14002) address objectives by content key + sort order,
   so the re-key does not strand them. Pinned by `ObjectiveTemplateIdAlignmentTests` (SQLite + Postgres,
   18 cases, including `Chain_BlockedRowReadFirst_IsRekeyedOnceHolderMoves` and
-  `Swap_EachHoldingTheOthersDerivedId_IsResolved`). The two-phase version (`99b283b`) is only on
-  feature/retire-welcome; cr-api PR #69 (`fix/quest-objective-id-align`, head `f274715`) still carries
-  the earlier single-phase M7019, which mishandles chains and swaps, and must not be merged on its own.
+  `Swap_EachHoldingTheOthersDerivedId_IsResolved`). The two-phase version (`99b283b`) ships in
+  cr-api PR #70 (`feature/retire-welcome`); the earlier single-phase PR #69 (`f274715`) was closed as
+  superseded.
 
 ### Quest endpoints are token-authoritative for the account
 

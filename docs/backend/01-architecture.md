@@ -612,7 +612,7 @@ it runs before shipping:
 | Path | Where | Opt-out | Status |
 |---|---|---|---|
 | `cr-ops/deploy.sh` | Guard 4, after the image checks and before Guard 3 (keep `cr-api:previous`) | `ALLOW_ROLLBACK=1 ./deploy.sh` | Live 2026-10-09 |
-| cr-api `.github/workflows/deploy.yml` | "Rollback guard" step between "SSH setup" and "Ship image (keep previous)"; the deploy job's checkout uses `fetch-depth: 0` so the ancestry check has the history | `workflow_dispatch` input `allow_rollback` (boolean, default false) | Pending deploy (cr-api feature/retire-welcome); active once merged to main |
+| cr-api `.github/workflows/deploy.yml` | "Rollback guard" step between "SSH setup" and "Ship image (keep previous)"; the deploy job's checkout uses `fetch-depth: 0` so the ancestry check has the history | `workflow_dispatch` input `allow_rollback` (boolean, default false) | Pending deploy (cr-api PR #70, feature/retire-welcome); active once merged to main |
 
 `cr-ops/README.md` has the runbook lines for `ALLOW_ROLLBACK`.
 
