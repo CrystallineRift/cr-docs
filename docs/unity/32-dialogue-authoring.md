@@ -355,12 +355,12 @@ spawn point). The document is the reference for a giver who is also a shop:
 
 1. **Welcome** (`quest-welcome-to-cr`, auto-granted, auto-paid). The hub's first case is
    `quest.objectivePending` on it: he begs for help from inside the wagon, the player asks how
-   ("I don't have a soulbeast"), and that option's `quest.recordTalk` completes the talk objective.
+   ("I don't have a krytorus"), and that option's `quest.recordTalk` completes the talk objective.
    "Here, catch." The rewards land as the conversation ends: the starter creature
    (`welcome-npc-reward-spawner`) and two `item_heal_potion_30`.
 2. **First Battle** (`quest-first-battle`, auto-granted once Welcome completes, auto-paid). Until it
-   is done the hub falls to `trapped`: "get that soulbeast away from my wagon". Winning one wild
-   battle pays xp, gold and three `capture_crystal_standard`, the binding gems he hands over as he
+   is done the hub falls to `trapped`: "Still here? That gaterbear's not leaving on its own…". Winning one wild
+   battle pays xp, gold and six `capture_crystal_standard` (Summoning Shards), which he hands over as he
    climbs out.
 3. **Runaway Cargo** (`quest-runaway-cargo`, requires First Battle, offered by and returned to him).
    `quest.state Available` reaches the offer; while Active or ReadyToTurnIn the hub gives **repeat

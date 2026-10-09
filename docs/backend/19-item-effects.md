@@ -33,7 +33,7 @@ is trusted with the answer.
 | `trigger_type` | INTEGER | `HeldItemTriggerType`, `NOT NULL`, default `0` |
 | `trigger_parameters` | TEXT | JSON for the held-item passive |
 | `is_consumable` | INTEGER / BOOLEAN | `NOT NULL`, default false — decides whether one unit is deducted on a successful use |
-| `capture_modifier` | NUMERIC | Capture-crystal odds multiplier |
+| `capture_modifier` | NUMERIC | Summoning Shard odds multiplier |
 | `prevents_evolution` | INTEGER / BOOLEAN | `NOT NULL`, default false |
 | `icon_asset_key` | TEXT | **M6021** adds it, **M6022** backfills it. Addressables address of the 2D icon, `icons/items/<content_key>` |
 
@@ -70,13 +70,13 @@ carry every Creatures table), and both return early on SQLite in
 
 All three live in `cr-api/Game/CR.Game.Model/Items/`. A seed must cast from these, never type the
 number: `M6007`/`M6009`/`M6013` once wrote `item_type = 1` for consumables and the Bag offered
-**Equip** on a Radiant Crystal.
+**Equip** on a Radiant Summoning Shard.
 
 ### `ItemType : short`
 
 | Value | Name | Meaning |
 |---|---|---|
-| 0 | `Consumable` | Potions, food, crystals |
+| 0 | `Consumable` | Potions, food, Summoning Shards |
 | 1 | `Equipment` | Held items |
 | 2 | `KeyItem` | Progression; not sold or traded |
 | 3 | `Material` | Crafting |
@@ -96,7 +96,7 @@ number: `M6007`/`M6009`/`M6013` once wrote `item_type = 1` for consumables and t
 | 64 | `CaptureCrystal` |
 
 The 15 creature consumables carry `7` = `UsableInBattle | UsableOverworld | TargetsOwnTeam`. Capture
-crystals carry `9` = `UsableInBattle | TargetsOpponent`. The heal potion carries `19` =
+Summoning Shards carry `9` = `UsableInBattle | TargetsOpponent`. The heal potion carries `19` =
 `UsableInBattle | UsableOverworld | HeldByCreature` — a dual-use item, drinkable from the bag *and*
 holdable so it auto-triggers in battle.
 
@@ -150,7 +150,7 @@ sentence:
 `UsableOverworld` even though the client never says which it is.
 
 Check 6 is deliberately made **regardless of how the client flagged the target**: a trainer's creature
-can never be captured, and a wasted crystal plus the turn it cost is the worst outcome for the player.
+can never be captured, and a wasted shard plus the turn it cost is the worst outcome for the player.
 
 After a successful handler:
 
@@ -416,4 +416,4 @@ An empty condition list short-circuits before the catalogue read.
 - **Targets.** In battle the battle must be `Active` and the caller its trainer 1. An opponent target must be the battle's active
   opponent; an own target must be a creature the trainer owns. Anything else is a 400 before any item is taken.
 - **Capture** is additionally bound to the caller's live **wild** battle and its active wild creature, and ownership moves by the
-  `ICreatureCaptureClaim` compare-and-set — a double tap captures once; the loser's crystal is refunded.
+  `ICreatureCaptureClaim` compare-and-set — a double tap captures once; the loser's shard is refunded.

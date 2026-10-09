@@ -24,12 +24,12 @@ Gameplay systems (input gates, ambient audio) release on `BattleClosed`, not `Ba
 **A capture is not a battle win (spec B7).** `EndBattle` computes `playerWon` from the winning side, but
 `BattleEndReason.ReportsBattleWon(reason, playerWon)` additionally excludes `Capture`: catching the wild
 creature ends the battle without a `BattleWon`/`TrainerDefeated` outcome. The capture's
-own progress (`CreatureCaptured`, and the crystal's `ItemUsed`) comes back on the item-use result and is
+own progress (`CreatureCaptured`, and the shard's `ItemUsed`) comes back on the item-use result and is
 applied through `IQuestService.ApplyServerProgress` from `OnlineOfflineItemDomainService` — the client
 never reports the capture as a separate quest/achievement event. `BattleBagPanelHandler`'s capture branch
 no longer looks up the captured creature's base content key or calls a reporter itself; it just ends the
 battle with `BattleEndReason.Capture` and lets the item-use response's progress apply. Offline item use
-(potions in and out of battle, capture crystals) now binds to the same DLL `ItemUseDomainService` +
+(potions in and out of battle, Summoning Shards) now binds to the same DLL `ItemUseDomainService` +
 effect handlers the server runs (`ItemUseOfflineBindings.Install`, called from
 `LocalDevGameInstaller`) instead of the old hand-rolled `OfflineItemUseService` (deleted, M1-F1,
 cr-api-unity `8aac92b1`) — this is what gives an offline potion its `ItemUsed` progress outcome (a
@@ -595,7 +595,7 @@ The root is hidden (`DisplayStyle.None`) on start and shown when `BattleEvents.B
 
 Choosing a consumable from the bag now asks which creature to use it on when the item
 heals, revives or cures (`BattleItemTargeting.NeedsChoice` — opponent-targeting items and
-capture crystals skip the step). `BattleBagPanelHandler.GetTargetsAsync` refreshes the team,
+Summoning Shards skip the step). `BattleBagPanelHandler.GetTargetsAsync` refreshes the team,
 builds `TargetCandidate` cards through the shared `TargetCandidateBuilder` (also used by the
 overworld bag) and judges each with `ItemTargetRule`; the HUD's `target-panel` renders one
 row per creature, disabling rows the item cannot be used on and echoing the rule's reason

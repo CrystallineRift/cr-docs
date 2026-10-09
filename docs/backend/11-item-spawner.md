@@ -62,7 +62,7 @@ per roll — but not a slot.
 
 > This pairing matters. An earlier version removed a template once picked but still treated the
 > number as a weight, so any spawner whose `max_slots` reached its template count drew **every**
-> template with certainty: a `p=0.05` radiant crystal appeared in 2000 rolls out of 2000, and the
+> template with certainty: a `p=0.05` Radiant Summoning Shard appeared in 2000 rolls out of 2000, and the
 > rarity gradient existed only in the column. Rarity lives in `spawn_probability`; `max_slots` is
 > the ceiling on shelf size.
 
@@ -103,7 +103,7 @@ fills out.
 `M6015SeedAreaMerchantSpawners` seeds five spawners, `demo-merchant-area-{1..5}-items`, one per
 playtest area (Meadow, Cave, Shore, Crags, Dunes in that order). Only six real items exist, so the
 pools differ by weight and quantity rather than goods: shards and potions in area 1, radiant
-crystals and the Mentor's Charm weighted toward area 5. Each has a matching `ItemSpawnerDefinition`
+Summoning Shards and the Mentor's Charm weighted toward area 5. Each has a matching `ItemSpawnerDefinition`
 SO; `AreaMerchantSpawnerSqliteTests` rolls each through the real `ItemSpawnerDomainService` so a
 seeded-but-unrollable spawner fails the build rather than stocking an empty shop.
 

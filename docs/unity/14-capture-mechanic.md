@@ -1,10 +1,10 @@
 # Capture Mechanic
 
-This page documents the capture crystal system for wild creatures in battles.
+This page documents the Summoning Shard system for wild creatures in battles.
 
 ## Overview
 
-Capture crystals are special items used during wild battles to catch wild creatures. When used, the crystal has a chance to permanently catch the wild creature — it joins the trainer's team when a slot is free, otherwise it goes to storage.
+Summoning Shards are special items used during wild battles to catch wild creatures. When used, the shard has a chance to permanently catch the wild creature — it joins the trainer's team when a slot is free, otherwise it goes to storage.
 
 ### Capture Levels
 
@@ -57,15 +57,15 @@ Where:
 ### Key Rules
 
 1. **Cannot capture fainted creatures** - If `currentHp <= 0`, the capture attempt fails immediately
-2. **Cannot capture enemy creatures** - Only wild creatures can be captured. In a trainer battle the crystal is refused *before* anything is spent — see [Refused in trainer battles](#refused-in-trainer-battles).
+2. **Cannot capture enemy creatures** - Only wild creatures can be captured. In a trainer battle the shard is refused *before* anything is spent — see [Refused in trainer battles](#refused-in-trainer-battles).
 3. **Maximum 95% chance** - Even at low HP with high modifiers, the chance caps at 95%
 4. **Minimum 5% chance** - Even at full health with high modifiers, there's always a small chance
-5. **Crystals are consumed on use** - Both successful and failed captures use the crystal, **unless
+5. **Shards are consumed on use** - Both successful and failed captures use the shard, **unless
    a talent saves it**: on a failed roll, the trainer's `CrystalSaveChance` talent modifier (0-50%,
    [Talents §6.2](?page=backend/25-talents#effects-consumers)) rolls with the same `ICaptureRoll`; a
    save sets `ItemUseResult.ItemRetained = true` and `ItemUseDomainService` refunds the item already
-   taken under the claim-before-pay ordering (no change to that ordering — the client sees "Your
-   crystal survived" as presentation only, never a client-decided outcome)
+   taken under the claim-before-pay ordering (no change to that ordering). The save is the server's
+   outcome; the client does not read `ItemRetained` and shows no "shard saved" message yet
 
 ## Backend Implementation
 
@@ -142,11 +142,11 @@ Shards can only be used on the wild creature you are battling."), and from `Capt
 
 ## Refused in trainer battles
 
-A trainer's creature can never be captured, so throwing a crystal at one would cost the crystal
+A trainer's creature can never be captured, so throwing a shard at one would cost the shard
 *and* the turn for nothing. Both ends refuse the throw before anything is consumed.
 
 **Server.** `ItemUseDomainService.UseItemAsync` calls `IsCaptureCrystal(item)` — true when
-`EffectType == CaptureCreature` **or** the `CaptureCrystal` usage flag is set (seeded crystals carry
+`EffectType == CaptureCreature` **or** the `CaptureCrystal` usage flag is set (seeded shards carry
 `UsableInBattle | TargetsOpponent` = 9 and *not* the flag, so the effect type is the reliable tell).
 When the battle's other trainer is not `BattleDomainService.WildTrainerId` the use fails with
 `"Summoning Shards cannot be used in a trainer battle."` (`ItemErrorCodes.CaptureNotInTrainerBattle`,
@@ -165,7 +165,7 @@ same decision:
 | `Refusal(isCaptureCrystal, isTrainerBattle)` | `null` when allowed, else `TrainerBattleRefusal` = "Summoning Shards can't be used in a trainer battle!" |
 
 `BattleBagPanelHandler` tracks `IsTrainerBattle` from `IBattleCoordinator.OnBattleStarted` /
-`OnBattleEnded`, stamps `BattleBagItem.BlockedReason` on every crystal row while it is true, and in
+`OnBattleEnded`, stamps `BattleBagItem.BlockedReason` on every shard row while it is true, and in
 `ExecuteUseAsync` raises `BattleEvents.ItemUseRefused(reason)` and returns before the capture VFX or
 the server call. Should a refusal still come back from the server (a 400 `BadRequestException`, or
 `ItemUseResult.Success == false`), the same event carries the server's message. `BattleHUD` greys a
@@ -178,16 +178,16 @@ legitimate throw. Tests: `Game/Battle/Logic/Tests/CaptureCrystalRuleTests`.
 
 ### Battle Bag Panel
 
-The `BattleBagPanelHandler` displays capture crystals with visual indicators:
+The `BattleBagPanelHandler` displays Summoning Shards with visual indicators:
 
-- **Blue left border** indicates a capture crystal item
+- **Blue left border** indicates a Summoning Shard item
 - **Effect preview** shows tier name (Standard/Fine/Radiant)
-- **Opponent target** is automatically shown when a capture crystal is selected
+- **Opponent target** is automatically shown when a Summoning Shard is selected
 - **Greyed row + log line** in a trainer battle (`BlockedReason`, see above)
 
 ### Item Definition
 
-In Unity, capture crystals use the `ItemDefinition` ScriptableObject:
+In Unity, Summoning Shards use the `ItemDefinition` ScriptableObject:
 
 ```csharp
 [System.Serializable]
@@ -233,7 +233,7 @@ Offline (local SQLite) battles roll **identical odds** to the server, because bo
 implementation, `CaptureAttemptService` (`CR.Game.Domain.Services`, shipped to Unity in the DLL
 package): wild + not fainted → chance
 `clamp((max−cur)/max × crystal × trainerMultiplier, 0.05, 0.95)` → roll → place on team/storage (a
-full storage fails the capture and the crystal is not consumed) → claim ownership
+full storage fails the capture and the shard is not consumed) → claim ownership
 (`CurrentTrainerId`, `FirstCaughtByTrainerId`, `CaptureDate`) → capture XP (+ first-of-species). The
 server's `CaptureCreatureHandler` resolves the wild target from the battle record and delegates to
 it; Unity's `OfflineItemUseService`
@@ -248,7 +248,7 @@ the creature.
 
 ### Opponent target resolution
 
-Clients may use a capture crystal against "the opponent" without knowing its
+Clients may use a Summoning Shard against "the opponent" without knowing its
 creature id (`targetCreatureId == Guid.Empty`). Both the server handler and the
 offline service resolve the wild side's active creature from the battle record
 (`Trainer1/2ActiveCreatureId` on the side whose trainer is the well-known
@@ -302,7 +302,7 @@ refused throw (wrong target, ended battle, trainer battle) never touches the fla
 This is display-only from the client's side: Unity never computes the chance itself, so there is
 nothing for it to fake. `BattleBagPanelHandler` tracks `BattleEvents.CaptureReady` (raised by
 `BattleMissionConductor` on the mission's completion and again on every later
-`ActionOutcome.GuaranteedCaptureReady = true`) and swaps the crystal row's percentage for "Sure catch"
+`ActionOutcome.GuaranteedCaptureReady = true`) and swaps the shard row's percentage for "Sure catch"
 through the pure `CaptureChanceLabel.For(chance, captureReady)`
 (`Assets/CR/Game/Battle/Logic/CaptureChanceLabel.cs`). `BattleHUD` shows a persistent "Capture ready"
 badge for the same event, cleared alongside the rest of the mission UI on battle start/close. See

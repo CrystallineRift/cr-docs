@@ -16,8 +16,8 @@ The Battle Bag Panel is an overlay UI that appears during battles when the playe
 │  Item List       ├──────────────────────────────┤
 │  - Potion        │ [Party Slot 1]               │
 │  - Poke Ball     │ [Party Slot 2]               │
-│  - Capture       │ [Party Slot 3]               │
-│    Crystal       │ ...                          │
+│  - Summoning     │ [Party Slot 3]               │
+│    Shard         │ ...                          │
 │                  │ ─────────────────────────────│
 │                  │ Wild Creature (opponent)     │  Opponent target
 ├──────────────────┴──────────────────────────────┤
@@ -38,7 +38,7 @@ The `BattleBagPanelHandler` MonoBehaviour manages the panel:
 - Cache item usage flags for filtering
 - Handle item selection and target selection
 - Wire up confirm/cancel actions
-- Display capture crystal visual indicators
+- Display Summoning Shard visual indicators
 
 **Zenject Injection** (current signature — item use no longer goes through
 `IItemUseDomainService` directly, see [Confirming Item Use](#confirming-item-use) below):
@@ -99,15 +99,15 @@ never `AssetKey`, which addresses the item's prefab — see [UI Icons](29-ui-ico
 1. **Player clicks an item row** → `OnItemRowClicked()`
 2. **Row is highlighted** with `.bag-item-row--selected`
 3. **Opponent target** is shown if item has `TargetsOpponent` flag
-4. **Capture crystals** show tier info (Standard/Fine/Radiant)
+4. **Summoning Shards** show tier info (Standard/Fine/Radiant)
 5. **Confirm button** is enabled when both item and target are selected
 
-### Capture Crystal Visuals
+### Summoning Shard Visuals
 
-Capture crystals are distinguished by:
+Summoning Shards are distinguished by:
 
 1. **Blue left border** - CSS class `.bag-item-row--capture-crystal`
-2. **Crystal indicator** - Blue bar on the left side (4px wide)
+2. **Shard indicator** - Blue bar on the left side (4px wide)
 3. **Effect text** - Shows tier name and max catch percentage
 
 Example item row text:
@@ -144,7 +144,7 @@ public enum ItemUsageFlags : short
 
 ### ItemEffectType
 
-Defines what an item does when used. Capture crystals use:
+Defines what an item does when used. Summoning Shards use:
 
 ```csharp
 public enum ItemEffectType : short
@@ -185,15 +185,15 @@ Each `ItemEffectType` with runtime data has a corresponding typed params class. 
 
 ## User Interactions
 
-### Selecting a Capture Crystal
+### Selecting a Summoning Shard
 
-When a capture crystal is selected:
+When a Summoning Shard is selected:
 
 1. The opponent target panel becomes visible
-2. The effect text shows the crystal tier
+2. The effect text shows the shard tier
 3. Player must select either:
    - A party member (for items that target own team)
-   - The opponent (for capture crystals and opponent-targeting items)
+   - The opponent (for Summoning Shards and opponent-targeting items)
 
 ### Confirming Item Use
 
@@ -232,7 +232,7 @@ bag-panel-specific end-battle call any more:
    and skips the victory/defeat camera cue for it (a capture has no winner, spec B7).
 3. Captured creature is added to trainer's storage server-side; the client only presents the result.
 
-The captured creature's own progress (`CreatureCaptured`, and the crystal's `ItemUsed`) is **not**
+The captured creature's own progress (`CreatureCaptured`, and the shard's `ItemUsed`) is **not**
 reported by `BattleBagPanelHandler` — it comes back on the resolved `ActionOutcome` as a
 `ProgressReport`, produced by the authority (server online, the shared DLL dispatcher offline) and
 applied through the normal `ApplyServerProgress` path, same as every other action's progress.
@@ -256,7 +256,7 @@ Player selects target
         ↓
 OnConfirmClicked() → ExecuteUseAsync()
         ↓
-Refuse client-side if a capture crystal in a trainer battle (no server round trip)
+Refuse client-side if a Summoning Shard in a trainer battle (no server round trip)
         ↓
 Build the action JSON, BattleCoordinator.SubmitPlayerAction() — same battle-actions intent as an ability
         ↓

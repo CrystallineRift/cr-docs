@@ -6,7 +6,12 @@ The player menu is a 7-tab overlay opened from the overworld via the `ToggleMenu
 the whole out-of-combat UI: the player's squad, their bag, their quest log, their record, and the
 game's settings — all without leaving the world scene.
 
-Tabs: **Team | Bag | Storage | Quests | Map | Talents | Achievements | System**
+Tabs: **Team | Bag | Astral Realm | Quests | Map | Talents | Achievements | System**
+
+The third tab is the **Astral Realm** to the player: its label is set in `PlayerMenuWindow.uxml` (still
+`name="storage-tab"`; the label change is pending merge, until then the tab reads "Storage") and its own
+strings are in `StorageText`. This page and the code keep calling it Storage, the name of the inventory
+behind it.
 
 Every tab reads real data from domain services. Nothing on Team, Bag, Storage, Quests, Talents, or
 Achievements is mocked or hand-authored — see the Achievements tab section below for how its two seam
@@ -131,7 +136,7 @@ Three controls:
   reads *Moving &lt;name&gt; — pick a slot*), then press any other card, its *Swap here* button, or an
   empty slot's *Move here (slot N)* target. Pressing the armed card again (*Cancel*) abandons the
   gesture. Empty slots become `Button`s only while a move is armed.
-- **→ Storage** — a `Button` beside Move, on the **picked card only**. One press moves that creature
+- **→ Astral Realm** — a `Button` beside Move, on the **picked card only**. One press moves that creature
   off the team and into storage via `MoveToStorageAsync`, then redraws with the selection back on
   the first card (there is no creature left to follow) and a toast naming what moved. No
   confirmation prompt: the storage screen moves it straight back, and a dialog in front of a
@@ -468,13 +473,13 @@ into a `BagItemFacts` (kind + `HeldByCreature` / `UsableOverworld` / `TargetsOwn
   `HeldByCreature` flag. **Use** follows the item's kind, not its flags: anything that is not
   equipment and is flagged `UsableOverworld`. A dual-use item such as the heal potion (a consumable
   that is also holdable so it auto-triggers in battle) therefore offers **both** buttons; a capture
-  crystal (battle-only consumable) offers neither. A button that does not apply to the item class is
+  Summoning Shard (battle-only consumable) offers neither. A button that does not apply to the item class is
   hidden. There is no longer a third "shown but disabled" state — targeting is asked for after the
   press, so once an item is selected `CanUse == ShowUse` and `CanEquip == ShowEquip`.
 
 > **Data trap (fixed 2026-09-04).** `ItemType.Consumable` is `0` and `Equipment` is `1`. The capture
-> crystal, exp-share charm and heal potion seeds (M6007 / M6009 / M6013) wrote `item_type = 1`, so
-> every seeded consumable classified as equipment and the bag offered Equip on a Radiant Crystal.
+> Summoning Shard, exp-share charm and heal potion seeds (M6007 / M6009 / M6013) wrote `item_type = 1`, so
+> every seeded consumable classified as equipment and the bag offered Equip on a Radiant Summoning Shard.
 > The seeds now write `0` and `M6019FixSeededConsumableItemType` corrects rows on already-migrated
 > databases (Postgres and every Unity SQLite file, including the online caches). The authored
 > `ItemDefinition` SO has no item-type field — the seed is the only source of `item_type`, so a new
