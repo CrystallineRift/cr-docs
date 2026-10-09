@@ -597,6 +597,25 @@ deploy hung on that step. The script now refuses such an image outright, runs th
 rather than whatever is checked out, and keeps the outgoing image as `cr-api:previous` for a one-command
 rollback. See `cr-ops/README.md`.
 
+#### Rollback guards: never ship a commit that does not contain what is live
+
+Production once ran a cr-api commit from a feature branch (a hand deploy with `DEPLOY_REF=…`) that
+`main` did not contain. The next ordinary deploy of `main` (a push, or a plain `deploy.sh`) would
+have replaced it and silently rolled production back. Both deploy paths now ask the box which commit
+it runs before shipping:
+
+- They read the live api container's `cr.git.sha` image label over ssh (`docker compose ps -q api`, then `docker inspect`).
+- If the label cannot be read (first deploy, api down, a pre-label image), they warn and continue.
+- If the live sha is not in the repository's history, or is not an ancestor of the commit about to ship, they **fail before anything ships**. The fix is to merge the live commit into the ref being deployed.
+- An intended rollback opts out explicitly, with a warning.
+
+| Path | Where | Opt-out | Status |
+|---|---|---|---|
+| `cr-ops/deploy.sh` | Guard 4, after the image checks and before Guard 3 (keep `cr-api:previous`) | `ALLOW_ROLLBACK=1 ./deploy.sh` | Live 2026-10-09 |
+| cr-api `.github/workflows/deploy.yml` | "Rollback guard" step between "SSH setup" and "Ship image (keep previous)"; the deploy job's checkout uses `fetch-depth: 0` so the ancestry check has the history | `workflow_dispatch` input `allow_rollback` (boolean, default false) | Pending deploy (cr-api PR #70, feature/retire-welcome); active once merged to main |
+
+`cr-ops/README.md` has the runbook lines for `ALLOW_ROLLBACK`.
+
 ### `GET /health`
 
 Anonymous (an orchestrator has no token), mapped beside `version-check`, and deliberately free of

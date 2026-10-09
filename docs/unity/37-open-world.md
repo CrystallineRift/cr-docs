@@ -1,8 +1,9 @@
 # Open World
 
-> **Status: in development** (branch `feature/open-world`, cr-api-unity). Not on main. `world_mode` defaults to `legacy`;
-> the default flips to `open` only after the Act 1 corridor is playtested. Nothing here changes cr-api, the schema or
-> the server-authority boundary.
+> **Status: on cr-api-unity main** (merged in PR #65, `41b92439`), behind `world_mode`. Missing, empty or unknown values
+> mean Legacy (`WorldModeSetting`). The mode comes from `GameSettings.defaultWorldMode` (shipping default Legacy), or in the
+> Editor from this machine's override in Studio → Server & Keys → World mode. The default flips to `open` only after the
+> Act 1 corridor is playtested. Nothing here changes cr-api, the schema or the server-authority boundary.
 
 Seamless travel on the continent map: walk from region to region with no door, fade or loading screen. The world is a
 grid of streamed cell scenes; a byte mask of the user's map says which region any world position is in.

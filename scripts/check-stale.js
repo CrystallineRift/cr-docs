@@ -33,6 +33,7 @@ const REPO_PATHS = {
   // Pointing this at a directory that does not exist made every cr-data glob match nothing, so
   // staleness detection silently ignored the entire Unity project.
   'cr-data': path.join(REPO_ROOT, 'cr-api-unity'),
+  'cr-ops': path.join(REPO_ROOT, 'cr-ops'),
 };
 
 // ---------------------------------------------------------------------------

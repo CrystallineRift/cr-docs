@@ -23,7 +23,7 @@ The `IGameConfiguration` abstraction is unchanged — the rest of the codebase c
 The offline SQLite store is split into **two databases** with different lifecycles:
 
 - **game-data DB** (`game-data.bytes`) — global authored content (base creatures, abilities, status conditions, growth profiles, items, spawner templates + pools, quest templates/objectives/requirements/rewards, `game_assets`, level/exp tables). Read-only at runtime. Built at build time as a versioned artifact and patched via Addressables.
-- **player-data DB** (`player-data.bytes`) — per-account/per-trainer saves (trainers, inventories, generated creatures, quest instances, stats, battles, spawn history, auth) **plus the per-trainer NPC instance tables** (`npcs`, `npc_creature_team`, `npc_inventory`). Mutable; migrated in place on app update.
+- **player-data DB** (`playerData.bytes`) — per-account/per-trainer saves (trainers, inventories, generated creatures, quest instances, stats, battles, spawn history, auth) **plus the per-trainer NPC instance tables** (`npcs`, `npc_creature_team`, `npc_inventory`). Mutable; migrated in place on app update.
 
 > **NPC instance tables live in player-data, not game-data.** `INpcRepository` and `INpcCreatureTeamRepository` are bound to `LocalDataSources.PlayerData.OfflineSource` in `LocalDevGameInstaller`, co-located with `npc_inventory` (so merchant-purchase transactions and FK integrity stay on one physical DB). The `npcs` rows are per-`(account, trainer)` runtime save-data created by `EnsureNpcAsync` at world bootstrap — not designer content — so binding them to the adopted, read-only `game-data.bytes` was wrong: adoption could wipe runtime NPCs. NPC *definitions* (designer content) still flow through the content registry, not the offline `npcs` table.
 
@@ -37,11 +37,11 @@ See the dedicated [Content Pipeline (Two-Database Model)](?page=unity/17-content
 
 `DatabaseConnectionStringFactory` implements a three-tier fallback for resolving database paths:
 
-1. **YAML config key** — looks up `database_path_trainer` (etc.) from `game_config.yaml`. If the path is absolute it is used as-is; if relative it is resolved against `Application.persistentDataPath`.
-2. **PlayerPrefs** — falls back to `DatabaseConfiguration.GetEffectiveDatabasePath()` if the YAML key is missing.
-3. **Default** — `Application.persistentDataPath/{databaseName}.bytes`.
+1. **Configuration key** — asks `IGameConfiguration` for the data source's key. Only two are answered: `database_path_game_data` and `database_path_player_data`, which come from `GameSettings` `gameDataFileName` / `playerDataFileName` (`game-data.bytes`, `playerData.bytes`). An absolute value is used as-is; a relative one (the normal case) resolves against `Application.persistentDataPath`.
+2. **PlayerPrefs** — for the base directory, `DatabaseConfiguration.GetEffectiveDatabasePath()` when it holds a path.
+3. **Default** — `{base directory}/{databaseName}.bytes`, where the base directory is the PlayerPrefs path from step 2 or else `Application.persistentDataPath`. The online-cache databases always land here: `GameSettings` answers no `database_path_*_online_cache` key.
 
-This means a new developer who does not customise `game_config.yaml` still gets a working database path automatically. The factory also creates the directory if it does not exist, so first-run setup is fully automatic.
+Nothing needs configuring on a fresh clone. The factory also creates the directory if it does not exist, so first-run setup is fully automatic.
 
 ## Repository Structure
 
@@ -53,9 +53,9 @@ cr-data/
         Auth/           ← auth data, HTTP clients
         Common/         ← shared utilities, base types
         Core/
-          Assets/       ← IGameAssetLoader (loads game_config.yaml assets)
+          Assets/       ← IGameAssetLoader
           Auth/         ← ITokenManager, ITokenValidator
-          Configuration/← IGameConfiguration, DatabaseConnectionStringFactory
+          Configuration/← GameSettings, SettingsGameConfiguration, IGameConfiguration, DatabaseConnectionStringFactory
           Data/
             Client/     ← SimpleWebClient + all HTTP client impls
             Repository/ ← online/offline repository pairs, LocalizationRepository
@@ -79,7 +79,8 @@ cr-data/
       Plugins/          ← Best HTTP, Zenject, Newtonsoft.Json
       Resources/
         configuration/
-          game_config.yaml        ← loaded at runtime by ConfigurationRepository
+          GameSettings.asset      ← read by SettingsGameConfiguration
+          BackendEnvironments.asset ← the Local / Production environments
           localization/           ← per-domain per-language YAML files
     ProjectSettings/
 ```
@@ -140,36 +141,15 @@ In Unity Hub: **Open → `cr-data/My project`**. On first open, Unity will compi
 
 If compile errors appear about missing namespaces (`Best.HTTP`, `Zenject`, `CodeStage`), the corresponding Asset Store plugin was not imported before opening. Import it from the Package Manager window, then wait for recompilation.
 
-### Step 5 — Configure `game_config.yaml`
+### Step 5 — Point the Editor at your local server
 
-Open `cr-data/My project/Assets/CR/Resources/configuration/game_config.yaml` in a text editor. For local development with `CR.REST.AIO` running on port 8080:
+Nothing in the repo changes for this. The committed `GameSettings.asset` holds the shipping defaults (environment `production`, world mode Legacy); your machine's choices are Editor-only overrides stored in EditorPrefs.
 
-```yaml
-# Server addresses — all point to the AIO host for local dev
-auth_server_http_address: "http://localhost:8080/auth"
-oauth_server_http_address: "http://localhost:8080/oauth"
-account_server_http_address: "http://localhost:8080/account"
-trainer_server_http_address: "http://localhost:8080/trainer"
-creature_server_http_address: "http://localhost:8080/creature"
-npc_server_http_address: "http://localhost:8080/npc"
-quest_server_http_address: "http://localhost:8080"
-stat_server_http_address: "http://localhost:8080"
-trainer_inventory_server_http_address: "http://localhost:8080/trainer-inventory"
-trainer_creature_inventory_server_http_address: "http://localhost:8080/trainer-creature-inventory"
+1. Open **Crystalline Rift Studio → Server & Keys**.
+2. On the **Local** card (`http://localhost:8080`), press **Use for game** so Play mode talks to your local `CR.REST.AIO` (EditorPrefs `CR_Studio_EnvironmentId`), and **Use for editor** so Studio pushes go there too.
+3. Optional: set the **World mode** override to `Open` to play the open world. The shipping default is Legacy.
 
-# Database paths — absolute paths work best for local dev
-# Leave these as-is to use Application.persistentDataPath defaults,
-# or set to absolute paths to a known directory for easier inspection.
-# Two offline databases (the two-DB split): authored content vs player saves.
-database_path_game_data: "/path/to/dev/databases/game-data.bytes"
-database_path_player_data: "/path/to/dev/databases/player-data.bytes"
-# Online-cache databases (used when playing online)
-database_path_trainer_online_cache: "/path/to/dev/databases/trainer-online.bytes"
-database_path_auth_online_cache: "/path/to/dev/databases/auth-online.bytes"
-database_path_creature_online_cache: "/path/to/dev/databases/creature-online.bytes"
-```
-
-If you omit the `database_path_*` keys entirely, `DatabaseConnectionStringFactory` falls back to `Application.persistentDataPath`, which on macOS is `~/Library/Application Support/DefaultCompany/My project/`.
+The cards, the key fields and **Reset to shipping defaults** are described in [Content Registry](?page=unity/08-content-registry) under *Server & Keys section* and *Game settings*. Database files need no setup: they go under `Application.persistentDataPath` (on macOS `~/Library/Application Support/DefaultCompany/My project/`).
 
 ### Step 6 — Start the backend
 
@@ -192,23 +172,18 @@ Watch the Unity Console for `[GameInitializer] === World init complete ===` to c
 
 ## Configuration (`GameSettings.asset`)
 
-> `game_config.yaml` no longer exists; the remaining sections of this page that mention it describe the retired file. Keys below are still the ones `IGameConfiguration` answers, now from `GameSettings` (`*_server_http_address` = the selected environment's API base URL; `database_path_game_data` / `database_path_player_data` = `gameDataFileName` / `playerDataFileName`; other keys are not found).
+`IGameConfiguration` is implemented by `SettingsGameConfiguration`, built in `LocalDevGameInstaller` from `GameSettingsResolver.Resolve(shipping defaults, overrides, isPlayerBuild)`. Player builds ignore overrides. The keys it answers:
 
-`IGameConfiguration` is implemented by `SettingsGameConfiguration` at runtime. Key configuration keys:
+| Key | Answer |
+|-----|--------|
+| every `*_server_http_address` (`npc_`, `auth_`, `trainer_`, `creature_`, `quest_`, `stat_`, `game_`, ...) | The selected environment's API base URL (your override, else `defaultEnvironmentId`) |
+| `discord_server_http_address` | `discordApiBaseUrl` (Discord's API; never follows the environment) |
+| `database_path_game_data` | `gameDataFileName` — the **game-data** offline SQLite file (authored content; read-only) |
+| `database_path_player_data` | `playerDataFileName` — the **player-data** offline SQLite file (per-trainer saves; mutable) |
+| `starter_creature_level` | `offlineStarterCreatureLevel` |
+| `world_mode` | `legacy` / `open` (your override, else `defaultWorldMode`) |
 
-| Key | Purpose |
-|-----|---------|
-| `npc_server_http_address` | Base URL for NPC REST endpoints |
-| `auth_server_http_address` | Base URL for auth endpoints |
-| `trainer_server_http_address` | Base URL for trainer endpoints |
-| `creature_server_http_address` | Base URL for creature and growth-profile endpoints |
-| `quest_server_http_address` | Base URL for quest endpoints |
-| `stat_server_http_address` | Base URL for stats debug endpoints |
-| `database_path_game_data` | Path for the **game-data** offline SQLite file (global authored content; read-only) |
-| `database_path_player_data` | Path for the **player-data** offline SQLite file (per-trainer saves; mutable) |
-| `database_path_trainer_online_cache` | Path for the trainer online-cache SQLite file |
-| `database_path_auth_online_cache` | Path for the auth online-cache SQLite file |
-| `database_path_creature_online_cache` | Path for the creature online-cache SQLite file |
+Any other key is not found (`TryGet` returns false), and the reader's own fallback applies.
 
 `GameConfigurationKeys` (static class in `CR.Core.Data.Repository`) holds string constants for all keys. Always use these constants instead of string literals:
 
@@ -220,53 +195,9 @@ configuration.TryGet(GameConfigurationKeys.NpcServerHttpAddress, out var url);
 configuration.TryGet("npc_server_http_adress", out var url);
 ```
 
-## How to Add a New Creature to `game_config.yaml`
+## Adding a Creature or an NPC
 
-New creatures are defined in the backend seed data (database migration), not in `game_config.yaml` directly. However, the Unity Inspector and any code that looks up a creature by `content_key` from config does need YAML entries for any creature whose UUID you need to reference from configuration.
-
-The pattern is:
-
-```yaml
-# Wild encounter base creature IDs (referenced by content_key in spawner config)
-wild_encounter_cindris_creature_id: a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d
-```
-
-When a new creature is added:
-1. Add a migration in `CR.Creatures.Data.Migration` to seed the `creature_base` row with the correct `content_key`.
-2. After running the migration, retrieve the UUID from the database.
-3. If any game configuration lookup references this creature (e.g., a wild encounter spawner pool, or a starter creature slot), add the UUID to `game_config.yaml` under a descriptive key.
-4. Add the key constant to `GameConfigurationKeys` if it will be used in code.
-
-Localization strings for the creature go in `Resources/configuration/localization/creatures.yaml`:
-
-```yaml
-creature_cindris_fire_name: Cindris Fire
-creature_cindris_fire_description: A flame-type starter creature native to the Cindris region.
-```
-
-The key pattern is `creature_{content_key}_{field}`. See [Localization](?page=unity/06-localization) for full key conventions.
-
-## How to Add a New NPC to `game_config.yaml`
-
-NPCs are not configured in `game_config.yaml` directly. The NPC's `content_key` is set in the Unity Inspector on `NpcWorldBehaviour._npcContentKey`. The NPC row is created on the backend via `EnsureNpcAsync` on first play.
-
-However, if an NPC's creature team slots reference creature base UUIDs by config key (as is the pattern in `NpcTrainerBehaviour`), those UUIDs need to be in `game_config.yaml`:
-
-```yaml
-# NPC trainer creature slot config keys (resolved by NpcTrainerBehaviour)
-kael_battle_creature_1_id: bbbb2222-...
-kael_battle_creature_2_id: cccc3333-...
-```
-
-`NpcTrainerBehaviour` looks these up via `IGameConfiguration.TryGet(creatureBaseContentKey)`. If the key is missing, the behaviour logs a warning and skips that slot.
-
-Localization strings for NPC dialogue go in a dedicated YAML file or in an existing domain file under `Resources/configuration/localization/`:
-
-```yaml
-# In a new npcs.yaml file (create it — Unity picks it up automatically)
-npc_kael_trainer_name: Trainer Kael
-npc_kael_trainer_greeting: Ready to see what your creatures are made of?
-```
+Neither touches configuration. A creature is a `CreatureDefinition` and an NPC an `NpcDefinition` under `Assets/CR/Content/Defs/`, pushed to the server from Crystalline Rift Studio (see [Content Registry](?page=unity/08-content-registry)); the backend migrations seed the floor. An NPC placed in a scene names its `content_key` in `NpcWorldBehaviour._npcContentKey`, and the server creates the per-trainer row through the NPC ensure call on first play. What an NPC gives or fields in battle is authored on the server (gift template, `{key}-team` spawner templates, battle-item loadout), not in the scene. Localization strings follow [Localization](?page=unity/06-localization).
 
 ## Running the Backend
 
@@ -275,31 +206,31 @@ cd cr-api/Convenience/CR.REST.AIO
 dotnet run
 ```
 
-Default port: `http://localhost:8080` (check `launchSettings.json` if it differs on your machine). Set all `*_server_http_address` keys in `game_config.yaml` to match.
+Default port: `http://localhost:8080` (check `launchSettings.json` if it differs on your machine). The **Local** environment in `BackendEnvironments.asset` points at that address; if your server runs elsewhere, edit the environment (Server & Keys → Advanced → *Edit environments…*) and press **Use for game** on it.
 
 Check Swagger UI at `http://localhost:8080/swagger` to verify all endpoints are registered and the server is healthy before hitting Play in Unity.
 
 ## SQLite Database Files
 
-Unity creates SQLite files at the configured `database_path_*` locations. `DatabaseConnectionStringFactory` creates the directory if it does not exist, so no manual setup is required.
+Unity creates the SQLite files under `Application.persistentDataPath`. `DatabaseConnectionStringFactory` creates the directory if it does not exist, so no manual setup is required.
 
 Database files use the `.bytes` extension (not `.db`) so Unity's asset pipeline does not try to import them as binary assets. SQLite itself does not care about the extension.
 
-The offline store is two databases: `game-data.bytes` (global authored content, read-only) and `player-data.bytes` (per-trainer saves, mutable). See [Content Pipeline](?page=unity/17-content-pipeline) for how each is built and updated.
+The offline store is two databases: `game-data.bytes` (global authored content, read-only) and `playerData.bytes` (per-trainer saves, mutable). See [Content Pipeline](?page=unity/17-content-pipeline) for how each is built and updated.
 
 If you need to reset all local state (e.g., after a breaking schema migration):
 1. Stop the Unity Player.
-2. Delete the `.bytes` files from the configured paths. To reset only saves while keeping content, delete `player-data.bytes` and leave `game-data.bytes`.
+2. Delete the `.bytes` files from `Application.persistentDataPath`. To reset only saves while keeping content, delete `playerData.bytes` and leave `game-data.bytes`.
 3. Hit Play — migrations recreate them fresh.
 
 The database files should be listed in `.gitignore` and never committed. They are local developer state.
 
-## content_key and game_config.yaml
+## content_key
 
-The `game_config.yaml` and localization YAML files define `content_key` values for game content — creatures, NPCs, quest templates, items, etc. When a level designer places an NPC in the Unity scene and sets `_npcContentKey` in the Inspector, they use the `content_key` from the YAML and database seed data.
+Every piece of content — creatures, NPCs, quest templates, items — has a `content_key` string, set on its definition ScriptableObject and stored in the backend's `content_key` column. When a level designer places an NPC and sets `_npcContentKey` in the Inspector, they use that key.
 
 This separation means:
-- Designers work in YAML and Unity Inspector only
+- Designers work in definition assets, Crystalline Rift Studio and the Unity Inspector
 - Backend engineers manage the database seed data
 - The `content_key` string is the contract between the two worlds — readable, version-controllable, and human-friendly
 
@@ -308,14 +239,14 @@ See [Introduction](?page=00-introduction) for more on the `content_key` vs UUID 
 ## Common Mistakes / Tips
 
 - **All four plugins must be present before opening the project.** Missing a plugin causes a cascade of compile errors that can be misleading. Import Zenject and Best HTTP from the Asset Store before opening the project for the first time.
-- **`game_config.yaml` not found at startup.** If the config file is missing, all `IGameConfiguration.TryGet` calls return false and null. HTTP client base URLs will be null, and every request will throw immediately. The file must be at `Assets/CR/Resources/configuration/game_config.yaml`.
+- **Play mode talks to production when you expected Local.** The shipping default is `production`; Play mode uses Local only after **Use for game** on the Local card. The first line of Server & Keys says where Editor, Game and Content point.
 - **Stale SQLite files after schema migration.** If a migration adds a non-nullable column with no default, and the old `.bytes` file has rows missing that column, queries will fail at runtime. Delete and recreate the database files after breaking schema changes.
-- **Editor vs Build database paths.** `Application.persistentDataPath` differs between Editor and standalone builds. Use absolute paths in `game_config.yaml` only during local development — use relative paths or omit the keys for device builds to use the default path.
-- **Multiple Unity instances with the same database file.** Two Unity instances sharing the same `.bytes` file will cause SQLite lock contention. Use separate `game_config.yaml` overrides for each instance.
-- **Wrong port in `game_config.yaml`.** The AIO server uses port 8080 by default (check `launchSettings.json`). The example in this doc previously showed 5000 — if requests are timing out immediately, verify the port.
+- **Editor vs Build database paths.** `Application.persistentDataPath` differs between Editor and standalone builds, so the Editor and a build on the same machine never share a database.
+- **Multiple Unity instances with the same database file.** Two Unity instances sharing the same `.bytes` file will cause SQLite lock contention. There is no per-instance configuration override any more; run the second instance from a separate project clone (a different `persistentDataPath`).
+- **Wrong port.** The AIO server uses port 8080 by default (check `launchSettings.json`). If requests time out immediately, check the Local environment's API URL in Server & Keys.
 - **`GameConfigurationKeys` key not found logs no error at startup.** `TryGet` returns false silently. If an HTTP client's base URL resolves to null, you will see `Invalid HttpClient configuration` in the log at startup — search for this string to identify the misconfigured key.
-- **Relative `database_path_*` values resolve against `Application.persistentDataPath`.** A value like `databases/trainer.bytes` becomes `{persistentDataPath}/databases/trainer.bytes`. This is fine for device builds but may be surprising in the Editor where `persistentDataPath` includes Unity's company and project name in the path.
-- **`.bytes` extension required.** SQLite files must use `.bytes` to avoid Unity's asset importer attempting to process them. The `DatabaseConnectionStringFactory.GetConnectionString` method appends `.bytes` automatically when using the database name overload, but `GetConnectionStringForRepository` uses the path from YAML as-is.
+- **The file names resolve against `Application.persistentDataPath`.** `gameDataFileName` / `playerDataFileName` are relative, so `playerData.bytes` becomes `{persistentDataPath}/playerData.bytes`. In the Editor `persistentDataPath` includes Unity's company and project name.
+- **`.bytes` extension required.** SQLite files must use `.bytes` to avoid Unity's asset importer attempting to process them. The `DatabaseConnectionStringFactory.GetConnectionString` method appends `.bytes` automatically when using the database name overload, but `GetConnectionString(DataSource)` uses the configured file name as-is.
 
 ## The CR menu
 
@@ -363,7 +294,8 @@ a far better fit for something that destructive.
 
 - [Content Pipeline (Two-Database Model)](?page=unity/17-content-pipeline) — game-data vs player-data, baked `game-data.bytes` artifact, cold-start adopt
 - [Dependency Injection](?page=unity/02-dependency-injection) — `LocalDevGameInstaller`, migration runner, binding order
-- [HTTP Clients](?page=unity/05-http-clients) — how `game_config.yaml` keys are used to configure HTTP clients
-- [Localization](?page=unity/06-localization) — YAML localization files alongside `game_config.yaml`
-- [Auth and Accounts](?page=backend/06-auth-and-accounts) — `auth_server_http_address` and token management
+- [Content Registry](?page=unity/08-content-registry) — Game settings, Server & Keys, environment and world-mode overrides
+- [HTTP Clients](?page=unity/05-http-clients) — how the `*_server_http_address` keys configure HTTP clients
+- [Localization](?page=unity/06-localization) — localization files and the Language setting
+- [Auth and Accounts](?page=backend/06-auth-and-accounts) — auth clients and token management
 - [Backend Architecture](?page=backend/01-architecture) — how the server-side mirrors this structure

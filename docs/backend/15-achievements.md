@@ -284,3 +284,8 @@ repeat grant still succeeds, a revoke never claws back rewards) against the admi
   only fires on the completion compare-and-set going forward. See [Quest System — completion
   outcome](07-quest-system.md#quest-categories-and-area-key) for the at-completion counting rule this closes
   the gap for.
+- `M18010SeekerVocabularyAchievementText` (both engines, live 2026-10-08 via cr-api PR #68): the opening-story
+  vocabulary pass. `first_capture`'s description becomes "Summon your first krytorus." and the `trainer`
+  category's name becomes "Seeker". Content keys and ids are unchanged, and each UPDATE fires only while the
+  row still holds the seeded text, so an authored value is never overwritten. Both texts are AI drafts in the
+  [AI content ledger](?page=content/01-ai-content-ledger).

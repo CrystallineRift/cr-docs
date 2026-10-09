@@ -1,5 +1,79 @@
 # Changelog
 
+## 2026-10-09 — Deploy rollback guards (cr-ops live; cr-api CI pending deploy)
+
+- **Why:** production ran a cr-api commit from a feature branch that `main` did not contain, so the next
+  ordinary deploy of `main` would have silently rolled it back.
+- **cr-ops (live 2026-10-09):** `deploy.sh` Guard 4 reads the live api's `cr.git.sha` label and refuses to ship
+  an image that does not contain it (live sha unknown to the repo, or not an ancestor). An unreadable label
+  only warns. `ALLOW_ROLLBACK=1` opts in to an intended rollback.
+- **cr-api CI (pending deploy, cr-api feature/retire-welcome; active once merged to main):** the same check
+  as a "Rollback guard" step in `.github/workflows/deploy.yml`, before "Ship image (keep previous)", with
+  `fetch-depth: 0`; opt out with the `workflow_dispatch` input `allow_rollback`.
+  → [Backend Architecture — Rollback guards](?page=backend/01-architecture)
+
+## 2026-10-09 — Starting kit at trainer creation; Welcome quest retired (pending deploy)
+
+- **Status:** pending deploy (cr-api PR #70, feature/retire-welcome). Not merged, not deployed; the cr-api-unity half
+  (offline binding, parking the Welcome asset) is pending.
+- **cr-api:** `ITrainerCreationService` / `TrainerCreationService` creates the trainer and, when its team is
+  empty, grants one starter (`starter_creature_1_id` at `starter_creature_level`, ability-set fallback
+  `starter_creature_ability_progression_set_id`) and the `starter_items` backpack items
+  (`content_key:qty[,…]`; absent = `item_heal_potion_30:2`, blank = none). Config is validated before any
+  write; a failed starter grant soft-deletes the starter and the trainer and rethrows; a failed item grant is
+  logged and skipped. `POST /trainer` calls it; offline play runs the same service.
+- **M7020RetireWelcomeQuest** (Quests, both engines): soft-deletes `quest-welcome-to-cr`, its objective,
+  reward and requirement rows, and every QuestCompleted requirement on it (First Battle's). First Battle's
+  giver moves from `demo-questgiver-area-1` to Philroe (`demo-merchant-area-1`) where it still holds M14002's
+  value; M14002's own entry is edited for fresh databases. Instance and progress history is untouched;
+  stranded Welcome instances never complete or pay.
+- **NPC ensure:** the type lookup moves into `EnsureWorldNpcAsync`, which also takes the NPC's name from
+  the content registry and reconciles the name on upsert; unknown keys are still ensured as a plain `Npc`;
+  `POST /api/v1/npc/ensure` gets the `PlayerIntent` rate limit. (Ignoring the body's `npcType` and taking
+  the type from the registry is already on cr-api main, since route lockdown round 1.)
+  → [Starter Creature Flow — The Starting Kit](?page=backend/05-starter-creature-flow), [Quest System — Welcome is retired](?page=backend/07-quest-system), [NPC System](?page=backend/02-npc-system)
+
+## 2026-10-09 — M7019 objective-id alignment uses a two-phase re-key (pending deploy)
+
+- **Status:** pending deploy (cr-api PR #70, `feature/retire-welcome`). M7019 is deployed nowhere yet. The
+  two-phase re-key (`99b283b`) ships in #70; the earlier single-phase PR #69 (`f274715`), which mishandled
+  chains and swaps, was closed as superseded.
+- **What M7019 does:** re-keys every live `quest_objective_template` row to
+  `QuestObjectiveTemplateIds.Derive(template, sortOrder)` and repoints
+  `quest_objective_progress.objective_template_id`. That fixes the HUD quest tracker staying at 0/N after a
+  capture online (a prod objective minted before derived ids). The tracker's companion fix (it redraws on
+  `OnActiveQuestsRefreshed`) is on cr-api-unity `fix/quest-tracker-refresh`, not yet on main.
+- **Change:** the re-key is two-phase (every chosen row to a temporary id, then to its derived id, in one
+  transaction), with a deterministic read order and blocked claimants dropped until stable, so chains and
+  swaps between mis-keyed rows resolve regardless of row order.
+  → [Quest System — Authored template ids are authoritative (Objective ids, M7019)](?page=backend/07-quest-system)
+
+## 2026-10-08 — Summoning Shard and Seeker vocabulary (M6023, M18010)
+
+- **Live 2026-10-08** (cr-api PR #68, with the region-key change below). `M6023RenameCaptureCrystalsToSummoningShards`
+  renames the four capture items to Rough Summoning Shard, Summoning Shard, Fine Summoning Shard and Radiant
+  Summoning Shard (content keys `capture_crystal_*` unchanged); `M18010SeekerVocabularyAchievementText` rewords `first_capture` and names the `trainer` category
+  "Seeker". Both only update rows that still hold the seeded text. The five server capture refusals use the
+  Summoning Shards wording; clients key off `ItemErrorCodes`.
+- All of it is AI draft copy: [AI content ledger](?page=content/01-ai-content-ledger) (Opening story round).
+  → [Capture Mechanic](?page=unity/14-capture-mechanic), [Achievements](?page=backend/15-achievements)
+
+## 2026-10-08 — Opening story (cr-api-unity PR #66)
+
+- Earth prologue, arrival at the Meadow wagon, the escorted walk to the farm, lore readables, barks, the
+  scripted capture lesson and place flavour. Presentation only: the client sends existing intents.
+- **Reward push needed:** First Battle and First Capture now pay 6 Summoning Shards each in their assets; push
+  both quests from the Studio, or online First Battle still pays 3 and First Capture pays XP and gold only
+  (AI content ledger, Opening story round).
+  → [Opening Story](?page=unity/38-story-opening)
+
+## 2026-10-08 — Open world on main, behind world_mode (cr-api-unity PR #65)
+
+- Seamless continent travel: streamed cell scenes, a region mask from the user's map, region profiles.
+  Behind `world_mode`; the shipping default is Legacy, set per machine with Studio → Server & Keys →
+  World mode. The default flips to open only after the Act 1 corridor playtest. No cr-api change.
+  → [Open World](?page=unity/37-open-world)
+
 ## 2026-10-08 — Trainer location save accepts open-world region keys
 
 - **Why:** the open-world client saves `last_area_key` as a region key (`1a`, `ocean`, `techdemo`, ...);

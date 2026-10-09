@@ -141,7 +141,7 @@ sentence:
 | 3 | In battle and not `UsableInBattle` | `This item cannot be used in battle.` |
 | 4 | Out of battle and not `UsableOverworld` | `This item cannot be used outside of battle.` |
 | 5 | `IsHeldOnly` | `This is a held item and must be equipped to a creature, not used directly.` |
-| 6 | Capture crystal in a trainer battle | `Capture Crystals cannot be used in a trainer battle.` |
+| 6 | Capture item (Summoning Shard) in a trainer battle | `Summoning Shards cannot be used in a trainer battle.` (`item-capture-not-in-trainer-battle`) |
 | 7 | Opponent-targeted without `TargetsOpponent`, in a trainer battle | `This item cannot target an opponent in a trainer battle.` |
 | 8 | A handler exists for `effect_type` | `No handler registered for effect type '<type>'.` |
 | 9 | The handler's own rules | see below |

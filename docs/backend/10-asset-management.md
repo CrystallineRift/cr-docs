@@ -234,7 +234,7 @@ Pipeline-only. Called by the CI/CD pipeline after a successful content build to 
 
 **Response:** 200 OK with a summary of how many assets were created vs updated.
 
-**Editor tool:** The Unity Editor window at `Window > CR > Publish Content` (`ContentPublishTool.cs`) provides a GUI for triggering a content publish during development. It reads the pipeline key and server address from `game_config.yaml` and posts the current `ContentDefinitionProvider` asset list to the configured server.
+**Editor tool:** *Publish to Server* (`ContentPublishTool.cs`, opened from Crystalline Rift Studio → Pipeline ▾) provides a GUI for triggering a content publish during development. You type the server address (default `http://localhost:8080`) and the pipeline key into the window; it posts the current `ContentDefinitionProvider` asset list to that server.
 
 ## DI Wiring
 
@@ -270,7 +270,7 @@ public interface IContentManifestRepository
 }
 ```
 
-`ContentManifestClientUnityHttp` extends `SimpleWebClient`. It uses `GameConfigurationKeys.GameServerHttpAddress` (`"game_server_http_address"`) from `game_config.yaml` as its base URL and calls `GET /api/v1/content/manifest`. The response is deserialized by Newtonsoft into `ContentManifestResponse` (lists of `CreatureManifestEntry`, `ItemManifestEntry`, `NpcManifestEntry`, `SpawnerManifestEntry`).
+`ContentManifestClientUnityHttp` extends `SimpleWebClient`. It uses `GameConfigurationKeys.GameServerHttpAddress` (`"game_server_http_address"`) as its base URL — `SettingsGameConfiguration` answers it with the selected environment's `apiBaseUrl` — and calls `GET /api/v1/content/manifest`. The response is deserialized by Newtonsoft into `ContentManifestResponse` (lists of `CreatureManifestEntry`, `ItemManifestEntry`, `NpcManifestEntry`, `SpawnerManifestEntry`).
 
 The response populates a `ServerContentRegistry`, which is installed into the `MutableContentRegistry` that all game systems inject as `IGameContentRegistry`. If the fetch fails or returns null, the client keeps the local `ScriptableObjectContentRegistry` loaded from the `ContentDefinitionProvider` SO asset.
 

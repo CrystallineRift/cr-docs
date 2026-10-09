@@ -522,7 +522,7 @@ Container.Bind<IOAuthClient>().To<OAuthClientUnityHttp>().AsSingle();
 Container.Bind<IAccountClient>().To<AccountClientUnityHttp>().AsSingle();
 ```
 
-All auth-related clients use `GameConfigurationKeys.AuthServerHttpAddress` as their base URL, read from `game_config.yaml`. In `CR.REST.AIO`, auth endpoints are served at the same host as all other endpoints, so `auth_server_http_address` and `npc_server_http_address` will be identical in a local development setup.
+All auth-related clients use `GameConfigurationKeys.AuthServerHttpAddress` as their base URL. `SettingsGameConfiguration` answers every `*_server_http_address` key with the selected environment's `apiBaseUrl` (Studio → Server & Keys override in the Editor, else `GameSettings.defaultEnvironmentId`), so `auth_server_http_address` and `npc_server_http_address` are always the same host.
 
 ## REST Endpoints
 
@@ -603,7 +603,7 @@ Auth is wired into the ASP.NET pipeline via `builder.AddCrAuth()` (extension met
 
 ## Common Mistakes / Tips
 
-- **Wrong `auth_server_http_address` in `game_config.yaml`.** All auth requests will 404 or connect refused. Ensure this points to the same host as `npc_server_http_address` when running `CR.REST.AIO`.
+- **Play mode talks to the wrong server.** All auth requests 404, are refused, or log in to production when you meant Local. `auth_server_http_address` is the selected environment's API URL: check the first line of Studio → Server & Keys and press **Use for game** on the card you want.
 - **Expired refresh token in `ObscuredPrefs`.** After a long hiatus (refresh token expiry period), `TokenManager.RefreshAccessTokenAsync` returns 401. The client must redirect to the login screen. Make sure the login scene is wired to `IAuthClient.LoginAsync`.
 - **Forgetting `builder.AddCrAuth()` in a new standalone host.** Requests to protected endpoints will return 401 for all clients. The method configures the JWT validation middleware.
 - **Testing with hard-coded credentials.** Use environment variables or `config.yml` overrides for test account credentials. Never commit credentials to source control.
@@ -613,6 +613,6 @@ Auth is wired into the ASP.NET pipeline via `builder.AddCrAuth()` (extension met
 ## Related Pages
 
 - [Backend Architecture](?page=backend/01-architecture) — middleware, DI wiring, `Program.cs` startup
-- [Unity Project Setup](?page=unity/01-project-setup) — `game_config.yaml` key for auth server address
+- [Unity Project Setup](?page=unity/01-project-setup) — pointing Play mode at a local server
 - [HTTP Clients](?page=unity/05-http-clients) — how `SimpleWebClient` attaches the bearer token to every request
 - [Dependency Injection](?page=unity/02-dependency-injection) — auth bindings in `LocalDevGameInstaller`

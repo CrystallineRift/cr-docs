@@ -167,7 +167,7 @@ with `Column(...).Exists()` because SQLite's `Down()` keeps the column.
 
 | content_key | Category |
 |---|---|
-| `quest-welcome-to-cr`, `quest-first-battle`, `quest-runaway-cargo` (Meadow Merchant Act 1) | Main Story |
+| `quest-welcome-to-cr` (retired by M7020, pending deploy), `quest-first-battle`, `quest-runaway-cargo` (Meadow Merchant Act 1) | Main Story |
 | `quest-road-to-shore`, `quest-into-the-dark`, `quest-windbitten-climb`, `quest-sunbleached` | Exploration |
 | `quest-meadow-hunt`, `quest-tidewrack-trials` | Battle |
 | `quest-first-capture`, `quest-hearthmere-supplies` | Bonus |
@@ -291,6 +291,52 @@ trainers may reference specific one of the eight objective/reward ids, so cleanu
 FK-safe migration. Flagging for a follow-up rather than touching production data as a side effect of
 this fix.
 :::
+
+### Welcome is retired (M7020)
+
+:::note Pending deploy (cr-api PR #70, feature/retire-welcome)
+Not merged to main and not deployed. The Unity half (parking the Welcome asset, removing First
+Battle's requirement from its asset, offline trainer creation) is also pending.
+:::
+
+The starter creature and the two `item_heal_potion_30` are now granted at trainer creation by
+`TrainerCreationService` (see [Starter Creature Flow](?page=backend/05-starter-creature-flow)), so
+Welcome's creature reward would be a second starter. `M7020RetireWelcomeQuest` (Quests, both
+engines; `isSqlite` boolean literals, `LOWER()` id matching on SQLite, every statement guarded by
+`deleted = false`, so a re-run is a no-op) retires it:
+
+- **Soft-deletes** every `quest_requirement` of type QuestCompleted (`requirement_type = 0`) whose
+  `reference_id` is Welcome — First Battle's requirement — and Welcome's own requirement, objective
+  and reward rows, then the `quest-welcome-to-cr` template. Welcome is matched by content key **and**
+  by the authored id `f1921cfd-26a0-4b70-b45f-0e28a58fb7e1`, so a requirement left pointing at the id
+  with no template behind it goes too.
+- **First Battle** has no requirement left, so it is the first story quest and, with `grant_mode = 1`
+  (AutoWhenAvailable, unchanged, matching the asset), is granted to every trainer at once. Its giver
+  moves from `demo-questgiver-area-1` (M14002's value) to Philroe, `demo-merchant-area-1`, as First
+  Battle.asset authors it. Only a row still holding M14002's value moves; a giver pushed from the
+  Studio since then is left alone.
+- **Fresh databases.** On a fresh Postgres database Quest migrates before Dialogue, so M14002 runs
+  after M7020 and would set the old giver again. M14002's entry for First Battle was therefore edited
+  to `demo-merchant-area-1` as well. Databases that already applied 14002 never re-run it, which is why
+  M7020 carries the move. M14002 is Postgres-only, so SQLite is unaffected.
+- **Leaves alone** `quest_instance` and `quest_objective_progress` history. `Down()` is a documented
+  no-op: rows soft-deleted before the migration cannot be told apart from the ones it deleted.
+- **Nothing resurrects it.** M7008 is a different key (`quest_welcome_to_cr`); M7014/M7015/M7016 guard
+  on the row existing (soft-deleted included) and run earlier; M14002 and M17002 only UPDATE. A Studio
+  push of the parked Welcome asset fails loudly with a primary-key conflict (the upsert finds no live
+  row by content key and INSERTs under the authored id) rather than reviving it. Studio sync must
+  still exclude `Defs/_Parked/`: a push of an old First Battle asset that carries the requirement
+  would add it back.
+
+**Stranded instances.** A trainer who holds an in-progress Welcome instance keeps it. Its objectives
+now read as empty, so the projector never marks it relevant and it never completes; a claim would
+pay nothing, because `GetRewardTemplatesAsync` filters deleted rows; `GetObjectiveProgressRelinkedAsync`
+makes no writes for it. The instance still appears in `GetActiveQuestsAsync`, so the client should
+hide instances whose template is gone (Unity half, pending).
+
+Tests: `RetireWelcomeQuestMigrationTests` (Quests.Data.Test, SQLite + Postgres, including
+`FirstBattle_MovesFromTheM14002GiverToPhilroe` and `FirstBattle_AGiverPushedSince_IsLeftAlone`),
+`WelcomeQuestSeedPostgresTests` and `M14002SeedPostgresTests` (updated to the retired state).
 
 ## How to Define a New Quest (Step-by-Step)
 
@@ -543,7 +589,7 @@ both sides of the seam:
   `QuestEditorSyncHelper.BuildUpsertBody` sends it. The repository re-keys a minted row as described
   above (instances follow, no FKs), so one "Push" of a diverged quest from Studio makes the server's
   id match the content's. Pushes without an id (older Studio, cr-admin-web) keep the stored id.
-- **Objective ids (M7019):** templates realign by push, objective rows never did — the upsert keeps
+- **Objective ids (M7019, pending deploy — cr-api feature/retire-welcome; it re-keys ids):** templates realign by push, objective rows never did — the upsert keeps
   the live row at a sort order and never rewrites its id, so a prod objective minted before
   `QuestObjectiveTemplateIds.Derive(templateId, sortOrder)` kept its old id while every client's
   local template carries the derived one. The template ids matched, so the server-template fallback
@@ -551,10 +597,21 @@ both sides of the seam:
   have: the HUD tracker stayed at 0/N after a capture (Runaway Cargo) until a journal refresh let the
   local re-link heal the row. `M7019AlignObjectiveTemplateIdsToDerived` (Quests, both engines,
   `ObjectiveTemplateIdAlignment`) re-keys every live objective row to its derived id and repoints
-  `quest_objective_progress.objective_template_id`; a soft-deleted row squatting on the derived id
-  is moved aside first, a live one is skipped with a `[M7019] WARNING` line. Idempotent; one
+  `quest_objective_progress.objective_template_id`. It is a **two-phase re-key**, so the result does
+  not depend on row order: rows are read in a fixed order (template, sort order, id); one live
+  claimant is picked per (template, sort order) target; a claimant whose derived id is held by a live
+  row that is not itself moving (correctly keyed, or a skipped duplicate) is dropped, repeated until
+  stable, so no row is left on a temporary id; then, in one transaction, every chosen row and its
+  progress rows move to a temporary id and from there to the derived id. That resolves **chains**
+  (Y's target is held by X, which has a free target) and **swaps** (X holds Y's derived id and Y holds
+  X's). A soft-deleted row squatting on a derived id is moved aside first; a duplicate claimant, or a
+  target held by a correctly keyed live row, is skipped with a `[M7019] WARNING` line. Idempotent; one
   `[M7019]` line per re-key. Later seeds (M14002) address objectives by content key + sort order,
-  so the re-key does not strand them. Pinned by `ObjectiveTemplateIdAlignmentTests` (SQLite + Postgres).
+  so the re-key does not strand them. Pinned by `ObjectiveTemplateIdAlignmentTests` (SQLite + Postgres,
+  18 cases, including `Chain_BlockedRowReadFirst_IsRekeyedOnceHolderMoves` and
+  `Swap_EachHoldingTheOthersDerivedId_IsResolved`). The two-phase version (`99b283b`) ships in
+  cr-api PR #70 (`feature/retire-welcome`); the earlier single-phase PR #69 (`f274715`) was closed as
+  superseded.
 
 ### Quest endpoints are token-authoritative for the account
 

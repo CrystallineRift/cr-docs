@@ -8,20 +8,26 @@ Capture crystals are special items used during wild battles to catch wild creatu
 
 ### Capture Levels
 
-There are four tiers of capture crystals, each with a different capture modifier:
+There are four tiers of capture items, each with a different capture modifier. Players see them as
+**Summoning Shards** (M6023, live 2026-10-08); the content keys kept the `capture_crystal_*` names, and the
+code still says "capture crystal" (`CaptureCrystalRule`, `IsCaptureCrystal`).
 
-| Tier | ID | Modifier | Base Value | Description |
+| Tier (display name) | Content key | Modifier | Base Value | Description |
 |------|----|----------|------------|-------------|
-| Shard Crystal | `capture_crystal_shard` | 0.8× | 80 | Low capture rate |
-| Capture Crystal | `capture_crystal_standard` | 1.0× | 100 | Standard catch rate |
-| Fine Crystal | `capture_crystal_fine` | 1.5× | 150 | Higher chance of capture |
-| Radiant Crystal | `capture_crystal_radiant` | 2.0× | 200 | Greatly increases capture rate |
+| Rough Summoning Shard | `capture_crystal_shard` | 0.8× | 80 | Low summoning rate |
+| Summoning Shard | `capture_crystal_standard` | 1.0× | 100 | Standard summoning rate |
+| Fine Summoning Shard | `capture_crystal_fine` | 1.5× | 150 | Higher chance of summoning |
+| Radiant Summoning Shard | `capture_crystal_radiant` | 2.0× | 200 | Greatly increases summoning rate |
 
 The **capture modifier** scales the base catch probability:
-- Shard Crystal: 80% of standard
-- Standard Crystal: 100% (baseline)
-- Fine Crystal: 150% of standard
-- Radiant Crystal: 200% of standard
+- Rough Summoning Shard: 80% of standard
+- Summoning Shard: 100% (baseline)
+- Fine Summoning Shard: 150% of standard
+- Radiant Summoning Shard: 200% of standard
+
+The names, descriptions and the refusal messages below are display copy, listed as AI drafts in the
+[AI content ledger](?page=content/01-ai-content-ledger). Clients key off the `ItemErrorCodes` value
+(`code` in the 400 body), never the message text.
 
 ## Capture Formula
 
@@ -124,9 +130,15 @@ Content-Type: application/json
 ```json
 {
   "success": false,
-  "errorMessage": "Capture Crystals can only be used during a wild battle."
+  "errorMessage": "Summoning Shards can only be used during a wild battle."
 }
 ```
+
+The handler's refusals, each with its `ItemErrorCodes` value: `item-capture-wild-battle-only`
+("Summoning Shards can only be used during a wild battle."), `item-capture-must-target-opponent`
+("Summoning Shards must target the opposing wild creature."), `item-capture-wrong-target` ("Summoning
+Shards can only be used on the wild creature you are battling."), and from `CaptureAttemptService`
+`item-capture-wild-only` ("Summoning Shards can only be used on wild creatures.").
 
 ## Refused in trainer battles
 
@@ -137,8 +149,9 @@ A trainer's creature can never be captured, so throwing a crystal at one would c
 `EffectType == CaptureCreature` **or** the `CaptureCrystal` usage flag is set (seeded crystals carry
 `UsableInBattle | TargetsOpponent` = 9 and *not* the flag, so the effect type is the reliable tell).
 When the battle's other trainer is not `BattleDomainService.WildTrainerId` the use fails with
-`"Capture Crystals cannot be used in a trainer battle."` regardless of how the client flagged the
-target, and `ItemEndpoints` returns it as **400** `{ "message": ... }`. Nothing is removed from the
+`"Summoning Shards cannot be used in a trainer battle."` (`ItemErrorCodes.CaptureNotInTrainerBattle`,
+`item-capture-not-in-trainer-battle`) regardless of how the client flagged the target, and `ItemEndpoints`
+returns it as **400** `{ "code": ..., "message": ... }`. Nothing is removed from the
 bag and the round is not consumed. Pinned by the "Capture crystals" tests in
 `ItemUseDomainServiceTests`.
 
@@ -149,7 +162,7 @@ same decision:
 |---|---|
 | `IsCaptureCrystal(effectIsCapture, hasCaptureFlag)` | mirrors the server tell |
 | `IsTrainerBattle(kindIsNpcTrainer, battleType, trainerBattleType)` | `BattleSession.Kind == NpcTrainer` first, then a case-insensitive `BattleTypes.Trainer` match; the legacy `"ONEvONE"` type string is *not* a trainer tell |
-| `Refusal(isCaptureCrystal, isTrainerBattle)` | `null` when allowed, else `TrainerBattleRefusal` = "Capture Crystals can't be used in a trainer battle!" |
+| `Refusal(isCaptureCrystal, isTrainerBattle)` | `null` when allowed, else `TrainerBattleRefusal` = "Summoning Shards can't be used in a trainer battle!" |
 
 `BattleBagPanelHandler` tracks `IsTrainerBattle` from `IBattleCoordinator.OnBattleStarted` /
 `OnBattleEnded`, stamps `BattleBagItem.BlockedReason` on every crystal row while it is true, and in
@@ -249,6 +262,7 @@ empty-target path is only a fallback.
 |-----------|-------------|
 | M6006AddCaptureModifierToItem | Added `capture_modifier` column to `item` table |
 | M6007SeedCaptureCrystals | Seeded the four capture crystal tiers |
+| M6023RenameCaptureCrystalsToSummoningShards | Renamed the four tiers to Summoning Shards (names and descriptions; content keys and ids unchanged). Each UPDATE fires only while the row still carries the M6007 name, so a Studio-authored name is never overwritten. Both engines. Live 2026-10-08 (cr-api PR #68) |
 
 ## Related Documentation
 
