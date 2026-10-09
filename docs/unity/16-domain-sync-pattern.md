@@ -124,8 +124,8 @@ achievement/trainer-progression reads described next.
 
 :::caution
 A stubbed client is worse than no client. Stats shipped with an `IStatClient` that called
-`GET /api/v1/stats` — a route that did not exist — through `stat_server_http_address`, a key absent
-from `game_config.yaml`. It was bound in DI and had no callers, so nothing ever failed and nothing
+`GET /api/v1/stats` — a route that did not exist — through `stat_server_http_address`, a key `SettingsGameConfiguration`
+did not answer (it had never been in the old `game_config.yaml` either). It was bound in DI and had no callers, so nothing ever failed and nothing
 ever worked. When adding a client, verify the route answers and the config key resolves.
 :::
 

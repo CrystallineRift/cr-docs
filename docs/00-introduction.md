@@ -74,10 +74,10 @@ Each system follows the same layering pattern: interfaces in a shared `*.Data` p
 
 ### content_key vs UUID
 
-Every game entity that has a counterpart in Unity's `game_config.yaml` asset system carries two identifiers:
+Every game entity that has a counterpart in Unity's content registry carries two identifiers:
 
 - `id` (UUID) — the internal database primary key, generated at row creation, never exposed to designers
-- `content_key` (string) — a stable, human-readable key that Unity Inspector fields reference, matching entries in `game_config.yaml` (e.g. `"cindris_starter_npc"`, `"quest_talk_to_elder"`)
+- `content_key` (string) — a stable, human-readable key that Unity Inspector fields reference, matching the content definition assets (e.g. `"cindris_starter_npc"`, `"quest_talk_to_elder"`)
 
 This separation means a game designer can rename a creature, move it to a different YAML section, or change its display properties without touching the database schema or invalidating existing rows. The backend looks up entities by `content_key` when bridging from Unity's world to the database, and uses `id` for all internal foreign key relationships.
 
@@ -112,7 +112,7 @@ Or open `index.html` directly with VS Code Live Server.
 - [Creature Generation](?page=backend/04-creature-generation) — stat calculation, growth profiles, natures
 - [Starter Creature Flow](?page=backend/05-starter-creature-flow) — end-to-end walkthrough from world boot to creature transfer
 - [Auth and Accounts](?page=backend/06-auth-and-accounts) — bearer tokens, Discord OAuth, token management
-- [Unity Project Setup](?page=unity/01-project-setup) — repo structure, plugins, game_config.yaml
+- [Unity Project Setup](?page=unity/01-project-setup) — repo structure, plugins, GameSettings
 - [Dependency Injection](?page=unity/02-dependency-injection) — Zenject installer, online/offline pattern
 - [World Behaviours](?page=unity/03-world-behaviours) — IWorldInitializable, WorldRegistry, GameInitializer
 - [NPC Interaction](?page=unity/04-npc-interaction) — NpcWorldBehaviour, NpcInteractionBehaviour

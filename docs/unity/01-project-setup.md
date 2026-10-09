@@ -12,11 +12,11 @@ LTS (Long-Term Support) releases receive bug fixes and security patches for two 
 
 This is Unity Hub's default project name and has not been changed. It is an intentional non-decision — renaming the folder would break any absolute paths stored in Unity's internal project settings files. The folder name does not appear in builds or affect any game functionality.
 
-### Why `game_config.yaml` Instead of Unity's `PlayerPrefs` or `ScriptableObject`?
+### Why `GameSettings.asset` Instead of a YAML File?
 
-`game_config.yaml` is a plain text file that can be edited outside the Unity Editor (e.g., in CI pipelines or by contributors who do not have Unity installed). `PlayerPrefs` is opaque binary. A `ScriptableObject` requires the Unity Editor to modify. YAML is human-readable, version-controllable, and parseable from any language for tooling scripts.
+`game_config.yaml` was replaced on 2026-10-08. A ScriptableObject (`GameSettings.asset`) is typed, shows up in the Inspector and cannot hold a typo'd key; the machine-specific parts (which environment, which world mode) moved out of the committed file into per-developer Studio overrides (EditorPrefs), so switching to Local no longer dirties the repo or risks shipping `localhost`. See [Content Registry -> Game settings](?page=unity/08-content-registry).
 
-The `IGameConfiguration` abstraction means the rest of the codebase never directly reads YAML — it calls `TryGet("key", out var value)`, making it easy to swap the backing format in the future if needed.
+The `IGameConfiguration` abstraction is unchanged — the rest of the codebase calls `TryGet("key", out var value)`; `SettingsGameConfiguration` now answers it from the asset.
 
 ### Why a Two-Database Split (game-data vs player-data)?
 
@@ -190,9 +190,11 @@ Open the main scene (typically `Assets/Scenes/Game.unity`) and press **Play**. O
 
 Watch the Unity Console for `[GameInitializer] === World init complete ===` to confirm the bootstrap succeeded.
 
-## Configuration (`game_config.yaml`)
+## Configuration (`GameSettings.asset`)
 
-The `IGameConfiguration` reads from a YAML file at runtime via `ConfigurationRepository`. Key configuration keys:
+> `game_config.yaml` no longer exists; the remaining sections of this page that mention it describe the retired file. Keys below are still the ones `IGameConfiguration` answers, now from `GameSettings` (`*_server_http_address` = the selected environment's API base URL; `database_path_game_data` / `database_path_player_data` = `gameDataFileName` / `playerDataFileName`; other keys are not found).
+
+`IGameConfiguration` is implemented by `SettingsGameConfiguration` at runtime. Key configuration keys:
 
 | Key | Purpose |
 |-----|---------|

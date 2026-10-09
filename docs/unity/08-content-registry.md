@@ -537,7 +537,7 @@ Window → CR → Crystalline Rift Studio
 | 17 | COMBAT | Elemental Damage | `AssetDatabase.FindAssets("t:ElementalDamageMatrixConfig")` | `ElementalDamageEditorSyncHelper.PushMatrix` |
 | 11 | COMBAT | Battle Tuning | `AssetDatabase.FindAssets("t:DamageCurveDefinition")` | `AbilityEditorSyncHelper.SyncDamageCurve` |
 | 9 | SYSTEM | Registry | the `ContentDefinitionProvider` asset | status overview — see below; pushes everything |
-| 20 | SYSTEM | Server & Keys | `BackendEnvironments.asset`, `game_config.yaml`, Addressables profile, per-environment keys | switches targets, saves keys, runs connection checks; no content |
+| 20 | SYSTEM | Server & Keys | `BackendEnvironments.asset`, `GameSettings.asset`, Addressables profile, per-environment keys | switches targets, saves keys, runs connection checks; no content |
 | 18 | LIVE OPS | Players | `GET /api/v1/admin/players?q=` + `/players/{accountId}` | `AdminPlayerEditorSyncHelper` (writes, not pushes) |
 | 19 | LIVE OPS | Marketplace | `GET /api/v1/admin/market/listings` | `AdminMarketEditorSyncHelper.RemoveListing` |
 
@@ -566,8 +566,8 @@ Under **SYSTEM**, before Registry (internal section key `configuration`, tab 20)
 separate **Auth** and **Configuration** sections on 2026-09-27: they asked one question — which
 server, with which key? — in two places, with two key editors that could disagree. Three things name a backend and nothing forces them to
 agree: the editor's own server address (EditorPrefs, this machine only — the same value the header's
-*Server* field edits), the game's `game_config.yaml` (fourteen `*_server_http_address` lines that
-all mean one host), and the Addressables profile's `Remote.LoadPath` (where a build fetches content).
+*Server* field edits), the game's environment (the committed `GameSettings.asset` default, or this
+machine's override of it), and the Addressables profile's `Remote.LoadPath` (where a build fetches content).
 Before this section, switching to production meant knowing all three places existed and editing
 each by hand. The failure that bit was the editor pushing content to one server while the game in
 Play mode read from another — which looks exactly like a push that did nothing.
@@ -584,18 +584,17 @@ The section is built around **environments** and those three **targets**:
   Production` — with `custom` for an address that is nobody's environment (a colleague's branch
   server is deliberate, not an error). A warning appears when Editor and Game disagree.
 - Per environment: **Use for editor** writes the EditorPrefs override and re-pings; **Use for game**
-  rewrites every `*_server_http_address` in `game_config.yaml` **except** `discord_server_http_address`
-  (a third-party host, never ours to repoint) and imports the asset — that is a file in the repo, so
-  it is what the next build ships with, and the note says to commit it; **Use for content** sets the
+  sets *your* per-machine environment override (EditorPrefs `CR_Studio_EnvironmentId`) — nothing in
+  the repo changes and player builds ignore it; picking the shipping default clears the override
+  instead; **Use for content** sets the
   active Addressables profile's `Remote.LoadPath`, keeping the `[BuildTarget]` token; **Use
   everywhere** does all three.
 
 The rules are engine-free in `CR.Core.Data.Logic` and tested (25 tests): `BackendUrl` (one
 normalisation — trailing slash and case — so `http://localhost:8080/` is Local, not custom),
-`GameConfigRewrite` (`Apply` changes only the lines that are ours and is byte-identical elsewhere,
-CRLF and no-trailing-newline included; `DetectApiBaseUrl` answers **null** when the file disagrees
-with itself, because "half the game on production" is a state to be told about, not averaged over),
-`BackendEnvironmentMatch` and `BackendTargetsSummary` (the line and the drift warning).
+`StudioGameOverrides` (changing the environment override keeps the world-mode override and vice
+versa), `BackendEnvironmentMatch` and `BackendTargetsSummary` (the line, fed by the resolver's API
+address, and the drift warning). `game_config.yaml` and its rewriter `GameConfigRewrite` no longer exist.
 `StudioConfigurationPanel` only reads files, writes files and draws. Class names, EditorPrefs keys
 (`CR_ContentStudio_*`) and asmdef names kept the old "Content Studio" spelling when the window was
 renamed — changing them would lose every developer's saved server address for nothing visible.
@@ -605,7 +604,7 @@ every label is a constant in `ServerKeysText`, pinned by `ServerKeysTextTests`):
 
 1. **Where things point** — three rows named for what they control, each with its own button:
    *Studio pushes & LIVE OPS go to* (the editor server address — **Use for editor**), *The game in
-   Play mode talks to* (`game_config.yaml` — **Use for game**) and *Built games download content
+   Play mode talks to* (your environment override — **Use for game**) and *Built games download content
    from* (Addressables `Remote.LoadPath` — **Use for content**). **Use everywhere** sits in the card
    header.
 2. **Your key for this server** — one row, *Personal API key — used for content pushes and LIVE OPS;
@@ -651,7 +650,7 @@ no separate admin key box any more). A 401/403 on either tab renders `AdminAuthG
 
 Every server round trip is a `StudioJob` (`PlayerSearchJob`, `PlayerDossierJob`, `ListingsJob`,
 `AdminMutationJob`). Each job's `Steps()` first calls `AdminEndpointContext.Resolve()` on the main
-thread — that is the one place the server address (`Resources.Load` of `game_config`) and the admin
+thread — that is the one place the server address (`EditorGameSettings` resolving `GameSettings.asset`) and the admin
 key (`EditorPrefs`) are read — and hands the resulting `(BaseUrl, AdminKey)` struct into `Task.Run`, so
 the worker body is plain HTTP + `JsonConvert`. Results land on the main thread through the job runner,
 and the tab never patches its own copy after a write — it re-reads the dossier or page from the server.
@@ -985,8 +984,8 @@ has already fought the trainer, including the designer's own test save — which
 this exists to close.
 
 **The push writes the local databases too**, last and non-fatally, after the server has already
-accepted it. `TrainerBattleOfflineWriter` builds the SQLite repositories from the `game_config`
-connection strings and calls the **real** `SpawnerConfigSyncService` for the templates in game-data
+accepted it. `TrainerBattleOfflineWriter` builds the SQLite repositories from the `GameSettings`
+file names and calls the **real** `SpawnerConfigSyncService` for the templates in game-data
 (a hand-written editor mirror would be a second set of matching rules, and they drift), plus a
 repo-level replica of the team sweep against player-data, plus the battle-item loadout into player-data with one `INpcBattleItemLoadoutRepository.ReplaceForNpcAsync` call (`TrainerBattleOfflineSync.WriteBattleItemLoadout`; the same replace as the server, empty list included) — the two databases are different files, because
 templates are content and cached teams are player state. Designers playtest offline, so this closes
@@ -1283,22 +1282,31 @@ var prefab = await _assetLoader.LoadAssetByKeyAsync<GameObject>(def.assetKey);
 
 > Assets loaded via the fallback path are not tracked in `_loadedHandles` so `ReleaseAsset` will not release them. This is intentional for dev builds — the fallback path disappears once the asset is published and the registry path takes over.
 
-## Relationship to `game_config.yaml` and `GameConfigurationKeys`
+## Game settings (replaces `game_config.yaml`) and `GameConfigurationKeys`
 
-`game_config.yaml` is a flat `string → string` map for runtime configuration (server addresses, database paths, content version, etc.). It is **not** the place for structured content definitions.
+`game_config.yaml` was deleted on 2026-10-08. Runtime configuration is now a ScriptableObject,
+`CR.Core.Configuration.GameSettings` (`Assets/CR/Resources/configuration/GameSettings.asset`, committed
+**shipping defaults**): the `BackendEnvironmentsConfig` reference, `defaultEnvironmentId`
+(`production`), `defaultWorldMode` (`Legacy`), `offlineStarterCreatureLevel`, `discordApiBaseUrl`,
+`gameDataFileName` and `playerDataFileName`. It is **not** the place for structured content definitions.
 
-`game_config.yaml` now includes:
+Every reader still calls `IGameConfiguration.TryGet(key, out value)`; only the implementation changed.
+`SettingsGameConfiguration` resolves environment = override ?? default and answers every key the yaml
+answered: all `*_server_http_address` keys → the environment's API base URL,
+`discord_server_http_address` → `discordApiBaseUrl`, `database_path_game_data` /
+`database_path_player_data` → the file names, `starter_creature_level` → `offlineStarterCreatureLevel`,
+`world_mode` → `legacy` / `open`. Any other key is simply not found, exactly as an absent yaml line was.
 
-```yaml
-game_server_http_address: http://localhost:8080
-content_version_key: ""     # populated after a content publish
-```
+**Overrides are per developer, Editor only.** Studio → Server & Keys stores an environment id and a
+world mode in EditorPrefs (`CR_Studio_EnvironmentId`, `CR_Studio_WorldMode`), shows *Shipping defaults
+(GameSettings.asset)* beside *Your overrides (this machine)*, and has **Reset to shipping defaults**.
+Player builds bind a no-override implementation, so overrides never apply to a build, and a
+pre-build guard fails a non-Development build whose defaults are not the intended ship values.
 
 Read via:
 
 ```csharp
 _gameConfig.TryGet(GameConfigurationKeys.GameServerHttpAddress, out var address);
-_gameConfig.TryGet(GameConfigurationKeys.ContentVersionKey, out var version);
 ```
 
 ## Relationship to the Backend `content_key` Column
@@ -1379,7 +1387,7 @@ Pushed by Crystalline Rift Studio → Growth → ⬆ Push All → `PUT {creature
 
 ### `AbilityEditorSyncHelper`
 
-`CR/Game/World/Editor/AbilityEditorSyncHelper.cs` — Editor-only static helper. Reads `game_server_http_address` from `game_config.yaml` via `Resources.Load<TextAsset>("configuration/game_config")` and uses blocking `System.Net.Http.HttpClient` calls (acceptable in editor context). Returns `(bool ok, string message)` tuples that Crystalline Rift Studio records per asset and shows in the row.
+`CR/Game/World/Editor/AbilityEditorSyncHelper.cs` — Editor-only static helper. Reads the game's resolved API address via `ContentCreatorSyncHelper.ConfigBaseUrl` (`GameSettings.asset` plus your Studio override) and uses blocking `System.Net.Http.HttpClient` calls (acceptable in editor context). Returns `(bool ok, string message)` tuples that Crystalline Rift Studio records per asset and shows in the row.
 
 `SyncAbility` pushes **the ability row only**; conditions are pushed from the Conditions tab. Folding the conditions call into it was tried and reverted on 2026-08-30 — at the time `sync-conditions` was destructive (see below). The endpoint is safe now, but the split is kept deliberately: a shared condition is content in its own right, and the tab that lists it is where it should be edited and pushed.
 
@@ -1484,7 +1492,7 @@ Container.Bind<IAbilityLibrarySyncClient>()
 
 **Manifest fetch happens after Zenject Initialize.** `ContentRegistryInitializer.Initialize()` fires the async fetch but does not block. Code that reads the registry in `Awake()` or `Start()` may still see SO data — this is expected. Only code that runs well after the first-frame Initialize cycle (e.g., world bootstrap triggered by a trainer selection) is guaranteed to see server data.
 
-**`game_server_http_address` must be set.** `ContentManifestClientUnityHttp` uses `GameConfigurationKeys.GameServerHttpAddress` to resolve the base URL. If that key is missing from `game_config.yaml`, the client logs `Invalid HttpClient configuration` at startup and all manifest fetches return null (SO fallback applies).
+**`game_server_http_address` must be set.** `ContentManifestClientUnityHttp` uses `GameConfigurationKeys.GameServerHttpAddress` to resolve the base URL. If `SettingsGameConfiguration` cannot resolve that key (no `GameSettings.asset`, or no environment selected), the client logs `Invalid HttpClient configuration` at startup and all manifest fetches return null (SO fallback applies).
 
 **`AddressablesCatalogUpdater` is compile-gated.** The `CR_ADDRESSABLES` scripting define must be added in Player Settings for `AddressablesCatalogUpdater` to compile. If `com.unity.addressables` is in `manifest.json` but the define is absent, the updater file compiles to nothing and no catalog update check runs.
 

@@ -268,12 +268,12 @@ hand-copied binding list.
 - **`WithId` binding resolved without the Id.** If a service injects `ITrainerRepository` without an `Id`, it gets the unkeyed router binding. This is usually correct. But if you accidentally bind the router twice (e.g., both with and without `.WithId`), Zenject will throw an ambiguity error at resolve time.
 - **`AsSingle` vs `AsCached` for `FromInstance`.** Use `AsCached` when you pass a pre-created instance via `FromInstance`. `AsSingle` causes Zenject to attempt to create a new instance via constructor injection, ignoring the `FromInstance` call.
 - **Missing `using` statement for the interface namespace.** Zenject binds by exact type. If two assemblies both define `ITrainerRepository` in different namespaces, you must use the fully qualified name in the `Bind<>` call or Zenject will silently bind the wrong one.
-- **Zenject validate passes but Play fails.** Container validation does not execute `FromInstance` factories, so runtime errors (e.g., `DatabaseConnectionStringFactory` throwing because `game_config.yaml` is missing a key) only appear on Play. Always check the Console on first Play after changing bindings.
+- **Zenject validate passes but Play fails.** Container validation does not execute `FromInstance` factories, so runtime errors (e.g., `DatabaseConnectionStringFactory` throwing because `GameSettings.asset` is missing or names no database file) only appear on Play. Always check the Console on first Play after changing bindings.
 - **`ILogger<T>` binding uses `AsTransient`.** This is intentional — each service gets its own typed logger. Do not change it to `AsSingle()`.
 
 ## Related Pages
 
-- [Unity Project Setup](?page=unity/01-project-setup) — `game_config.yaml`, database paths, plugin requirements
+- [Unity Project Setup](?page=unity/01-project-setup) — `GameSettings`, database paths, plugin requirements
 - [World Behaviours](?page=unity/03-world-behaviours) — `GameInitializer` and `NonLazy` in detail
 - [HTTP Clients](?page=unity/05-http-clients) — HTTP client bindings and `ITokenManager` dependency
 - [Backend Architecture](?page=backend/01-architecture) — server-side DI mirrors this pattern
