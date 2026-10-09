@@ -381,6 +381,11 @@
   },
   {
     "section": "Unity",
+    "title": "Open World",
+    "path": "unity/37-open-world"
+  },
+  {
+    "section": "Unity",
     "title": "Opening Story (Unity)",
     "path": "unity/38-story-opening"
   }

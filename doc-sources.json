@@ -1864,6 +1864,17 @@
     },
     "description": "Opening story client systems: IStoryFlags, LoreReadable, WorldBark, NpcEscort/EscortPlan, OneShotWorldEvent, PrologueController + gate, place flavour, capture-lesson hints, StoryText, and the cr_story_script_page review-page command"
   },
+  "unity/37-open-world": {
+    "docPath": "docs/unity/37-open-world.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [
+        "Assets/CR/Game/OpenWorld/**",
+        "Assets/CR/Scenes/World/**"
+      ]
+    },
+    "description": "Open world (in development): streamed 256 m cells, region mask, Dormant/Active rings, region identity, world_mode switch, Editor tools and cr_world_* CLI, regions.json, tech-demo areas"
+  },
   "backend/25-talents": {
     "docPath": "docs/backend/25-talents.md",
     "repos": {
