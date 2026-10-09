@@ -112,8 +112,10 @@ building players, or offline play in the build won't see the new content.
 2. Addressables group is whole: the Ability Workbench **Publish** re-registers every ability's
    FX/SFX (`AbilityPublishPipeline`), which is how `CRContent` is rebuilt if entries go missing;
    an Addressables build (`BuildPlayerContent`) with `error=''` confirms no dangling assets.
-3. Server address config: builds read `Assets/CR/Resources/configuration/game_config.yaml` —
-   `localhost:8080` only works on a machine running the AIO backend; offline mode works anywhere.
+3. Server address config: builds read the shipping defaults in `Assets/CR/Resources/configuration/GameSettings.asset`
+   (never your Studio overrides). A non-Development build **fails the build guard** unless
+   `defaultEnvironmentId` is `production` and `defaultWorldMode` is the intended ship value (Legacy
+   until flipped) — the message says what to fix. Offline mode works anywhere.
 4. **CR > Build > Build Players…** — tick Windows / macOS / Linux, hit **Build** (see below). The
    manual route still works: **File > Build Profiles**, pick a `CR_Game_*` profile → **Build**.
 5. Windows build output must keep `<name>_Data/` next to the exe; macOS output is a single

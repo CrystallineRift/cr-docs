@@ -158,8 +158,7 @@ unity cmd --project-path . cr_sync_creatures            # every definition
 ```
 
 :::caution
-Both need cr-api reachable at the `*_server_http_address` in `game_config.yaml` — port 8080 by
-default. If something else is already listening there the push fails with a bare `404 Not Found`,
+Both need cr-api reachable at the selected environment's API address (Studio → Server & Keys; Local is port 8080). If something else is already listening there the push fails with a bare `404 Not Found`,
 because a different server answered rather than nothing answering at all.
 :::
 

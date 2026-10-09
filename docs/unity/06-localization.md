@@ -308,7 +308,7 @@ hand.
 ## Legacy YAML tables
 
 > The rest of this page describes the older per-domain YAML loader. It works as described, but the
-> tables are English only, `display_language` in `game_config.yaml` does not exist (the language is
+> tables are English only, `display_language` does not exist as a setting (the language is
 > the saved Settings choice), and only `NpcDisplayNameResolver` reads them.
 
 
@@ -387,7 +387,6 @@ Key behaviors:
 ```
 Assets/CR/Resources/
   configuration/
-    game_config.yaml
     localization/
       quests.yaml          ← English (default)
       quests.fr.yaml       ← French overrides
@@ -451,7 +450,7 @@ Examples:
 Rules:
 - All lowercase, underscores only — no hyphens (YamlDotNet's `UnderscoredNamingConvention` does not handle hyphens)
 - Numeric suffix (`_1`, `_2`, …) follows `sort_order` from the database for ordered fields like objectives
-- `content_key` is set by the designer in the database seed and in `game_config.yaml` — it is the contract between the two
+- `content_key` is set by the designer in the database seed and the content definition assets — it is the contract between the two
 
 ### NPC-specific keys
 
@@ -491,7 +490,7 @@ LocalizationRepository.Instance.TryGetText("fr", "quest_welcome_to_cr_name", out
 
 Always check the return value before using `out` text in UI code. A missing key should show a visible placeholder (not an empty string) so it is easy to identify untranslated content during QA.
 
-The active language is stored in `GameConfiguration.Instance.DisplayLanguage` (read from `game_config.yaml` using the `display_language` key). Change that value to switch the language for the entire session.
+The active language is stored in `GameConfiguration.Instance.DisplayLanguage` (historical: the old loader read a `display_language` key; there is no such key now — the language is the saved Settings choice). Change that value to switch the language for the entire session.
 
 ## How `LocalizationRepository` Is Accessed from MonoBehaviours
 
@@ -606,11 +605,9 @@ quest_talk_to_elder_description: Encuentra y habla con el anciano del pueblo par
 quest_talk_to_elder_objective_1: Hablar con el Anciano
 ```
 
-### Step 3 — Set the language in `game_config.yaml`
+### Step 3 — Choose the language
 
-```yaml
-display_language: es
-```
+Pick it in Settings → Language (the old `display_language` yaml key is gone along with `game_config.yaml`).
 
 ### Step 4 — Test in Unity
 
@@ -660,11 +657,11 @@ repo.TryGetText(lang, $"quest_{questTemplate.ContentKey}_name", out var localize
 - **Accessing `LocalizationRepository.Instance` before `Resources` is ready.** If you access the singleton in a static initializer or before Unity's runtime is fully started (e.g., from a test without a Unity context), `Resources.LoadAll` returns an empty array and the singleton initializes with no entries. This can appear as "key not found" errors in test environments.
 - **Key collision between domains.** If two domains both define a key with the same name (e.g., both `creatures.yaml` and `items.yaml` define `generic_description`), the last file loaded wins. Use the `{domain}_` prefix consistently to prevent collisions.
 - **Displaying raw key on missing translation.** If `TryGetText` returns false and your code sets the label to an empty string instead of a placeholder, missing keys are invisible during QA. Always show a visible fallback string such as the raw key or `"[missing]"`.
-- **Setting `display_language` to an unsupported code.** If `display_language: xx` is set in `game_config.yaml` but no `*.xx.yaml` files exist, all `TryGetText(key)` calls fall back to English silently. This is correct behavior but can be confusing — verify the language code matches the file suffix exactly.
+- **Setting `display_language` to an unsupported code.** If language `xx` is selected but no `*.xx.yaml` files exist, all `TryGetText(key)` calls fall back to English silently. This is correct behavior but can be confusing — verify the language code matches the file suffix exactly.
 
 ## Related Pages
 
-- [Unity Project Setup](?page=unity/01-project-setup) — `game_config.yaml` and the `display_language` config key
+- [Unity Project Setup](?page=unity/01-project-setup) — `GameSettings` and configuration keys
 - [Quest System](?page=backend/07-quest-system) — `content_key` values used in quest localization keys
 - [NPC Interaction](?page=unity/04-npc-interaction) — NPC dialogue strings and `content_key` conventions
 - [Dependency Injection](?page=unity/02-dependency-injection) — `LocalizationRepository` is a plain C# singleton, not a Zenject binding

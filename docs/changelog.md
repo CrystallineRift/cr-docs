@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-10-08 — Trainer location save accepts open-world region keys
+
+- **Why:** the open-world client saves `last_area_key` as a region key (`1a`, `ocean`, `techdemo`, ...);
+  `PUT /trainer/{id}/location` only knew `world_location.area_key`, so every save was a 400.
+- **cr-api:** `world_region(key, name, parent)` (Talents, M15012) seeded from `regions.json` + `techdemo`;
+  the area-key check accepts a `world_location` area key or a `world_region` key and moved from the
+  endpoint into `TrainerDomainService.UpdateLastLocationAsync` (`UnknownAreaKeyException` → 400), so
+  offline enforces it too. New regions need a new seed migration.
+  → [Area Scenes](?page=unity/22-area-scenes#resuming-where-you-stood)
+
+## 2026-10-08 — GameSettings replaces game_config.yaml
+
+- **What:** `Assets/CR/Resources/configuration/game_config.yaml` is gone. Runtime configuration is
+  `GameSettings.asset` (committed shipping defaults: environments, default environment `production`,
+  default world mode, offline starter level, file names). `IGameConfiguration.TryGet` is unchanged —
+  `SettingsGameConfiguration` answers every key the yaml answered.
+- **Studio -> Server & Keys:** environment cards and a new World mode dropdown set per-developer
+  overrides (EditorPrefs, never committed); the panel shows shipping defaults next to your overrides,
+  with **Reset to shipping defaults**. Player builds ignore overrides, and a pre-build guard fails a
+  non-Development build whose defaults are not the intended ship values. `GameConfigRewrite` is removed.
+- **Docs:** unity/08 (Game settings, Server & Keys), 05, 06, 07, 16, 17, 21, 00-introduction.
+
 ## 2026-10-04 — Email-code account link, many devices, one login at a time
 
 - **Why:** a guest (device) account had no in-game way to gain an email address, so a reinstall or a

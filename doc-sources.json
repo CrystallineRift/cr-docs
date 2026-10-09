@@ -1231,7 +1231,9 @@
         "Trainers/CR.Trainers.Data.Migration/M4013AddLastLocationToTrainer.cs",
         "Trainers/CR.Trainers.Data/Implementation/BaseTrainerRepository.cs",
         "Trainers/CR.Trainers.Service.REST/Endpoints/TrainerEndpoints.cs",
-        "Trainers/CR.Trainers.Data.Sqlite.Test/TrainerRepositoryLocationTests.cs"
+        "Trainers/CR.Trainers.Data.Sqlite.Test/TrainerRepositoryLocationTests.cs",
+        "Trainers/CR.Trainers.Domain.Services/Implementation/TrainerDomainService.cs",
+        "Talents/CR.Talents.Data.Migration/M15012CreateWorldRegionTable.cs"
       ],
       "cr-data": [
         "Assets/CR/Game/Areas/**",
@@ -1851,6 +1853,27 @@
       ]
     },
     "description": "Talents UI (Phase 2 Unity lane): TalentTreeDefinition authoring SO + custom inspector calling cr-api's real TalentTreeValidation, Studio push/export + CLI, the three starter trees, the Talents tab (TalentNodeStateBuilder over the real TalentRules/TrainerProgress), ITalentProgressReader/ITalentActions wired to the real server/offline TalentService (TalentOnlineOfflineRouter, TalentClientUnityHttp); movement-speed is a real client-applied effect (TrainerModifierApplier + TrainerMoveSpeedLogic pushing MalbersMovementController.SetSpeed)"
+  },
+  "unity/38-story-opening": {
+    "docPath": "docs/unity/38-story-opening.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [
+        "Assets/CR/Game/Story/**"
+      ]
+    },
+    "description": "Opening story client systems: IStoryFlags, LoreReadable, WorldBark, NpcEscort/EscortPlan, OneShotWorldEvent, PrologueController + gate, place flavour, capture-lesson hints, StoryText, and the cr_story_script_page review-page command"
+  },
+  "unity/37-open-world": {
+    "docPath": "docs/unity/37-open-world.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [
+        "Assets/CR/Game/OpenWorld/**",
+        "Assets/CR/Scenes/World/**"
+      ]
+    },
+    "description": "Open world (in development): streamed 256 m cells, region mask, Dormant/Active rings, region identity, world_mode switch, Editor tools and cr_world_* CLI, regions.json, tech-demo areas"
   },
   "backend/25-talents": {
     "docPath": "docs/backend/25-talents.md",

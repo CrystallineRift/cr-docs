@@ -94,7 +94,7 @@ protected SimpleWebClient(
     string serverConfigKeyAddress)
 ```
 
-The base URL is read from `IGameConfiguration` using the config key at construction time via `configuration.TryGet(serverConfigKeyAddress, out _serverAddress)`. If the key is missing from `game_config.yaml`, `_serverAddress` is null and an error is logged immediately: `Invalid HttpClient configuration. address: {key}`. Every subsequent request will fail to build a valid URL.
+The base URL is read from `IGameConfiguration` using the config key at construction time via `configuration.TryGet(serverConfigKeyAddress, out _serverAddress)`. `IGameConfiguration` is implemented by `SettingsGameConfiguration`, which answers every `*_server_http_address` key with the resolved environment's API base URL (see [Game settings](?page=unity/08-content-registry)). A key it does not answer — a typo, or a client with no entry there — leaves `_serverAddress` null and an error is logged immediately: `Invalid HttpClient configuration. address: {key}`. Every subsequent request will fail to build a valid URL.
 
 ### Request Lifecycle
 
@@ -299,11 +299,16 @@ All are bound `AsSingle()` — one instance per container lifetime, shared acros
 public const string GuildServerHttpAddress = "guild_server_http_address";
 ```
 
-### Step 2 — Add the address to `game_config.yaml`
+### Step 2 — Make `SettingsGameConfiguration` answer the key
 
-```yaml
-# game_config.yaml
-guild_server_http_address: "http://localhost:8080/guild"
+There is no yaml file to edit any more. Every `*_server_http_address` key resolves to the selected
+environment's API base URL (`Local`, `Production`, … from `BackendEnvironments.asset`), so a client
+for the same host needs no new setting; add the key to the table in `SettingsGameConfiguration` (and
+its all-keys test) so the lookup answers it.
+
+```csharp
+// resolves to the environment's apiBaseUrl, e.g. "http://localhost:8080"
+configuration.TryGet(GameConfigurationKeys.GuildServerHttpAddress, out var address);
 ```
 
 ### Step 3 — Define the interface
@@ -450,7 +455,7 @@ If a response property name does not match (e.g., backend returns `creatureId` b
 
 ## Common Mistakes / Tips
 
-- **Wrong key in `GameConfigurationKeys`.** If the key string does not match `game_config.yaml`, `SimpleWebClient`'s base URL is null. Every request fails with "Invalid HttpClient configuration" logged at construction time. Double-check the exact string match.
+- **Wrong key in `GameConfigurationKeys`.** If the key string is not one `SettingsGameConfiguration` answers, `SimpleWebClient`'s base URL is null. Every request fails with "Invalid HttpClient configuration" logged at construction time. Double-check the exact string match.
 - **Path leading slash handling.** `SimpleWebClient` strips a leading `/` from the path: `path = path.StartsWith("/") ? path.Substring(1, ...) : path`. This means `/api/v1/npc/ensure` and `api/v1/npc/ensure` are equivalent. Consistency is preferred — the codebase uses the leading slash convention.
 - **JSON property name mismatch.** The response deserializes to all defaults without throwing. Add debug logging of `response.DataAsText` in the `after` callback if a response object is unexpectedly empty.
 - **Not handling `NotAuthorizedException`.** If `GetAccessTokenAsync` fails to refresh and throws, the caller receives `NotAuthorizedException`. Without a handler, the game will show an unhandled exception. Catch this in top-level handlers and redirect to the login flow.
@@ -462,7 +467,7 @@ If a response property name does not match (e.g., backend returns `creatureId` b
 
 ## Related Pages
 
-- [Unity Project Setup](?page=unity/01-project-setup) — `game_config.yaml` setup, server address keys
+- [Unity Project Setup](?page=unity/01-project-setup) — `GameSettings` and environment setup, server address keys
 - [Dependency Injection](?page=unity/02-dependency-injection) — how clients are registered with `AsSingle()`
 - [NPC Interaction](?page=unity/04-npc-interaction) — example of `INpcClient` usage in a world behaviour
 - [Auth and Accounts](?page=backend/06-auth-and-accounts) — `ITokenManager` that `SimpleWebClient` depends on

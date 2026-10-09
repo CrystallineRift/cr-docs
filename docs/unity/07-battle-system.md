@@ -294,7 +294,7 @@ On a trainer win the banner subtitle reads `Beat Trainer {DisplayName}` (`Battle
 
 `OnlineOfflineBattleDomainService` selects the active implementation from `IGameDataRepository.IsPlayingOnline` at call time — no restart needed to switch modes.
 
-The HTTP base URL is read from `game_config.yaml` via `GameConfigurationKeys.BattleServerHttpAddress`.
+The HTTP base URL resolves through `IGameConfiguration` via `GameConfigurationKeys.BattleServerHttpAddress` (the selected environment's API base URL — see [Game settings](?page=unity/08-content-registry)).
 
 ## Arena System
 
@@ -556,7 +556,7 @@ constructor out of the cr-api source and asserts a matching `Container.Bind<…>
 parameter. It is a text comparison because the installer lives in Assembly-CSharp, which no Unity
 asmdef may reference, so no EditMode test can build the container.
 
-The `game.bytes` file is keyed as `LocalDataSources.GameOfflineRepository` and resolved to `database_path_game` in `game_config.yaml` (defaults to `{persistentDataPath}/databases/gameOffline.bytes`).
+The `game.bytes` file is keyed as `LocalDataSources.GameOfflineRepository`; its file name is `GameSettings.gameDataFileName` (`database_path_game_data`, default `game-data.bytes`, resolved under `persistentDataPath`).
 
 ## `BattleHUD`
 
@@ -1038,7 +1038,7 @@ Stale rows surviving one extra sync is the recoverable failure. The deletion is 
 
 **`OperationCanceledException` in the turn loop.** When `EndBattle` cancels the `_playerActionSource` TCS during a forced exit, the awaited `_playerActionSource.Task` throws `OperationCanceledException`. A dedicated `catch (OperationCanceledException)` block before the generic `catch (Exception ex)` swallows this silently — it is not an error, and `EndBattle` in `finally` handles cleanup.
 
-**`BattleHttpDomainAdapter` server address.** Reads `game_config.yaml` key `battle_server_http_address`. In local dev this is `http://localhost:8080`. Ensure the AIO host is running.
+**`BattleHttpDomainAdapter` server address.** Reads the `battle_server_http_address` key (answered by `SettingsGameConfiguration` with the environment's API base URL). In local dev this is `http://localhost:8080`. Ensure the AIO host is running.
 
 **`BattleStager` missing creature `AssetKey`.** If `BaseCreature.AssetKey` is empty or the addressable cannot be loaded, the stager logs and returns null for that visual. `BattleCoordinator` then reads the returned `BattleStagingResult`, logs an Error, and raises `BattleEvents.StagingFailed("opponent visual" | "player visual")`. The battle still runs — only the on-arena prefab is missing.
 
