@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-10-09 — v0.1.7: the open world ships
+
+- **What:** release builds now boot the open world and the new opening (Earth prologue → 1a summit → Philroe at the
+  wagon → the farm) instead of the legacy area flow. `GameSettingsShipCheck.ShippingWorldMode` is `Open` and
+  `GameSettings.asset` `defaultWorldMode` is `1`; the release build guard compares the two.
+- **Unchanged:** a missing, empty or unknown `world_mode` still parses as Legacy, and the Studio's per-machine World
+  mode override can still choose Legacy for testing (player builds ignore overrides).
+- **Build:** tag `v0.1.7` on cr-api-unity main `a1582830` (PR #70) → `build-game` publishes to
+  `content.crystallinerift.com/builds/0.1.7/`. → [Standalone Builds](?page=unity/21-standalone-builds)
+
 ## 2026-10-09 — Talents floor seed M15040 and an authenticated floor bake (pending merge)
 
 - **Talents floor seed** (cr-api `content/talent-seed-2026-10-09`, pending merge): `M15040SeedTalentContent_20261009`,

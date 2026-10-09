@@ -1287,7 +1287,7 @@ var prefab = await _assetLoader.LoadAssetByKeyAsync<GameObject>(def.assetKey);
 `game_config.yaml` was deleted on 2026-10-08. Runtime configuration is now a ScriptableObject,
 `CR.Core.Configuration.GameSettings` (`Assets/CR/Resources/configuration/GameSettings.asset`, committed
 **shipping defaults**): the `BackendEnvironmentsConfig` reference, `defaultEnvironmentId`
-(`production`), `defaultWorldMode` (`Legacy`), `offlineStarterCreatureLevel`, `discordApiBaseUrl`,
+(`production`), `defaultWorldMode` (`Open` since v0.1.7; must equal `GameSettingsShipCheck.ShippingWorldMode`), `offlineStarterCreatureLevel`, `discordApiBaseUrl`,
 `gameDataFileName` and `playerDataFileName`. It is **not** the place for structured content definitions.
 
 Every reader still calls `IGameConfiguration.TryGet(key, out value)`; only the implementation changed.

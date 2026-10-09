@@ -114,8 +114,10 @@ building players, or offline play in the build won't see the new content.
    an Addressables build (`BuildPlayerContent`) with `error=''` confirms no dangling assets.
 3. Server address config: builds read the shipping defaults in `Assets/CR/Resources/configuration/GameSettings.asset`
    (never your Studio overrides). A non-Development build **fails the build guard** unless
-   `defaultEnvironmentId` is `production` and `defaultWorldMode` is the intended ship value (Legacy
-   until flipped) — the message says what to fix. Offline mode works anywhere.
+   `defaultEnvironmentId` is `production` and `defaultWorldMode` equals
+   `GameSettingsShipCheck.ShippingWorldMode` — **Open since v0.1.7** (the open world ships). The message says what
+   to fix. A missing, empty or unknown `world_mode` still parses as Legacy (a parse rule, not the shipping
+   default), and the per-machine Studio override can still pick Legacy for testing. Offline mode works anywhere.
 4. **CR > Build > Build Players…** — tick Windows / macOS / Linux, hit **Build** (see below). The
    manual route still works: **File > Build Profiles**, pick a `CR_Game_*` profile → **Build**.
 5. Windows build output must keep `<name>_Data/` next to the exe; macOS output is a single
