@@ -1231,7 +1231,9 @@
         "Trainers/CR.Trainers.Data.Migration/M4013AddLastLocationToTrainer.cs",
         "Trainers/CR.Trainers.Data/Implementation/BaseTrainerRepository.cs",
         "Trainers/CR.Trainers.Service.REST/Endpoints/TrainerEndpoints.cs",
-        "Trainers/CR.Trainers.Data.Sqlite.Test/TrainerRepositoryLocationTests.cs"
+        "Trainers/CR.Trainers.Data.Sqlite.Test/TrainerRepositoryLocationTests.cs",
+        "Trainers/CR.Trainers.Domain.Services/Implementation/TrainerDomainService.cs",
+        "Talents/CR.Talents.Data.Migration/M15012CreateWorldRegionTable.cs"
       ],
       "cr-data": [
         "Assets/CR/Game/Areas/**",
