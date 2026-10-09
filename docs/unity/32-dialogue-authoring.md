@@ -349,6 +349,10 @@ The demo script is the main story, and its Act 1 is three quests on one NPC, the
 (`dialogue-merchant-area-1`, NPC `demo-merchant-area-1`, placed six metres in front of the Meadow
 spawn point). The document is the reference for a giver who is also a shop:
 
+> **Pending deploy (cr-api feature/retire-welcome):** the server retires Welcome (M7020): the starter and the two
+> potions are granted at trainer creation, First Battle loses its Welcome requirement and is given by this NPC. The
+> Unity half (parking the Welcome asset, this hub's dialogue) is pending. See [Quest System](?page=backend/07-quest-system).
+
 1. **Welcome** (`quest-welcome-to-cr`, auto-granted, auto-paid). The hub's first case is
    `quest.objectivePending` on it: he begs for help from inside the wagon, the player asks how
    ("I don't have a soulbeast"), and that option's `quest.recordTalk` completes the talk objective.

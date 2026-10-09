@@ -31,9 +31,14 @@
         "Convenience/CR.REST.AIO/Builds/*.cs",
         "Game/CR.Game.Data.Migration/M8018AddDownloadPasswordToAppConfig.cs",
         "Game/CR.Game.Data/Interface/IAppConfigRepository.cs",
-        "Game/CR.Game.Data/Implementation/BaseAppConfigRepository.cs"
+        "Game/CR.Game.Data/Implementation/BaseAppConfigRepository.cs",
+        ".github/workflows/deploy.yml"
       ],
-      "cr-data": []
+      "cr-data": [],
+      "cr-ops": [
+        "deploy.sh",
+        "README.md"
+      ]
     },
     "description": "Backend layer diagram, DDD module structure, dual-DB pattern, DI wiring"
   },
@@ -43,7 +48,10 @@
       "cr-api": [
         "Npcs/**/*.cs",
         "Npcs/**/*.csproj",
-        "Game/CR.Game.Model/Npcs/*.cs"
+        "Game/CR.Game.Model/Npcs/*.cs",
+        "Npcs/CR.Npcs.Domain.Services/Implementation/NpcDomainService.cs",
+        "Npcs/CR.Npcs.Data/Implementation/BaseNpcRepository.cs",
+        "Npcs/CR.Npcs.Service.REST/Endpoints/NpcEndpoints.cs"
       ],
       "cr-data": [
         "Assets/Scripts/Npcs/**/*NpcCreatureGrantBehaviour*.cs",
@@ -102,7 +110,9 @@
         "Game/CR.Game.Service.BFF/Endpoints/WildCreatureEndpoints.cs",
         "Spawner/CR.Spawner.Data/Implementation/BaseCreatureSpawnerTemplateRepository.cs"
       ],
-      "cr-data": []
+      "cr-data": [
+        "Assets/CR/Core/Data/Registry/Definitions/GrowthProfileConfig.cs"
+      ]
     },
     "description": "Creature generation pipeline, growth profiles, abilities assignment, quest-gated ability unlocks"
   },
@@ -112,7 +122,13 @@
       "cr-api": [
         "Npcs/CR.Npcs.Domain.Services/**/*.cs",
         "Trainers/**/*.cs",
-        "Game/CR.Game.Domain.Services/**/*.cs"
+        "Game/CR.Game.Domain.Services/**/*.cs",
+        "Game/CR.Game.Domain.Services/Interfaces/Trainer/ITrainerCreationService.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Trainer/TrainerCreationService*.cs",
+        "Game/CR.Game.Domain.Services.Test/Trainer/TrainerCreationService*.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Creature/StarterCreatureService.cs",
+        "Trainers/CR.Trainers.Service.REST/Endpoints/TrainerEndpoints.cs",
+        "Convenience/CR.Api.IntegrationTests/TrainerCreationHttpTests.cs"
       ],
       "cr-data": [
         "Assets/Scripts/Npcs/**/*.cs",
@@ -132,7 +148,8 @@
         "Assets/Scripts/Auth/**/*.cs",
         "Assets/CR/Core/Auth/TokenManager.cs",
         "Assets/CR/Core/Data/Client/Implementation/SimpleWebClient.cs",
-        "Assets/CR/Core/Data/Logic/SupersededResponse.cs"
+        "Assets/CR/Core/Data/Logic/SupersededResponse.cs",
+        "Assets/CR/Core/Configuration/SettingsGameConfiguration.cs"
       ]
     },
     "description": "Auth system: JWT, OAuth linking, account management, email-code account link (POST /account/email/code + /verify, SES/Log email sender, limits), many Game device links per account (M0018), one login at a time (auth_session provider + revoked_reason, session_superseded 401 marker)"
@@ -154,7 +171,14 @@
         "Quests/CR.Quests.Data.Migration/M17002BackfillQuestCategories.cs",
         "Quests/CR.Quests.Data.Migration/M17003AddAreaKeyToQuestTemplate.cs",
         "Quests/CR.Quests.Data/Enums/QuestCategory.cs",
-        "Quests/CR.Quests.Data/Extensions/QuestCategoryExtensions.cs"
+        "Quests/CR.Quests.Data/Extensions/QuestCategoryExtensions.cs",
+        "Quests/CR.Quests.Data.Migration/M7019*.cs",
+        "Quests/CR.Quests.Data.Migration/M7020*.cs",
+        "Quests/CR.Quests.Data.Migration/ObjectiveTemplateIdAlignment*.cs",
+        "Quests/CR.Quests.Data.Test/ObjectiveTemplateIdAlignment*.cs",
+        "Quests/CR.Quests.Data.Test/RetireWelcomeQuest*.cs",
+        "Convenience/CR.Data.Migrations.Test/WelcomeQuestSeedPostgresTests.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Trainer/TrainerCreationService*.cs"
       ],
       "cr-data": [
         "Assets/CR/Core/Data/Logic/QuestObjectiveValidation.cs",
@@ -194,7 +218,10 @@
         "ProjectSettings/**",
         "Assets/Scripts/Installers/**/*.cs",
         "Assets/CR/Core/Data/Repository/LocalDataSources.cs",
-        "Assets/CR/Core/Data/Repository/DatabaseMigration.cs"
+        "Assets/CR/Core/Data/Repository/DatabaseMigration.cs",
+        "Assets/CR/Core/Configuration/**/*.cs",
+        "Assets/CR/Core/Data/Logic/StudioGameOverrides*.cs",
+        "Assets/CR/Resources/configuration/GameSettings.asset"
       ]
     },
     "description": "Unity project structure, packages, folder layout; two-database (game-data vs player-data) config keys and startup migration flow"
@@ -641,7 +668,16 @@
         "Assets/CR/Core/Data/Logic/FieldDiff.cs",
         "Assets/CR/Core/Data/Editor/DialogueScaffoldMenu.cs",
         "Assets/CR/Core/Data/Editor/DialogueContentAuditMenu.cs",
-        "Assets/CR/Game/World/Editor/DialogueEditorSyncHelper.cs"
+        "Assets/CR/Game/World/Editor/DialogueEditorSyncHelper.cs",
+        "Assets/CR/Core/Configuration/**/*.cs",
+        "Assets/CR/Core/Data/Editor/EditorGameSettings.cs",
+        "Assets/CR/Core/Data/Logic/StudioGameOverrides*.cs",
+        "Assets/CR/Core/Data/Logic/Tests/StudioGameOverridesTests.cs",
+        "Assets/CR/Tests/Editor/SettingsGameConfigurationTests.cs",
+        "Assets/CR/Tests/Editor/GameSettingsResolverTests.cs",
+        "Assets/CR/Tests/Editor/EditorPrefsGameSettingsOverridesTests.cs",
+        "Assets/CR/Resources/configuration/GameSettings.asset",
+        "Assets/CR/Resources/configuration/BackendEnvironments.asset"
       ]
     },
     "description": "IGameContentRegistry, ScriptableObjectContentRegistry, ServerContentRegistry, MutableContentRegistry, ContentRegistryInitializer, ContentManifestClientUnityHttp, ContentDefinitionProvider, ContentKeys constants, CreatureDefinition/ItemDefinition/NpcDefinition/SpawnerDefinition ScriptableObjects, CreatureContentDef/ItemContentDef/NpcContentDef/SpawnerContentDef POCOs, IGameAssetLoader.LoadAssetByKeyAsync, ContentStudioTool unified EditorWindow (7 tabs replacing ContentCreatorTool and AbilityLibraryTool), custom Inspectors for all definition types, AddressablesCatalogUpdater, LocalizationEditorWindow, ContentAuditTool, ContentPublishTool, AbilityConfig/AbilityProgressionSetConfig/GrowthProfileConfig SOs, AbilityEditorSyncHelper, ability sync clients (HTTP/local/online-offline); Crystalline Rift Studio chrome rebuilt in UI Toolkit (CRStudio.uss shared editor design system, grouped navigation rail with live counts, header count chips + server field + connection pill, status bar; tab bodies remain IMGUI in an IMGUIContainer); ContentDisplayName single naming rule + ContentPicker dropdowns (human names stored as keys, dangling references warned, options from project incl. arenas unioned from spawners/trainers/open scenes); header rebuilt around one StudioWorkSummary pill (the single ranked answer to \"what needs doing\", with the button that resolves it) plus Guide and Advanced switches — Advanced (same pref as the old Debug toggle) holds the server field, raw keys/ids, the all-content sync bar and the recovery actions; ContentSectionCatalog is the one source of the rail's labels, groups and per-section guide sentences; project scans (registry sweep, orphan scan, Addressables lookups, push-state file stats) cached through EditorMemo/EditorMemoPolicy on the IMGUI layout pass instead of running every repaint; Trainer Battles tab; spawner/pool/creature/item reference fields all ContentPicker dropdowns (Fetch-button flows deleted); NpcAuthorChecklist readiness panel on NpcDefinitionEditor; Crystalline Rift Studio's slow work moved off the draw thread into a job system (StudioJobTracker/StudioJobQueue pure logic + StudioJob/StudioIteratorJob/StudioJobRunner stepping on EditorApplication.update within an 8ms budget, yield-a-Task for non-Unity work, StudioProgressBar cr-jobbar strip above the status bar, [Studio]-prefixed console lines on every status transition): per-definition content pushes (plan built without network, one send per tick, cancellable, tab not stamped on a partial run), per-type pulls, and the registry sweep + push comparison (published into a pending slot and adopted only on a Layout pass); NPC placements now scanned across EVERY scene in the project rather than the open ones — NpcSceneScanJob reads scene/prefab YAML on a worker thread (NpcScanFileReader buffered single-pass pre-filter, NpcScenePlacementParser for Component/PrefabInstance/PrefabReference shapes, NpcPrefabClosure fixed point over m_SourcePrefab so variants and nested NPC prefabs count), results cached per file in Library/CRStudioNpcScenes.json under NpcScanCachePolicy with prefab-state and resolved-prefab fingerprints; NpcPlacementIndex/NpcSceneGroup drive a scan strip, per-row 'in Village (2), Meadow' summaries and per-scene grouped placements with Open scene/Select via NpcPlacementNavigator; NpcDefinitionEditor's checklist reads placement from the scan or the open scene and memoises BuildSnapshot; COMBAT → Battle Reactions tab (CreatureReactionProfile rows with ReactionProfileRow digest, Variant button, inline CreatureReactionProfileEditor; local-only, no sync); SYSTEM → Configuration section (StudioConfigurationPanel + BackendEnvironmentsConfig asset: Local/Production environments applied to the editor's server pref, every *_server_http_address in game_config.yaml via GameConfigRewrite, and the Addressables Remote.LoadPath; BackendUrl/BackendEnvironmentMatch/BackendTargetsSummary pure logic; one Key row per environment (personal API key) stored in EditorPrefs via BackendKeyVault, masked with a 15s auto-hiding reveal, activated for both service and admin auth by Use for editor); LIVE OPS group (Players tab 18 + Marketplace tab 19 in Editor/LiveOps/, EditorAdminAuth admin token, StudioJob-backed admin reads/writes, ModerationReasonDialog) — see backend/18-moderation; Review window (ContentReviewWindow, Review button beside Push All): every unpushed asset grouped by type with per-row Diff (FieldDiff over EditorJsonUtility of local vs server-applied clone), Push (PushOne, single-asset job, tab not stamped) and Revert (RevertOne, same apply as Pull All, confirm-gated, not for Trainer Battles); ContentPushLog per-asset stamps (LastPushUtcTicks_asset_<guid>) so ContentPushStatus counts an asset pushed when newer than the later of tab/asset stamps; ReviewRow/ReviewGroup/ContentReviewRows pure logic; Dialogues tab (22) with its audit panel"
@@ -682,7 +718,8 @@
         "Assets/CR/Core/Data/Editor/ContentDeployTool.cs",
         "scripts/setup-s3-bucket.sh",
         "scripts/setup-minio-bucket.sh",
-        "scripts/deploy-content.sh"
+        "scripts/deploy-content.sh",
+        "Assets/CR/Core/Configuration/SettingsGameConfiguration.cs"
       ]
     },
     "description": "game_assets table, app_config singleton row, version-check endpoint, content-publish endpoint, content-manifest endpoint, X-Pipeline-Key auth, three-system asset architecture (Addressables CDN, cr-api backend, local SQLite), S3/MinIO CDN setup, deploy scripts"
@@ -1001,7 +1038,8 @@
         "Game/CR.Game.Model/Items/BaseItem.cs",
         "Game/CR.Game.Domain.Services/Implementation/Item/CaptureChanceCalculator.cs",
         "Game/CR.Game.Domain.Services/Implementation/Item/CaptureAttemptService.cs",
-        "Creatures/CR.Creatures.Data/Interface/ICreatureCaptureClaim.cs"
+        "Creatures/CR.Creatures.Data/Interface/ICreatureCaptureClaim.cs",
+        "Items/CR.Items.Data.Migration/M6023RenameCaptureCrystalsToSummoningShards.cs"
       ],
       "cr-data": [
         "Assets/CR/Game/Battle/Events/BattleEvents.cs",
@@ -1130,7 +1168,8 @@
         "Quests/CR.Quests.Domain.Services/Interface/QuestProgressResult.cs",
         "Quests/CR.Quests.Domain.Services/Interface/QuestClaimResult.cs",
         "Quests/CR.Quests.Domain.Services/Implementation/ProgressDispatcher.cs",
-        "Quests/CR.Quests.Domain.Services/Extensions/ProgressOutcomeQuestFactsExtensions.cs"
+        "Quests/CR.Quests.Domain.Services/Extensions/ProgressOutcomeQuestFactsExtensions.cs",
+        "Achievements/CR.Achievements.Data.Migration/M18010SeekerVocabularyAchievementText.cs"
       ],
       "cr-data": [
         "Assets/CR/Core/Notifications/Adapters/QuestGrantToastAdapter.cs",
@@ -1219,7 +1258,11 @@
         "ProjectSettings/QualitySettings.asset",
         "ProjectSettings/TimeManager.asset",
         "Assets/Settings/Build Profiles/**",
-        "Assets/AddressableAssetsData/AddressableAssetSettings.asset"
+        "Assets/AddressableAssetsData/AddressableAssetSettings.asset",
+        "Assets/CR/Core/Data/Editor/Build/GameSettingsBuildGuard.cs",
+        "Assets/CR/Core/Configuration/GameSettingsShipCheck.cs",
+        "Assets/CR/Tests/Editor/GameSettingsShipCheckTests.cs",
+        "Assets/CR/Resources/configuration/GameSettings.asset"
       ]
     },
     "description": "Standalone desktop builds: Unity 6 build profiles (CR_Game_macOS / CR_Game_Windows / CR_Game_Linux_SteamDeck, BuildProfileSetupTool reflection factory), CR > Build > Build Players… sequential multi-target window (PlayerBuildPlan pure logic + tests), per-platform e_sqlite3 natives bundled by build-packages.sh, Addressables built with player, game-data.bytes floor, Mono-only Windows cross-build; CR > Build > Deploy to Steam Deck… one-step Linux build + rsync-over-SSH push to a fixed folder on the Deck (SteamDeckDeployPlan pure logic + tests)"
@@ -1233,7 +1276,8 @@
         "Trainers/CR.Trainers.Service.REST/Endpoints/TrainerEndpoints.cs",
         "Trainers/CR.Trainers.Data.Sqlite.Test/TrainerRepositoryLocationTests.cs",
         "Trainers/CR.Trainers.Domain.Services/Implementation/TrainerDomainService.cs",
-        "Talents/CR.Talents.Data.Migration/M15012CreateWorldRegionTable.cs"
+        "Talents/CR.Talents.Data.Migration/M15012CreateWorldRegionTable.cs",
+        "Talents/CR.Talents.Data.Migration/M15013SeedLegacyAreaWorldRegions.cs"
       ],
       "cr-data": [
         "Assets/CR/Game/Areas/**",
@@ -1535,7 +1579,8 @@
         "Items/CR.Items.Data.Migration/M6022BackfillItemIconAssetKey.cs",
         "Creatures/CR.Creatures.Data.Migration/M12013BackfillContentIconAssetKey.cs",
         "Convenience/CR.Data.Migrations.Test/IconAssetKeyRoundTripSqliteTests.cs",
-        "Trainers/CR.Trainers.Data/Interface/IItemEntryGuardedWrites.cs"
+        "Trainers/CR.Trainers.Data/Interface/IItemEntryGuardedWrites.cs",
+        "Items/CR.Items.Data.Migration/M6023RenameCaptureCrystalsToSummoningShards.cs"
       ],
       "cr-data": [
         "Assets/CR/Game/Battle/Offline/OfflineItemUseService.cs",
@@ -1660,7 +1705,9 @@
   "unity/32-dialogue-authoring": {
     "docPath": "docs/unity/32-dialogue-authoring.md",
     "repos": {
-      "cr-api": [],
+      "cr-api": [
+        "Quests/CR.Quests.Data.Migration/M7020*.cs"
+      ],
       "cr-data": [
         "Assets/CR/Dialogue/Editing/**/*.cs",
         "Assets/CR/Dialogue/Editor/**/*.cs",
@@ -1857,9 +1904,12 @@
   "unity/38-story-opening": {
     "docPath": "docs/unity/38-story-opening.md",
     "repos": {
-      "cr-api": [],
+      "cr-api": [
+        "Quests/CR.Quests.Data.Migration/M7020*.cs"
+      ],
       "cr-data": [
-        "Assets/CR/Game/Story/**"
+        "Assets/CR/Game/Story/**",
+        "Assets/CR/Resources/Story/**"
       ]
     },
     "description": "Opening story client systems: IStoryFlags, LoreReadable, WorldBark, NpcEscort/EscortPlan, OneShotWorldEvent, PrologueController + gate, place flavour, capture-lesson hints, StoryText, and the cr_story_script_page review-page command"
@@ -1870,7 +1920,9 @@
       "cr-api": [],
       "cr-data": [
         "Assets/CR/Game/OpenWorld/**",
-        "Assets/CR/Scenes/World/**"
+        "Assets/CR/Scenes/World/**",
+        "Assets/CR/Resources/OpenWorld/**",
+        "Assets/CR/Core/DI/OpenWorldBindingsExtensions.cs"
       ]
     },
     "description": "Open world (in development): streamed 256 m cells, region mask, Dormant/Active rings, region identity, world_mode switch, Editor tools and cr_world_* CLI, regions.json, tech-demo areas"

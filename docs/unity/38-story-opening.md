@@ -120,7 +120,9 @@ After a rebuild run `cr_world_refresh_activatables --args c,r`, `cr_world_bake_p
 - `QuestGatedCollider` — keeps a trigger collider enabled only while `QuestGateRule` says so (required quest
   complete, blocker not complete); re-checked every frame because `SpawnerEncounterBehaviour.Activate` re-enables
   the collider at world init. The gaterbear zone opens after Welcome and closes after First Battle; the lesson
-  zone opens after First Battle and closes after First Capture.
+  zone opens after First Battle and closes after First Capture. Server side, Welcome is retired by M7020 and the
+  starter is granted at trainer creation (pending deploy, cr-api feature/retire-welcome; see
+  [Quest System](?page=backend/07-quest-system)); the Unity changes to the escort and gates are pending.
 - `ProximityBark` — one StoryText line when the player's root collider (tag `Player`) enters; once per trainer
   under `event.<key>`, written only when the line was actually shown (a line suppressed by a conversation is retried
   while the player stays inside); anchored on the player (Ahksun) or on a transform (Izzandra).
@@ -145,8 +147,11 @@ region, reveal; the healed dialog waits for it. The target is `IWhiteoutSafePoin
 
 ## Play-mode smoke
 
-`cr_story_smoke_start --args full|skip|runaway|hold|title|switch` (play mode, `world_mode: open`; Editor and
-development builds only — `#if UNITY_EDITOR || DEVELOPMENT_BUILD`) runs `StorySmokeRunner`: it drives the
+`cr_story_smoke_start --args full|skip|runaway|hold|title|switch|portal` (play mode, `world_mode` = `open` through
+GameSettings or the Studio override; Editor and development builds only — `#if UNITY_EDITOR || DEVELOPMENT_BUILD`)
+runs `StorySmokeRunner`. `portal` (`PortalPlacesScenario`) walks the prologue naturally into the portal, checks the
+player is placed and records visited places, then switches to a second new trainer and checks its Places start empty
+and its first region entry still shows flavour; it needs `IVisitedPlacesSource`, so open mode only. Every mode drives the
 startup UI to a new offline trainer and walks every beat through the player's own entry points (readables,
 events, NPC conversations, `SubmitPlayerAction` with `BattleActionParser.Serialise(BattleAction)`, teleports through
 `IOpenWorldPlayer`). One line per step in
