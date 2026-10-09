@@ -816,7 +816,7 @@ NPC rows are scoped to the *player's* `(accountId, trainerId)` for world isolati
 
 `ItemUseDomainService.UseItemAsync` refuses any capture crystal (`IsCaptureCrystal`: effect type
 `CaptureCreature` or the `CaptureCrystal` usage flag) when the battle's other trainer is not
-`WildTrainerId`, with `"Capture Crystals cannot be used in a trainer battle."` — a 400 from
+`WildTrainerId`, with `"Summoning Shards cannot be used in a trainer battle."` (`item-capture-not-in-trainer-battle`) — a 400 from
 `ItemEndpoints`, nothing consumed, turn not spent. The Unity bag greys the row and logs the refusal
 first; see [Capture Mechanic → Refused in trainer battles](?page=unity/14-capture-mechanic).
 
