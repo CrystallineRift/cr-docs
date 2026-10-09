@@ -191,7 +191,7 @@ The active pointer is written into `battle_system_version.active_elemental_damag
 **only when the named version actually arrived with cells** — pointing at a version this database
 holds no rows for is how every matchup silently becomes 1.0. That row lives in `game-data.bytes`
 with the matrix it names: the offline `IBattleSystemVersionRepository` binding reads the content
-database, not `player-data.bytes`, because a single column naming an authored matrix version is
+database, not `playerData.bytes`, because a single column naming an authored matrix version is
 content, not player state.
 
 Multipliers on both tables are clamped to `[0, 10]` on write, mirroring the server-side validation.

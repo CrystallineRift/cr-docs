@@ -13,7 +13,7 @@ The registry bridges two concerns:
 This in-memory registry is the fast lookup layer. The durable offline store underneath it is split into **two databases**:
 
 - **game-data DB** (`game-data.bytes`) — all global authored content (base creatures, abilities, status conditions, growth profiles, items, spawner templates + pools, NPC definitions + teams + inventory, quest templates/objectives/requirements/rewards, `game_assets`, level/exp tables). Read-only at runtime, built as a versioned artifact at build time, and patched via Addressables.
-- **player-data DB** (`player-data.bytes`) — per-account/per-trainer saves. Mutable; migrated in place on app update.
+- **player-data DB** (`playerData.bytes`) — per-account/per-trainer saves. Mutable; migrated in place on app update.
 
 The registry's data ultimately originates from game-data content (offline) or the server manifest (online). A content update patches the game-data Addressable and **never touches player saves**. See the [Content Pipeline (Two-Database Model)](?page=unity/17-content-pipeline) page for the full build/ship/adopt flow and the build-time referential-integrity checks.
 

@@ -609,7 +609,9 @@ both sides of the seam:
   `[M7019]` line per re-key. Later seeds (M14002) address objectives by content key + sort order,
   so the re-key does not strand them. Pinned by `ObjectiveTemplateIdAlignmentTests` (SQLite + Postgres,
   18 cases, including `Chain_BlockedRowReadFirst_IsRekeyedOnceHolderMoves` and
-  `Swap_EachHoldingTheOthersDerivedId_IsResolved`).
+  `Swap_EachHoldingTheOthersDerivedId_IsResolved`). The two-phase version (`99b283b`) is only on
+  feature/retire-welcome; cr-api PR #69 (`fix/quest-objective-id-align`, head `f274715`) still carries
+  the earlier single-phase M7019, which mishandles chains and swaps, and must not be merged on its own.
 
 ### Quest endpoints are token-authoritative for the account
 

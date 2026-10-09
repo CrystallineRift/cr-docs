@@ -23,7 +23,7 @@ The `IGameConfiguration` abstraction is unchanged — the rest of the codebase c
 The offline SQLite store is split into **two databases** with different lifecycles:
 
 - **game-data DB** (`game-data.bytes`) — global authored content (base creatures, abilities, status conditions, growth profiles, items, spawner templates + pools, quest templates/objectives/requirements/rewards, `game_assets`, level/exp tables). Read-only at runtime. Built at build time as a versioned artifact and patched via Addressables.
-- **player-data DB** (`player-data.bytes`) — per-account/per-trainer saves (trainers, inventories, generated creatures, quest instances, stats, battles, spawn history, auth) **plus the per-trainer NPC instance tables** (`npcs`, `npc_creature_team`, `npc_inventory`). Mutable; migrated in place on app update.
+- **player-data DB** (`playerData.bytes`) — per-account/per-trainer saves (trainers, inventories, generated creatures, quest instances, stats, battles, spawn history, auth) **plus the per-trainer NPC instance tables** (`npcs`, `npc_creature_team`, `npc_inventory`). Mutable; migrated in place on app update.
 
 > **NPC instance tables live in player-data, not game-data.** `INpcRepository` and `INpcCreatureTeamRepository` are bound to `LocalDataSources.PlayerData.OfflineSource` in `LocalDevGameInstaller`, co-located with `npc_inventory` (so merchant-purchase transactions and FK integrity stay on one physical DB). The `npcs` rows are per-`(account, trainer)` runtime save-data created by `EnsureNpcAsync` at world bootstrap — not designer content — so binding them to the adopted, read-only `game-data.bytes` was wrong: adoption could wipe runtime NPCs. NPC *definitions* (designer content) still flow through the content registry, not the offline `npcs` table.
 
@@ -216,11 +216,11 @@ Unity creates the SQLite files under `Application.persistentDataPath`. `Database
 
 Database files use the `.bytes` extension (not `.db`) so Unity's asset pipeline does not try to import them as binary assets. SQLite itself does not care about the extension.
 
-The offline store is two databases: `game-data.bytes` (global authored content, read-only) and `player-data.bytes` (per-trainer saves, mutable). See [Content Pipeline](?page=unity/17-content-pipeline) for how each is built and updated.
+The offline store is two databases: `game-data.bytes` (global authored content, read-only) and `playerData.bytes` (per-trainer saves, mutable). See [Content Pipeline](?page=unity/17-content-pipeline) for how each is built and updated.
 
 If you need to reset all local state (e.g., after a breaking schema migration):
 1. Stop the Unity Player.
-2. Delete the `.bytes` files from `Application.persistentDataPath`. To reset only saves while keeping content, delete `player-data.bytes` and leave `game-data.bytes`.
+2. Delete the `.bytes` files from `Application.persistentDataPath`. To reset only saves while keeping content, delete `playerData.bytes` and leave `game-data.bytes`.
 3. Hit Play — migrations recreate them fresh.
 
 The database files should be listed in `.gitignore` and never committed. They are local developer state.

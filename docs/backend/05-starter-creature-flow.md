@@ -251,10 +251,11 @@ Known windows, accepted: a process that dies between steps 4 and 5 leaves a crea
 that dies during step 6 leaves some items missing; a `GenerateStarterAsync` that persists the creature
 and then throws leaves that creature unowned.
 
-**Why.** The starter used to be the Welcome quest's reward, claimed when the client completed the
-quest. The authority now grants it, and M7020 retires Welcome in the same change (see
-[Quest System](?page=backend/07-quest-system)), so there is no second grant. Trainers who already
-claimed Welcome keep both creatures; no cleanup was done.
+**Why.** `POST /trainer` already granted the starter inline, but the Welcome quest's reward, claimed
+when the client completed the quest, added a second creature and the potions. The service moves the
+inline grant into one creation path and adds the potions there, and M7020 retires Welcome in the same
+change (see [Quest System](?page=backend/07-quest-system)), which removes the duplicate grant. Trainers
+who already claimed Welcome keep both creatures; no cleanup was done.
 
 Tests: `TrainerCreationServiceTests` (27), and `CR.Api.IntegrationTests.TrainerCreationHttpTests`
 (real HTTP: account → token → create → all inventory ids non-null, one starter on the team and

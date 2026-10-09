@@ -27,15 +27,19 @@
   giver moves from `demo-questgiver-area-1` to Philroe (`demo-merchant-area-1`) where it still holds M14002's
   value; M14002's own entry is edited for fresh databases. Instance and progress history is untouched;
   stranded Welcome instances never complete or pay.
-- **NPC ensure:** `EnsureWorldNpcAsync` takes the NPC's type and name from the content registry; unknown
-  keys are still ensured as a plain `Npc`; `POST /api/v1/npc/ensure` ignores the body's `npcType` and gets
-  the `PlayerIntent` rate limit.
+- **NPC ensure:** the type lookup moves into `EnsureWorldNpcAsync`, which also takes the NPC's name from
+  the content registry and reconciles the name on upsert; unknown keys are still ensured as a plain `Npc`;
+  `POST /api/v1/npc/ensure` gets the `PlayerIntent` rate limit. (Ignoring the body's `npcType` and taking
+  the type from the registry is already on cr-api main, since route lockdown round 1.)
   → [Starter Creature Flow — The Starting Kit](?page=backend/05-starter-creature-flow), [Quest System — Welcome is retired](?page=backend/07-quest-system), [NPC System](?page=backend/02-npc-system)
 
 ## 2026-10-09 — M7019 objective-id alignment uses a two-phase re-key (pending deploy)
 
-- **Status:** pending deploy (cr-api feature/retire-welcome, which carries `fix/quest-objective-id-align`,
-  cr-api PR #69). M7019 is deployed nowhere yet.
+- **Status:** pending deploy (cr-api feature/retire-welcome). M7019 is deployed nowhere yet. The two-phase
+  re-key (`99b283b`) is **only on feature/retire-welcome**. cr-api PR #69 (`fix/quest-objective-id-align`,
+  head `f274715`) is the earlier single-phase M7019, which mishandles chains and swaps: do not merge #69 on
+  its own. Supersede it with feature/retire-welcome, or push `99b283b` to `fix/quest-objective-id-align`
+  first.
 - **What M7019 does:** re-keys every live `quest_objective_template` row to
   `QuestObjectiveTemplateIds.Derive(template, sortOrder)` and repoints
   `quest_objective_progress.objective_template_id`. That fixes the HUD quest tracker staying at 0/N after a

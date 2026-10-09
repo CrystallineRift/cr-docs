@@ -301,6 +301,8 @@ Task<NpcBase> EnsureWorldNpcAsync(Guid accountId, Guid trainerId, string content
 The caller names only the key. The type and name come from the NPC content-registry row (content
 world `00000000-0000-0000-0000-000000000001`, `ContentWorldId`) for that key. Choosing the type is an
 outcome, not an intent: a client that could say "Trainer" minted a battle identity for any key.
+The type part is already on main, in the `POST /api/v1/npc/ensure` handler (see below); this method
+moves that lookup into the domain service and adds the registry name.
 
 - **Registered key:** ensured with the registry's `NpcType` and name (the key when the registry name is blank).
 - **Unregistered key:** ensured as a plain `NpcType.Npc` named by its key, with a warning in the log. Unknown keys are **not refused**; that ruling is unchanged.
@@ -311,7 +313,7 @@ Tests: `EnsureWorldNpcAsync_RegisteredKey_TakesTypeAndNameFromRegistry`,
 `EnsureWorldNpcAsync_UnregisteredKey_EnsuresPlainNpcNamedByKey`, the name-reconciliation cases in
 `NpcRepositorySqliteTests` and `NpcEnsureNameRepositoryTests` (Postgres), and
 `RouteLockdownRound2HttpTests` (an unknown key sent with body `npcType = 1` comes back as type 2,
-`Npc`, named by its key).
+`Npc`, named by its key; the type half of that test is already on main).
 
 The team inventory is created (via the `CreateNpcAsync` transaction below) **only when the returned row is genuinely new** — i.e. the upsert's `RETURNING creature_team_inventory_id` came back `null`. An existing/revived NPC keeps its current team inventory and is returned as-is.
 
@@ -455,7 +457,7 @@ as shown.
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/api/v1/npc/ensure-starter` | `EnsureStarterNpc` — idempotent upsert with slot 1 creature |
-| `POST` | `/api/v1/npc/ensure` | `EnsureNpc` — idempotent bare NPC creation (no creatures). Pending deploy: `PlayerIntent` rate limit, type and name from the content registry, the body's `npcType` ignored |
+| `POST` | `/api/v1/npc/ensure` | `EnsureNpc` — idempotent bare NPC creation (no creatures). The type comes from the content registry and the body's `npcType` is ignored (on main). Pending deploy: the name from the registry and the `PlayerIntent` rate limit |
 | `POST` | `/api/v1/npc/{npcId}/ensure-creature-team` | **Retired (410).** `EnsureNpcCreatureTeam` — idempotent multi-slot team seeding; DLL method still called internally, see note below |
 | `POST` | `/api/v1/npc/{npcId}/ensure-items` | **Retired (410).** `EnsureNpcItems` — idempotent item inventory seeding; DLL method still called internally |
 | `POST` | `/api/v1/npc/{npcId}/use-battle-item` | **Retired (410).** A trainer NPC's own in-battle item use is decided and applied entirely server-side now, inside `BattleTurnDomainService.SubmitTurnAsync` — see [Battle Extensions](?page=unity/24-battle-extensions) |
@@ -654,11 +656,11 @@ POST /api/v1/npc/ensure
 
 The account comes from the token (`context.GetAccountId()`), never the body. The response also carries `battleTrainerId`, `name` and `isRematchable`.
 
-**Pending deploy (cr-api feature/retire-welcome):**
-- The handler calls `EnsureWorldNpcAsync`, so the type and name come from the content registry and **the body's `npcType` is ignored**. `EnsureNpcRequest.NpcType` stays on the record for wire compatibility and will be dropped with the Unity follow-up. An unregistered key is ensured as a plain `Npc`.
-- The route carries `RequireRateLimiting(RateLimitPolicies.PlayerIntent)`, like the talk and gift intents (`RateLimitCoverageHttpTests.The_npc_ensure_route_carries_the_player_intent_policy`).
+**On cr-api main today** (since route lockdown round 1, `aac4e0d`): the handler resolves the type from the NPC content registry (`ResolveRegisteredNpcTypeAsync`) and **never reads the body's `npcType`**, so a client cannot mint a `Trainer` identity by claiming one. A key the registry does not know is ensured as a plain `Npc`, with a warning in the log. `EnsureNpcRequest.NpcType` stays on the record for wire compatibility only. The upsert's no-downgrade rule still applies to the registry's type: a generic `Npc` ensure never overwrites an existing type, and a registry type such as `Trainer` upgrades a row previously created as a generic `Npc`. A soft-deleted NPC is revived rather than re-created. Pinned by `RouteLockdownRound2HttpTests` (an unknown key sent with body `npcType = 1` comes back as type 2, `Npc`).
 
-Before that change (what production runs today): `npcType` is optional and defaults to `"Npc"`. No-downgrade on conflict: a default `Npc` ensure never overwrites an existing type, but a specific type (e.g. `Trainer`) upgrades a row previously created as a generic `Npc`. A soft-deleted NPC is revived rather than re-created.
+**Pending deploy (cr-api feature/retire-welcome):**
+- The registry lookup moves into `EnsureWorldNpcAsync`, which also takes the NPC's **name** from the registry, and the upsert reconciles the name on conflict (see the `EnsureWorldNpcAsync` subsection above). `EnsureNpcRequest.NpcType` will be dropped with the Unity follow-up.
+- The route carries `RequireRateLimiting(RateLimitPolicies.PlayerIntent)`, like the talk and gift intents (`RateLimitCoverageHttpTests.The_npc_ensure_route_carries_the_player_intent_policy`).
 
 ### `POST /api/v1/npc/{npcId}/ensure-items` — EnsureNpcItems
 
