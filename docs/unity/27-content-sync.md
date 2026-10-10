@@ -156,6 +156,12 @@ the new one, never none — and **refuses a payload with no templates** (`400`, 
 rather than emptying the spawner. Studio never sends `allowEmpty`; a trainer with no authored slots
 is a push error to fix in the Editor, not a server state.
 
+The same route accepts the spawner's optional `description` and `battleArenaKey`: null, absent or blank
+keeps the server's value, a non-blank value sets it (trimmed), and a spawner the push creates starts with
+an empty description and no arena key. Clearing either stays a Studio web action (the by-content-key PUT).
+This is the server contract; a Studio build only delivers an authored arena key (`meadow-arena`) or
+description once its push body sends them.
+
 ## Elemental reactions and the damage matrix
 
 Both are authored content as of 2026-09-03, and both are read by the **offline**

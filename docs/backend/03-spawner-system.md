@@ -345,10 +345,12 @@ POST /spawner/{spawnerId}/spawn
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/api/v1/spawners/sync-config` | Upsert a full spawner (pools + templates) from a `SpawnerDefinition` SO, or a trainer's team from a `TrainerBattleDefinition`. Templates may carry an optional `id` (deterministic, preserved verbatim) and `progressionSetName`. |
+| `POST` | `/api/v1/spawners/sync-config` | Upsert a full spawner (pools + templates) from a `SpawnerDefinition` SO, or a trainer's team from a `TrainerBattleDefinition`. Templates may carry an optional `id` (deterministic, preserved verbatim) and `progressionSetName`. The spawner header may carry an optional `description` and `battleArenaKey` (rule below). |
 | `GET` | `/api/v1/spawners/by-content-key/{contentKey}/config` | Full config (header + pools + creature templates) for one spawner, by `content_key`. Used by Crystalline Rift Studio pull. |
 
-Request body mirrors `SpawnerConfigSyncRequest` (contentKey, displayName, maxCapacity, spawnCooldownSeconds, pools[], allowEmpty). `allowEmpty` defaults to false: a request whose pools carry no templates is refused with `400` rather than emptying the spawner.
+Request body mirrors `SpawnerConfigSyncRequest` (contentKey, displayName, maxCapacity, spawnCooldownSeconds, description, battleArenaKey, pools[], allowEmpty). `allowEmpty` defaults to false: a request whose pools carry no templates is refused with `400` rather than emptying the spawner.
+
+`description` and `battleArenaKey` are optional and follow one rule: **null, absent or blank keeps the server's value** (a client that predates the fields sends neither, and one with nothing authored sends null); a non-blank value sets it, trimmed. A spawner the sync *creates* starts with an empty description and no arena key. Clearing either one stays a Studio web action: `PUT /api/v1/spawners/by-content-key/{contentKey}` writes both exactly as sent, so a null there clears. The same two fields ride on the `spawners[]` items of `POST /api/v1/sync/batch`, and the offline `LocalSpawnerSyncClient` hands the same domain request to the same service.
 
 ### Crystalline Rift Studio sync (push / pull)
 
@@ -578,6 +580,7 @@ identical to the migration's or online and offline play at different difficultie
 - **`growthProfileName` typo in a SpawnerDefinition template.** If the name doesn't match an existing `GrowthProfile` row, the template is skipped with a warning and no creature will spawn. Check server logs for `GrowthProfile named '...' not found`. Seeded growth profiles are `"Gains more strength"` and `"Fast Experience"`.
 - **`creatureContentKey` mismatch.** If the creature content key doesn't match a `BaseCreature` row, the template is skipped silently. Verify via `GET /api/v1/creatures?contentKey=...`.
 - **Sync overwrites pools on every push.** The sync-config endpoint replaces all existing pools and templates (atomically). If you have manually added pools via REST and then the SO syncs, the manual pools will be replaced. Use the SO as the single source of truth.
+- **`UpdateSpawnerAsync` never writes `battle_arena_key`.** Its UPDATE covers the generic fields only, because `PUT /api/v1/spawners/{id}` builds its entity without an arena key and writing the column there would clear it. The config sync therefore refreshes an existing spawner's header (name, capacity, cooldown, description, arena key) through `ISpawnerRepository.UpsertDefinitionByContentKeyAsync`, which writes every field it is handed, and passes the kept values back in. Setting `Spawner.BattleArenaKey` and calling `UpdateSpawnerAsync` stores nothing.
 - **A push with zero templates is refused.** `400` with a message naming `allowEmpty`. Either author at least one template, deactivate the spawner, or — if emptying it really is the intent — send `allowEmpty: true` (Studio does not; this is deliberate).
 - **`deactivate` only toggles `is_active`.** It does not affect spawn state — there is none. Deactivation makes the validation phase reject spawns until you reactivate.
 
