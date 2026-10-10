@@ -113,7 +113,44 @@ replaces its own `[Story …]` root and leaves hand-placed objects alone:
   (all in this cell — Unity cannot serialise cross-scene references), the three story encounter zones, the two
   place triggers, Ahksun's barks, the farm (gate, fence, barn, Izzandra, `BarnSleepInteraction`).
 
+Before saving `arrival`, `vista` and `descent`, `StorySceneBuilder` calls `CorridorStoryPlacer.ApplyTo(scene, CorridorLayout.LoadDefault(), dryRun: false)`,
+so a rebuild puts every story object back where the corridor layout says (the constants in `StorySceneBuilder` are the blockout
+positions and are not edited). With no layout asset it is a no-op with a note.
+
 After a rebuild run `cr_world_refresh_activatables --args c,r`, `cr_world_bake_proxy --args c,r` and `cr_world_validate`.
+
+## Beat map on the built corridor
+
+The corridor builder ([Open World → Terrain and the corridor builder](?page=unity/37-open-world)) moved, snapped or resized
+these objects through its adjustment rows (each row carries its reason in `Act1Corridor.asset`); component fields (keys,
+dialogue, quest gates, radii, escort settings) are never edited.
+
+| # | Beat | Object | Where on the built corridor |
+|---|---|---|---|
+| 1 | spawn | `WorldLayout` start (208, 30.1, 1105), yaw 180 | the 1a shelf, ground 30.0; nothing solid within 1.5 m |
+| 2 | Ahksun rises | `Event_arrival-ahksun-rises` | box widened to the whole glade, x 184-231, z 1091-1100 (A3); rims close every other exit |
+| 3 | crystal at the cliff edge | `Ahksun Crystal (placeholder)` | moved to (205, 30, 1090), 2.2 m inside the rim, in a broken rune ring (A5) |
+| 4 | inscription | `Readable_RuinInscription` (193.6, 30, 1090.6) | unchanged; a rune rock stands 1.2 m south of it |
+| 5 | first sight of Mirandale | `Bark_ahksun-mirandale-first-sight` | box widened to x 206-226 on the balcony (A6); the gate posts frame the city |
+| 6 | pillar shatters | World `Event_arrival-pillar-shatters` | box spans the whole shoulder, x 96-300, z 1051-1065 (W1) |
+| 7 | descent, ambush seen | — | goat path legs B/C; Leg C looks down on the terrace |
+| 8 | wagon: Hellcat bond, gaterbear First Battle | Philroe, WP0, `[Bond Cue]`, gaterbear zone | y-snapped onto the 4.2 m terrace; the cart is posed nose-down against a boulder (C13) and the grey rock cube parked |
+| 9 | escort, descent bark, switchback | `NpcEscort`, `Bark_ahksun-descent`, `story-switchback` | ET track WP0 → WP1; waypoints, bark and trigger y-snapped |
+| 10 | capture lesson | `story-capture-lesson` | WP2 in the flat lesson clearing (pad 0.0) |
+| 11 | meadow edge | `Bark_ahksun-meadow` | WP2 → WP3 |
+| 12 | farm gate, Runaway Cargo offer | WP4 | moved to the lane (210.5, 0, 974.5), yaw 90, facing the gate (C12); still inside `story-philroes-farm` |
+| 13 | Runaway captures | `story-runaway-farm` (238, 955) r 9 | meadow south of the yard fence |
+| 14 | Izzandra, barn sleep, morning | Izzandra (224, 978), Barn Sleep (231.5, 983), morning spot (215.5, 976) | through the doorless gate |
+
+**The farm (2a).** The eight story fences are re-lined N-S as the yard's west fence around the gate frame (C27-C34); the gate's two
+door children are parked so the opening is walkable (C25, C26; a broken leaf leans on the fence instead). The north and east yard
+fences are closed, so a player coming down from the wagon follows the track past the lesson. The cabin (Village `house_10`) has
+chimney smoke and a lantern; the barn has its own lantern over Barn Sleep. Keep-outs (legacy `entrance` 2.5 m, the barn apron,
+Barn Sleep 3.2 m, Izzandra 3.5 m, morning spot 1.5 m, a 3 m corridor gate → Izzandra) are checked by `cr_world_check_corridor`.
+
+**Village parked in open mode.** The migrated `[Village]` group and the demo quest-giver are parked in `World_c0_r3` (C4, C5); legacy
+mode keeps `Areas/Village.unity`. The market broker moved to the lane's east end beside a stall at (252.5, 964.6) (C6). The `village`
+visit trigger and the `entrance` spawn point are kept.
 
 ## Small story components
 
@@ -155,6 +192,7 @@ and its first region entry still shows flavour; it needs `IVisitedPlacesSource`,
 startup UI to a new offline trainer and walks every beat through the player's own entry points (readables,
 events, NPC conversations, `SubmitPlayerAction` with `BattleActionParser.Serialise(BattleAction)`, teleports through
 `IOpenWorldPlayer`). One line per step in
-`Temp/i2/story_smoke.txt`; `cr_story_smoke_status` shows the phase. Offline, the gaterbear needs its creature
-row in the local game-data (the server content sync soft-deletes creatures the server does not have), so push
-`creature_gaterbear` before relying on the wagon fight.
+`Temp/i2/story_smoke.txt`; `cr_story_smoke_status` shows the phase. Its teleports still use the blockout heights, so
+`Teleport` lifts each one onto the terrain + 0.2 (`GroundLiftRule`) when it would land underground. Offline, the gaterbear needs its creature
+row in the local game-data (the server content sync soft-deletes creatures the server does not have); production content
+with `creature_gaterbear` was pushed and the offline floor rebaked on 2026-10-09.
