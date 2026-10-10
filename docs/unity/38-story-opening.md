@@ -155,11 +155,14 @@ visit trigger and the `entrance` spawn point are kept.
 ## Small story components
 
 - `QuestGatedCollider` — keeps a trigger collider enabled only while `QuestGateRule` says so (required quest
-  complete, blocker not complete); re-checked every frame because `SpawnerEncounterBehaviour.Activate` re-enables
-  the collider at world init. The gaterbear zone opens after Welcome and closes after First Battle; the lesson
-  zone opens after First Battle and closes after First Capture. Server side, Welcome is retired by M7020 and the
-  starter is granted at trainer creation (pending deploy, cr-api feature/retire-welcome; see
-  [Quest System](?page=backend/07-quest-system)); the Unity changes to the escort and gates are pending.
+  complete, blocker not complete, required dialogue heard); re-checked every frame because
+  `SpawnerEncounterBehaviour.Activate` re-enables the collider at world init. The gaterbear zone has no required
+  quest: it is armed from world start until First Battle completes, and waits until Philroe's opening
+  (`dialogue-merchant-area-1`) has been heard. The lesson zone opens after First Battle and closes after First
+  Capture. Server side, Welcome is retired by M7020 and the starter is granted at trainer creation (merged to cr-api
+  `main` in PR #70; see [Quest System](?page=backend/07-quest-system)). The Unity side is in place: the gate fields
+  above, and the escort waits for Philroe's post-win lines at the wagon before it walks (F7). The corridor build-out
+  does not touch any of these fields (it moves transforms only).
 - `ProximityBark` — one StoryText line when the player's root collider (tag `Player`) enters; once per trainer
   under `event.<key>`, written only when the line was actually shown (a line suppressed by a conversation is retried
   while the player stays inside); anchored on the player (Ahksun) or on a transform (Izzandra).
@@ -196,3 +199,11 @@ events, NPC conversations, `SubmitPlayerAction` with `BattleActionParser.Seriali
 `Teleport` lifts each one onto the terrain + 0.2 (`GroundLiftRule`) when it would land underground. Offline, the gaterbear needs its creature
 row in the local game-data (the server content sync soft-deletes creatures the server does not have); production content
 with `creature_gaterbear` was pushed and the offline floor rebaked on 2026-10-09.
+
+Capture beats are random (the capture roll is the authority's), so the runner plays them like a player would. A missed
+lesson shard is retried (up to 3 times; the lesson zone stays armed until First Capture completes). Runaway Cargo gets up to
+8 attempts. Between attempts the runner heals with potions through `IItemUseDomainService` (the bag screen's use-item
+intent), buys potions and shards from Philroe through the merchant purchase intent when the bag is empty, and leaves the zone
+as soon as each battle closes, because standing in it re-arms the next encounter. A repeat-capture battle that the zone has
+already started is adopted rather than reset. Trainers are named `Smoke<MMddHHmmss>`. The runaway mode fails unless the barn
+reads `Sleep` after the claim, and every mode that reaches the barn fails unless the morning fires and reads back `Closed`.

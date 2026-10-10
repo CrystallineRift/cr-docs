@@ -34,7 +34,7 @@ All game assets load through `IOpenWorldAssets`; the mode comes from `WorldModeS
 Hysteresis: unload only past ring radius + 32 m; Active demotes at 40 + 16 m. One load and one unload in flight at a time.
 `CellActivator` (one per cell scene) promotes (runs the cell's `IWorldInitializable`s once per visit, enables activatable
 behaviours and animators) and demotes (disables them, `CullCompletely`). A re-promotion re-runs world init, like today's
-per-load. **World init per visit:** `IWorldInitializable`s of a cell run on each promotion (merchant stock re-rolls per visit); ones on inactive objects (parked content, e.g. the demo quest-giver the corridor build parks) are skipped; a trainer switch mid-promotion restarts the cell's promote with the new context. A failed load retries with backoff (1, 2, 4 s) and does not block other cells.
+per-load. **World init per visit:** `IWorldInitializable`s of a cell run on each promotion (merchant stock re-rolls per visit); ones on inactive objects (parked content, e.g. the demo quest-giver the corridor build parks) are skipped and logged by name, so an initializable must be active at promotion: one switched on later in the visit (a OneShotWorldEvent's `enableOnPlay`, a story beat) is not initialized until the next promotion, and nothing in the scenes does that today (`IWorldInitializable` states the contract); a trainer switch mid-promotion restarts the cell's promote with the new context. A failed load retries with backoff (1, 2, 4 s) and does not block other cells.
 
 **Hold at edge.** If the player outruns streaming (resume, slow Deck) `WorldEdgeHold` covers the screen and gates gameplay input
 (`GameplayInputHolds`, which `PlayerInputGate` honours) while a built cell within ~4 m is not yet Active, then releases. After 5 s it
@@ -81,7 +81,7 @@ Menu `CR/World/...`; every CLI command is `cr_world_*` and takes **one string** 
 | `cr_world_refresh_activatables` | `"c,r"` or `""` (every built cell) | Re-collects a cell's activatables (see below) and saves the cell. |
 | `cr_world_validate` | none | Objects outside their cell (+/- 2 m, looks inside migrated containers and nested gameplay placements), built cells missing from Build Settings, regions with no profile, unresolved NPC keys, ocean spawns, terrain seams > 1 mm, > 4 terrain layers (warning), corridor story objects buried > 0.5 m, corridor builder children outside their cell. Summary `E error(s), W warning(s), I info`; checks skipped for a missing provider/mask/profile set show as warnings. |
 | `cr_world_bake_proxy` | `"c,r"` | Bakes the cell's far-field proxy to `Resources/OpenWorld/Proxies/Proxy_c{c}_r{r}.prefab` via `ICellProxyBaker` (built-in fallback baker: copies of enabled renderers ≥ 8 m, one LOD level per group, shadows off, plus a `TerrainProxy` per terrain; Amplify baker later). |
-| `cr_world_add_lods` | `"c,r"` | Adds `LODGroup`s to the cell's large renderers (grouped; small clutter gets a cull distance); vendor LODGroups (from the prefab's source chain, variants included) are kept and counted. Cell scene must exist; saves it. |
+| `cr_world_add_lods` | `"c,r"` | Adds `LODGroup`s to the cell's large renderers (grouped; small clutter gets a cull distance); vendor LODGroups (from the prefab's source chain, variants included) are kept and counted. Idempotent: rewrites a group only when it differs from the plan and saves the cell only when it wrote one. The corridor build's `lods` step runs the same pass over its owned containers. |
 | `cr_world_audit_vendor_lods` | `"c,r[,fix]"` | Lists vendor LODGroups carrying instance overrides; `fix` reverts them and saves the cell. Run before `cr_world_add_lods`. |
 | `cr_world_build_backdrop` | none | Builds the ocean plane + mountain ring blockout prefab (`OpenWorld/WorldBackdrop`), instanced in `World.unity`; skips ring cubes over built cells and adds the `VistaGround` (land mesh of unbuilt cells near Mirandale, `M_VistaGround.mat`). |
 | `cr_world_*_corridor` | see below | Corridor builder: seed, build, check, render, revert (section "Terrain and the corridor builder" below). |
@@ -187,7 +187,9 @@ Steps: **height** (constraints → harmonic SOR solve 4/2/1 m → bicubic 0.5 m 
 four terrains, so shared edges are bit-identical), **paint** (grass/path/rock/snow-or-farmfield per 0.5 m texel), **trees** (terrain
 tree instances, vendor LODGroups kept), **details** (grass/flowers, zero under every placed footprint + 0.3 m), **dressing**
 (landmarks, polylines, rows, composites, scatter, combined crop meshes), **guards** (edge guards), **adjust** (the §3 rows through
-`CorridorStoryPlacer`), **environment** (World light, fog, sky, region profiles).
+`CorridorStoryPlacer`), **environment** (World light, fog, sky, region profiles), **lods** (last: the `cr_world_add_lods` grouping and
+vendor guard over the renderers in the owned containers only, so a child an earlier step created or recreated gets its LODGroup before the
+hashes are recorded; idempotent, an unchanged container gets no write).
 
 ### Containers and idempotency
 
@@ -202,9 +204,9 @@ and the World/RegionProfile mood values, and every first touch stores the origin
 - A content hash per owned container and per TerrainData (component types, transforms, colliders, materials, lights, terrain settings)
   is stored in the manifest by every saved build; the check's `hashes` group fails on drift. A second identical build reports
   **0 changes** and saves no scene.
-- `cr_world_add_lods` adds LODGroup components to builder children, which changes their container hashes: run one full build
-  afterwards (0 changes) to re-record them. A child the builder later **recreates** loses its LODGroup, so re-run `cr_world_add_lods` for
-  that cell after a build that created or recreated children.
+- LODGroups on builder children come from the build's own **lods** step, so a recreated child gets its group back in the same build.
+  `cr_world_add_lods` groups the rest of the cell (renderers outside the owned containers, e.g. the migrated Meadow); it rewrites a group
+  only when its levels, members or bounds differ from the plan, saves the cell only then, and reports `n written`.
 
 ### Checks (`cr_world_check_corridor`)
 
@@ -244,7 +246,9 @@ built-cell borders that face unbuilt cells (584 today); none within 20 m of the 
   whose model root has no LODGroup) are recognised; `cr_world_add_lods` skips and counts them.
 - `cr_world_bake_proxy` copies only the last LOD level of a group, skips disabled renderers (vendor collider hulls), and adds a
   `TerrainProxy` child per terrain: 65 × 65 mesh, skirts to y −10 on edges facing unbuilt cells, 256² colour map from the layers
-  (`Resources/OpenWorld/Proxies/Terrain/ProxyTerrain_c{c}_r{r}.asset/.png/.mat`).
+  (`Resources/OpenWorld/Proxies/Terrain/ProxyTerrain_c{c}_r{r}.asset/.png/.mat`). The material is saved with URP's opaque setup already
+  applied (RenderType tag, MotionVectors pass off, `_MainTex` = `_BaseMap`), so URP does not rewrite it on first play. A rebake does
+  renumber the proxy prefab's local fileIDs (same content); revert that churn if nothing else changed.
 
 ### Performance budget (Steam Deck 1280 × 800)
 

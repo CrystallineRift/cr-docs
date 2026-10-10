@@ -230,8 +230,7 @@ and rebuild with `steps=adjust`. Never edit component fields through the builder
 
 ```bash
 unity cmd --project-path $P cr_world_audit_vendor_lods --args 0,4      # and 0,3 / 1,4 / 1,3; add ,fix to revert overrides
-unity cmd --project-path $P cr_world_add_lods --args 0,4               # each cell
-unity cmd --project-path $P --timeout 600 cr_world_build_corridor       # 0 changes; re-records the content hashes
+unity cmd --project-path $P cr_world_add_lods --args 0,4               # each cell; the builder's own children already got theirs (lods step)
 unity cmd --project-path $P cr_world_refresh_activatables --args ""
 unity cmd --project-path $P cr_world_bake_proxy --args 0,4             # each cell
 unity cmd --project-path $P cr_world_validate                          # 0 errors
@@ -244,8 +243,9 @@ the terrains. The blockout comes back.
 
 ### Common mistakes
 
-**The check fails with `hash … changed since the last build`.** A builder object was edited by hand (or `cr_world_add_lods` ran). Record
-the tweak as an override, or run a full build to re-record the hashes.
+**The check fails with `hash … changed since the last build`.** A builder object was edited by hand. Record the tweak as an override,
+or run a full build to re-record the hashes. (`cr_world_add_lods` no longer causes this: the build's `lods` step already made the same
+groups, so it writes nothing under the owned containers.)
 
 **A story object is reported "moved by hand".** It is neither at its row's `from` nor its `to`. Record it, or fix the row.
 
