@@ -500,11 +500,17 @@ encrypted prefs store) under a `GameConfigurationKeys` constant and is pushed li
 | Graphics | **UI Scale** slider (`ui-scale-slider`, 70–150%) | `UiScale` | `UiScaleApplier.SetScale` |
 | Graphics | **Quest Tracker** toggle (`quest-tracker-toggle`) | `QuestTrackerHidden` | `QuestTrackerPresenter.SetShown` |
 | Game | Combat Speed dropdown | `BattlePacingScale` | `BattlePresentationSequencer` at battle start |
+| Game | **Reduced Motion** toggle (`reduced-motion-toggle`) | `ReducedMotion` | `IFeelSettings`: the feedback director, the battle camera shake |
+| Game | **Screen Shake** dropdown (`screen-shake-dropdown`, 100% / 50% / Off) | `ScreenShake` (the `ScreenShakeLevel` number, 0 = Full) | `IFeelSettings`: `BattleCameraShakeResponder`, camera-motion Feel moments |
+| Game | **Rumble** toggle (`rumble-toggle`) | `RumbleDisabled` | `IFeelSettings`: `HapticsResponder` |
 
 The tracker key stores the **hidden** flag, not "shown": the tracker is on by default and
 `TryGet<bool>` cannot tell "never written" from `false`, so an absent key has to mean the default.
-The checkbox shows the positive. The rest of the Game card (volume, notifications, reduced motion,
-language) is still decorative.
+The checkbox shows the positive. The three game-feel rows go through `IFeelSettings`
+(see [Game Feel](?page=unity/39-game-feel)) and follow the same rule: Reduced Motion is a flag (off), Screen
+Shake is stored as the `ScreenShakeLevel` number so that an unset key (0) is Full, and Rumble is stored as
+"disabled" so that an unset key is on. The rest of the Game card (volume, notifications, language) is still
+decorative.
 
 ### UI scale
 
@@ -769,8 +775,8 @@ as a cancel, so no path leaves an item half-used or a modal stranded.
 
 - `TeamManagementView` is **not** used by `PlayerMenuWindow`. It is still used by
   `GameDataManagerController` and must not be deleted.
-- The System tab's Master Volume / Notifications / Reduced Motion / Language rows are still static
-  decoration; Look Sensitivity, Invert X/Y and Combat Speed are real and persist via
-  `IGameDataRepository`.
+- The System tab's Master Volume / Notifications / Language rows are still static
+  decoration; Look Sensitivity, Invert X/Y, Combat Speed, Reduced Motion, Screen Shake and Rumble are real
+  and persist via `IGameDataRepository`.
 - The `.evo-*` and `.friend-*` rules in `PlayerMenuWindow.uss` are now unused; they are kept so the
   stylesheet stays a superset while those features are unbuilt.

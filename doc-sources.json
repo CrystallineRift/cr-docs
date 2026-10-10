@@ -2083,5 +2083,29 @@
       ]
     },
     "description": "How to add a field to an existing cr-admin-web resource descriptor or add a whole new resource: FieldMeta/RowColumn kinds, fieldsFromSchema inference vs explicit override, the ResourceDescriptor shape, registry.ts registration, and the renderFieldsForm/descriptor.test patterns used to prove a field round-trips and validates."
+  },
+  "unity/39-game-feel": {
+    "docPath": "docs/unity/39-game-feel.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [
+        "Assets/CR/Core/Feedback/**/*.cs",
+        "Assets/CR/Core/Feedback/**/*.asmdef",
+        "Assets/CR/Game/Feedback/**/*.cs",
+        "Assets/CR/Content/Feel/**/*.prefab",
+        "Assets/CR/Content/Defs/FeedbackManifest.asset",
+        "Assets/CR/Content/Defs/Events/HeavyHit.asset",
+        "Assets/CR/Game/Battle/Arena/BattleCameraShakeResponder.cs",
+        "Assets/CR/Core/State/Events/CustomTypes/HpChangedData.cs",
+        "Assets/CR/Core/Wiring/Generated/GeneratedEventWiringBridge.cs",
+        "Assets/CR/UI/Text/SettingsText.cs",
+        "Assets/CR/Tests/Editor/Feel*.cs",
+        "Assets/CR/Tests/Editor/HapticsResponderTests.cs",
+        "Assets/CR/Tests/Editor/SceneFeedbackAnchorsTests.cs",
+        "ci/check-fx-keys.sh",
+        "docs/feedback-bindings.md"
+      ]
+    },
+    "description": "Game feel with More Mountains Feel 5.9.1: FeedbackBinding.feelPlayerAddress/intensity, CrFeelPlayerInfo motion classes (Cosmetic/CameraMotion/ScreenFlash/TimeScale/Haptic) and the engine-free settings gate, FeedbackDirector + FeelPlayerPool (preload, one pooled instance per address, anchor play, kill switch, per-moment timing), payload-aware intensity adapters (HpChangedData damage), Reduced Motion / Screen Shake / Rumble settings (IFeelSettings, FeelSettingsStore, GameDataFeelSettingsPersistence), HapticsResponder + MMF_CrRumble + RumbleCoalescer (Nice Vibrations gamepad rumble, reset on pause/focus/battle close), BattleCameraShakeResponder scaling, BattleOpponentCreature anchor, the ten authored moments under Content/Feel built by FeelMomentBuilder, HeavyHit Soap wiring, the Steam Deck budget and its content tests, check-fx-keys.sh feelPlayerAddress check, and what still needs cr-api (crit / super-effective)"
   }
 }

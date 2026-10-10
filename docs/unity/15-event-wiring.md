@@ -297,12 +297,12 @@ Computed in `BattleCoordinator` from existing outcome data. Tunable thresholds: 
 
 | Event | Payload | Fires when |
 |---|---|---|
-| `HeavyHit` | `HpChangedData` | Damage exceeds 30% of target's maxHp — wire to screen shake |
+| `HeavyHit` | `HpChangedData` (`Damage` carries the HP the action took off, as the authority reported it) | Damage exceeds 30% of target's maxHp. Has a Soap event asset (`Events/HeavyHit.asset`) and a wiring entry; the shake responder listens to the static bus, and a [Feel](?page=unity/39-game-feel) moment (`feel/hit-heavy`, a hit stop) answers the Soap event |
 | `LowHpEntered` | `string` creatureId | HP fraction crosses 30% downward (once per descent) — wire to heartbeat SFX, red border |
 | `CriticalHpEntered` | `string` creatureId | HP fraction crosses 10% downward (once per descent) — wire to faster heartbeat / panic music |
 
 ### Vibration tiers (`BattleEventsAdapter`)
-0-arg semantic haptic hooks. Wire each to a `ScriptableEventNoParam` and have one `HapticsResponder` translate the tier into platform-specific calls.
+0-arg semantic haptic hooks. `HapticsResponder` (`Assets/CR/Game/Feedback/`) subscribes to the static bus and drives the gamepad through Nice Vibrations: gated by the Rumble setting, one pulse per frame (the strongest), motors stopped on pause, focus loss and battle close. See [Game Feel](?page=unity/39-game-feel).
 
 | Event | Fires when |
 |---|---|

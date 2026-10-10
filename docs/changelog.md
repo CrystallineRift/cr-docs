@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-10-10 — Game feel: the Feel bridge, real comfort settings, rumble, and ten moments (cr-api-unity `feature/game-feel`)
+
+- **Bridge.** A feedback binding can now play a Feel player prefab (`feelPlayerAddress`, `intensity`). The prefab
+  declares what it does to the screen, time or hands (`CrFeelPlayerInfo`: Cosmetic, CameraMotion, ScreenFlash,
+  TimeScale, Haptic) and `FeedbackDirector` plays one pooled instance at the binding's anchor at
+  `intensity x what the event carried x what the settings allow`. The gate and the intensity rules are engine-free
+  (`CR.Core.Feedback.Logic`) and tested. `CR.Core.Feedback` references Feel; nothing else does. →
+  [Game Feel](?page=unity/39-game-feel)
+- **Settings made real.** System, Game: Reduced Motion (it was a static mock-up), Screen Shake (100 / 50 / 0 %) and
+  Rumble, persisted like Combat Speed. `BattleCameraShakeResponder` scales its force by them and stays the only thing that
+  shakes the camera in a battle.
+- **Rumble.** `HapticsResponder` finally drives a gamepad (Nice Vibrations) from the battle's `VibrationLight / Medium /
+  Strong` signals, gated, merged per frame, and reset on pause, focus loss and battle close.
+- **Ten moments** under `feel/`: hit, heavy hit (50 ms hit stop), faint (60 ms), capture wobble / fail / success, level
+  up, quest turn-in, item use, status applied. `HeavyHit` now has a Soap event asset and wiring. Critical hit and
+  super-effective are not done: the server reports neither (cr-api change described in the page).
+- **Anchors.** New `BattleOpponentCreature` anchor (a capture is about the opponent, not whoever was last cast at); the scene
+  anchors learn the actor, target and opponent when a battle opens.
+- **CI.** `ci/check-fx-keys.sh` also checks `feelPlayerAddress` against the Addressables catalogue.
+
 ## 2026-10-10 — Merchant stock resolved by the server; offline NPC registry seed M16100 (live)
 
 - **Merchant stock (cr-api `8324296`, PR #72, live 2026-10-10):** `NpcMerchantService.StockFromSpawnerAsync` now
