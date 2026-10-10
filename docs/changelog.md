@@ -11,12 +11,23 @@
   `INpcMerchantService.StockFromSpawnerAsync` is now `(accountId, trainerId, npcId, ct)`, with no `force` and no
   spawner key. The spawner's cooldown alone decides. A shop with no stock rows is rolled. A stocked shop is
   re-rolled once the cooldown has elapsed since its newest row's `updated_at`, and kept when the cooldown is 0. A
-  purchase restamps the row it buys from (unless that sells out), so trading defers a restock. The caller-key Debug
-  log is gone, and every `MerchantStockNotAllowedException` refusal is unchanged.
+  purchase that leaves stock behind restarts the cooldown (the row it bought from is restamped). A shop bought out
+  completely rolls again on the next ask, because the purchase path deletes a row it sells out; that is intended,
+  and cr-api `b37cf98` (same branch) pins both cases in `NpcMerchantServiceTests`. The caller-key Debug log is gone,
+  and every `MerchantStockNotAllowedException` refusal is unchanged.
 - **The route:** `POST /api/v1/merchants/{npcId}/stock-from-spawner` calls the new signature.
   `StockFromSpawnerRequest` keeps `SpawnerContentKey` and `Force`, now optional and ignored, so v0.1.2 to v0.1.7
   bodies still bind. `MerchantRestockHttpTests` posts a v0.1.7 body with `force: true` inside the cooldown and gets
   200 `{ stocked: 0 }` with the stock unchanged.
+- **Clearing a shop is content-write only (cr-api `2649a5f`, same branch):** a shop with no stock rows is always
+  rolled, so a player who could empty one could re-roll it inside the cooldown, and one could:
+  `DELETE /api/v1/merchants/{npcId}/inventory` was a player route that answered 200 `{ cleared: true }`, and the
+  next stock intent rolled. It is now merchant-stock authoring like the inventory add, update and remove routes and
+  `restock`: `RequireContentWrite`, with the operator naming `accountId` and `trainerId` in the query (400 when
+  either is empty), no ownership guard and no idempotency key. A player token gets 403 before the handler runs and
+  the stock stays; `MerchantRestockHttpTests` pins both sides. No shipped client calls it in gameplay. The client
+  router makes the clear offline-only, like the other authoring writes: online it throws `NotSupportedException`
+  and sends nothing (cr-api-unity `fix/merchant-restock-authority`, pending merge).
 - **M6024 (cr-api `7145c33`, same branch):** `M6024SetMerchantRestockCooldowns` sets 900 s on
   `starting-merchant-items` and `demo-merchant-area-1-items` … `demo-merchant-area-5-items`, only where the value is
   still 0 and the row is not deleted, so an authored cooldown wins. It stamps `row_version` and `updated_at`, is
@@ -35,7 +46,8 @@
   falls due mid-session restocks on the first visit of a later session.
 - **build-packages.sh (cr-api `c98c8df`):** the post-build test summary prints each suite's real result line
   instead of "(no summary)".
-- **Docs:** unity/18 (Restocking), backend/11 (Stocking a merchant, M6024), unity/03, unity/37; `doc-sources.json`.
+- **Docs:** unity/18 (Restocking), backend/11 (Stocking a merchant, M6024), backend/02 (merchant routes: who may
+  call each), backend/27 (the clear is no longer a keyed player route), unity/03, unity/37; `doc-sources.json`.
   → [Merchant Shop](?page=unity/18-merchant-shop#restocking)
 
 ## 2026-10-10 — Merchant stock resolved by the server; offline NPC registry seed M16100 (live)

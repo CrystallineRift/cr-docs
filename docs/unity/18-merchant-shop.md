@@ -108,7 +108,7 @@ is; a pad user has only that. Focus styles are deliberately brighter than hover 
 (`Assets/CR/Npcs/Runtime/Merchant/Logic/`), a router in front of the same `NpcMerchantService`
 the server runs. It samples `is_playing_online` **on every call** and routes:
 
-| Mode    | Stock, prices, buy, sell, stock-from-spawner | Authoring ops (add/remove/set multiplier) |
+| Mode    | Stock, prices, buy, sell, stock-from-spawner | Authoring ops (add/remove/clear/set multiplier) |
 |---------|-----------------------------------------------|-------------------------------------------|
 | Online  | `NpcMerchantClientUnityHttp` → `/api/v1/merchants/*` on the **game** server address | `NotSupportedException` — the server owns stock; use Crystalline Rift Studio |
 | Offline | local `NpcMerchantService` over `playerData.bytes` | local |
@@ -143,16 +143,33 @@ The authority rolls from the spawner that the merchant's NPC registry row names 
 
 | The shop | The authority |
 |---|---|
-| has no stock rows (never stocked, or every item bought out) | rolls it |
+| has no stock rows (never stocked, or bought out completely) | rolls it, whatever the cooldown |
 | has stock, and the cooldown is `0` | keeps it: 0 means "never auto-restock", not "every time" |
 | has stock, and the cooldown has not elapsed since the stock last changed | keeps it |
 | has stock, and the cooldown has elapsed | re-rolls it: clears the shop and stocks a fresh roll, so a bought-out item comes back |
 
 "Last changed" is the newest `updated_at` among the shop's `npc_inventory` rows. A roll stamps every
-row it writes, and a purchase that leaves a row behind restamps it, so buying from a shop pushes its
-restock back and a shop is not re-rolled under a player who is trading with it. A row that sells out
-is deleted and leaves no stamp. A roll that comes back empty keeps the old stock. The answer is
-`{ stocked }`, the number of distinct items rolled, or 0 when the stock was kept.
+row it writes. What a purchase does to the clock depends on what it leaves:
+
+- **A purchase that leaves stock behind restarts the cooldown.** When some of the item stays on the
+  shelf, its row is restamped, so a shop is not re-rolled under a player who is trading with it.
+- **A shop bought out completely rolls again on the next ask.** The purchase path deletes a row it
+  sells out, so buying the last of the last item leaves no stock rows, and a shop with no stock rows
+  is always rolled. This is intended, and `NpcMerchantServiceTests` pins it.
+
+A purchase that sells out one item while others remain deletes that row and restamps nothing, so the
+clock keeps running from the shop's last change. A roll that comes back empty keeps the old stock.
+The answer is `{ stocked }`, the number of distinct items rolled, or 0 when the stock was kept.
+
+**Clearing a shop is content-write only (Crystalline Rift Studio / operators); the client cannot clear
+or force a re-roll.** An empty shop is always rolled, so a clear followed by the stock intent would be a
+re-roll on demand. `DELETE /api/v1/merchants/{npcId}/inventory` therefore needs a content-write token,
+and the operator names `accountId` and `trainerId` in the query; a player token gets 403 and the shop
+is left as it was. In the client, `NpcMerchantOnlineOfflineService.ClearMerchantInventoryAsync` is an
+offline-only authoring write like the others (see
+[Where stock lives](#where-stock-lives-server-online-local-offline)): online it throws
+`NotSupportedException` and sends nothing. Offline it still clears the local database, and no game code
+calls it. See [NPC System → Merchant REST Endpoints](?page=backend/02-npc-system#merchant-rest-endpoints).
 
 ### When the client asks
 

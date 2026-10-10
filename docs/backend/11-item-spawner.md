@@ -75,13 +75,19 @@ server online, and offline the same service over local SQLite.
 1. **Refuses** an NPC that does not exist for this trainer or is not a merchant, and a content key
    with no Merchant row in the NPC registry, or whose row names no item spawner. It throws
    `MerchantStockNotAllowedException` and rolls and writes nothing; the route answers 404.
-2. **Stocks** a merchant that has **no stock rows**: the first time it is asked, or once every
-   item has been bought out (a row that sells out is deleted).
+2. **Stocks** a merchant that has **no stock rows**, whatever its cooldown: the first time it is
+   asked, or after it has been bought out. **A shop bought out completely rolls again on the next
+   ask**, because the purchase path deletes a row it sells out and the last purchase leaves no rows.
+   That is intended (pinned in `NpcMerchantServiceTests`), and it is why clearing a shop is
+   content-write only: a player who could empty a shop could re-roll it on demand (see
+   [NPC System → Merchant REST Endpoints](?page=backend/02-npc-system#merchant-rest-endpoints)).
 3. Otherwise **the spawner's cooldown decides**. **`restock_cooldown_seconds = 0` means "never
    auto-restock"**, not "restock every time": a merchant that already has stock is left alone.
    Above 0, the shop is due once that many seconds have passed since its newest `npc_inventory`
-   `updated_at`. A roll stamps every row it writes, and a purchase that leaves a row behind
-   restamps it, so trading with a shop defers its restock.
+   `updated_at`. A roll stamps every row it writes. **A purchase that leaves stock behind restarts
+   the cooldown**: when some of the item stays on the shelf, its row is restamped, so trading with a
+   shop defers its restock. A purchase that sells out one item while others remain deletes that row
+   and restamps nothing.
 4. When a restock is due: rolls the spawner, **clears** the merchant's `npc_inventory`, and
    inserts the rolled items. A roll that comes back empty (the spawner is missing, inactive, or
    has nothing to roll) keeps the old stock and logs a warning.
@@ -126,12 +132,16 @@ every world load (`_refreshStockOnWorldLoad`, `force: true`). The route stopped 
 the 2026-09-27 route lockdown, so from then on no online shop restocked. On 2026-10-10, `force` and
 the caller's spawner key were removed from the call altogether.
 
-Pinned by `NpcMerchantServiceTests` (each branch above), `MerchantRestockCooldownSqliteTests` and
+Pinned by `NpcMerchantServiceTests` (each branch above, plus two purchase cases run against a stand-in
+shop: bought out completely, it rolls on the next ask inside its cooldown; left with stock, it restarts
+the cooldown from the last purchase), `MerchantRestockCooldownSqliteTests` and
 `MerchantRestockCooldownPostgresTests` (the migration), `OfflineMerchantRestockSqliteTests` (the real
 service over migrated SQLite, called the way the client calls it offline) and
 `MerchantRestockHttpTests`. The HTTP tests post a v0.1.7 body with `force: true` inside the cooldown and
 get `stocked: 0` with the stock untouched, buy an item out and see it return once the cooldown has
-passed, and show that a partial purchase resets the clock.
+passed, and show that a partial purchase resets the clock. They also show that a player's
+`DELETE /api/v1/merchants/{npcId}/inventory` is 403 and leaves the stock and the cooldown as they were,
+while a content-write token clears the shop the operator names.
 
 ### One spawner per area merchant
 
