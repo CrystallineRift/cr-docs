@@ -32,14 +32,19 @@ Every typed exception derives from `ServerRequestException` (`Assets/CR/Core/Dat
 
 The family lives in the engine-free `CR.Core.Data.Logic` assembly rather than beside `SimpleWebClient` so the whole status → exception → player-text path is unit-tested without Best HTTP or Unity in the loop.
 
-### Why Is There No Retry Strategy?
+### Why Retry Automatically Now?
 
-There is no automatic retry in `SimpleWebClient`. The reasons:
-- Automatic retries can hide real problems (e.g., an auth error that retries indefinitely)
-- Most operations in this game are idempotent at the backend level (e.g., `EnsureNpcAsync` is safe to call multiple times), so callers that need retry can call the operation again on transient failure
-- The game's initialization flow already has a natural retry: if world init fails, the player can trigger it again by re-selecting their trainer
+`SimpleWebClient` used to have no retry at all, for three reasons: an automatic retry of a write could
+double its effect, retries can hide real problems (an auth error that retries forever), and callers that
+wanted a second go could simply call again. The first reason is gone. Every write now carries an
+`Idempotency-Key` (below), so the server replays the answer to a request it already ran instead of running
+it twice, and a lost response is no longer something a caller has to guess about. Retrying is therefore
+one policy for the whole client, with no per-route tagging and no "outcome unknown" case: reads and keyed
+writes share it. The second reason is answered by the bounds: three retries at most, only for the failures
+listed below, and a 401 keeps its single in-request re-auth.
 
-For callers that need retry (e.g., a UI button that the player can press again), wrap the call in a try/catch and re-enable the button on failure:
+For a failure the client gave up on (or one it never retries) the manual pattern still applies: catch and
+let the player try again from the UI:
 
 ```csharp
 private async void OnButtonClick()
@@ -57,17 +62,110 @@ private async void OnButtonClick()
 }
 ```
 
-### Server Idempotency Keys (planned)
+### Retry Strategy (Polly)
 
-The server now supports (see [Idempotency Keys](../backend/27-idempotency-keys.md)) an
-`Idempotency-Key` header on the curated set of player write-intent routes (battle actions, battle
-start, talent spend/respec, receive-gift, talk, world-location entry, and the trainer creature
-move/swap/discard group): a retry with the same key and the same body replays the first response
-instead of running the handler again. The client side of this — the shared web layer attaching one key
-per logical user action (created once at the call site boundary, reused across every retry of that
-same call, never on a `GET`) and Polly retrying on network error/timeout/502/503/504/429/409 — is not
-yet implemented; this section will describe it once it lands. Until then, the "no automatic retry"
-section above still describes `SimpleWebClient`'s actual behavior.
+Every request goes through `HttpRetryExecutor` (the version check excepted, below), a thin wrapper around one shared
+[Polly](https://github.com/App-vNext/Polly) v8 `ResiliencePipeline` (`Polly.Core`). Polly appears nowhere
+else: a caller hands the executor one attempt and gets back its result, or the last failure unchanged, as
+if nothing had retried. The rules are plain code in `HttpRetryPolicy`, which has no Polly and no engine in
+it, so the status table and the delay bounds are ordinary unit tests. Both live in `Assets/CR/Core/Data/Logic/`.
+
+**What is retried** (`HttpRetryPolicy.ShouldRetry`), up to 3 retries, so a call goes on the wire at most 4 times:
+
+| Failure | Retried | Why |
+|---|---|---|
+| No response (refused, DNS, TLS, timeout; `StatusCode == 0`), including an unreachable auth server | yes | The request may never have arrived. If it did, a keyed write replays. |
+| 429 | yes | Rate limited; `Retry-After` is honoured. |
+| 502, 503, 504 | yes | The proxy or host could not hand the request over or get an answer back in time. |
+| 409 whose JSON body is `{"error":"idempotency_in_progress"}` | yes | Another attempt on the same key is still running. |
+| 500, 501, 505 | **no** | See the ruling below. |
+| Every other 4xx: 400, 401, 403, 404, a plain 409, 410, 422 | no | These are answers, not hiccups. A 401 keeps its own in-request re-auth. |
+| A signed-out session (`SignedOut`) or a missing online entry (`EntryRequired`) | no | Decisions, not hiccups; `EntryRequired` has status 0 but nothing was attempted. |
+| Cancellation (`OperationCanceledException`) | no | A cancel is not a server failure. |
+| Anything whose `Retry-After` is over 10 s | no | The failure surfaces at once with `RetryAfterSeconds` intact. |
+
+**Why a 500 is not retried.** A 500 is the server's own code having run and failed, which is usually a bug
+or bad data that the next attempt meets again: a retry only delays the error by seconds and multiplies the
+load of one failing call. It is also the one failure where retrying a *write* is not safe. When a handler
+throws, or answers any 5xx, the idempotency middleware deletes the claim so that a retry may run the handler
+again, which makes a retried 500 a second real execution rather than a replay. A handler that applied part of
+its effects before failing would apply them twice. 502/503/504 are different: the handler either never ran or
+finished unseen, and in the second case the stored answer is replayed. The table is the same for every method,
+so a failed read is not retried on a 500 either; the player can try again.
+
+**Backoff** (`HttpRetryPolicy.RetryDelay`): 0.5 s, 1 s, 2 s, each varied by up to 25% either way so clients
+that failed together do not all return together. A `Retry-After` header is a *minimum*: the wait is the larger of
+the backoff and the header. A `Retry-After` over `MaxRetryAfterSeconds` (10) is not waited for. The email link
+flow relies on that: a 429 on `account/email/code` carries a cooldown of about a minute, which must reach
+`LinkAccountPresenter` through `ServerRequestException.RetryAfterSeconds` rather than hang the call on a spinner.
+
+**The session a call belongs to.** `SimpleWebClient` reads `OnlineSessionGate.Generation` once, before the first
+attempt, and hands the executor a "session is still current" check. It is asked after every failure and again
+after every backoff: a call is not re-sent once the session was signed out or a new online entry began (a mode
+switch, another trainer). A write must not be re-sent into a session it did not start in, where it would run as
+someone else. The caller then gets the failure that led to the backoff.
+
+**Threads.** Every attempt resumes on the caller's synchronisation context (the Unity main thread): an attempt raises the
+rate-limit events and writes the log. Polly would resume on the thread pool by default.
+
+**Where retries are off.** `VersionCheckClientUnityHttp` overrides `RetryExecutor` with
+`HttpRetryExecutor.SingleAttempt`. `GameSessionManager.Start` awaits the version check before the database gate on
+every launch, and `ConnectivityProbe` uses it to ask whether the server is there right now: both want their "no" at
+once, not after three backoffs on every launch without a network. Offline play's domain calls go to the local services
+rather than these clients, so they are untouched.
+
+**Cancellation.** `HttpRetryExecutor.ExecuteAsync` takes a `CancellationToken` and a cancel ends the retries (even
+mid-backoff), but the `Get`/`Post`/`Put`/`Delete` methods do not take one yet (a known gap, see Request Lifecycle).
+An aborted Best HTTP request surfaces as `TaskCanceledException`, which is never retried.
+
+**Library.** Two managed DLLs are vendored in `Assets/Plugins/Polly/`: `Polly.Core` 8.5.2 and
+`Microsoft.Bcl.TimeProvider` 8.0.0, the unmodified netstandard2.0 builds from NuGet. Nothing else of Polly's
+dependency chain is shipped, because the project already supplies it and a second copy would be a duplicate
+plugin: `Microsoft.Bcl.AsyncInterfaces` comes from the `com.cr.game.compat` package (9.0.0.2),
+`System.Threading.Tasks.Extensions` and `System.ComponentModel.Annotations` are facades in Unity's Mono class
+libraries (the same ones `System.Text.Json` and FluentMigrator already bind to), and
+`System.Runtime.CompilerServices.Unsafe` comes from `Assets/Plugins/Roslyn/`. `Assets/link.xml` preserves both
+Polly assemblies. Every build profile (Steam Deck, Windows, macOS, DatabaseManager Alpha) inherits the project-wide
+scripting settings: the Mono backend for standalone targets (Android is the only IL2CPP override) at the default
+stripping level, on .NET Standard 2.1; no profile overrides any of it. The preserve entries are insurance: they keep
+both Polly assemblies whole if a profile moves to IL2CPP or stronger stripping. They do not protect the class-library
+assemblies Polly calls into (`System.ComponentModel.DataAnnotations`, for its options validation); if a stripped build
+ever loses those, add them to `link.xml` too.
+
+**Testing.** `HttpRetryPolicyTests` is the status table, the Retry-After ceiling and the delay bounds.
+`HttpRetryExecutorTests` drives the real Polly pipeline with an attempt that fails on cue (attempt counts, the
+schedule, cancellation before and during a backoff, session changes, main-thread resumption). `SimpleWebClientRetryTests`
+runs the whole client against a scripted transport (`SimpleWebClient.TransmitAsync` is the seam, returning a
+`TransportReply`): the key on every write and none on a read, one key across retries and the 401 re-send,
+and the guards around a retry. `VersionCheckClientUnityHttpTests` pins the opt-out.
+
+### Idempotency Keys
+
+The server supports (see [Idempotency Keys](../backend/27-idempotency-keys.md)) an `Idempotency-Key` header on
+player write routes: a retry with the same key and the same request replays the first response instead of
+running the handler again; the same key with a *different* request is a 422 (`idempotency_key_reused`); the
+same key while the first attempt is still running is the 409 `idempotency_in_progress` that the client retries.
+
+`SimpleWebClient` is the only place a key is minted or attached:
+
+- **One key per logical call.** `ExecuteAsync` mints a GUID before the retry loop starts. Every attempt uses it:
+  each Polly retry and the 401 re-send inside an attempt (the body is re-serialised identically, so the server's
+  request hash matches).
+- **Decided by the verb of the request actually built.** `SendOnceAsync` attaches the key when
+  `request.MethodType.CarriesIdempotencyKey()` (`HttpMethodExtensions`): every verb except GET, HEAD, OPTIONS and
+  TRACE, so POST, PUT, PATCH and DELETE. A read never carries one.
+- **Exactly one header.** It is set (not added) after the caller's `before` hook has run, so a hook that adds its
+  own `Idempotency-Key` cannot leave a second value on the request. `AccountClientUnityHttp` used to mint its own
+  key for the two email-link POSTs in a `before` hook; that is gone, and those calls get the shared key.
+- **Callers do nothing.** Every write through `SimpleWebClient` is keyed automatically. Anonymous bootstrap routes
+  (`/auth/*`, `POST /account`) are sent with a key too, which the server ignores because it has no principal to
+  scope one to; they are retried like everything else but are not replay-protected.
+
+**Production switch.** The server accepts a missing key (`Idempotency:RequireKey` is off, with a warning in the
+log), which is what keeps old clients working. Once a minimum client version that sends keys on every write is
+enforced (the release that ships this change, v0.1.8 on the current plan, behind a `MinClientVersion` bump), set
+`Idempotency__RequireKey=true` in the production `/opt/cr/.env` and restart the API so unkeyed writes get a 400
+(`idempotency_key_required`). Doing it earlier locks out every client that predates this change.
 
 ## `SimpleWebClient`
 
@@ -98,13 +196,17 @@ The base URL is read from `IGameConfiguration` using the config key at construct
 
 ### Request Lifecycle
 
+Each `Get`/`Post`/`Put`/`Delete` is one *logical call*. `ExecuteAsync` mints the call's `Idempotency-Key` and reads the
+session generation once, then runs `HandleResponse` under the retry executor (see [Retry Strategy](#retry-strategy-polly)).
+The steps below are one attempt; a failure the policy retries goes back to step 1 after its backoff.
+
 Every authenticated request follows this sequence:
 
 1. `ITokenManager.GetAccessTokenAsync()` — retrieves the current Bearer token; refresh happens inside `TokenManager` if needed
 2. Constructs the full URL: `{_serverAddress}/{path}` (note: path leading slash is stripped)
 3. Creates a Best HTTP request with `Authorization: Bearer <token>` header
 4. Serializes the request body using `Newtonsoft.Json` (`JSonDataStream<TD>`) for POST/PUT
-5. Sends the request and awaits `GetHTTPResponseAsync()`
+5. Attaches the call's `Idempotency-Key` (writes only), then sends the request through `TransmitAsync`, which awaits `GetHTTPResponseAsync()` and turns the answer into a `TransportReply` (status, reason, body, headers, path)
 6. Checks the HTTP status code via `CheckForResponseForErrors` and throws a typed exception if not 2xx (200, 203, 204 are accepted)
 7. Deserializes the response body with `Newtonsoft.Json` into the typed response type
 8. Returns the deserialized response
@@ -152,7 +254,8 @@ Every instance carries:
 - `StatusCode` — the HTTP status, or `0` when nothing came back.
 - `Message` — **always player-facing text**, chosen by `ServerErrorMessage.ForPlayer`. For a 4xx the body's explanation wins when the server gave a short one (≤ 200 characters); otherwise the status's default wording above. Never the reason phrase ("I'm a teapot", "Found"), and never a 5xx body — that is the server talking to its operators (`Error creating account: <exception>`), so it stays on `Body` and goes to the log. UI may show `Message` verbatim.
 - `Body` — the raw response body (empty string, never null) for callers that deserialise a structured refusal, e.g. the market's result object on a 409.
-- `IsTransient` — true when retrying later could plausibly succeed (no response, 429, or 5xx).
+- `IsTransient` — true when retrying later could plausibly succeed (no response, 429, or 5xx). It answers "might trying again help?" for a screen; the client's own automatic retry set is narrower (see [Retry Strategy](#retry-strategy-polly)): it leaves out 500.
+- `RetryAfterSeconds` — what the response's `Retry-After` header asked for (0 when absent), for a screen that shows a cooldown.
 - `ServerUnreachableException.TransportMessage` — Best HTTP's own wording, for the log.
 
 The body is parsed for **every** status, not only 400, because cr-api is not uniform about where the reason lives. `ServerErrorMessage` tries `message`, `errorMessage` (market result objects), `error`, `detail` then `title` (ASP.NET ProblemDetails — `detail` first because only it says what actually happened), then a short bare-text body; JSON arrays, markup, malformed JSON and non-string fields are never shown. A bare JSON string document — what `Results.BadRequest("AreaKey is required.")` serialises to — is unquoted and unescaped rather than shown to the player with its literal quotes intact. Two entry points read the result differently:
@@ -162,7 +265,7 @@ The body is parsed for **every** status, not only 400, because cr-api is not uni
 
 Cancellation is deliberately **not** part of the family: an aborted request still surfaces as `TaskCanceledException` / `OperationCanceledException`, because a cancel is not a server failure and nothing should be shown for it.
 
-The 401 path is the one status the client acts on itself. `AuthRetryPolicy.ShouldReauthenticate(status, hasTokenManager, callerToken)` (engine-free, unit-tested) says when: only a 401 on a request whose token came from the token manager. A caller-supplied token is the caller's to refresh, and a client built without a token manager (`AuthClientUnityHttp`, `VersionCheckClientUnityHttp`) cannot retry — which is what stops a 401 from the refresh endpoint retrying itself. When it applies, `HandleResponse` runs `ITokenManager.RefreshAccessTokenAsync()` and re-sends exactly once before letting the second failure propagate.
+The 401 path is the one status the client acts on itself. `AuthRetryPolicy.ShouldReauthenticate(status, hasTokenManager, callerToken)` (engine-free, unit-tested) says when: only a 401 on a request whose token came from the token manager. A caller-supplied token is the caller's to refresh, and a client built without a token manager (`AuthClientUnityHttp`, `VersionCheckClientUnityHttp`) cannot retry — which is what stops a 401 from the refresh endpoint retrying itself. When it applies, `HandleResponse` re-authenticates (`IRejectedTokenRecovery.ReAuthenticateAsync(sentToken)` when the token manager offers it, otherwise `ITokenManager.RefreshAccessTokenAsync()`) and re-sends exactly once, with the same `Idempotency-Key`, before letting the second failure propagate. This stays inside a single attempt of the retry executor; it is not a Polly retry.
 
 ### How the Authentication Token Is Attached
 
