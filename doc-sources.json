@@ -331,7 +331,8 @@
         "Assets/CR/Core/Data/Editor/Build/CrLocalizationCommands.cs",
         "Assets/CR/Dialogue/Editing/DialogueLocalizationLines.cs",
         "Assets/CR/Dialogue/Editing/DialogueLocalizationFacts.cs",
-        "Assets/CR/Dialogue/Editing/DialogueLocalizationDiagnostics.cs"
+        "Assets/CR/Dialogue/Editing/DialogueLocalizationDiagnostics.cs",
+        "Assets/CR/Game/Story/Content/Text/glossary.json"
       ]
     },
     "description": "CSV language packs, Settings language, Update Pack tooling; legacy per-domain YAML localization files, LocalizationRepository loading, key naming convention"
@@ -850,7 +851,10 @@
         "Assets/CR/UI/WorldMap/WorldMapTab.cs",
         "Assets/CR/UI/Logic/QuestCategory*.cs",
         "Assets/CR/UI/Logic/QuestJournalGroup*.cs",
-        "Assets/CR/UI/Theme/CrTheme.uss"
+        "Assets/CR/UI/Theme/CrTheme.uss",
+        "Assets/CR/UI/Common/ITextDisplaySettings.cs",
+        "Assets/CR/UI/Common/TextDisplaySettings.cs",
+        "Assets/CR/Tests/Editor/PlayerMenuTextSettingsTests.cs"
       ]
     },
     "description": "Player menu UI: 8-tab overlay (Team/Bag/Storage/Quests/Map/Talents/Achievements/System) wired to real domain data — PlayerTeamView squad sheet, BagScreenHandler backpack with BagItemPolicy filtering, QuestJournalView active/completed quests, AchievementsView rail (Summary/categories/Statistics) over AchievementBoardProjection, CR.UI.Logic pure rules, input wiring via UICoordinator; Quests tab 'Return to {giver}' status for a ReturnToGiver quest awaiting the player"
@@ -1702,7 +1706,11 @@
         "Assets/CR/Game/World/Behaviours/NpcTrainerBarkPolicy.cs",
         "Assets/CR/Game/World/Behaviours/DialogueBackend.cs",
         "Assets/CR/Game/World/Behaviours/NpcInteractionRoute.cs",
-        "Assets/CR/Tests/Editor/DialogueCoreLayeringTests.cs"
+        "Assets/CR/Tests/Editor/DialogueCoreLayeringTests.cs",
+        "Assets/CR/UI/Logic/DialogueLineReveal.cs",
+        "Assets/CR/UI/Logic/DialogueTextSpeed*.cs",
+        "Assets/CR/UI/Resources/DialogueScreen.uxml",
+        "Assets/CR/Tests/Editor/DialogueScreenTypewriterTests.cs"
       ]
     },
     "description": "The CR dialogue system: document model (nodes/options/cases/conditions/actions), the module vocabulary (quest/progress/npc), the dialogue-core-knows-nothing-about-quests layering test, DialogueRunner safety rules and DialogueEndReason, DialogueService start results/ends-exactly-once/cannot-wedge, DialogueScreenPresenter and the isMenuOpen gate, the id rule, the online/offline router, boot-time sync, NPC routing and trainer bark gating"
@@ -1774,7 +1782,7 @@
         "Assets/CR/UI/Resources/AchievementsView.uss"
       ]
     },
-    "description": "Global UI theme: CrTheme.tss on both runtime PanelSettings, CrTheme.uss design tokens (paper/glass/hud/accent/status colours, font/radius/spacing scales, --cr-achievement-* points shield/row/bar/criterion tokens), shared .cr-window/.cr-scrim/.cr-hud-card classes, ScaledWindow USS-driven frame sizing under UI Scale, CrThemeTests guard"
+    "description": "Global UI theme: CrTheme.tss on both runtime PanelSettings, CrTheme.uss design tokens (paper/glass/hud/accent/status colours, font/radius/spacing scales, --cr-achievement-* points shield/row/bar/criterion tokens, --cr-lore-* keyword colours mirrored by LorePalette), shared .cr-window/.cr-scrim/.cr-hud-card classes, ScaledWindow USS-driven frame sizing under UI Scale, CrThemeTests guard"
   },
   "backend/22-trainer-progression": {
     "docPath": "docs/backend/22-trainer-progression.md",
@@ -2083,5 +2091,43 @@
       ]
     },
     "description": "How to add a field to an existing cr-admin-web resource descriptor or add a whole new resource: FieldMeta/RowColumn kinds, fieldsFromSchema inference vs explicit override, the ResourceDescriptor shape, registry.ts registration, and the renderFieldsForm/descriptor.test patterns used to prove a field round-trips and validates."
+  },
+  "unity/39-lore-text": {
+    "docPath": "docs/unity/39-lore-text.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [
+        "Assets/CR/Localization/Logic/Lore*.cs",
+        "Assets/CR/Localization/Logic/Tests/Lore*.cs",
+        "Assets/CR/Localization/Runtime/Lore*.cs",
+        "Assets/CR/Localization/Editor/LoreGlossaryStringSource.cs",
+        "Assets/CR/UI/Common/ITextDisplaySettings.cs",
+        "Assets/CR/UI/Common/TextDisplaySettings.cs",
+        "Assets/CR/UI/Common/LoreLabelExtensions.cs",
+        "Assets/CR/UI/Logic/DialogueTextSpeed*.cs",
+        "Assets/CR/UI/Logic/DialogueTypingWaits.cs",
+        "Assets/CR/UI/Logic/DialogueLineReveal.cs",
+        "Assets/CR/UI/Logic/DialogueRevealPress.cs",
+        "Assets/CR/UI/Dialogue/DialogueScreenPresenter.cs",
+        "Assets/CR/UI/Resources/DialogueScreen.uxml",
+        "Assets/CR/Resources/Areas/AreaBanner.uxml",
+        "Assets/CR/Game/Areas/Presentation/AreaBannerPresenter.cs",
+        "Assets/CR/Game/Story/WorldBarkView.cs",
+        "Assets/CR/UI/Quests/QuestTrackerPresenter.cs",
+        "Assets/CR/UI/Quests/QuestJournalView.cs",
+        "Assets/CR/Core/Notifications/Adapters/DiscoveryToastAdapter.cs",
+        "Assets/CR/Dialogue/Editing/DialogueLoreTagDiagnostics.cs",
+        "Assets/CR/Game/Story/Content/Text/glossary.json",
+        "Assets/CR/Resources/Story/LoreGlossary.asset",
+        "Assets/CR/Resources/Lore/*.asset",
+        "Assets/CR/UI/Theme/CrTheme.uss",
+        "Assets/CR/Tests/Editor/Lore*.cs",
+        "Assets/CR/Tests/Editor/DialogueScreenTypewriterTests.cs",
+        "Assets/CR/Tests/Editor/TextDisplaySettingsTests.cs",
+        "Assets/CR/Tests/Editor/PlayerMenuTextSettingsTests.cs",
+        "Assets/CR/Tests/Editor/DialogueLoreTagDiagnosticsTests.cs"
+      ]
+    },
+    "description": "Lore keyword styling and the dialogue typewriter: LoreText.Decorate pipeline and surfaces (Plain/Rich/Animated), glossary.json (terms, categories, forms, emphasis, effects, styleOverride) and its Resources asset, matching rules, <cr:em>/<cr:term>/<cr:no> author tags and the raw-Text-Animator-tag validator, LorePalette and the --cr-lore-* tokens, the Order small-caps look and the serif hook, the Text Animator effect assets (crrelic/crastral), the Text Effects and Dialogue Text Speed settings, DialogueLineReveal press semantics, gloss.<key>.forms pack rows, tests and live checks"
   }
 }

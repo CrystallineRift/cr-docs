@@ -341,6 +341,13 @@ Other load-bearing details:
   double-advance (old and new button both live for one frame). Option buttons ARE rebuilt every
   Choice step; they are protected by a realtime-based debounce instead
   (`DialoguePanelPolicy.InputAccepted`).
+- **The body is a Text Animator `AnimatedLabel`, and lines can be typed out.** Each block of body
+  text goes through `LoreText.Decorate` (lore keywords coloured, a relic shimmering) and, unless the
+  player's Dialogue Text Speed is Instant, is typed by the label's `Typewriter`. While a line types a
+  Continue / Submit / Cancel press only completes it and the next press advances (`DialogueLineReveal`);
+  a choice's options wait for their prompt; the panel carries `dialogue--typing`. With no
+  `ITextDisplaySettings` bound lines are instant. Details, the safety timeout and the settings:
+  [Lore text](39-lore-text.md).
 - Sorting order 40 — above the shop (5) and battle summary (10), below the toast rig (60).
 - `OnContextChanged(UIContext newContext)` closes the panel whenever the game leaves the Overworld
   context (a battle starting, a cutscene) — `Close()` cancels whatever step is pending, which the

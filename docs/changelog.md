@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-10-10 — Lore text: keyword styling and the dialogue typewriter (cr-api-unity `feature/lore-text`, not merged)
+
+- **Keyword styling.** `LoreText.Decorate(localized, surface, palette)` colours the first occurrence per text block of
+  glossary terms (soulstone, Summoning Shard, Seeker, krytori, the Actuators, Mirandale …) in dialogue, barks, the area
+  banner flavour line, the quest tracker, the journal and the discovery toast flavour. Names and titles are never
+  touched. The vocabulary is `Content/Text/glossary.json` (21 seeded terms, six categories); Order terms are bold small
+  caps; a relic shimmers and the Astral Realm / a pillar pulse on the two Text Animator labels (dialogue body, banner
+  flavour). Per-language forms are pack rows `gloss.<key>.forms`. Authors get `<cr:em>`, `<cr:term=key>` and `<cr:no>`;
+  raw Text Animator tags in content are an error in the Dialogue Editor and in a content test.
+- **Theme.** `--cr-lore-*` colour tokens (dark and light) mirrored by `LorePalette`; a test fails when they drift.
+- **Settings (System → Game).** *Text Effects* (Full / Static colour / Plain) and *Dialogue Text Speed* (Instant / Fast /
+  Normal), persisted like Combat Speed.
+- **Dialogue typewriter.** The dialogue body is a Text Animator `AnimatedLabel`; lines are typed at Fast by default. A
+  press while a line types only completes it and the next press advances; a choice's options wait for their prompt.
+- Page: [Lore text](unity/39-lore-text.md). Needs the Text Animator package (untracked; Asset Store id 341308).
+
 ## 2026-10-10 — Merchant stock resolved by the server; offline NPC registry seed M16100 (live)
 
 - **Merchant stock (cr-api `8324296`, PR #72, live 2026-10-10):** `NpcMerchantService.StockFromSpawnerAsync` now

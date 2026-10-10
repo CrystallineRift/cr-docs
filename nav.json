@@ -388,5 +388,10 @@
     "section": "Unity",
     "title": "Opening Story (Unity)",
     "path": "unity/38-story-opening"
+  },
+  {
+    "section": "Unity",
+    "title": "Lore Text (keyword styling and the dialogue typewriter)",
+    "path": "unity/39-lore-text"
   }
 ]
