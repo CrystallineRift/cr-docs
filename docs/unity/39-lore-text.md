@@ -39,6 +39,9 @@ Both persist like Combat Speed (`GameConfigurationKeys.LoreTextMode` = `full` / 
 `DialogueTextSpeed` = `instant` / `fast` / `normal`; unset reads as Full / Fast) through
 `ITextDisplaySettings` / `TextDisplaySettings`, and take effect from the next line shown.
 
+For live checks, `cr_set_text_display --effects full|static|plain --speed instant|fast|normal` (play mode, Editor and
+development builds) sets either one without opening the menu.
+
 ## The pipeline
 
 ```
