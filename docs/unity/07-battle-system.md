@@ -117,6 +117,7 @@ public interface IBattleCoordinator
 | `PlayerMustSwap` | `(string trainerId)` | Player's active creature fainted but has a backup; HUD must force a swap |
 | `BattleEnded` | `(bool playerWon, string outcomeLabel)` | Show result screen |
 | `RunAttempted` | `(bool success)` | Show escape message |
+| `ActionResolving` | `(ActionOutcome outcome)` | Every resolved action, raised once per step **before** its presentation plays: the authority has decided and nothing has been shown yet. The lead-in to `ActionResolved`, for a presenter that has to cue something ahead of the verdict from the outcome itself (`CaptureThrowWatcher` raises `CaptureResolving` from it) |
 | `ActionResolved` | `(ActionOutcome outcome)` | Every resolved action, raised once per turn **after** its presentation has played. The outbound seam for battle extensions — see [Battle Extensions](?page=unity/24-battle-extensions) |
 | `MissionProgressed` | `(string missionName, int current, int threshold)` | An in-battle mission ticked forward (e.g. applying Burn); HUD shows a fading progress toast |
 | `MissionCompleted` | `(string missionName, string unlockedAbilityName)` | An in-battle mission finished and unlocked a move for the rest of the battle; HUD shows a completion banner |
@@ -148,6 +149,7 @@ StartBattleAsync
        else
            IWildBattleAIDomainService.DecideActionAsync → submit via IBattleDomainService
            IBattleDomainService.SubmitActionAsync → ActionOutcome
+    └─ RaiseActionResolving(outcome)                                              ← lead-in seam (before the beats)
     └─ await IBattlePresentationSequencer.PlayOutcomeAsync(outcome, action, ctx)   ← paced beats
     └─ RaiseActionResolved(outcome)                                               ← extension seam
     └─ if outcome.BattleEnded → RaiseBattleEnded → break
@@ -333,7 +335,7 @@ The battle camera is a **reactive, editor-authored Cinemachine 3 system**. `Batt
 | `BattleCameraRig` | Editor-authored prefab: one `CinemachineCamera` per `BattleCameraRole` (`Establishing`, `Action`, `Reaction`, `LowAngle`, `Hero`), a `CinemachineTargetGroup`, a `CinemachineImpulseSource`, and a `BattleCameraProfile`. Assigned to `BattleArena.cameraRig`. |
 | `BattleCameraProfile` | ScriptableObject of feel values (blend seconds, action/faint holds, orbit °/s, intro radius multiplier, shake force). Persists across Play-mode tuning; framing lives on the vCams. |
 | `BattleFormation` | Maps the live battle onto arena slot anchors (`AttackerAnchor`/`DefenderAnchor`/`AllActiveAnchors`). 1v1 today; shaped for NvN / N-v-1. |
-| `BattleCameraShakeResponder` | Decoupled shake. Reacts to `CameraCueDefender`/`HeavyHit`/`CameraCueFaint`, coalesces same-frame signals into one force-scaled impulse, fires the rig's impulse source. Reaches the active rig via the shared `BattleCameraRigContext`. |
+| `BattleCameraShakeResponder` | Decoupled shake. Reacts to `CameraCueDefender`/`HeavyHit`/`CameraCueFaint`, coalesces same-frame signals into one force-scaled impulse, fires the rig's impulse source. Reaches the active rig via the shared `BattleCameraRigContext`. The force is scaled by the player's Screen Shake setting (100 / 50 / 0 %, and 0 under Reduced Motion) through `IFeelSettings`; it stays the only thing that shakes the camera in a battle (a [Feel moment](?page=unity/39-game-feel) never does). |
 | `ScreenFader` | Full-screen white overlay (code-built top-most UGUI canvas, no prefab) that **masks the camera cut** into and out of battle. The coordinator awaits `FadeAsync(target, seconds)` around staging/`EnterBattle` and around `CloseBattle`'s teardown. |
 
 **Battle in/out transition (fade-masked cut).** Rather than easing the camera back to the player on exit, the coordinator fades to white (`~0.3s`), then switches the camera under the cover. On entry: fade to white → stage + `EnterBattle` → fade from white (the intro sweep plays as it clears). On exit: fade to white → `ExitBattle` (which now sets the Brain blend to **`Cut`** for an instant snap back to the player, restoring the overworld's saved blend a frame later) + arena teardown → fade from white onto the overworld. Applies to both wild and NPC battles.

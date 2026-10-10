@@ -119,6 +119,43 @@
   press while a line types only completes it and the next press advances; a choice's options wait for their prompt.
 - Page: [Lore text](unity/39-lore-text.md). Needs the Text Animator package (untracked; Asset Store id 341308).
 
+## 2026-10-10 — Game feel review fixes (cr-api-unity `feature/game-feel`)
+
+- **The capture wobble now answers the authority, not the throw.** It was bound to `CaptureAttempted`, which the bag
+  panel raises the moment the player confirms, so a throw the server refused still wobbled (and the broke-free cue matched
+  on `ActionOutcome.ItemId`, which cr-api stamps only on an opponent's own heal, so it could not match the player's own
+  step). New `CaptureResolving` event
+  (Soap asset, wiring entry, regenerated bridge) raised by `CaptureThrowWatcher` from the resolved outcome, ahead of the
+  catch or the miss; a refused throw raises neither it nor `CaptureFailed`. `BattleCoordinator.PlayStepsAsync` raises a
+  new `BattleEvents.ActionResolving` before each step is presented to give it a lead-in. `CaptureAttempted` stays as the
+  battle log's echo, and a test fails if a binding answers it. → [Game Feel](?page=unity/39-game-feel)
+- **Hit stop is capped per resolved action** (120 ms: an impact plus the faint it causes), and the content tests pin
+  which moments freeze time and which events they answer, so the cap holds by construction. It was documented per turn
+  and only tested pairwise.
+- **The feedback director no longer flips Feel's process-wide `GlobalMMFeedbacksActive` when it is disabled**, so it
+  cannot silence a player that was not its own.
+- **Reduced Motion hint** now says what it does: "Removes screen shake and hit stop, and softens light flashes."
+
+## 2026-10-10 — Game feel: the Feel bridge, real comfort settings, rumble, and ten moments (cr-api-unity `feature/game-feel`)
+
+- **Bridge.** A feedback binding can now play a Feel player prefab (`feelPlayerAddress`, `intensity`). The prefab
+  declares what it does to the screen, time or hands (`CrFeelPlayerInfo`: Cosmetic, CameraMotion, ScreenFlash,
+  TimeScale, Haptic) and `FeedbackDirector` plays one pooled instance at the binding's anchor at
+  `intensity x what the event carried x what the settings allow`. The gate and the intensity rules are engine-free
+  (`CR.Core.Feedback.Logic`) and tested. `CR.Core.Feedback` references Feel; nothing else does. →
+  [Game Feel](?page=unity/39-game-feel)
+- **Settings made real.** System, Game: Reduced Motion (it was a static mock-up), Screen Shake (100 / 50 / 0 %) and
+  Rumble, persisted like Combat Speed. `BattleCameraShakeResponder` scales its force by them and stays the only thing that
+  shakes the camera in a battle.
+- **Rumble.** `HapticsResponder` finally drives a gamepad (Nice Vibrations) from the battle's `VibrationLight / Medium /
+  Strong` signals, gated, merged per frame, and reset on pause, focus loss and battle close.
+- **Ten moments** under `feel/`: hit, heavy hit (50 ms hit stop), faint (60 ms), capture wobble / fail / success, level
+  up, quest turn-in, item use, status applied. `HeavyHit` now has a Soap event asset and wiring. Critical hit and
+  super-effective are not done: the server reports neither (cr-api change described in the page).
+- **Anchors.** New `BattleOpponentCreature` anchor (a capture is about the opponent, not whoever was last cast at); the scene
+  anchors learn the actor, target and opponent when a battle opens.
+- **CI.** `ci/check-fx-keys.sh` also checks `feelPlayerAddress` against the Addressables catalogue.
+
 ## 2026-10-10 — Merchant stock resolved by the server; offline NPC registry seed M16100 (live)
 
 - **Merchant stock (cr-api `8324296`, PR #72, live 2026-10-10):** `NpcMerchantService.StockFromSpawnerAsync` now

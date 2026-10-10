@@ -503,11 +503,17 @@ encrypted prefs store) under a `GameConfigurationKeys` constant and is pushed li
 | Game | **Story Camera** dropdown (`story-camera-dropdown`): Cinematic / Gentle (cuts only) / Off | `StoryCameraMode` | `StoryCameraSetting`, read at each cued line ([Story Camera](?page=unity/39-story-camera)) |
 | Game | **Text Effects** dropdown (`text-effects-dropdown`: Full / Static colour / Plain) | `LoreTextMode` (`full` / `static` / `plain`) | `ITextDisplaySettings` → `LoreText.Mode`, Text Animator behaviours on/off; see [Lore text](39-lore-text.md) |
 | Game | **Dialogue Text Speed** dropdown (`dialogue-speed-dropdown`: Instant / Fast / Normal) | `DialogueTextSpeed` (`instant` / `fast` / `normal`) | `ITextDisplaySettings` → `DialogueScreenPresenter`, from the next line |
+| Game | **Reduced Motion** toggle (`reduced-motion-toggle`) | `ReducedMotion` | `IFeelSettings`: the feedback director, the battle camera shake |
+| Game | **Screen Shake** dropdown (`screen-shake-dropdown`, 100% / 50% / Off) | `ScreenShake` (the `ScreenShakeLevel` number, 0 = Full) | `IFeelSettings`: `BattleCameraShakeResponder`, camera-motion Feel moments |
+| Game | **Rumble** toggle (`rumble-toggle`) | `RumbleDisabled` | `IFeelSettings`: `HapticsResponder` |
 
 The tracker key stores the **hidden** flag, not "shown": the tracker is on by default and
 `TryGet<bool>` cannot tell "never written" from `false`, so an absent key has to mean the default.
-The checkbox shows the positive. The rest of the Game card (volume, notifications, reduced motion,
-language) is still decorative.
+The checkbox shows the positive. The three game-feel rows go through `IFeelSettings`
+(see [Game Feel](?page=unity/39-game-feel)) and follow the same rule: Reduced Motion is a flag (off), Screen
+Shake is stored as the `ScreenShakeLevel` number so that an unset key (0) is Full, and Rumble is stored as
+"disabled" so that an unset key is on. The rest of the Game card (volume, notifications, language) is still
+decorative.
 
 ### UI scale
 
@@ -772,9 +778,9 @@ as a cancel, so no path leaves an item half-used or a modal stranded.
 
 - `TeamManagementView` is **not** used by `PlayerMenuWindow`. It is still used by
   `GameDataManagerController` and must not be deleted.
-- The System tab's Master Volume / Notifications / Reduced Motion / Language rows are still static
-  decoration; Look Sensitivity, Invert X/Y, Combat Speed and Story Camera are real and persist via
-  `IGameDataRepository`.
+- The System tab's Master Volume / Notifications / Language rows are still static
+  decoration; Look Sensitivity, Invert X/Y, Combat Speed, Story Camera, Text Effects, Dialogue Text Speed,
+  Reduced Motion, Screen Shake and Rumble are real and persist via `IGameDataRepository`.
 - `MenuInputBlocked` (the open key is ignored; closing is never blocked) is true in the prologue room **and** while a
   skippable story beat holds `IStoryBeatGate`: Esc is the beat's hold-to-skip as well as the menu key.
 - The `.evo-*` and `.friend-*` rules in `PlayerMenuWindow.uss` are now unused; they are kept so the

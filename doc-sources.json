@@ -2195,5 +2195,35 @@
       ]
     },
     "description": "Lore keyword styling and the dialogue typewriter: LoreText.Decorate pipeline and surfaces (Plain/Rich/Animated), glossary.json (terms, categories, forms, emphasis, effects, styleOverride) and its Resources asset, matching rules, <cr:em>/<cr:term>/<cr:no> author tags and the raw-Text-Animator-tag validator, LorePalette and the --cr-lore-* tokens, the Order small-caps look and the serif hook, the Text Animator effect assets (crrelic/crastral), the Text Effects and Dialogue Text Speed settings, DialogueLineReveal press semantics, gloss.<key>.forms pack rows, tests and live checks"
+  },
+  "unity/39-game-feel": {
+    "docPath": "docs/unity/39-game-feel.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [
+        "Assets/CR/Core/Feedback/**/*.cs",
+        "Assets/CR/Core/Feedback/**/*.asmdef",
+        "Assets/CR/Game/Feedback/**/*.cs",
+        "Assets/CR/Content/Feel/**/*.prefab",
+        "Assets/CR/Content/Defs/FeedbackManifest.asset",
+        "Assets/CR/Content/Defs/Events/HeavyHit.asset",
+        "Assets/CR/Content/Defs/Events/CaptureResolving.asset",
+        "Assets/CR/Game/Battle/CaptureThrowWatcher.cs",
+        "Assets/CR/Game/Battle/Logic/CaptureThrowVerdict.cs",
+        "Assets/CR/Game/Battle/Logic/Tests/CaptureThrowVerdictTests.cs",
+        "Assets/CR/Tests/Editor/CaptureThrowWatcherTests.cs",
+        "Assets/CR/Tests/Editor/BattleCoordinatorActionSeamTests.cs",
+        "Assets/CR/Game/Battle/Arena/BattleCameraShakeResponder.cs",
+        "Assets/CR/Core/State/Events/CustomTypes/HpChangedData.cs",
+        "Assets/CR/Core/Wiring/Generated/GeneratedEventWiringBridge.cs",
+        "Assets/CR/UI/Text/SettingsText.cs",
+        "Assets/CR/Tests/Editor/Feel*.cs",
+        "Assets/CR/Tests/Editor/HapticsResponderTests.cs",
+        "Assets/CR/Tests/Editor/SceneFeedbackAnchorsTests.cs",
+        "ci/check-fx-keys.sh",
+        "docs/feedback-bindings.md"
+      ]
+    },
+    "description": "Game feel with More Mountains Feel 5.9.1: FeedbackBinding.feelPlayerAddress/intensity, CrFeelPlayerInfo motion classes (Cosmetic/CameraMotion/ScreenFlash/TimeScale/Haptic) and the engine-free settings gate, FeedbackDirector + FeelPlayerPool (preload, one pooled instance per address, anchor play, no global Feel switch, per-moment timing), payload-aware intensity adapters (HpChangedData damage), Reduced Motion / Screen Shake / Rumble settings (IFeelSettings, FeelSettingsStore, GameDataFeelSettingsPersistence), HapticsResponder + MMF_CrRumble + RumbleCoalescer (Nice Vibrations gamepad rumble, reset on pause/focus/battle close), BattleCameraShakeResponder scaling, BattleOpponentCreature anchor, the ten authored moments under Content/Feel built by FeelMomentBuilder, HeavyHit and CaptureResolving Soap wiring (CaptureThrowWatcher / CaptureThrowVerdict raise the wobble cue from the authority's outcome, never from the throw), the Steam Deck budget (hit stop capped per resolved action) and its content tests, check-fx-keys.sh feelPlayerAddress check, and what still needs cr-api (crit / super-effective)"
   }
 }
