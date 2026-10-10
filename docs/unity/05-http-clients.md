@@ -169,7 +169,7 @@ and the auth client together behind the real token manager (see "One layer retri
 
 ### Idempotency Keys
 
-The server supports (see [Idempotency Keys](../backend/27-idempotency-keys.md)) an `Idempotency-Key` header on
+The server supports (see [Idempotency Keys](?page=backend/27-idempotency-keys)) an `Idempotency-Key` header on
 player write routes: a retry with the same key and the same request replays the first response instead of
 running the handler again; the same key with a *different* request is a 422 (`idempotency_key_reused`); the
 same key while the first attempt is still running is the 409 `idempotency_in_progress` that the client retries.
@@ -188,6 +188,10 @@ same key while the first attempt is still running is the 409 `idempotency_in_pro
 - **Callers do nothing.** Every write through `SimpleWebClient` is keyed automatically. Anonymous bootstrap routes
   (`/auth/*`, `POST /account`) are sent with a key too, which the server ignores because it has no principal to
   scope one to; they are retried like everything else but are not replay-protected.
+- **Unkeyed routes ignore it.** The middleware acts only on routes marked `RequireIdempotencyKey`. A player write
+  the server deliberately leaves unkeyed (the exemptions listed on the backend page, among them the merchant
+  "stock this shop" intent since restock v2) receives the header and ignores it; such a route is safe to repeat
+  by construction (the stock roll is a compare-and-set), so a retry of it is harmless too.
 
 **Production switch.** The server accepts a missing key (`Idempotency:RequireKey` is off, with a warning in the
 log), which is what keeps old clients working. Once a minimum client version that sends keys on every write is

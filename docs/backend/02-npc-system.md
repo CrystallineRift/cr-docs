@@ -850,11 +850,14 @@ All merchant endpoints are prefixed `/api/v1/merchants`.
 | `POST` | `/api/v1/merchants/{npcId}/inventory` | Content-write | Add item to merchant inventory |
 | `PUT` | `/api/v1/merchants/{npcId}/inventory/{itemId}` | Content-write | Set item quantity |
 | `DELETE` | `/api/v1/merchants/{npcId}/inventory/{itemId}` | Content-write | Remove quantity of item (query: `quantity`) |
-| `DELETE` | `/api/v1/merchants/{npcId}/inventory` | Content-write | Clear entire merchant inventory (query: `accountId`, `trainerId`). A player token gets 403: the next stock intent always rolls an empty shop, so a player who could clear one could re-roll it inside the restock cooldown. |
+| `DELETE` | `/api/v1/merchants/{npcId}/inventory` | Content-write | Clear entire merchant inventory (query: `accountId`, `trainerId`). The clear also forgets the shelf's roll (M16010 stamps), so the next stock intent rolls it. A player token gets 403: a player who could clear a shop could re-roll it past the restock cooldown. |
 | `GET` | `/api/v1/merchants/{npcId}/price/buy/{itemId}` | Player | Calculate buy price for one unit |
 | `GET` | `/api/v1/merchants/{npcId}/price/sell/{itemId}` | Player | Calculate sell price for one unit |
-| `POST` | `/api/v1/merchants/{npcId}/purchase` | Player | Purchase items from merchant to trainer inventory |
-| `POST` | `/api/v1/merchants/{npcId}/sell` | Player | Sell items from trainer inventory to merchant |
+| `POST` | `/api/v1/merchants/{npcId}/purchase` | Player | Purchase items from merchant to trainer inventory. Idempotency-Key required. Stamps the shelf touched inside the purchase transaction, so the restock cooldown runs from the last trade |
+| `POST` | `/api/v1/merchants/{npcId}/sell` | Player | Sell items from trainer inventory to merchant. Idempotency-Key required. Stamps the shelf touched, like a purchase |
+| `GET` | `/api/v1/merchants/{npcId}/multipliers` | Player | Buy and sell multipliers in one call |
+| `POST` | `/api/v1/merchants/{npcId}/restock` | Content-write | Reset limited-stock items whose restock interval has elapsed to their capacity (unrelated to spawners; stamps nothing) |
+| `POST` | `/api/v1/merchants/{npcId}/stock-from-spawner` | Player | The "stock this shop" intent, sent as the player walks up to a merchant. Rolls the registered spawner when the shelf is due (never rolled, or touched by a trade and the cooldown has run since the last one) and answers `{ stocked }`. No Idempotency-Key (one that is sent is ignored); its own per-account limiter, `cr-merchant-stock` (30/min, `RateLimits:MerchantStockPerMinute`). See [Item Spawner → Stocking a merchant](?page=backend/11-item-spawner#stocking-a-merchant) |
 
 **Player** routes read the account from the validated token, never from the request: an `accountId`
 in the query or body is accepted and ignored. They take `trainerId` in the query (GET) or the JSON

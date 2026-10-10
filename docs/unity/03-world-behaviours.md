@@ -84,10 +84,11 @@ Two things the numbers do argue for, if load time ever matters:
   ~4ms; the gap is `NpcMerchantBehaviour` calling `StockFromSpawnerAsync` on every world load.
   Invisible with two NPCs, but twenty merchants would add roughly 800ms to every load — restocking
   wants to become lazy (on first shop open) or interval-gated before the world fills out.
-  **It has since become interval-gated:** that ~40ms was a clear-and-re-roll on every load. The load
-  still sends the stock intent, but the authority re-rolls a stocked shop only once its spawner's
-  restock cooldown has elapsed (900 s on the shipped merchants), so a load inside the cooldown only
-  reads, and online the router asks once per merchant per session. See
+  **It has since become lazy:** that ~40ms was a clear-and-re-roll on every load. Since merchant
+  restock v2 (2026-10-10) world init sends no stock call at all. The intent goes out when the player
+  walks up to a merchant (at most once a minute per merchant), and the authority re-rolls a shelf only
+  after a trade has touched it and the spawner's cooldown has run since (900 s on the shipped
+  merchants); a shelf nothing has touched costs it one row read. See
   [Merchant Shop → Restocking](?page=unity/18-merchant-shop#restocking).
 
 ## Component Overview
@@ -399,7 +400,7 @@ GameObject: NPC_Cindris
 
 ## `NpcMerchantBehaviour` — Merchant Stock Intent
 
-`NpcMerchantBehaviour` implements `INpcSubInitializable`. On world init it sends the merchant's "stock this shop" intent, `INpcMerchantService.StockFromSpawnerAsync(accountId, trainerId, npcId)`, then marks itself ready and exposes a stable `MerchantNpcId` for the shop UI. It chooses neither the stock source nor a re-roll: the NPC registry row names the spawner, and the spawner's restock cooldown decides whether the shop is re-rolled (see [Merchant Shop → Restocking](?page=unity/18-merchant-shop#restocking)). A refusal is logged as a warning naming the NPC's content key.
+`NpcMerchantBehaviour` implements `INpcSubInitializable`. World init only records whose shop it is, marks it ready and exposes a stable `MerchantNpcId` for the shop UI; it sends nothing. When the player walks into range with the merchant on offer, `NpcInteractionBehaviour.EnterRange` calls `OnPlayerApproached()`, which sends the merchant's "stock this shop" intent, `INpcMerchantService.StockFromSpawnerAsync(accountId, trainerId, npcId)` (the first ask after the merchant came to life waits a random 0 to 2 s). It chooses neither the stock source nor a re-roll: the NPC registry row names the spawner, and the shelf's trade history and the spawner's restock cooldown decide whether the shop is re-rolled; the router asks at most once a minute per merchant (see [Merchant Shop → Restocking](?page=unity/18-merchant-shop#restocking)). A refusal is logged as a warning naming the NPC's content key.
 
 ### Example Inspector Setup
 

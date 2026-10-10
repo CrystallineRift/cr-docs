@@ -70,39 +70,54 @@ per roll — but not a slot.
 
 `NpcMerchantService.StockFromSpawnerAsync(accountId, trainerId, npcId, ct)` is the "stock this
 shop" intent. The caller names neither the spawner nor a re-roll. The authority decides both: the
-server online, and offline the same service over local SQLite.
+server online, and offline the same service over local SQLite. The client sends it when the player
+walks up to a merchant and again as the shop opens, never on world load (see
+[Merchant Shop → Restocking](?page=unity/18-merchant-shop#restocking)).
 
-1. **Refuses** an NPC that does not exist for this trainer or is not a merchant, and a content key
-   with no Merchant row in the NPC registry, or whose row names no item spawner. It throws
+1. **Refuses** an NPC that does not exist for this trainer or is not a merchant. It throws
    `MerchantStockNotAllowedException` and rolls and writes nothing; the route answers 404.
-2. **Stocks** a merchant that has **no stock rows**, whatever its cooldown: the first time it is
-   asked, or after it has been bought out. **A shop bought out completely rolls again on the next
-   ask**, because the purchase path deletes a row it sells out and the last purchase leaves no rows.
-   That is intended (pinned in `NpcMerchantServiceTests`), and it is why clearing a shop is
-   content-write only: a player who could empty a shop could re-roll it on demand (see
-   [NPC System → Merchant REST Endpoints](?page=backend/02-npc-system#merchant-rest-endpoints)).
-3. Otherwise **the spawner's cooldown decides**. **`restock_cooldown_seconds = 0` means "never
-   auto-restock"**, not "restock every time": a merchant that already has stock is left alone.
-   Above 0, the shop is due once that many seconds have passed since its newest `npc_inventory`
-   `updated_at`. A roll stamps every row it writes. **A purchase that leaves stock behind restarts
-   the cooldown**: when some of the item stays on the shelf, its row is restamped, so trading with a
-   shop defers its restock. A purchase that sells out one item while others remain deletes that row
-   and restamps nothing.
-4. When a restock is due: rolls the spawner, **clears** the merchant's `npc_inventory`, and
-   inserts the rolled items. A roll that comes back empty (the spawner is missing, inactive, or
-   has nothing to roll) keeps the old stock and logs a warning.
+2. **Keeps a shelf that was rolled and that nothing has touched since** (`stock_rolled_at` set,
+   `stock_touched_at` null), however long ago the roll was. This is the hot path and by far the
+   commonest answer: the NPC row read for step 1 carries the stamps, so it costs that one indexed
+   read, with no registry row, spawner, shelf read, transaction or write.
+3. Resolves the stock source: the merchant's content key → its NPC registry row → that row's item
+   spawner. A content key with no Merchant row in the registry, or whose row names no spawner, is
+   refused the same way.
+4. **Rolls a shelf that was never rolled** (no `stock_rolled_at`: a new merchant, a cleared shop, or a
+   shop that held rows before the stamps existed), replacing any rows it holds.
+5. Otherwise the shelf has been **touched** by a purchase or a sale, and **the spawner's cooldown
+   decides**. `restock_cooldown_seconds = 0` means "never auto-restock", not "restock every time". Above
+   0, the shelf is due once that many seconds have passed since the **last** touch. Every purchase and
+   sale re-stamps the touch, so trading with a shop defers its restock, and a shop bought out completely
+   waits for the cooldown like any other.
+6. **Rolls** the spawner before any transaction opens (the roll reads the spawner, its pools and its
+   templates, and none of that should hold a lock on the shelf). Then one transaction claims the shelf
+   with `TryClaimMerchantRollInTransactionAsync`, a compare-and-set on `stock_roll_seq` and the touch
+   stamp this request read, which sets `stock_rolled_at = now`, clears the touch and adds 1 to the
+   sequence, and replaces the shelf with the rolled items (`ReplaceMerchantStockInTransactionAsync`:
+   delete the rows, then plain inserts on the same connection, duplicate item ids summed first). A claim
+   that matches nothing (another ask rolled first, an operator reset the shelf, or a trade touched it
+   after the read) answers 0 and writes nothing. **An empty roll is still a roll:** the claim commits on
+   its own, the shelf keeps its rows and a warning is logged, so the asks after it take the hot path.
 
 It returns the number of distinct items stocked, or 0 when the stock was kept. Because the caller
-cannot force anything, the call is safe to repeat, and the client sends it on every world load
-(online, once per merchant per session); see
-[Merchant Shop → Restocking](../unity/18-merchant-shop.md#restocking).
+cannot force anything, the call is safe to repeat: a re-roll happens at most once per (trainer,
+merchant) per cooldown, and only after a trade.
 
-> The gate also keeps a stocked shop's world load cheap: when the stock is kept, the call only
-> reads. Its zero-cooldown half came first. Until that rule arrived on 2026-08-03, the seeded
-> `starting-merchant-items` spawner (cooldown 0) made every merchant clear and re-roll its full
-> inventory on every load — a serial write loop per merchant, linear in merchant count, and a
-> reload-to-reroll exploit on shop contents. Fixing it halved merchant world-init cost
-> (~40ms → ~19ms).
+The trades stamp the shelf inside their own transactions: `PurchaseItemFromMerchantAsync` and
+`SellItemToMerchantAsync` call `TouchMerchantStockInTransactionAsync` with `DateTime.UtcNow` right after
+the debit and before any `npc_inventory` write, so the lock order is the same everywhere (trainer, then
+the `npcs` row, then `npc_inventory`) and a rolled-back trade takes its stamp with it. Authoring writes
+reset the shelf rather than stamp it: the clear always (`ResetMerchantStockInTransactionAsync`: rolled
+and touched cleared, sequence + 1), and a removal or quantity edit only when it would leave the shelf
+empty (`ResetMerchantStockIfEmptiedByInTransactionAsync`). `RestockEligibleItemsAsync` (the limited-stock
+`restock` route) has nothing to do with spawners and stamps nothing.
+
+> The gate also keeps the ask cheap. Its zero-cooldown half came first: until that rule arrived on
+> 2026-08-03, the seeded `starting-merchant-items` spawner (cooldown 0) made every merchant clear and
+> re-roll its full inventory on every load — a serial write loop per merchant, linear in merchant
+> count, and a reload-to-reroll exploit on shop contents. Fixing it halved merchant world-init cost
+> (~40ms → ~19ms). Since restock v2 (2026-10-10) world init sends no stock call at all.
 
 A merchant's spawner is named by its **NPC registry row**: `item_spawner_content_key` on the
 `ContentWorldId` row for the merchant's content key. Crystalline Rift Studio pushes it there from
@@ -110,8 +125,32 @@ the Unity `NpcDefinition.itemSpawnerContentKey` (authored on Merchant-type NPCs)
 come from `M16100SeedNpcRegistry_20261009`. The scene's `NpcMerchantBehaviour._itemSpawnerContentKey`
 is a designer reference that the audit reads; it is not sent.
 
-Per-merchant per-load work scales linearly with merchant count — keep an eye on it as the world
-fills out.
+### Shelf stamps: M16010
+
+`M16010AddMerchantStockStampsToNpcs` adds three columns to `npcs` (the player's copy of the merchant,
+per account and trainer; player-data offline): `stock_rolled_at` and `stock_touched_at` (nullable
+timestamps, UTC readings) and `stock_roll_seq` (integer, NOT NULL, default 0). They are read through
+`NpcColumns` and written only by the dedicated statements above, never by the generic `UpdateNpc`, so a
+content push or a stale read-modify-write cannot reset them. The sequence exists because a timestamp
+cannot be compared reliably across engines (Postgres keeps microseconds; SQLite stores whatever text its
+writer produced).
+
+The backfill is what makes deploying it re-roll nothing: every live merchant (type 0) that holds shelf
+rows is stamped rolled at its newest row's `updated_at` and left untouched, so every existing shelf
+counts as stocked and untouched. A merchant with no rows (a shop bought out under the old rules) has no
+roll to remember and is rolled once by its next ask. Postgres runs one set-based `UPDATE … FROM`
+over the shelf aggregate; SQLite, which has no `UPDATE … FROM` on the versions this project targets,
+uses a correlated subquery that compares ids with `LOWER()`. The ADD COLUMNs are guarded, so a re-run
+changes nothing, and `updated_at` on `npcs` is left alone (it is the NPC definition's edit stamp).
+`Down()` drops the columns on Postgres and leaves them on SQLite (no DROP COLUMN there). The NPC
+repositories now select the new columns, so M16010 must run on every SQLite database that has an
+`npcs` table: player-data and every online cache.
+
+Pinned by `NpcMerchantServiceTests` and `MerchantShelfStampTests` (the rules), `MerchantShelfStampsRepositoryTests`
+(Postgres) and `MerchantShelfStampsSqliteTests` (the claim, touch and reset statements, concurrent asks
+rolling once), `MerchantShelfStampsMigrationSqliteTests` / `…PostgresTests` (columns, backfill, re-run),
+`OfflineMerchantRestockSqliteTests` (the real service over migrated SQLite, called the way the client
+calls it offline) and `MerchantRestockHttpTests`.
 
 ### Restock cooldowns: M6024
 
@@ -132,16 +171,17 @@ every world load (`_refreshStockOnWorldLoad`, `force: true`). The route stopped 
 the 2026-09-27 route lockdown, so from then on no online shop restocked. On 2026-10-10, `force` and
 the caller's spawner key were removed from the call altogether.
 
-Pinned by `NpcMerchantServiceTests` (each branch above, plus two purchase cases run against a stand-in
-shop: bought out completely, it rolls on the next ask inside its cooldown; left with stock, it restarts
-the cooldown from the last purchase), `MerchantRestockCooldownSqliteTests` and
-`MerchantRestockCooldownPostgresTests` (the migration), `OfflineMerchantRestockSqliteTests` (the real
-service over migrated SQLite, called the way the client calls it offline) and
-`MerchantRestockHttpTests`. The HTTP tests post a v0.1.7 body with `force: true` inside the cooldown and
-get `stocked: 0` with the stock untouched, buy an item out and see it return once the cooldown has
-passed, and show that a partial purchase resets the clock. They also show that a player's
-`DELETE /api/v1/merchants/{npcId}/inventory` is 403 and leaves the stock and the cooldown as they were,
-while a content-write token clears the shop the operator names.
+Pinned by `MerchantRestockCooldownSqliteTests` and `MerchantRestockCooldownPostgresTests` (the
+migration) and, in cr-api-unity, `MerchantRestockContentTests` (the six `*MerchantItems` assets and the
+committed offline floor carry the same 900). `MerchantRestockHttpTests` posts a v0.1.7 body with
+`force: true` and gets `stocked: 0` with the stock untouched, and shows on seeded merchants that a shelf
+nothing touched is never restocked, even days past its cooldown; that a bought-out item comes back once
+the cooldown has run since the last purchase; that a shop bought out completely waits for the cooldown;
+that a partial purchase starts the clock while a sibling shop nobody traded with never restocks; that a
+sale touches the shelf; that a group of asks for a due shop rolls it once; and that a purchase landing
+between an ask's read and its claim makes the claim lose. It also shows that a player's
+`DELETE /api/v1/merchants/{npcId}/inventory` is 403 and leaves the stock as it was, while a content-write
+token clears the shop the operator names and the next ask rolls it.
 
 ### One spawner per area merchant
 
@@ -167,13 +207,14 @@ seeded-but-unrollable spawner fails the build rather than stocking an empty shop
 | POST | `/api/v1/item-spawners/sync-config` | Create/replace a spawner (header + pools + templates) by content key — used by Crystalline Rift Studio. Every `itemContentKey` must resolve: a payload naming an item the server does not have is refused with `409` and nothing is written, because this call replaces the spawner's pools wholesale and skipping the unresolved templates silently emptied it. Now gated behind `AuthorizationPolicies.RequireContentWrite` — it was reachable on any player token. |
 | GET  | `/api/v1/item-spawners/{contentKey}/roll?seed=` | Preview a roll (distinct item ids + quantities) |
 | GET  | `/api/v1/item-spawners/by-content-key/{contentKey}/config` | Full config (header + pools + templates) — used by Crystalline Rift Studio **Pull** |
-| POST | `/api/v1/merchants/{npcId}/stock-from-spawner` | The "stock this shop" intent: rolls the merchant's registered spawner into its inventory when the restock cooldown says the shop is due, and answers `{ stocked }` (0 = stock kept). Body `{ accountId, trainerId }`; only `trainerId` is read, and the account comes from the token. The `spawnerContentKey` and `force` that v0.1.2 to v0.1.7 still post bind and are ignored. 404 for a refusal. |
+| POST | `/api/v1/merchants/{npcId}/stock-from-spawner` | The "stock this shop" intent, sent as the player walks up to a merchant: rolls the merchant's registered spawner into its inventory when the shelf is due (never rolled, or touched by a trade and the cooldown has run since the last one), and answers `{ stocked }` (0 = stock kept). No Idempotency-Key (one that is sent is ignored); limited per account by `cr-merchant-stock` (`RateLimits:MerchantStockPerMinute`, default 30/min, 429 past it). Body `{ trainerId }`; the account comes from the token. The `accountId`, `spawnerContentKey` and `force` that v0.1.2 to v0.1.7 still post bind and are ignored. 404 for a refusal. |
 
 ## Authoring (Unity)
 
 Create an **`ItemSpawnerDefinition`** (`Assets → Create → CR → Content → Item Spawner
-Definition`): set `contentKey`, `maxSlots` and `restockCooldownSeconds` (**Restock Cooldown (s)**;
-0 never restocks a stocked shop, and the merchant spawners use 900), then add pools
+Definition`): set `contentKey`, `maxSlots` and `restockCooldownSeconds` (**Restock Cooldown (s)**:
+how long after the player's last trade with a shop fed by this spawner it may be re-rolled, on the next
+walk-up; 0 never restocks, and the merchant spawners use 900), then add pools
 and item templates (item content-key picker, probability slider, quantity range). Push it to the
 backend with **Crystalline Rift Studio → Item Spawners → ⬆ Push All** (the inspector's own "Sync Full
 Config" button was removed — see

@@ -68,3 +68,13 @@ Purchase: debit (guarded) → take the merchant's stock by guarded decrement ins
 (`INpcInventoryRepository.TryTakeMerchantStockInTransactionAsync`, quantity and the limited-stock counter together) → add to the bag.
 A lost stock take rolls back, refunding the debit ("This item is out of stock."). Sell: take the sold units from the bag entry by
 guarded decrement **before** crediting; twenty parallel sales of the last unit credit once.
+
+Since merchant restock v2 (2026-10-10, M16010) both trades also stamp the merchant's shelf touched
+(`INpcRepository.TouchMerchantStockInTransactionAsync`, `npcs.stock_touched_at = DateTime.UtcNow`) inside
+the same transaction, right after the debit and before any `npc_inventory` write. The lock order is
+therefore trainer, then the merchant's `npcs` row, then `npc_inventory`, the same as the restock roll's,
+and a trade that rolls back takes its stamp with it. The restock cooldown runs from that stamp, so a
+shelf is only ever re-rolled after a trade (see
+[Item Spawner → Stocking a merchant](?page=backend/11-item-spawner#stocking-a-merchant)).
+`APurchaseThatLosesItsTake_RollsBackTheStampAndTheMoneyTogether` (`OfflineMerchantRestockSqliteTests`)
+and `ASale_TouchesTheShelf_InItsTransaction` (`MerchantRestockHttpTests`) pin it.

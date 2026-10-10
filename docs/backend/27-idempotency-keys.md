@@ -59,11 +59,12 @@ written reason. Four routes are exempted today:
 | `POST /api/v1/trainers/{trainerId:guid}/creatures/by-ids` | A read (bulk fetch by id list) shaped as `POST` only because the id list doesn't fit a `GET` query string — no mutation. |
 | `POST /api/v1/npc/ensure` | Idempotent by construction — creates a bare NPC only if one doesn't already exist. |
 | `POST /api/v1/pickups/{trainerId:guid}/collected` | Mark-only bookkeeping keyed by `instanceId`, grants nothing. The reward-granting route is `/collect`, which **is** keyed. |
+| `POST /api/v1/merchants/{npcId:guid}/stock-from-spawner` | Idempotent by construction (merchant restock v2, 2026-10-10): the roll is a compare-and-set on `npcs.stock_roll_seq`, so any number of concurrent or repeated asks roll a shelf at most once, and the common answer (an untouched shelf) is one row read that writes nothing. The client sends it whenever the player walks up to a merchant, so a key would add a write and a 24-hour `idempotency_record` row to every approach. The route has its own per-account rate limit (`cr-merchant-stock`) instead. A key that is sent anyway is ignored. |
 
 This covers every player write intent in the manifest today, including trainer create/update/delete,
 trainer inventory create/update/delete, team heal, account link/password/personal-API-key
 create+revoke, `/auth/oauth/link`, evolution begin/commit/cancel, stats increment/max/set, market
-list/cancel/buy, merchant purchase/sell/stock-from-spawner, quest accept/abandon/
+list/cancel/buy, merchant purchase/sell, quest accept/abandon/
 claim-rewards, item use, held-item equip/unequip, pickup collect, plus the original curated set
 (battle-start, `receive-gift`, `talk`, `world-locations/enter`, `talents/spend`, `talents/respec`, and
 the whole `TrainerCreatureIntentEndpoints` group).
