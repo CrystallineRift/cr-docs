@@ -246,6 +246,8 @@
         "Assets/Scripts/World/**/*.cs",
         "Assets/Scripts/**/*WorldBehaviour*.cs",
         "Assets/Scripts/**/*WorldInitializ*.cs",
+        "Assets/CR/Game/World/IWorldInitializable.cs",
+        "Assets/CR/Game/Areas/AreaWorldInitializer.cs",
         "Assets/Scripts/**/*GameInitializ*.cs",
         "Assets/Scripts/**/*NpcCreatureGrantBehaviour*.cs",
         "Assets/Scripts/**/*NpcMerchantBehaviour*.cs",
