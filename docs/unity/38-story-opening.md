@@ -204,6 +204,12 @@ events, NPC conversations, `SubmitPlayerAction` with `BattleActionParser.Seriali
 row in the local game-data (the server content sync soft-deletes creatures the server does not have); production content
 with `creature_gaterbear` was pushed and the offline floor rebaked on 2026-10-09.
 
+Its model is a placeholder: `creatures/gaterbear` is a scaled (1.8x), olive-tinted Prefab Variant of the Wolf Pup,
+built by `cr_build_gaterbear_placeholder`, with a portrait baked from it at `icons/creatures/creature_gaterbear`. Before
+that the definition pointed at Dragon Fire's prefab and icon, so the wagon fight showed a dragon. Changing a
+creature's `assetKey` or icon key reaches players only through the same two steps as its row: push `creature_gaterbear`
+(online reads the key from the server) and rebake the offline floor (offline reads it from `game-data.bytes`).
+
 Capture beats are random (the capture roll is the authority's), so the runner plays them like a player would. A missed
 lesson shard is retried (up to 3 times; the lesson zone stays armed until First Capture completes). Runaway Cargo gets up to
 8 attempts. Between attempts the runner heals with potions through `IItemUseDomainService` (the bag screen's use-item
