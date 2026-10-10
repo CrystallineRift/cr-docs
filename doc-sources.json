@@ -246,6 +246,8 @@
         "Assets/Scripts/World/**/*.cs",
         "Assets/Scripts/**/*WorldBehaviour*.cs",
         "Assets/Scripts/**/*WorldInitializ*.cs",
+        "Assets/CR/Game/World/IWorldInitializable.cs",
+        "Assets/CR/Game/Areas/AreaWorldInitializer.cs",
         "Assets/Scripts/**/*GameInitializ*.cs",
         "Assets/Scripts/**/*NpcCreatureGrantBehaviour*.cs",
         "Assets/Scripts/**/*NpcMerchantBehaviour*.cs",
@@ -1913,10 +1915,11 @@
       ],
       "cr-data": [
         "Assets/CR/Game/Story/**",
-        "Assets/CR/Resources/Story/**"
+        "Assets/CR/Resources/Story/**",
+        "Assets/CR/Game/OpenWorld/Editor/Corridor/CorridorStoryPlacer.cs"
       ]
     },
-    "description": "Opening story client systems: IStoryFlags, LoreReadable, WorldBark, NpcEscort/EscortPlan, OneShotWorldEvent, PrologueController + gate, place flavour, capture-lesson hints, StoryText, and the cr_story_script_page review-page command"
+    "description": "Opening story client systems: IStoryFlags, LoreReadable, WorldBark, NpcEscort/EscortPlan, OneShotWorldEvent, PrologueController + gate, place flavour, capture-lesson hints, StoryText, the cr_story_script_page review-page command, the beat map on the built corridor and the CorridorStoryPlacer hook in cr_story_build_scenes"
   },
   "unity/37-open-world": {
     "docPath": "docs/unity/37-open-world.md",
@@ -1926,10 +1929,13 @@
         "Assets/CR/Game/OpenWorld/**",
         "Assets/CR/Scenes/World/**",
         "Assets/CR/Resources/OpenWorld/**",
-        "Assets/CR/Core/DI/OpenWorldBindingsExtensions.cs"
+        "Assets/CR/Core/DI/OpenWorldBindingsExtensions.cs",
+        "Assets/CR/Art/Terrain/**",
+        "Assets/CR/Art/Sky/**",
+        "Assets/CR/Art/OpenWorld/**"
       ]
     },
-    "description": "Open world (in development): streamed 256 m cells, region mask, Dormant/Active rings, region identity, world_mode switch, Editor tools and cr_world_* CLI, regions.json, tech-demo areas"
+    "description": "Open world: streamed 256 m cells, region mask, Dormant/Active rings, region identity, world_mode switch, Editor tools and cr_world_* CLI, regions.json, tech-demo areas; the Act 1 corridor builder (layout asset, steps, containers, idempotency, overrides, revert, checks, edge guards), terrain proxies, sun override, vendor-LOD guard, resume ground lift, Deck budget"
   },
   "backend/25-talents": {
     "docPath": "docs/backend/25-talents.md",

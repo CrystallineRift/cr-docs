@@ -159,6 +159,19 @@ content key, which `AreaMerchantSpawnerSqliteTests` reads back through the real 
 Edit a merchant's stock by editing its SO and pushing from Crystalline Rift Studio — the seed is the floor,
 the SO is the authored truth.
 
+## The server picks the stock source
+
+Since cr-api PR #72 (live 2026-10-10), the authority decides which spawner stocks a merchant. Offline, that
+authority is the domain service running against local SQLite. `NpcMerchantService` looks up the merchant's content
+key in the NPC registry, reads that row's `item_spawner_content_key`, and rolls from it. The
+`_itemSpawnerContentKey` the scene sends is ignored, and a mismatch is only logged at Debug. Keep the scene field and
+the registry row in step anyway, because the audit above still reads the scene field.
+
+A merchant with no registry row, a registry row that is not a Merchant, or a row with no spawner is refused with
+`MerchantStockNotAllowedException`, and nothing is written. Online, the route returns 404 for those cases. Offline,
+the registry rows come from `M16100SeedNpcRegistry_20261009`. An empty shop with a registry refusal in the log
+means the registry row is missing; the scene is not the cause.
+
 ## Drift the audit catches
 
 `ContentAuditTool` → `AuditAreaNpcs` reads the five area scenes as text (prefab-instance

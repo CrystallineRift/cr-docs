@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026-10-10 — Merchant stock resolved by the server; offline NPC registry seed M16100 (live)
+
+- **Merchant stock (cr-api `8324296`, PR #72, live 2026-10-10):** `NpcMerchantService.StockFromSpawnerAsync` now
+  picks the stock spawner itself: merchant content key → its NPC registry row under `ContentWorldId` → that row's
+  `item_spawner_content_key`. The cooldown is read from the same spawner. The spawner key the caller sends is
+  ignored, with a Debug log when it differs. Before, offline play rolled whatever key the scene passed, so a client
+  could stock any merchant from any item spawner. Online, the route already overrode the key.
+  - Refusals throw `MerchantStockNotAllowedException`, and nothing is rolled or written. The cases: NPC not found, not
+    a merchant, no registry row, registry row not a Merchant, or no item spawner.
+  - The route answers those refusals with 404 `{ message }`, the same answer as "no such NPC". A registered merchant
+    with no spawner used to answer 200 `{stocked:0}`.
+  - The route no longer falls back to the per-trainer NPC row's own `item_spawner_content_key`. Only the registry
+    names a stock source.
+  - `StockFromSpawnerRequest.SpawnerContentKey` and `Force` stay for compatibility and are documented as ignored.
+- **M16100 (cr-api `659121b` + `644cdab`, PR #72, live 2026-10-10):** `M16100SeedNpcRegistry_20261009` seeds the
+  offline NPC content registry with production's 15 rows: the five area merchants with their stock spawners, the
+  five area quest givers, the legacy `demo-merchant` and `demo-quest-giver` (production registers both as
+  QuestGiver, so neither can be stocked), the Meadow Scout, Izzandra and the market broker. It was exported read-only from production by
+  the Studio's `cr_npc_registry_export_seed`.
+  - It inserts only when absent, keyed on `LOWER(content_key)` on both engines, so M16050's Scout row and any row
+    a Studio push already wrote stay untouched.
+  - Block 16100-16199 is reserved for this export (`SeedNpcRegistry_HighWaterMark.txt`). A re-export with changed
+    rows takes the next number.
+  - Offline, the NPCs now resolve "through the offline NPC registry" instead of falling back to the definition or
+    the scene's type. That log line comes from cr-api-unity PR #71.
+- **Unity package:** cr-api-unity `feature/mountain-buildout` runs the `CR.Game.Compat` 1.0.3 package built from
+  cr-api `main` `7de81f2`. The offline smoke shows Philroe stocking from `demo-merchant-area-1-items`, with no 404
+  and no refusal. → [Merchant Shop](?page=unity/18-merchant-shop)
+
 ## 2026-10-09 — v0.1.7: the open world ships
 
 - **What:** release builds now boot the open world and the new opening (Earth prologue → 1a summit → Philroe at the

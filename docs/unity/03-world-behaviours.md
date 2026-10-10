@@ -114,6 +114,13 @@ public interface IWorldInitializable
 
 Any `MonoBehaviour` that needs account/trainer context at scene start implements this interface and registers itself with `WorldRegistry` in `Awake`. The `CancellationToken` is provided by `GameInitializer` and is cancelled if the scene unloads or the trainer changes again before initialization completes. Always pass `ct` to any async operations inside `InitializeAsync` to support clean cancellation.
 
+**Be active when the scene is initialized.** Area scenes and open-world cells (`AreaWorldInitializer`) initialize only the
+initializables on active GameObjects. An inactive one is parked content (the corridor builder retires objects with
+`SetActive(false)`), so it is skipped and logged by name. One that is switched on later in the same visit (a
+`OneShotWorldEvent`'s `enableOnPlay`, a story beat) is not initialized until the next load or cell promotion. So an
+initializable must not sit under something enabled mid-visit, or whatever enables it must initialize it. No scene does
+that today.
+
 ## `INpcSubInitializable`
 
 ```csharp

@@ -113,16 +113,60 @@ replaces its own `[Story …]` root and leaves hand-placed objects alone:
   (all in this cell — Unity cannot serialise cross-scene references), the three story encounter zones, the two
   place triggers, Ahksun's barks, the farm (gate, fence, barn, Izzandra, `BarnSleepInteraction`).
 
+Before saving `arrival`, `vista` and `descent`, `StorySceneBuilder` calls `CorridorStoryPlacer.ApplyTo(scene, CorridorLayout.LoadDefault(), dryRun: false)`,
+so a rebuild puts every story object back where the corridor layout says (the constants in `StorySceneBuilder` are the blockout
+positions and are not edited). With no layout asset it is a no-op with a note.
+
 After a rebuild run `cr_world_refresh_activatables --args c,r`, `cr_world_bake_proxy --args c,r` and `cr_world_validate`.
+
+## Beat map on the built corridor
+
+The corridor builder ([Open World → Terrain and the corridor builder](?page=unity/37-open-world)) moved, snapped or resized
+these objects through its adjustment rows (each row carries its reason in `Act1Corridor.asset`); component fields (keys,
+dialogue, quest gates, radii, escort settings) are never edited.
+
+| # | Beat | Object | Where on the built corridor |
+|---|---|---|---|
+| 1 | spawn | `WorldLayout` start (208, 30.1, 1105), yaw 180 | the 1a shelf, ground 30.0; nothing solid within 1.5 m |
+| 2 | Ahksun rises | `Event_arrival-ahksun-rises` | box widened to the whole glade, x 184-231, z 1091-1100 (A3); rims close every other exit |
+| 3 | crystal at the cliff edge | `Ahksun Crystal (placeholder)` | moved to (205, 30, 1090), 2.2 m inside the rim, in a broken rune ring (A5) |
+| 4 | inscription | `Readable_RuinInscription` (193.6, 30, 1090.6) | unchanged; a rune rock stands 1.2 m south of it |
+| 5 | first sight of Mirandale | `Bark_ahksun-mirandale-first-sight` | box widened to x 206-226 on the balcony (A6); the gate posts frame the city |
+| 6 | pillar shatters | World `Event_arrival-pillar-shatters` | box spans the whole shoulder, x 96-300, z 1051-1065 (W1) |
+| 7 | descent, ambush seen | — | goat path legs B/C; Leg C looks down on the terrace |
+| 8 | wagon: Hellcat bond, gaterbear First Battle | Philroe, WP0, `[Bond Cue]`, gaterbear zone | y-snapped onto the 4.2 m terrace; the cart is posed nose-down against a boulder (C13) and the grey rock cube parked |
+| 9 | escort, descent bark, switchback | `NpcEscort`, `Bark_ahksun-descent`, `story-switchback` | ET track WP0 → WP1; waypoints, bark and trigger y-snapped |
+| 10 | capture lesson | `story-capture-lesson` | WP2 in the flat lesson clearing (pad 0.0) |
+| 11 | meadow edge | `Bark_ahksun-meadow` | WP2 → WP3 |
+| 12 | farm gate, Runaway Cargo offer | WP4 | moved to the lane (210.5, 0, 974.5), yaw 90, facing the gate (C12); still inside `story-philroes-farm` |
+| 13 | Runaway captures | `story-runaway-farm` (238, 955) r 9 | meadow south of the yard fence |
+| 14 | Izzandra, barn sleep, morning | Izzandra (224, 978), Barn Sleep (231.5, 983), morning spot (215.5, 976) | through the doorless gate |
+
+**The farm (2a).** The eight story fences are re-lined N-S as the yard's west fence around the gate frame (C27-C34); the gate's two
+door children are parked so the opening is walkable (C25, C26; a broken leaf leans on the fence instead). The north and east yard
+fences are closed, so a player coming down from the wagon follows the track past the lesson. The cabin (Village `house_10`) has
+chimney smoke and a lantern; the barn has its own lantern over Barn Sleep. Keep-outs (legacy `entrance` 2.5 m, the barn apron,
+Barn Sleep 3.2 m, Izzandra 3.5 m, morning spot 1.5 m, a 3 m corridor gate → Izzandra) are checked by `cr_world_check_corridor`.
+
+**Village parked in open mode.** The migrated `[Village]` group and the demo quest-giver are parked in `World_c0_r3` (C4, C5); legacy
+mode keeps `Areas/Village.unity`. The market broker moved to the lane's east end beside a stall at (252.5, 964.6) (C6). The `village`
+visit trigger and the `entrance` spawn point are kept.
 
 ## Small story components
 
 - `QuestGatedCollider` — keeps a trigger collider enabled only while `QuestGateRule` says so (required quest
-  complete, blocker not complete); re-checked every frame because `SpawnerEncounterBehaviour.Activate` re-enables
-  the collider at world init. The gaterbear zone opens after Welcome and closes after First Battle; the lesson
-  zone opens after First Battle and closes after First Capture. Server side, Welcome is retired by M7020 and the
-  starter is granted at trainer creation (pending deploy, cr-api feature/retire-welcome; see
-  [Quest System](?page=backend/07-quest-system)); the Unity changes to the escort and gates are pending.
+  complete, blocker not complete, required dialogue heard); re-checked every frame because
+  `SpawnerEncounterBehaviour.Activate` re-enables the collider at world init. The gaterbear zone
+  (`Story_EncounterZone_story-gaterbear-wagon` in `World_c0_r3`) no longer gates on Welcome and has no required quest
+  (First Battle is granted at world start). It arms only once Philroe's opening (`dialogue-merchant-area-1`) has been
+  heard: the conversation ends after showing `help-catch` or `trapped`. It stays shut mid-talk, on the last line and
+  after a walk-off. The "heard" marker is a local presentation story flag per trainer
+  (`IStoryFlags`), so it is never reported to the authority. The zone closes for good when First Battle completes
+  (`blockedByCompletedQuestKey: quest-first-battle`). The lesson zone opens after First Battle and closes after First
+  Capture. Server side, Welcome is retired by M7020 and the starter is granted at trainer creation (merged to cr-api
+  `main` in PR #70; see [Quest System](?page=backend/07-quest-system)). The Unity side is in place: the gate fields
+  above, and the escort waits for Philroe's post-win lines at the wagon before it walks (F7). The corridor build-out
+  does not touch any of these fields (it moves transforms only).
 - `ProximityBark` — one StoryText line when the player's root collider (tag `Player`) enters; once per trainer
   under `event.<key>`, written only when the line was actually shown (a line suppressed by a conversation is retried
   while the player stays inside); anchored on the player (Ahksun) or on a transform (Izzandra).
@@ -155,6 +199,15 @@ and its first region entry still shows flavour; it needs `IVisitedPlacesSource`,
 startup UI to a new offline trainer and walks every beat through the player's own entry points (readables,
 events, NPC conversations, `SubmitPlayerAction` with `BattleActionParser.Serialise(BattleAction)`, teleports through
 `IOpenWorldPlayer`). One line per step in
-`Temp/i2/story_smoke.txt`; `cr_story_smoke_status` shows the phase. Offline, the gaterbear needs its creature
-row in the local game-data (the server content sync soft-deletes creatures the server does not have), so push
-`creature_gaterbear` before relying on the wagon fight.
+`Temp/i2/story_smoke.txt`; `cr_story_smoke_status` shows the phase. Its teleports still use the blockout heights, so
+`Teleport` lifts each one onto the terrain + 0.2 (`GroundLiftRule`) when it would land underground. Offline, the gaterbear needs its creature
+row in the local game-data (the server content sync soft-deletes creatures the server does not have); production content
+with `creature_gaterbear` was pushed and the offline floor rebaked on 2026-10-09.
+
+Capture beats are random (the capture roll is the authority's), so the runner plays them like a player would. A missed
+lesson shard is retried (up to 3 times; the lesson zone stays armed until First Capture completes). Runaway Cargo gets up to
+8 attempts. Between attempts the runner heals with potions through `IItemUseDomainService` (the bag screen's use-item
+intent), buys potions and shards from Philroe through the merchant purchase intent when the bag is empty, and leaves the zone
+as soon as each battle closes, because standing in it re-arms the next encounter. A repeat-capture battle that the zone has
+already started is adopted rather than reset. Trainers are named `Smoke<MMddHHmmss>`. The runaway mode fails unless the barn
+reads `Sleep` after the claim, and every mode that reaches the barn fails unless the morning fires and reads back `Closed`.
