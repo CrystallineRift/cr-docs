@@ -111,6 +111,14 @@ Merged to main via PR cr-api-unity #66 (2026-10-08); the server-side vocabulary 
 | Quest reward tuning (Rulings S26, S28): First Battle pays 6 × `capture_crystal_standard` (Summoning Shard; was 3) and First Capture also pays 6, so failed throws in the capture lesson cannot leave the player shardless and Runaway Cargo's three captures are reachable — SERVER PUSH NEEDED (Studio Quests: both quests) or online First Battle still pays 3 and First Capture XP + gold only. Journal order: Welcome 0, First Battle 1, First Capture 2, Runaway Cargo 12 | First Battle reward; First Capture claim (Philroe's `caught-paid`) | `Assets/CR/Content/Defs/Quests/First Battle.asset`, `First Capture.asset`, `Starter Quest.asset` (sortOrder) + Studio push | 2026-10-08 | 2026-10-08 | AI draft |
 
 
+## Follow-ups (merged to main via PR cr-api-unity #71, 2026-10-09/10)
+
+| Item (what was generated) | Where it's used | Where to update it | Created | Updated | Status |
+|---|---|---|---|---|---|
+| Player menu wordmark "SEEKER'S JOURNAL" (was the pre-canon "MONSTER CURATOR") | Player menu header | cr-api-unity `Assets/CR/UI/Resources/PlayerMenuWindow.uxml` (`wordmark` label; localization key `ui.playermenuwindow.wordmark`) + language packs; pinned by `LegacyPlayerTitlesTests` | 2026-10-09 | 2026-10-10 | AI draft |
+| Battle HUD eyebrow "ACTIVE KRYTORUS" (was the pre-canon "ACTIVE AETHERIA") | Battle HUD, above the active creature | cr-api-unity `Assets/CR/UI/Resources/BattleHUD.uxml` (`active-aetheria-eyebrow` label; the element name is the localization key `ui.battlehud.active-aetheria-eyebrow`, so it stays) + language packs; pinned by `LegacyPlayerTitlesTests` | 2026-10-09 | 2026-10-10 | AI draft |
+| `dunes-wild-zone-2` Default Pool: sunflora pixie (`creature_sunflorapixie`) and poison bomb (`creature_poisonbomb`) at levels 28-34, ability sets copied from `dunes-wild-zone`. Aligned to the cr-api M10016 seed (`M10016SubdivideAreaLevelBands`), which is the authority; the asset fill (pool layout, ability sets) was composed by AI | Dunes wild encounters (upper band) | cr-api-unity `Assets/CR/Content/Defs/Spawners/dunes-wild-zone-2.asset` (Studio push); keep it equal to cr-api M10016 and the baked offline floor | 2026-10-09 | 2026-10-10 | AI draft |
+
 ## Earlier content — provenance audit pending
 
 Content created before this ledger existed. Some of it was drafted by AI in earlier sessions; each item needs its origin confirmed and then a row above (or removal from this list if human-made).

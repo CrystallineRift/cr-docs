@@ -156,9 +156,13 @@ visit trigger and the `entrance` spawn point are kept.
 
 - `QuestGatedCollider` — keeps a trigger collider enabled only while `QuestGateRule` says so (required quest
   complete, blocker not complete, required dialogue heard); re-checked every frame because
-  `SpawnerEncounterBehaviour.Activate` re-enables the collider at world init. The gaterbear zone has no required
-  quest: it is armed from world start until First Battle completes, and waits until Philroe's opening
-  (`dialogue-merchant-area-1`) has been heard. The lesson zone opens after First Battle and closes after First
+  `SpawnerEncounterBehaviour.Activate` re-enables the collider at world init. The gaterbear zone
+  (`Story_EncounterZone_story-gaterbear-wagon` in `World_c0_r3`) no longer gates on Welcome and has no required quest
+  (First Battle is granted at world start). It arms only once Philroe's opening (`dialogue-merchant-area-1`) has been
+  heard: the conversation ends after showing `help-catch` or `trapped`. It stays shut mid-talk, on the last line and
+  after a walk-off. The "heard" marker is a local presentation story flag per trainer
+  (`IStoryFlags`), so it is never reported to the authority. The zone closes for good when First Battle completes
+  (`blockedByCompletedQuestKey: quest-first-battle`). The lesson zone opens after First Battle and closes after First
   Capture. Server side, Welcome is retired by M7020 and the starter is granted at trainer creation (merged to cr-api
   `main` in PR #70; see [Quest System](?page=backend/07-quest-system)). The Unity side is in place: the gate fields
   above, and the escort waits for Philroe's post-win lines at the wagon before it walks (F7). The corridor build-out
