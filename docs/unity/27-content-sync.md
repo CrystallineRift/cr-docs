@@ -31,11 +31,11 @@ not share.
 | `ServerContentSyncService` | Fetches each domain, pages it, validates it, hands rows to the writer, returns a report. |
 | `ContentSyncWriter` | All the SQL. Takes a connection string and parsed rows — no web client — so it can be tested against a real database. |
 | `ContentSyncIds` | Lowercases every id written, and derives stable ids for junction rows. |
-| `ContentSyncReport` / `ContentDomainResult` | Per-domain outcome. `MayRecordVersion` is true only when every domain applied. |
+| `ContentSyncReport` / `ContentDomainResult` | Per-domain outcome. `MayRecordVersion` is true only when every domain applied. `ContentDomainResult.RowByRow` builds the result for a domain written one row at a time (spawners): `Applied` when nothing was refused, else `Failed` with the rows that did land counted and the refused keys named. |
 | `ContentSyncPaging` | Page-walk rules: full page means keep going, short page ends it, hard cap stops a runaway. |
 | `ContentSyncSafety` | Guards the destructive half — deletions reconcile only against a provably complete pull *and* a plausible row count. |
 | `BattleMissionEditorSyncHelper` | Crystalline Rift Studio's battle-mission transport (`GET /all`, `PUT`, `DELETE`). Editor-only, and the one content type whose offline copy comes from an exported seed migration rather than from this pull. |
-| `ISpawnerSyncClient` | The spawner write path, reused by the pull. Optional on the sync service: a caller baking into a scratch file cannot supply one that writes to the right place, so it passes null and the domain is skipped rather than writing into the live database. |
+| `ISpawnerSyncClient` | The spawner write path, reused by the pull. Returning means the spawner was written; a spawner the writer refuses (no creature templates, an unresolved reference) throws, and the caller counts it as not written. Optional on the sync service: a caller baking into a scratch file cannot supply one that writes to the right place, so it passes null and the domain is skipped rather than writing into the live database. |
 
 ### Domains, in the order they run
 
@@ -148,6 +148,31 @@ existing upsert and prune logic. Crystalline Rift Studio's editor push is unaffe
 `SpawnerRecoveryService` used to sync-then-count-local, which online could never satisfy. It now
 re-pulls the single spawner from the server when reachable, and falls back to the authored floor
 otherwise.
+
+**A refused spawner is a failure, not a write.** The local writer hands every spawner to the cr-api
+`SpawnerConfigSyncService`, which refuses a payload with no creature templates and one whose creature,
+growth profile or progression set does not resolve. `LocalSpawnerSyncClient` used to return quietly for
+an empty definition (a log line, then "synced"), so every caller counted it as written. It now lets the
+refusal throw, with the tables untouched, and each caller counts the spawner as not written and names its
+key: world init (`SpawnerDefinitionSyncBehaviour`) skips it and lists it in its summary, recovery falls
+back or returns false, and this pull skips it and goes on with the rest.
+
+The domain result follows. `SyncSpawnersAsync` returns `Failed` — the status documented as "untouched or
+partial" — when any spawner was refused, with `Rows` counting the spawners that did land and the message
+naming the ones that did not (`ContentDomainResult.RowByRow`). It does not add a state for this. The rest
+of the sync is unaffected and nothing blocks game start: the other domains report on their own, the
+runtime sync only warns "local content may be behind the server", `MayRecordVersion` stays false, and the
+online entry re-syncs once. The floor bake (`cr_bake_floor_from_server`) never sees it, because it passes
+no spawner client and the domain reports `Empty`. Studio's pull and push do not read this result.
+
+A spawner the server lists with a content key but no templates is refused every time, so it warns on every
+sync and makes each online entry re-sync until someone fixes or removes it.
+
+**Description and battle arena key.** The pulled row's `description` and `battleArenaKey` go to the writer
+too (`ISpawnerSyncClient.SyncAsync(..., description, battleArenaKey)`), as do the same two fields of an
+authored `SpawnerDefinition`. Both follow one rule, shared with Studio's push (`TrimmedOrNull`): the value
+trimmed, and a blank sent as null — never `""` — because the service reads null as "keep what the row
+holds". A sync with nothing to say never blanks a value.
 
 The server side of Studio's push (`POST /api/v1/spawners/sync-config`, both for a `SpawnerDefinition`
 and for a `TrainerBattleDefinition`'s `-team` spawner) replaces pools and templates in **one

@@ -998,9 +998,11 @@ works because **the database pool is derived data** — the asset is the source,
 at world init. A pool that lost its templates (a bad sync, a soft-delete sweep) is rebuilt from the
 asset; soft-deleted rows are invisible to the read path, so the sync writes fresh ones.
 
-It cannot fix a definition that is itself wrong. If the asset holds templates with no creature key,
-the sync resolves nothing, the prune guard declines to delete anything, and `TryRestoreAsync` returns
-false — logged as an error, because the content needs a person and no retry will change that.
+It cannot fix a definition that is itself wrong. If the asset holds templates with no creature key, or
+no templates at all, the writer refuses it (it throws, and the tables are left as they were) and
+`TryRestoreAsync` returns false — logged as an error naming the spawner, because the content needs a
+person and no retry will change that. Online, a server config the writer refuses is a failed pull: recovery
+warns and falls back to the authored definition.
 
 `EnsureReadyAsync` runs the same check **when the zone activates**, so the common case is repaired
 before the player ever walks into the grass, and an unfixable zone reports itself at world init

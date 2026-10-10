@@ -89,6 +89,12 @@
         "Assets/CR/Game/World/Behaviours/SpawnerWorldBehaviour.cs",
         "Assets/CR/Game/World/Behaviours/SpawnerEncounterBehaviour.cs",
         "Assets/CR/Game/World/LocalSpawnerSyncClient.cs",
+        "Assets/CR/Game/World/ISpawnerSyncClient.cs",
+        "Assets/CR/Game/World/SpawnerSyncHttpClient.cs",
+        "Assets/CR/Game/World/Behaviours/SpawnerDefinitionSyncBehaviour.cs",
+        "Assets/CR/Core/Extensions/AuthoredTextExtensions.cs",
+        "Assets/CR/Tests/Editor/SpawnerSyncConfigBodyTests.cs",
+        "Assets/CR/Tests/Editor/LocalSpawnerSyncClientRequestTests.cs",
         "Assets/CR/Game/World/Logic/SpawnerPrunePolicy.cs",
         "Assets/CR/Game/Areas/Editor/CrEncounterZoneCommand.cs",
         "Assets/CR/Content/Defs/Spawners/**"
@@ -1433,7 +1439,15 @@
         "Assets/CR/Core/Data/Editor/Build/PickupPlacementPipelineCommands.cs",
         "Assets/CR/Core/Data/Editor/Build/GameDataFloorFromServerTool.cs",
         "Assets/CR/Game/World/Editor/EditorServiceTokenManager.cs",
-        "Assets/CR/Tests/Editor/EditorServiceTokenManagerTests.cs"
+        "Assets/CR/Tests/Editor/EditorServiceTokenManagerTests.cs",
+        "Assets/CR/Game/World/ISpawnerSyncClient.cs",
+        "Assets/CR/Game/World/LocalSpawnerSyncClient.cs",
+        "Assets/CR/Game/World/SpawnerRecoveryService.cs",
+        "Assets/CR/Game/World/Behaviours/SpawnerDefinitionSyncBehaviour.cs",
+        "Assets/CR/Core/Extensions/AuthoredTextExtensions.cs",
+        "Assets/CR/Tests/Editor/ServerContentSyncServiceSpawnerTests.cs",
+        "Assets/CR/Tests/Editor/SpawnerDefinitionSyncBehaviourTests.cs",
+        "Assets/CR/Tests/Editor/SpawnerRecoveryServiceTests.cs"
       ]
     },
     "description": "Runtime content pull-through cache: ServerContentSyncService fetch+paging, ContentSyncWriter SQL rules (no id rewrites, lowercase GUIDs, named-column upserts, derived junction ids, per-domain transactions), ContentSyncReport version-recording rule, deletion safety, and the dotnet round-trip tests; Bake Floor From Server (GameDataFloorFromServerTool) authenticating the sync with the Studio service token (EditorServiceTokenManager)."
