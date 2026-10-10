@@ -145,6 +145,44 @@ The pure rules — target → profile asset, target → output path, queue order
 `PlayerBuild/Logic/PlayerBuildPlan.cs` (asmdef `CR.Core.PlayerBuild.Logic`, no engine references)
 with NUnit tests beside it, so the queue and naming are checked without an Editor.
 
+## Release builds in CI (`build-game`)
+
+A version tag (`v0.1.8`) on cr-api-unity, or a manual dispatch, runs the GitHub workflow
+`.github/workflows/build-game.yml` on the self-hosted Mac runner (`[self-hosted, macOS, unity]`). It
+builds the Windows, Linux and macOS players and publishes them to the content CDN, where Crystalline
+Rift Studio's Builds page finds them through `GET /api/v1/builds` (see
+[Architecture](?page=backend/01-architecture)). The steps are scripts under `ci/`:
+
+1. **`ci/link-assets.sh "$CR_ASSET_SOURCE"`** makes the runner's checkout buildable. About 13 GB of
+   Asset Store packs under `Assets/` and `Packages/` are not in git, so the script walks the source
+   project (the live checkout on the same Mac) and symlinks in whatever the checkout lacks: a missing
+   directory whole, a missing file on its own. Tracked files are never touched, so the code that ships is
+   exactly the commit. Two things are never borrowed:
+   - **SQLite sidecars.** Names ending in `-wal`, `-shm` or `-journal` (and their `.meta` files) are
+     skipped. The open Editor keeps `game-data.bytes` in WAL mode, and linking its sidecars shipped
+     symlinks to the Editor's live database state inside the players' `StreamingAssets/CR` (the
+     0.1.8-playtest1 Mac app had them; on any other machine they dangle). `ci/build.sh` also deletes any
+     sidecar already under `Assets/StreamingAssets` before it builds, because older runner checkouts keep
+     the links they were given. (cr-api-unity PR #73.)
+   - **`Assets/CR`.** The game's own code and content are all tracked, so anything untracked there is
+     someone's uncommitted work in progress, and a build must ship the commit, not that. The script
+     skips the subtree (`NEVER_LINK`). In the live project the only ignored files under `Assets/CR` are
+     `.DS_Store` and `.idea` files. (cr-api-unity PR #74.)
+
+   It also skips `Library`, `Temp`, `Logs`, `Builds`, `ServerData`, `obj`, `UserSettings`, `.git`,
+   `.idea`, `.vs` and dot-files at every level.
+2. **`ci/check-fx-keys.sh`** fails the run when an ability's sound or effect key, or an address in the
+   feedback manifest, names nothing in the Addressables catalogue, before 40 minutes go into a build.
+3. **`ci/build.sh <version> [targets]`** runs Unity headless (`CR.Core.Data.Editor.Build.CiBuild.Run`) to
+   build Addressables and the players, then zips each one as
+   `Builds/CrystallineRift-<Windows|Linux|Mac>-<version>.zip`.
+4. **`ci/publish.sh <version>`** uploads `builds/<version>/` (immutable), `builds/latest/`,
+   `builds/latest.json` and the version's `manifest.json`, then has `ci/builds-index.sh` merge the version
+   into `builds/index.json`. The zips are served only through signed URLs; the JSON stays public.
+
+The runner keeps `Library/` and the asset links between runs (`clean: false`), and resets tracked files
+with `git reset --hard HEAD` before each build. A three-platform build takes about 40 minutes.
+
 ## Distributing the macOS build
 
 A downloaded copy shows **“CR_Alpha” is damaged and can’t be opened** — that's Gatekeeper, not
