@@ -320,6 +320,7 @@
         "Assets/CR/Core/Data/Logic/Tests/HttpRetryExecutorTests.cs",
         "Assets/CR/Core/Data/Logic/Tests/IdempotencyKeyTests.cs",
         "Assets/CR/Tests/Editor/SimpleWebClientRetryTests.cs",
+        "Assets/CR/Tests/Editor/HttpRetryLayeringTests.cs",
         "Assets/CR/Tests/Editor/HttpMethodExtensionsTests.cs",
         "Assets/CR/Tests/Editor/VersionCheckClientUnityHttpTests.cs",
         "Assets/CR/Tests/Editor/AccountClientEmailLinkTests.cs",

@@ -74,15 +74,17 @@ it, so the status table and the delay bounds are ordinary unit tests. Both live 
 
 | Failure | Retried | Why |
 |---|---|---|
-| No response (refused, DNS, TLS, timeout; `StatusCode == 0`), including an unreachable auth server | yes | The request may never have arrived. If it did, a keyed write replays. |
+| No response to the call's own request (refused, DNS, TLS, connect timeout; `ServerUnreachableException`) | yes | The request may never have arrived. If it did, a keyed write replays. |
 | 429 | yes | Rate limited; `Retry-After` is honoured. |
 | 502, 503, 504 | yes | The proxy or host could not hand the request over or get an answer back in time. |
 | 409 whose JSON body is `{"error":"idempotency_in_progress"}` | yes | Another attempt on the same key is still running. |
 | 500, 501, 505 | **no** | See the ruling below. |
 | Every other 4xx: 400, 401, 403, 404, a plain 409, 410, 422 | no | These are answers, not hiccups. A 401 keeps its own in-request re-auth. |
 | A signed-out session (`SignedOut`) or a missing online entry (`EntryRequired`) | no | Decisions, not hiccups; `EntryRequired` has status 0 but nothing was attempted. |
+| A token that could not be fetched because the auth server is unreachable (a bare `StatusCode == 0` from the token manager) | **no** | The auth client has already retried the refresh itself. See "One layer retries a given failure". |
 | Cancellation (`OperationCanceledException`) | no | A cancel is not a server failure. |
 | Anything whose `Retry-After` is over 10 s | no | The failure surfaces at once with `RetryAfterSeconds` intact. |
+| Any failure once the call has been failing for 15 s (`HttpRetryPolicy.RetryBudget`) | no | A host that never answers costs one connect timeout, not four. See "The time budget". |
 
 **Why a 500 is not retried.** A 500 is the server's own code having run and failed, which is usually a bug
 or bad data that the next attempt meets again: a retry only delays the error by seconds and multiplies the
@@ -92,6 +94,30 @@ again, which makes a retried 500 a second real execution rather than a replay. A
 its effects before failing would apply them twice. 502/503/504 are different: the handler either never ran or
 finished unseen, and in the second case the stored answer is replayed. The table is the same for every method,
 so a failed read is not retried on a 500 either; the player can try again.
+
+**One layer retries a given failure.** A data call asks the token manager for a bearer before it sends anything. When
+the access token has expired, `TokenManager` and `GameAuthRepository` spend the refresh token through
+`AuthClientUnityHttp`, which is a `SimpleWebClient` with this same ladder. If the auth server cannot be reached, that
+refresh is sent four times (the original and three retries, about 3.5 s of backoff) before the repository gives up with
+"the auth server is unavailable" and `TokenManager` throws it as a bare `ServerRequestException` with `StatusCode == 0`.
+Were the data call to retry that as well, one call against a dead auth server would put 4 x 4 = 16 refresh POSTs on
+`/auth/token/refresh`, a route under the Bootstrap rate limit, and take about 17 s of backoff to say so. So at status 0
+only a no-response of the call's *own* request is retried: the `ServerUnreachableException` that `TransmitAsync` raises.
+A bare status 0 is the token manager reporting on a request that was not this call's, and it is surfaced as it is.
+`HttpRetryLayeringTests` runs the real `TokenManager`, `GameAuthRepository` and `AuthClientUnityHttp` over two scripted
+wires (data and auth) and counts what each saw: with the auth server down, 4 refresh POSTs and no data request; with one
+refused refresh followed by an answer, 2 refresh POSTs and one data request.
+
+**The time budget.** Best HTTP's defaults here are 20 s to connect and no limit once connected (its
+`RequestSettings.RequestTimeout` is `TimeSpan.MaxValue`; nothing in the project overrides either). A host that
+drops connections therefore fails an attempt only after the connect timeout, and four of those would be over 80 s where
+there used to be one 20 s wait. So a call that has been failing for `HttpRetryPolicy.RetryBudget` (15 s) is not sent
+again: when an attempt fails, `HttpRetryExecutor` reads its clock, and past the budget the failure surfaces instead of
+starting a backoff. The budget only ends retries. It never cuts an attempt off, so a slow answer that does arrive is
+untouched, and failures that come back quickly (a refused connection, a 503, a 429) are far inside it and still get all
+three retries. An attempt that connects and is then never answered has no bound at all, with or without retries, because
+the request timeout is unset; that gap is left alone because the right limit depends on the slowest legitimate call (a
+content manifest on a slow link, a Studio push).
 
 **Backoff** (`HttpRetryPolicy.RetryDelay`): 0.5 s, 1 s, 2 s, each varied by up to 25% either way so clients
 that failed together do not all return together. A `Retry-After` header is a *minimum*: the wait is the larger of
@@ -134,10 +160,12 @@ ever loses those, add them to `link.xml` too.
 
 **Testing.** `HttpRetryPolicyTests` is the status table, the Retry-After ceiling and the delay bounds.
 `HttpRetryExecutorTests` drives the real Polly pipeline with an attempt that fails on cue (attempt counts, the
-schedule, cancellation before and during a backoff, session changes, main-thread resumption). `SimpleWebClientRetryTests`
-runs the whole client against a scripted transport (`SimpleWebClient.TransmitAsync` is the seam, returning a
-`TransportReply`): the key on every write and none on a read, one key across retries and the 401 re-send,
-and the guards around a retry. `VersionCheckClientUnityHttpTests` pins the opt-out.
+schedule, the time budget against a scripted clock, cancellation before and during a backoff, session changes,
+main-thread resumption). `SimpleWebClientRetryTests` runs the whole client against a scripted transport
+(`SimpleWebClient.TransmitAsync` is the seam, returning a `TransportReply`): the key on every write and none on a read,
+one key across retries and the 401 re-send, and the guards around a retry. `HttpRetryLayeringTests` is the data client
+and the auth client together behind the real token manager (see "One layer retries a given failure").
+`VersionCheckClientUnityHttpTests` pins the opt-out.
 
 ### Idempotency Keys
 
@@ -202,7 +230,7 @@ The steps below are one attempt; a failure the policy retries goes back to step 
 
 Every authenticated request follows this sequence:
 
-1. `ITokenManager.GetAccessTokenAsync()` — retrieves the current Bearer token; refresh happens inside `TokenManager` if needed
+1. `ITokenManager.GetAccessTokenAsync()` — retrieves the current Bearer token; refresh happens inside `TokenManager` if needed. A token that cannot be had (signed out, no online entry, the auth server unreachable) throws here, before anything is sent, and this client does not retry it: the refresh already went through the auth client's own retries
 2. Constructs the full URL: `{_serverAddress}/{path}` (note: path leading slash is stripped)
 3. Creates a Best HTTP request with `Authorization: Bearer <token>` header
 4. Serializes the request body using `Newtonsoft.Json` (`JSonDataStream<TD>`) for POST/PUT

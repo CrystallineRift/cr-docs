@@ -24,6 +24,10 @@
   netstandard2.0 builds unmodified. The rest of Polly's chain is already supplied by the `com.cr.game.compat` package,
   Unity's Mono class libraries and `Assets/Plugins/Roslyn/`, so shipping a second copy would be a duplicate plugin.
   `Assets/link.xml` preserves both. No build profile overrides the project-wide Mono backend or the default stripping level.
+- **Review follow-ups:** a token fetch that failed because the auth server is unreachable is no longer retried by the data
+  call (the auth client has already retried the refresh, and nesting the two made one call send 16 refresh POSTs), and a
+  call that has been failing for 15 s is not sent again, so a host that drops connections costs one 20 s connect timeout
+  instead of four (`HttpRetryPolicy.RetryBudget`; Best HTTP has no request timeout here, only the connect one).
 - **Production step (not done):** once a minimum client version that sends keys on every write is enforced, set
   `Idempotency__RequireKey=true` in the production `/opt/cr/.env` and restart the API. Before that, an unkeyed write is
   accepted with a warning.
