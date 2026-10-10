@@ -21,9 +21,10 @@ domain services never see any of it.
 - **First occurrence per text block** (one dialogue node, one bark, one objective line) is styled; a
   term may opt into `"emphasis": "every"` (proper names, if a line should keep naming someone). A
   term's **effect** only ever applies to its first occurrence, whatever its emphasis.
-- **Where**: dialogue body (animated), area banner flavour line (animated), world barks, HUD quest
-  tracker lines, journal description and objectives (light palette), the flavour line of the discovery
-  toast. **Never** names or titles: speaker names, quest names, place names, option letters.
+- **Where**: dialogue body (animated), dialogue option lines (rich), area banner flavour line (animated),
+  world barks, HUD quest tracker lines, journal description and objectives (light palette), the flavour
+  line of the discovery toast. **Never** names or titles: speaker names, quest names, place names, option
+  letters.
 - **Animated surfaces** are the two labels that are Text Animator `AnimatedLabel`s (dialogue body, banner
   flavour). Everything else gets UI Toolkit rich text (`<color>`, `<b>`, `<smallcaps>`) and never moves.
 
