@@ -275,8 +275,9 @@ whole "did I await at the wrong time" class of bug for a listener that needs to 
 ### Capture / progression (`BattleEventsAdapter`)
 | Event | Payload |
 |---|---|
-| `CaptureAttempted` | `string` targetCreatureId — fires the moment the crystal is thrown, before the roll |
-| `CaptureFailed` | `string` targetCreatureId — fires when the roll fails (creature breaks free) |
+| `CaptureAttempted` | `string` targetCreatureId — the player's own echo of the throw, raised the moment they confirm it (the battle log's "you threw a crystal"). An intent, not an outcome: nothing that has to reflect what happened may hang on it |
+| `CaptureResolving` | `string` targetCreatureId — the authority accepted the throw and its verdict is about to be shown. Raised from the resolved outcome (`CaptureThrowWatcher`, off `ActionResolving`), ahead of `CreatureCaptured` / `CaptureFailed`, and never for a throw the authority refused. Has a Soap asset (`Events/CaptureResolving.asset`) and a wiring entry; the [Feel](?page=unity/39-game-feel) capture wobble answers it |
+| `CaptureFailed` | `string` targetCreatureId — the authority took the throw and the creature broke free (raised by `CaptureThrowWatcher` once the outcome has been shown; not for a refused throw) |
 | `ExpGained` | `ExpGainedData` (creatureId, amount, leveledUp) |
 | `LevelUp` | `string` creatureId |
 

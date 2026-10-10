@@ -2095,6 +2095,12 @@
         "Assets/CR/Content/Feel/**/*.prefab",
         "Assets/CR/Content/Defs/FeedbackManifest.asset",
         "Assets/CR/Content/Defs/Events/HeavyHit.asset",
+        "Assets/CR/Content/Defs/Events/CaptureResolving.asset",
+        "Assets/CR/Game/Battle/CaptureThrowWatcher.cs",
+        "Assets/CR/Game/Battle/Logic/CaptureThrowVerdict.cs",
+        "Assets/CR/Game/Battle/Logic/Tests/CaptureThrowVerdictTests.cs",
+        "Assets/CR/Tests/Editor/CaptureThrowWatcherTests.cs",
+        "Assets/CR/Tests/Editor/BattleCoordinatorActionSeamTests.cs",
         "Assets/CR/Game/Battle/Arena/BattleCameraShakeResponder.cs",
         "Assets/CR/Core/State/Events/CustomTypes/HpChangedData.cs",
         "Assets/CR/Core/Wiring/Generated/GeneratedEventWiringBridge.cs",
@@ -2106,6 +2112,6 @@
         "docs/feedback-bindings.md"
       ]
     },
-    "description": "Game feel with More Mountains Feel 5.9.1: FeedbackBinding.feelPlayerAddress/intensity, CrFeelPlayerInfo motion classes (Cosmetic/CameraMotion/ScreenFlash/TimeScale/Haptic) and the engine-free settings gate, FeedbackDirector + FeelPlayerPool (preload, one pooled instance per address, anchor play, kill switch, per-moment timing), payload-aware intensity adapters (HpChangedData damage), Reduced Motion / Screen Shake / Rumble settings (IFeelSettings, FeelSettingsStore, GameDataFeelSettingsPersistence), HapticsResponder + MMF_CrRumble + RumbleCoalescer (Nice Vibrations gamepad rumble, reset on pause/focus/battle close), BattleCameraShakeResponder scaling, BattleOpponentCreature anchor, the ten authored moments under Content/Feel built by FeelMomentBuilder, HeavyHit Soap wiring, the Steam Deck budget and its content tests, check-fx-keys.sh feelPlayerAddress check, and what still needs cr-api (crit / super-effective)"
+    "description": "Game feel with More Mountains Feel 5.9.1: FeedbackBinding.feelPlayerAddress/intensity, CrFeelPlayerInfo motion classes (Cosmetic/CameraMotion/ScreenFlash/TimeScale/Haptic) and the engine-free settings gate, FeedbackDirector + FeelPlayerPool (preload, one pooled instance per address, anchor play, no global Feel switch, per-moment timing), payload-aware intensity adapters (HpChangedData damage), Reduced Motion / Screen Shake / Rumble settings (IFeelSettings, FeelSettingsStore, GameDataFeelSettingsPersistence), HapticsResponder + MMF_CrRumble + RumbleCoalescer (Nice Vibrations gamepad rumble, reset on pause/focus/battle close), BattleCameraShakeResponder scaling, BattleOpponentCreature anchor, the ten authored moments under Content/Feel built by FeelMomentBuilder, HeavyHit and CaptureResolving Soap wiring (CaptureThrowWatcher / CaptureThrowVerdict raise the wobble cue from the authority's outcome, never from the throw), the Steam Deck budget (hit stop capped per resolved action) and its content tests, check-fx-keys.sh feelPlayerAddress check, and what still needs cr-api (crit / super-effective)"
   }
 }

@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-10-10 — Game feel review fixes (cr-api-unity `feature/game-feel`)
+
+- **The capture wobble now answers the authority, not the throw.** It was bound to `CaptureAttempted`, which the bag
+  panel raises the moment the player confirms, so a throw the server refused still wobbled (and the broke-free cue matched
+  on `ActionOutcome.ItemId`, which cr-api stamps only on an opponent's own heal, so it could not match the player's own
+  step). New `CaptureResolving` event
+  (Soap asset, wiring entry, regenerated bridge) raised by `CaptureThrowWatcher` from the resolved outcome, ahead of the
+  catch or the miss; a refused throw raises neither it nor `CaptureFailed`. `BattleCoordinator.PlayStepsAsync` raises a
+  new `BattleEvents.ActionResolving` before each step is presented to give it a lead-in. `CaptureAttempted` stays as the
+  battle log's echo, and a test fails if a binding answers it. → [Game Feel](?page=unity/39-game-feel)
+- **Hit stop is capped per resolved action** (120 ms: an impact plus the faint it causes), and the content tests pin
+  which moments freeze time and which events they answer, so the cap holds by construction. It was documented per turn
+  and only tested pairwise.
+- **The feedback director no longer flips Feel's process-wide `GlobalMMFeedbacksActive` when it is disabled**, so it
+  cannot silence a player that was not its own.
+- **Reduced Motion hint** now says what it does: "Removes screen shake and hit stop, and softens light flashes."
+
 ## 2026-10-10 — Game feel: the Feel bridge, real comfort settings, rumble, and ten moments (cr-api-unity `feature/game-feel`)
 
 - **Bridge.** A feedback binding can now play a Feel player prefab (`feelPlayerAddress`, `intensity`). The prefab

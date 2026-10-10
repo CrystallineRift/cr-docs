@@ -117,6 +117,7 @@ public interface IBattleCoordinator
 | `PlayerMustSwap` | `(string trainerId)` | Player's active creature fainted but has a backup; HUD must force a swap |
 | `BattleEnded` | `(bool playerWon, string outcomeLabel)` | Show result screen |
 | `RunAttempted` | `(bool success)` | Show escape message |
+| `ActionResolving` | `(ActionOutcome outcome)` | Every resolved action, raised once per step **before** its presentation plays: the authority has decided and nothing has been shown yet. The lead-in to `ActionResolved`, for a presenter that has to cue something ahead of the verdict from the outcome itself (`CaptureThrowWatcher` raises `CaptureResolving` from it) |
 | `ActionResolved` | `(ActionOutcome outcome)` | Every resolved action, raised once per turn **after** its presentation has played. The outbound seam for battle extensions — see [Battle Extensions](?page=unity/24-battle-extensions) |
 | `MissionProgressed` | `(string missionName, int current, int threshold)` | An in-battle mission ticked forward (e.g. applying Burn); HUD shows a fading progress toast |
 | `MissionCompleted` | `(string missionName, string unlockedAbilityName)` | An in-battle mission finished and unlocked a move for the rest of the battle; HUD shows a completion banner |
@@ -148,6 +149,7 @@ StartBattleAsync
        else
            IWildBattleAIDomainService.DecideActionAsync → submit via IBattleDomainService
            IBattleDomainService.SubmitActionAsync → ActionOutcome
+    └─ RaiseActionResolving(outcome)                                              ← lead-in seam (before the beats)
     └─ await IBattlePresentationSequencer.PlayOutcomeAsync(outcome, action, ctx)   ← paced beats
     └─ RaiseActionResolved(outcome)                                               ← extension seam
     └─ if outcome.BattleEnded → RaiseBattleEnded → break
