@@ -2083,5 +2083,29 @@
       ]
     },
     "description": "How to add a field to an existing cr-admin-web resource descriptor or add a whole new resource: FieldMeta/RowColumn kinds, fieldsFromSchema inference vs explicit override, the ResourceDescriptor shape, registry.ts registration, and the renderFieldsForm/descriptor.test patterns used to prove a field round-trips and validates."
+  },
+  "unity/39-story-camera": {
+    "docPath": "docs/unity/39-story-camera.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [
+        "Assets/CR/Game/Story/StoryCamera*.cs",
+        "Assets/CR/Game/Story/IStoryCamera*.cs",
+        "Assets/CR/Game/Story/StoryShot*.cs",
+        "Assets/CR/Game/Story/OneShot*.cs",
+        "Assets/CR/Game/Story/IStoryBeatGate.cs",
+        "Assets/CR/Game/Story/StoryBeatGate.cs",
+        "Assets/CR/Game/Story/Logic/StoryShot*.cs",
+        "Assets/CR/Game/Story/Logic/StoryCamera*.cs",
+        "Assets/CR/Game/Story/Logic/OneShotStageTracker.cs",
+        "Assets/CR/Game/Story/Logic/HoldToSkip.cs",
+        "Assets/CR/Game/Story/Editor/StoryShot*.cs",
+        "Assets/CR/Game/Story/Editor/ArrivalShots.cs",
+        "Assets/CR/Game/Story/Editor/VistaShots.cs",
+        "Assets/CR/Core/DI/StoryCameraBindingsExtensions.cs",
+        "Assets/CR/Game/World/Behaviours/OverworldCameraGate.cs"
+      ]
+    },
+    "description": "Story camera: StoryShotCue/StoryShotPlan, StoryCameraDirector (one Cinemachine camera, blend save/restore, release paths, pitch reframe), the Story camera setting (Cinematic/Gentle/Off), per-line OneShotWorldEvent stages, hold-Cancel skip + the menu gate, the authoring and preview commands and the two authored beats"
   }
 }

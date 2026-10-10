@@ -45,6 +45,12 @@ Plays once per trainer (`event.<eventKey>` flag): optional dialogue (awaits its 
 `enableOnPlay` / `disableOnPlay` toggles, then sets the flag. `triggerOnEnter` fires from a trigger volume.
 `OneShotRule.ShouldPlay(alreadyPlayed, blocked)`. Used for the pillar shattering and Ahksun rising.
 
+Per-line **stages** (`OneShotStage`) pull parts of that sequence forward to the dialogue line that talks about them (the
+crystal rises on `r1`; the rifts open on `s1`; the charge, burst and lights-out run on `s2`); a stage no line reached
+still runs after the dialogue, and the flag is still written only at the end. Holding Cancel for 1 s **skips** the beat
+(camera back at once, conversation cancelled, end state shown, flag written). The camera shots the same lines cue are
+described in [Story Camera](?page=unity/39-story-camera).
+
 A restore (load, cell stream-in, trainer switch) shows the END state without replaying: after enabling an object it
 calls every `IOneShotAftermath` under it — `CrystalRise` jumps to its final pose, `LightFlash` stays dark. A trainer
 switch during the dialogue never starts the prelude; a switch during the prelude puts the new trainer's view back;
@@ -104,11 +110,12 @@ replaces its own `[Story …]` root and leaves hand-placed objects alone:
 - **prologue** — writes `Assets/CR/Scenes/Prologue/Prologue_Earth.unity` (room blockout, readables, the stone,
   the portal volume, `PrologueController`, a `SceneContext` parented to `CoreContext`) and adds it to Build Settings.
 - **arrival** — `World_c0_r4`: the ruin inscription readable, the `arrival-ahksun-rises` event (crystal with
-  `CrystalRise`) and Ahksun's first-sight bark. Triggers sit on the ramp, outside the player rig's 20 m lock-on
+  `CrystalRise`, its camera shots and the r1 stage: see [Story Camera](?page=unity/39-story-camera)) and Ahksun's first-sight bark. Triggers sit on the ramp, outside the player rig's 20 m lock-on
   sphere at the start spawn (a trigger nearer the edge fires the moment the game starts).
 - **vista** — `World.unity` (always loaded, so the pillar and the trigger can reference each other): the
   Mirandale pillar + city lights at (354, 60, 758), the `arrival-pillar-shatters` event on the ramp with
-  `HCFX_Explosion_02`, a `LightFlash` and the `RiftFlicker` sky quads. Adds a `SceneContext` to World.unity.
+  `HCFX_Explosion_02`, a `LightFlash` and the `RiftFlicker` sky quads (double-sided, so they show from the ground), with the
+  event's camera shots and the s1 / s2 stages. Adds a `SceneContext` to World.unity.
 - **descent** — `World_c0_r3`: Philroe moved to the wagon, `NpcEscort` + `EscortDirector` with five waypoints
   (all in this cell — Unity cannot serialise cross-scene references), the three story encounter zones, the two
   place triggers, Ahksun's barks, the farm (gate, fence, barn, Izzandra, `BarnSleepInteraction`).
@@ -199,7 +206,8 @@ and its first region entry still shows flavour; it needs `IVisitedPlacesSource`,
 startup UI to a new offline trainer and walks every beat through the player's own entry points (readables,
 events, NPC conversations, `SubmitPlayerAction` with `BattleActionParser.Serialise(BattleAction)`, teleports through
 `IOpenWorldPlayer`). One line per step in
-`Temp/i2/story_smoke.txt`; `cr_story_smoke_status` shows the phase. Its teleports still use the blockout heights, so
+`Temp/i2/story_smoke.txt`; `cr_story_smoke_status` shows the phase. The arrival and vista beats also check that the story
+camera was the Brain's live camera during the beat and is released after it (skipped when the Story camera setting is Off). Its teleports still use the blockout heights, so
 `Teleport` lifts each one onto the terrain + 0.2 (`GroundLiftRule`) when it would land underground. Offline, the gaterbear needs its creature
 row in the local game-data (the server content sync soft-deletes creatures the server does not have); production content
 with `creature_gaterbear` was pushed and the offline floor rebaked on 2026-10-09.

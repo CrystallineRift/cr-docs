@@ -500,6 +500,7 @@ encrypted prefs store) under a `GameConfigurationKeys` constant and is pushed li
 | Graphics | **UI Scale** slider (`ui-scale-slider`, 70–150%) | `UiScale` | `UiScaleApplier.SetScale` |
 | Graphics | **Quest Tracker** toggle (`quest-tracker-toggle`) | `QuestTrackerHidden` | `QuestTrackerPresenter.SetShown` |
 | Game | Combat Speed dropdown | `BattlePacingScale` | `BattlePresentationSequencer` at battle start |
+| Game | **Story Camera** dropdown (`story-camera-dropdown`): Cinematic / Gentle (cuts only) / Off | `StoryCameraMode` | `StoryCameraSetting`, read at each cued line ([Story Camera](?page=unity/39-story-camera)) |
 
 The tracker key stores the **hidden** flag, not "shown": the tracker is on by default and
 `TryGet<bool>` cannot tell "never written" from `false`, so an absent key has to mean the default.
@@ -770,7 +771,9 @@ as a cancel, so no path leaves an item half-used or a modal stranded.
 - `TeamManagementView` is **not** used by `PlayerMenuWindow`. It is still used by
   `GameDataManagerController` and must not be deleted.
 - The System tab's Master Volume / Notifications / Reduced Motion / Language rows are still static
-  decoration; Look Sensitivity, Invert X/Y and Combat Speed are real and persist via
+  decoration; Look Sensitivity, Invert X/Y, Combat Speed and Story Camera are real and persist via
   `IGameDataRepository`.
+- `MenuInputBlocked` (the open key is ignored; closing is never blocked) is true in the prologue room **and** while a
+  skippable story beat holds `IStoryBeatGate`: Esc is the beat's hold-to-skip as well as the menu key.
 - The `.evo-*` and `.friend-*` rules in `PlayerMenuWindow.uss` are now unused; they are kept so the
   stylesheet stays a superset while those features are unbuilt.

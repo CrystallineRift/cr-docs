@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-10-10 — Story camera: arrival beats show what the dialogue talks about (cr-api-unity `feature/story-camera`)
+
+- **Shots on dialogue lines.** `StoryShotCue` + `StoryShotPlan` cue a camera shot per line; `StoryCameraDirector` owns one
+  Cinemachine camera above the overworld rig and releases it on every path (conversation end, trainer switch, battle
+  start, destroyed anchor, the line that returns to the player), restoring the Brain's blend and the rig's pitch. Authored
+  for `arrival-ahksun-rises` (pan from the glade to Mirandale, medium on the crystal, city wide) and
+  `arrival-pillar-shatters` (low angle up at the rifts, long lens on the pillar). See [Story Camera](?page=unity/39-story-camera).
+- **Visuals during their lines.** `OneShotWorldEvent` per-line stages: the crystal rises on r1, the rifts open on s1, the
+  charge, burst and lights-out run on s2; unfired stages still run after the dialogue; the flag is written at the end.
+- **Skippable.** Hold Cancel (B / Esc) for 1 s: camera back, conversation cancelled, end state shown. The player menu
+  stays shut during a beat (Esc is both).
+- **Setting.** System → Game → Story Camera: Cinematic (default) / Gentle (cuts only) / Off.
+- **Fix.** The sky-rift strips were single-sided and face up, so they were invisible from the ground; the material is now
+  double-sided.
+- Editor: `cr_story_author_shots`, `cr_story_render_shots`.
+
 ## 2026-10-10 — Merchant stock resolved by the server; offline NPC registry seed M16100 (live)
 
 - **Merchant stock (cr-api `8324296`, PR #72, live 2026-10-10):** `NpcMerchantService.StockFromSpawnerAsync` now
