@@ -843,20 +843,26 @@ All dependencies (`INpcRepository`, `INpcInventoryRepository`, `IItemRepository`
 
 All merchant endpoints are prefixed `/api/v1/merchants`.
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/v1/merchants/{npcId}/inventory` | List all items in merchant's inventory |
-| `GET` | `/api/v1/merchants/{npcId}/inventory/{itemId}` | Get a single item entry (404 if absent) |
-| `POST` | `/api/v1/merchants/{npcId}/inventory` | Add item to merchant inventory |
-| `PUT` | `/api/v1/merchants/{npcId}/inventory/{itemId}` | Set item quantity |
-| `DELETE` | `/api/v1/merchants/{npcId}/inventory/{itemId}` | Remove quantity of item (query: `quantity`) |
-| `DELETE` | `/api/v1/merchants/{npcId}/inventory` | Clear entire merchant inventory |
-| `GET` | `/api/v1/merchants/{npcId}/price/buy/{itemId}` | Calculate buy price for one unit |
-| `GET` | `/api/v1/merchants/{npcId}/price/sell/{itemId}` | Calculate sell price for one unit |
-| `POST` | `/api/v1/merchants/{npcId}/purchase` | Purchase items from merchant to trainer inventory |
-| `POST` | `/api/v1/merchants/{npcId}/sell` | Sell items from trainer inventory to merchant |
+| Method | Path | Access | Description |
+|--------|------|--------|-------------|
+| `GET` | `/api/v1/merchants/{npcId}/inventory` | Player | List all items in merchant's inventory |
+| `GET` | `/api/v1/merchants/{npcId}/inventory/{itemId}` | Player | Get a single item entry (404 if absent) |
+| `POST` | `/api/v1/merchants/{npcId}/inventory` | Content-write | Add item to merchant inventory |
+| `PUT` | `/api/v1/merchants/{npcId}/inventory/{itemId}` | Content-write | Set item quantity |
+| `DELETE` | `/api/v1/merchants/{npcId}/inventory/{itemId}` | Content-write | Remove quantity of item (query: `quantity`) |
+| `DELETE` | `/api/v1/merchants/{npcId}/inventory` | Content-write | Clear entire merchant inventory (query: `accountId`, `trainerId`). A player token gets 403: the next stock intent always rolls an empty shop, so a player who could clear one could re-roll it inside the restock cooldown. |
+| `GET` | `/api/v1/merchants/{npcId}/price/buy/{itemId}` | Player | Calculate buy price for one unit |
+| `GET` | `/api/v1/merchants/{npcId}/price/sell/{itemId}` | Player | Calculate sell price for one unit |
+| `POST` | `/api/v1/merchants/{npcId}/purchase` | Player | Purchase items from merchant to trainer inventory |
+| `POST` | `/api/v1/merchants/{npcId}/sell` | Player | Sell items from trainer inventory to merchant |
 
-All endpoints accept `accountId` and `trainerId` either as query params (GET/DELETE) or inside the JSON body (POST/PUT).
+**Player** routes read the account from the validated token, never from the request: an `accountId`
+in the query or body is accepted and ignored. They take `trainerId` in the query (GET) or the JSON
+body (POST), and answer 404 unless it is a player trainer of the token's account. **Content-write**
+routes are merchant-stock authoring (Crystalline Rift Studio / operators) and need
+`AuthorizationPolicies.RequireContentWrite`; a player token gets 403 before the handler runs. The game
+never calls them, so the operator names the shop's owner: `accountId` and `trainerId` in the JSON body
+(POST/PUT) or the query (DELETE), and the route answers 400 when either is empty.
 
 ### `POST /api/v1/merchants/{npcId}/purchase`
 

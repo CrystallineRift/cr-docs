@@ -252,7 +252,8 @@
         "Assets/Scripts/**/*NpcCreatureGrantBehaviour*.cs",
         "Assets/Scripts/**/*NpcMerchantBehaviour*.cs",
         "Assets/Scripts/**/*NpcTrainerBehaviour*.cs",
-        "Assets/Scripts/**/*INpcSubInitializable*.cs"
+        "Assets/Scripts/**/*INpcSubInitializable*.cs",
+        "Assets/CR/Game/World/Behaviours/NpcMerchantBehaviour.cs"
       ]
     },
     "description": "IWorldInitializable, WorldRegistry, GameInitializer bootstrap, INpcSubInitializable composable NPC sub-behaviours"
@@ -746,7 +747,10 @@
         "Items/CR.Items.Data.Migration/M6015SeedAreaMerchantSpawners.cs",
         "Convenience/CR.Data.Migrations.Test/AreaMerchantSpawnerSqliteTests.cs",
         "Items/CR.Items.Domain.Services/Models/ItemSpawnerPoolSync.cs",
-        "Items/CR.Items.Domain.Services/Models/ItemSpawnerTemplateSync.cs"
+        "Items/CR.Items.Domain.Services/Models/ItemSpawnerTemplateSync.cs",
+        "Items/CR.Items.Data.Migration/M6024SetMerchantRestockCooldowns.cs",
+        "Npcs/CR.Npcs.Domain.Services/Interface/INpcMerchantService.cs",
+        "Npcs/CR.Npcs.Service.REST/Endpoints/NpcMerchantEndpoints.cs"
       ],
       "cr-data": [
         "Assets/CR/Core/Data/Registry/Definitions/ItemSpawnerDefinition.cs",
@@ -1098,7 +1102,9 @@
     "repos": {
       "cr-api": [
         "Items/CR.Items.Data.Migration/M6013SeedHealPotion.cs",
-        "Npcs/CR.Npcs.Service.REST/Endpoints/NpcMerchantEndpoints.cs"
+        "Npcs/CR.Npcs.Service.REST/Endpoints/NpcMerchantEndpoints.cs",
+        "Npcs/CR.Npcs.Domain.Services/Implementation/NpcMerchantService.cs",
+        "Items/CR.Items.Data.Migration/M6024SetMerchantRestockCooldowns.cs"
       ],
       "cr-data": [
         "Assets/CR/UI/Shop/MerchantShopScreenHandler.cs",
@@ -1113,10 +1119,11 @@
         "Assets/CR/Core/Data/Client/Implementation/SimpleWebClient.cs",
         "Assets/CR/Game/Areas/Logic/AreaNpcAudit.cs",
         "Assets/CR/Game/Areas/Logic/SceneNpcScraper.cs",
-        "Assets/CR/Core/Data/Editor/ContentAuditTool.cs"
+        "Assets/CR/Core/Data/Editor/ContentAuditTool.cs",
+        "Assets/CR/Content/Defs/ItemSpawners/*MerchantItems.asset"
       ]
     },
-    "description": "Player-facing merchant shop UI: NpcInteractionBehaviour merchant branch, MerchantShopScreenHandler (stock list, live prices, wallet, qty stepper, buy via PurchaseItemFromMerchantAsync), isMenuOpen input lock, sell tab stub"
+    "description": "Player-facing merchant shop UI: NpcInteractionBehaviour merchant branch, MerchantShopScreenHandler (stock list, live prices, wallet, qty stepper, buy via PurchaseItemFromMerchantAsync), isMenuOpen input lock, sell tab stub; restocking owned by the authority (spawner restock cooldown, M6024 900 s, no client force)"
   },
   "backend/13-loot-system": {
     "docPath": "docs/backend/13-loot-system.md",

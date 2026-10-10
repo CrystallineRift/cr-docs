@@ -68,35 +68,80 @@ per roll — but not a slot.
 
 ## Stocking a merchant
 
-`NpcMerchantService.StockFromSpawnerAsync(accountId, trainerId, npcId, spawnerContentKey, force)`:
+`NpcMerchantService.StockFromSpawnerAsync(accountId, trainerId, npcId, ct)` is the "stock this
+shop" intent. The caller names neither the spawner nor a re-roll. The authority decides both: the
+server online, and offline the same service over local SQLite.
 
-1. Stocks unconditionally when the merchant is **empty** (first time its zone loads).
-2. Otherwise honors the spawner cooldown. **`restock_cooldown_seconds = 0` means "never
-   auto-restock"**, not "restock every time" — a merchant that already has stock is left alone
-   unless its cooldown is both defined and elapsed. `force: true` always re-rolls.
-3. When a restock is due: rolls the spawner, **clears** the merchant's `npc_inventory`, and
-   inserts the rolled items.
+1. **Refuses** an NPC that does not exist for this trainer or is not a merchant, and a content key
+   with no Merchant row in the NPC registry, or whose row names no item spawner. It throws
+   `MerchantStockNotAllowedException` and rolls and writes nothing; the route answers 404.
+2. **Stocks** a merchant that has **no stock rows**, whatever its cooldown: the first time it is
+   asked, or after it has been bought out. **A shop bought out completely rolls again on the next
+   ask**, because the purchase path deletes a row it sells out and the last purchase leaves no rows.
+   That is intended (pinned in `NpcMerchantServiceTests`), and it is why clearing a shop is
+   content-write only: a player who could empty a shop could re-roll it on demand (see
+   [NPC System → Merchant REST Endpoints](?page=backend/02-npc-system#merchant-rest-endpoints)).
+3. Otherwise **the spawner's cooldown decides**. **`restock_cooldown_seconds = 0` means "never
+   auto-restock"**, not "restock every time": a merchant that already has stock is left alone.
+   Above 0, the shop is due once that many seconds have passed since its newest `npc_inventory`
+   `updated_at`. A roll stamps every row it writes. **A purchase that leaves stock behind restarts
+   the cooldown**: when some of the item stays on the shelf, its row is restamped, so trading with a
+   shop defers its restock. A purchase that sells out one item while others remain deletes that row
+   and restamps nothing.
+4. When a restock is due: rolls the spawner, **clears** the merchant's `npc_inventory`, and
+   inserts the rolled items. A roll that comes back empty (the spawner is missing, inactive, or
+   has nothing to roll) keeps the old stock and logs a warning.
 
-> The zero-cooldown rule matters because step 3 runs from `NpcMerchantBehaviour` on **every**
-> world load. Before this rule, the seeded `starting-merchant-items` spawner (cooldown 0) made
-> every merchant clear and re-roll its full inventory on every load — a serial write loop per
-> merchant, linear in merchant count, and a reload-to-reroll exploit on shop contents. Fixing it
-> halved merchant world-init cost (~40ms → ~19ms).
+It returns the number of distinct items stocked, or 0 when the stock was kept. Because the caller
+cannot force anything, the call is safe to repeat, and the client sends it on every world load
+(online, once per merchant per session); see
+[Merchant Shop → Restocking](../unity/18-merchant-shop.md#restocking).
 
-A merchant is linked to a spawner via the Unity `NpcDefinition.itemSpawnerContentKey`
-(authored on Merchant-type NPCs); the link is passed to the stock call rather than persisted
-on the NPC row.
+> The gate also keeps a stocked shop's world load cheap: when the stock is kept, the call only
+> reads. Its zero-cooldown half came first. Until that rule arrived on 2026-08-03, the seeded
+> `starting-merchant-items` spawner (cooldown 0) made every merchant clear and re-roll its full
+> inventory on every load — a serial write loop per merchant, linear in merchant count, and a
+> reload-to-reroll exploit on shop contents. Fixing it halved merchant world-init cost
+> (~40ms → ~19ms).
 
-At runtime, `NpcMerchantBehaviour` (a composable `INpcSubInitializable`) calls
-`StockFromSpawnerAsync` on world-init using its serialized `itemSpawnerContentKey` **with
-`force: true`** (`_refreshStockOnWorldLoad`, default on): every world load clears the merchant and
-re-rolls. The cooldown rules above still apply to any mid-session restock. This reverses the
-earlier "cooldown 0 = keep the first roll forever" behaviour, which left shops draining to empty;
-the reload-to-reroll trade is accepted. Online, the same call goes to
-`POST /merchants/{npcId}/stock-from-spawner` and the roll happens on the server.
+A merchant's spawner is named by its **NPC registry row**: `item_spawner_content_key` on the
+`ContentWorldId` row for the merchant's content key. Crystalline Rift Studio pushes it there from
+the Unity `NpcDefinition.itemSpawnerContentKey` (authored on Merchant-type NPCs); offline, the rows
+come from `M16100SeedNpcRegistry_20261009`. The scene's `NpcMerchantBehaviour._itemSpawnerContentKey`
+is a designer reference that the audit reads; it is not sent.
 
 Per-merchant per-load work scales linearly with merchant count — keep an eye on it as the world
 fills out.
+
+### Restock cooldowns: M6024
+
+Merchant spawners ship at **900 s**. `M6024SetMerchantRestockCooldowns` sets
+`restock_cooldown_seconds = 900` on `starting-merchant-items` and `demo-merchant-area-{1..5}-items`,
+only where the value is still 0 and the row is not deleted, so a cooldown authored in Crystalline Rift
+Studio stays. It stamps `row_version` and `updated_at` on the rows it changes, as the repository's own
+update does, so the Studio's drift sync sees that the server moved. It is ANSI SQL with no `isSqlite`
+branch, and a second run matches no row. `Down()` is a deliberate no-op, like M6022's and M6023's: the
+rows it set cannot be told apart from a cooldown that was already 900, and putting them back to 0
+would stop those shops restocking. Offline adoption needs no content-schema bump, because
+`GameDataAdopter` re-adopts when the SHA-256 of the baked bytes changes, and a re-bake that includes
+M6024 changes them.
+
+All six were at 0 before M6024. M6014 (2026-06-09) seeded `starting-merchant-items` that way, and
+M6015 (2026-08-22) seeded the five area spawners at 0 because the client by then forced a re-roll on
+every world load (`_refreshStockOnWorldLoad`, `force: true`). The route stopped honouring `force` in
+the 2026-09-27 route lockdown, so from then on no online shop restocked. On 2026-10-10, `force` and
+the caller's spawner key were removed from the call altogether.
+
+Pinned by `NpcMerchantServiceTests` (each branch above, plus two purchase cases run against a stand-in
+shop: bought out completely, it rolls on the next ask inside its cooldown; left with stock, it restarts
+the cooldown from the last purchase), `MerchantRestockCooldownSqliteTests` and
+`MerchantRestockCooldownPostgresTests` (the migration), `OfflineMerchantRestockSqliteTests` (the real
+service over migrated SQLite, called the way the client calls it offline) and
+`MerchantRestockHttpTests`. The HTTP tests post a v0.1.7 body with `force: true` inside the cooldown and
+get `stocked: 0` with the stock untouched, buy an item out and see it return once the cooldown has
+passed, and show that a partial purchase resets the clock. They also show that a player's
+`DELETE /api/v1/merchants/{npcId}/inventory` is 403 and leaves the stock and the cooldown as they were,
+while a content-write token clears the shop the operator names.
 
 ### One spawner per area merchant
 
@@ -122,17 +167,19 @@ seeded-but-unrollable spawner fails the build rather than stocking an empty shop
 | POST | `/api/v1/item-spawners/sync-config` | Create/replace a spawner (header + pools + templates) by content key — used by Crystalline Rift Studio. Every `itemContentKey` must resolve: a payload naming an item the server does not have is refused with `409` and nothing is written, because this call replaces the spawner's pools wholesale and skipping the unresolved templates silently emptied it. Now gated behind `AuthorizationPolicies.RequireContentWrite` — it was reachable on any player token. |
 | GET  | `/api/v1/item-spawners/{contentKey}/roll?seed=` | Preview a roll (distinct item ids + quantities) |
 | GET  | `/api/v1/item-spawners/by-content-key/{contentKey}/config` | Full config (header + pools + templates) — used by Crystalline Rift Studio **Pull** |
-| POST | `/api/v1/merchants/{npcId}/stock-from-spawner` | Roll a spawner into a merchant's inventory (`{ accountId, trainerId, spawnerContentKey, force }`) |
+| POST | `/api/v1/merchants/{npcId}/stock-from-spawner` | The "stock this shop" intent: rolls the merchant's registered spawner into its inventory when the restock cooldown says the shop is due, and answers `{ stocked }` (0 = stock kept). Body `{ accountId, trainerId }`; only `trainerId` is read, and the account comes from the token. The `spawnerContentKey` and `force` that v0.1.2 to v0.1.7 still post bind and are ignored. 404 for a refusal. |
 
 ## Authoring (Unity)
 
 Create an **`ItemSpawnerDefinition`** (`Assets → Create → CR → Content → Item Spawner
-Definition`): set `contentKey`, `maxSlots`, optional `restockCooldownSeconds`, then add pools
+Definition`): set `contentKey`, `maxSlots` and `restockCooldownSeconds` (**Restock Cooldown (s)**;
+0 never restocks a stocked shop, and the merchant spawners use 900), then add pools
 and item templates (item content-key picker, probability slider, quantity range). Push it to the
 backend with **Crystalline Rift Studio → Item Spawners → ⬆ Push All** (the inspector's own "Sync Full
 Config" button was removed — see
 [One way to reach the server](../unity/08-content-registry.md#one-way-to-reach-the-server)). On a
-Merchant `NpcDefinition`, set **Item Spawner Key** to the spawner's content key.
+Merchant `NpcDefinition`, set **Item Spawner Key** to the spawner's content key; a push writes it to
+the NPC registry row, which is what picks the merchant's stock.
 `ContentAuditTool` flags item-spawner templates or merchant links that reference unknown
 items/spawners.
 

@@ -18,9 +18,10 @@ NpcInteractionBehaviour (proximity + E)
                       (debits currency + moves stock → backpack, one transaction)
 ```
 
-The merchant's stock itself comes from its item spawner
-(see [Item Spawner](../backend/11-item-spawner.md)) via
-`NpcMerchantBehaviour.InitializeAsync` on world init.
+The merchant's stock itself comes from the item spawner its NPC registry row names
+(see [Item Spawner](../backend/11-item-spawner.md)). On world init
+`NpcMerchantBehaviour.InitializeAsync` asks the authority to stock the shop, and the authority
+decides whether anything is rolled (see [Restocking](#restocking)).
 
 ## Key files
 
@@ -87,9 +88,13 @@ is; a pad user has only that. Focus styles are deliberately brighter than hover 
    Resources if unassigned).
 3. On the merchant NPC GameObject (all required):
    - `NpcWorldBehaviour` — `_npcContentKey` set to the NPC's content key
-     (e.g. `demo-merchant`); this bootstraps the NPC and runs sub-initializers.
-   - `NpcMerchantBehaviour` — `_itemSpawnerContentKey`
-     (e.g. `starting-merchant-items`); stocks the merchant on world init.
+     (e.g. `demo-merchant-area-1`); this bootstraps the NPC and runs sub-initializers. The key
+     needs a Merchant row in the NPC registry, or the shop is refused. (`demo-merchant` will not
+     do: the registry has it as a QuestGiver.)
+   - `NpcMerchantBehaviour` — sends the "stock this shop" intent on world init. Its
+     `_itemSpawnerContentKey` (e.g. `demo-merchant-area-1-items`) does not choose the stock: the
+     NPC registry row names the spawner. Keep the field equal to that row's spawner anyway, because
+     the audit reads it.
    - `NpcInteractionBehaviour` — `Tags To Interact With` must contain the
      player's Malbers Tag, and `Interact Action` should reference
      CR_GameInput ▸ Player/Interact (when unassigned it resolves "Interact"
@@ -103,7 +108,7 @@ is; a pad user has only that. Focus styles are deliberately brighter than hover 
 (`Assets/CR/Npcs/Runtime/Merchant/Logic/`), a router in front of the same `NpcMerchantService`
 the server runs. It samples `is_playing_online` **on every call** and routes:
 
-| Mode    | Stock, prices, buy, sell, stock-from-spawner | Authoring ops (add/remove/set multiplier) |
+| Mode    | Stock, prices, buy, sell, stock-from-spawner | Authoring ops (add/remove/clear/set multiplier) |
 |---------|-----------------------------------------------|-------------------------------------------|
 | Online  | `NpcMerchantClientUnityHttp` → `/api/v1/merchants/*` on the **game** server address | `NotSupportedException` — the server owns stock; use Crystalline Rift Studio |
 | Offline | local `NpcMerchantService` over `playerData.bytes` | local |
@@ -125,15 +130,77 @@ Two details of the HTTP half:
 One new endpoint backs this: `GET /api/v1/merchants/{npcId}/multipliers` returns buy and sell
 multipliers in one call, so pricing the list is one round trip rather than one per row.
 
-## Stock refreshes on every world load
+## Restocking
 
-`NpcMerchantBehaviour` passes `force: true` (`_refreshStockOnWorldLoad`, on by default): each time
-the world loads, the merchant's inventory is **cleared and re-rolled** from its spawner. The
-spawner's own `restock_cooldown_seconds` only governs mid-session restocks now.
+The authority restocks a shop, never the client. Online that is the server; offline it is the same
+cr-api `NpcMerchantService` running against `playerData.bytes`. On world load `NpcMerchantBehaviour`
+sends one "stock this shop" intent, `StockFromSpawnerAsync(accountId, trainerId, npcId)`. The intent
+names neither a spawner nor a re-roll, so the client cannot force one, and asking again is harmless.
 
-This is a deliberate trade. The earlier rule (cooldown 0 = never re-roll) closed a
-reload-to-reroll exploit but meant the shop was the first roll forever, draining to empty as the
-player bought — which is what "the merchant isn't being used" looked like in practice.
+The authority rolls from the spawner that the merchant's NPC registry row names (see
+[The server picks the stock source](#the-server-picks-the-stock-source)), and that spawner's
+`restock_cooldown_seconds` decides:
+
+| The shop | The authority |
+|---|---|
+| has no stock rows (never stocked, or bought out completely) | rolls it, whatever the cooldown |
+| has stock, and the cooldown is `0` | keeps it: 0 means "never auto-restock", not "every time" |
+| has stock, and the cooldown has not elapsed since the stock last changed | keeps it |
+| has stock, and the cooldown has elapsed | re-rolls it: clears the shop and stocks a fresh roll, so a bought-out item comes back |
+
+"Last changed" is the newest `updated_at` among the shop's `npc_inventory` rows. A roll stamps every
+row it writes. What a purchase does to the clock depends on what it leaves:
+
+- **A purchase that leaves stock behind restarts the cooldown.** When some of the item stays on the
+  shelf, its row is restamped, so a shop is not re-rolled under a player who is trading with it.
+- **A shop bought out completely rolls again on the next ask.** The purchase path deletes a row it
+  sells out, so buying the last of the last item leaves no stock rows, and a shop with no stock rows
+  is always rolled. This is intended, and `NpcMerchantServiceTests` pins it.
+
+A purchase that sells out one item while others remain deletes that row and restamps nothing, so the
+clock keeps running from the shop's last change. A roll that comes back empty keeps the old stock.
+The answer is `{ stocked }`, the number of distinct items rolled, or 0 when the stock was kept.
+
+**Clearing a shop is content-write only (Crystalline Rift Studio / operators); the client cannot clear
+or force a re-roll.** An empty shop is always rolled, so a clear followed by the stock intent would be a
+re-roll on demand. `DELETE /api/v1/merchants/{npcId}/inventory` therefore needs a content-write token,
+and the operator names `accountId` and `trainerId` in the query; a player token gets 403 and the shop
+is left as it was. In the client, `NpcMerchantOnlineOfflineService.ClearMerchantInventoryAsync` is an
+offline-only authoring write like the others (see
+[Where stock lives](#where-stock-lives-server-online-local-offline)): online it throws
+`NotSupportedException` and sends nothing. Offline it still clears the local database, and no game code
+calls it. See [NPC System → Merchant REST Endpoints](?page=backend/02-npc-system#merchant-rest-endpoints).
+
+### When the client asks
+
+- **Offline:** every world load calls the local service, and in the open world so does every cell
+  promotion (each visit). A shop that falls due during play restocks on the next visit.
+- **Online:** `NpcMerchantOnlineOfflineService` sends the intent at most once per merchant per
+  session, through the `CacheScope.MerchantStocked` memo, which clears on an app restart or an
+  account or trainer change. When the server reports a roll (`stocked > 0`), the router raises
+  `MerchantRestocked`. That drops the cached stock and multipliers and re-opens the memo, so the next
+  load asks once more and is told 0. An online shop that falls due mid-session therefore restocks on
+  the first visit of a later session.
+
+### The cooldown
+
+Merchant spawners ship at **900 s** (15 minutes). `M6024SetMerchantRestockCooldowns` sets that on
+`starting-merchant-items` and `demo-merchant-area-1-items` … `demo-merchant-area-5-items` wherever
+the value was still 0, so a cooldown someone already authored stays. The six
+`Assets/CR/Content/Defs/ItemSpawners/*MerchantItems.asset` definitions carry the same 900, so a later
+push keeps it. Tune it per spawner: set **Restock Cooldown (s)** on the `ItemSpawnerDefinition` and
+push it from Crystalline Rift Studio → Item Spawners. The push sends the value as authored, so
+pushing 0 switches that shop's auto-restock off on the server.
+
+:::note[History: the client used to decide]
+From 2026-08-22, `NpcMerchantBehaviour` forced a clear-and-re-roll on every world load
+(`_refreshStockOnWorldLoad`, which passed `force: true`). That accepted a reload-to-reroll exploit so
+that shops would not drain to empty under a cooldown of 0, but it let the client choose an outcome:
+when stock is wiped. The route stopped honouring `force` in the 2026-09-27 route lockdown, and with
+every merchant spawner seeded at 0, no online shop restocked after that, so a bought-out item never
+came back. Since 2026-10-10 the call has no `force` and no spawner key, the merchant spawners have a
+real cooldown, and online and offline follow the same rule.
+:::
 
 ## One merchant per area
 
@@ -163,14 +230,17 @@ the SO is the authored truth.
 
 Since cr-api PR #72 (live 2026-10-10), the authority decides which spawner stocks a merchant. Offline, that
 authority is the domain service running against local SQLite. `NpcMerchantService` looks up the merchant's content
-key in the NPC registry, reads that row's `item_spawner_content_key`, and rolls from it. The
-`_itemSpawnerContentKey` the scene sends is ignored, and a mismatch is only logged at Debug. Keep the scene field and
-the registry row in step anyway, because the audit above still reads the scene field.
+key in the NPC registry, reads that row's `item_spawner_content_key`, and rolls from it. The client sends no
+spawner key: `StockFromSpawnerAsync` lost the parameter on 2026-10-10 (before that, the scene's
+`_itemSpawnerContentKey` was sent and ignored), and the route ignores the `spawnerContentKey` that v0.1.2 to v0.1.7
+still post. Keep `_itemSpawnerContentKey` and the registry row in step anyway, because the audit below reads the
+scene field.
 
 A merchant with no registry row, a registry row that is not a Merchant, or a row with no spawner is refused with
 `MerchantStockNotAllowedException`, and nothing is written. Online, the route returns 404 for those cases. Offline,
-the registry rows come from `M16100SeedNpcRegistry_20261009`. An empty shop with a registry refusal in the log
-means the registry row is missing; the scene is not the cause.
+the registry rows come from `M16100SeedNpcRegistry_20261009`. The world load logs a refusal as a warning that names
+the NPC's content key. An empty shop with a registry refusal in the log means the registry row is missing; the
+scene is not the cause.
 
 ## Drift the audit catches
 
@@ -184,8 +254,11 @@ overrides, no scene load) and reports, per `AreaNpcAudit`:
   what syncs, so the server would get the wrong type; `demo-merchant.asset` shipped this way)
 - `npc_missing_for_area` — a numbered area with no merchant / quest giver / stock SO
 
-An empty shop still logs the two usual causes (missing `_itemSpawnerContentKey` on the NPC, or
-missing local spawner config).
+An empty `_itemSpawnerContentKey` no longer empties a shop: the stock intent goes out regardless, and
+the registry decides. An empty shop now has one of two causes, both in the log: a registry refusal
+(above), or a spawner that rolled nothing. A spawner the authority does not have, or one that is
+inactive, logs `[ItemSpawnerRoll] spawner '…' not found or inactive`; either way
+`StockFromSpawner: spawner '…' rolled no items` follows, and any old stock is kept.
 
 See also: [Item Spawner](../backend/11-item-spawner.md),
 [Trainer Currency](../backend/12-trainer-currency.md).

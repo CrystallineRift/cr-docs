@@ -63,7 +63,7 @@ written reason. Four routes are exempted today:
 This covers every player write intent in the manifest today, including trainer create/update/delete,
 trainer inventory create/update/delete, team heal, account link/password/personal-API-key
 create+revoke, `/auth/oauth/link`, evolution begin/commit/cancel, stats increment/max/set, market
-list/cancel/buy, merchant purchase/sell/stock-from-spawner/clear-inventory, quest accept/abandon/
+list/cancel/buy, merchant purchase/sell/stock-from-spawner, quest accept/abandon/
 claim-rewards, item use, held-item equip/unequip, pickup collect, plus the original curated set
 (battle-start, `receive-gift`, `talk`, `world-locations/enter`, `talents/spend`, `talents/respec`, and
 the whole `TrainerCreatureIntentEndpoints` group).
