@@ -115,6 +115,16 @@ Merged to main via PR cr-api-unity #66 (2026-10-08); the server-side vocabulary 
 | Quest reward tuning (Rulings S26, S28): First Battle pays 6 × `capture_crystal_standard` (Summoning Shard; was 3) and First Capture also pays 6, so failed throws in the capture lesson cannot leave the player shardless and Runaway Cargo's three captures are reachable — SERVER PUSH NEEDED (Studio Quests: both quests) or online First Battle still pays 3 and First Capture XP + gold only. Journal order: Welcome 0, First Battle 1, First Capture 2, Runaway Cargo 12 | First Battle reward; First Capture claim (Philroe's `caught-paid`) | `Assets/CR/Content/Defs/Quests/First Battle.asset`, `First Capture.asset`, `Starter Quest.asset` (sortOrder) + Studio push | 2026-10-08 | 2026-10-08 | AI draft |
 
 
+## Story camera (feature/story-camera, 2026-10-10)
+
+Camera framing, shot timing and stage timing chosen by AI for the two arrival beats; checked with `cr_story_render_shots` against the built corridor. Not text: the dialogue is unchanged.
+
+| Item (what was generated) | Where it's used | Where to update it | Created | Updated | Status |
+|---|---|---|---|---|---|
+| Camera framing, arrival beat: r0 4 s pan from the glade to Mirandale (corridor bookmark 02 overlook, fov 58), r1 medium on the rising crystal from the ring of rune stones (5 m, fov 30), r2 city wide between the gate posts (fov 62), r3 back to the player; blends 1.5 / 1.2 / 1.0 / 1.2 s. The crystal now rises on r1, while Ahksun speaks | `arrival-ahksun-rises` event + `StoryShotCue` in `World_c0_r4` (anchors under `[Shots]`) | `Assets/CR/Game/Story/Editor/ArrivalShots.cs`, applied with `cr_story_author_shots` | 2026-10-10 | 2026-10-10 | AI draft |
+| Camera framing and timing, pillar beat: s1 low angle up at the sky (fov 80; the rifts open on that line), s2 long lens on the pillar over the city (fov 24; 1.5 s purple-red charge, burst and city lights out on that line), s3 back to the player; one camera mark on the ramp, 1.7 m up, so s2 pushes in from s1 | `arrival-pillar-shatters` event + `StoryShotCue` in `World.unity` (anchors under `[Shots]`) | `Assets/CR/Game/Story/Editor/VistaShots.cs`, applied with `cr_story_author_shots` | 2026-10-10 | 2026-10-10 | AI draft |
+| UI text: System → Game "Story Camera" with "Cinematic" / "Gentle (cuts only)" / "Off"; toast "Hold Esc / B to skip" | System tab; first line of a story beat | `Assets/CR/UI/Text/SettingsText.cs` (`ui.settings.story-camera.*`), `PlayerMenuWindow.uxml`, `Assets/CR/Game/Story/Text/StoryText.cs` (`ui.story.skip-beat-hint`) | 2026-10-10 | 2026-10-10 | AI draft |
+
 ## Follow-ups (merged to main via PR cr-api-unity #71, 2026-10-09/10)
 
 | Item (what was generated) | Where it's used | Where to update it | Created | Updated | Status |
