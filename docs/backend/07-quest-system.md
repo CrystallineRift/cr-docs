@@ -231,9 +231,16 @@ Three things this chain depends on, each of which was a trap:
   the whole playable space and keyed to the area key.
 - **Prerequisites must sync before their dependants.** `LocalQuestTemplateSyncClient` resolves a
   requirement's `referenceId` from a content key to the template's database id by looking it up — and
-  if it is not there yet it warns and stores **null**, which reads as "no prerequisite". The order of
+  if it is not there yet it warns and stores **null**, which the authority never meets (`QuestCompleted`
+  compares completed template ids with it; `QuestNotStarted` is closed without a reference). The order of
   `ContentDefinitionProvider.quests` is therefore load-bearing; the chain is registered in dependency
-  order.
+  order, and that is now a rule rather than a habit: `QuestRegistryOrder` (pure, `CR.Core.Data.Logic`) states
+  it, the Content Audit reports a breach as `quest-registered-before-its-reference`, and
+  `OpeningChainContentTests` / `OpeningChainAuthorityTests` sync the shipped quests into a real migrated SQLite
+  database in list order and read the stored references back. (Runaway Cargo was listed before First Capture
+  until 2026-10-10, so on a fresh offline install the farm gate did not offer it until the second launch.)
+  The Studio's Push All sends quests in the same dependency order (`ContentStudioTool.QuestPushOrder`), because
+  the server refuses a push naming a quest it has not seen yet.
 - **The server resolves the same key on push (2026-10-01).** `PUT /api/v1/quests/templates/bulk` used to
   keep only what `Guid.TryParse` accepted and store **null** for a QuestCompleted requirement authored
   as a content key — which `ConditionEvaluator` compares against completed template ids, so Runaway
@@ -241,7 +248,8 @@ Three things this chain depends on, each of which was a trap:
   ResolveRequirementsAsync` now resolves a QuestCompleted key to the template id — this push's authored
   ids first (order on the wire does not matter), then the stored row — and an unresolvable key refuses
   the whole push with `400 invalid_requirement` instead of silently storing a gate nobody can open.
-  Other requirement types still take a Guid reference as before.
+  `QuestNotStarted` resolves its quest key the same way, and a blank reference is refused outright (left
+  null it would be unmet for everyone). Other requirement types still take a Guid reference as before.
 - **The seed ids are UUIDv5 of the content key**, matching what the authored assets carry. A seed
   with an id of its own is discarded the moment Crystalline Rift Studio pushes the asset — the unique index is
   on `content_key`, so the row already exists and every objective and reward hangs off a template
@@ -311,7 +319,9 @@ engines; `isSqlite` boolean literals, `LOWER()` id matching on SQLite, every sta
   by the authored id `f1921cfd-26a0-4b70-b45f-0e28a58fb7e1`, so a requirement left pointing at the id
   with no template behind it goes too.
 - **First Battle** has no requirement left, so it is the first story quest and, with `grant_mode = 1`
-  (AutoWhenAvailable, unchanged, matching the asset), is granted to every trainer at once. Its giver
+  (AutoWhenAvailable, unchanged, matching the asset), is granted to every trainer at once (superseded 2026-10-10:
+  Find Ahksun opens the story and First Battle waits for the wagon, see
+  [The opening chain](#the-opening-chain-2026-10-10)). Its giver
   moves from `demo-questgiver-area-1` (M14002's value) to Philroe, `demo-merchant-area-1`, as First
   Battle.asset authors it. Only a row still holding M14002's value moves; a giver pushed from the
   Studio since then is left alone.
@@ -337,6 +347,40 @@ hide instances whose template is gone (Unity half, pending).
 Tests: `RetireWelcomeQuestMigrationTests` (Quests.Data.Test, SQLite + Postgres, including
 `FirstBattle_MovesFromTheM14002GiverToPhilroe` and `FirstBattle_AGiverPushedSince_IsLeftAlone`),
 `WelcomeQuestSeedPostgresTests` and `M14002SeedPostgresTests` (updated to the retired state).
+
+### The opening chain (2026-10-10)
+
+> **Pending deploy (cr-api `integration/round2b`, cr-api-unity `feature/opening-find-ahksun`):** the enum value,
+> evaluator case and M15014 below are on the integration branch only; the Studio pushes follow the cr-api deploy.
+
+The opening starts with Find Ahksun, walks the player down with Toward the Lights and reaches First Battle at the wagon. First Battle used to be granted to every trainer at the spawn (no requirement, `grant_mode = 1`), so the fight quest sat in
+the tracker a hundred metres above the gaterbear, and a playtester completed it with the first wild fight (its objective was
+"defeat any creature"). The opening is now three quests, all granted by the server and all decided by it:
+
+| Quest | Objective | Requirement | How it is granted |
+|---|---|---|---|
+| `quest-find-ahksun` (sort 0, Main Story) | `VisitLocation` `story-ahksun-landing` ×1 | `QuestNotStarted` `quest-first-battle` | auto, at the first sweep |
+| `quest-the-way-down` "Toward the Lights" (sort 1) | `VisitLocation` `story-philroes-wagon` ×1 | `QuestCompleted` `quest-find-ahksun` | auto, when Find Ahksun is claimed |
+| `quest-first-battle` (sort 1) | `DefeatCreature` `creature_gaterbear` ×1 (the species content key) | `StatThreshold` `location_discovered_story-philroes-wagon` ≥ 1 | the wagon location's `discovery_quest_key`, on the first entry; the auto sweep is the safety net |
+
+- **`QuestNotStarted`** (`QuestRequirementType` 6) is met only while the trainer has **no instance** of the referenced quest in
+  any status (in progress, completed, claimed, abandoned or failed; `ReferenceId` is the quest's template id). It keeps Find
+  Ahksun away from every trainer who is already past it, which no completed-quest or stat check can say. It is closed when no
+  quest is named. Accept and the available list both go through the evaluator, so accept refuses and the auto-grant sweep skips.
+  Offline, the same `ConditionEvaluator` runs against local SQLite.
+- **First Battle counts the gaterbear only.** The battle emits `CreatureDefeated` with the defeated species' content key as
+  the subject; a `DefeatCreature` objective with a target counts only a matching subject. A kill made before the quest is held
+  counts for nothing, so the wagon location (`world_location.discovery_quest_key`, M15014) grants First Battle on the first
+  entry, before the player can reach the gaterbear zone. An in-progress, completed or claimed First Battle is returned
+  untouched; an abandoned or failed one is restarted in place under the existing one-instance rule (the auto sweep does the
+  same).
+- **Existing trainers** keep what they have: accepting a quest that already has an instance returns it unchanged, and Find Ahksun
+  is closed to anyone who holds First Battle. Philroe's hub keeps its legacy cases (see
+  [Opening Story](?page=unity/38-story-opening)).
+
+Tests: `ConditionEvaluatorQuestNotStartedTests`, `QuestNotStartedGateSqliteTests`, `OpeningChainSqliteTests` (cr-api, real
+services on one migrated SQLite file) and, from the Unity side, `OpeningChainAuthorityTests` (the shipped assets synced by the
+real world-init sync, read by the real evaluator).
 
 ## How to Define a New Quest (Step-by-Step)
 
@@ -779,6 +823,8 @@ it, and a list type's `targetCount` is clamped to `1..list.Count`.
 | `HasItem` | 2 | Sums item quantities across all trainer inventories where `BaseItemId == reference_id` |
 | `CreatureLevel` | 3 | If `reference_id` set: stat `creature_level_{id}`; else `highest_creature_level` |
 | `TrainerLevel` | 4 | Reads stat `trainer_level`, applies `operator_type` vs `target_value` |
+| `UsedItem` | 5 | Reads stat `items_used_{stat_key}`, applies `operator_type` vs `target_value` |
+| `QuestNotStarted` | 6 | Met only while the trainer holds **no** `quest_instance` of `reference_id` (the template id) in any status; closed when `reference_id` is null |
 
 ### `RequirementOperator`
 

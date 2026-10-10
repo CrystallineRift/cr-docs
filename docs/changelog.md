@@ -68,6 +68,25 @@
   a cr-api `main` that has `M10024`.
 - **Docs:** backend/03 (Spawner System), Common Mistakes.
 
+## 2026-10-10 — The opening starts with Find Ahksun; First Battle begins at the wagon (branch, not deployed)
+
+- **Quests (cr-api `integration/round2b`, cr-api-unity `feature/opening-find-ahksun`):** a new trainer is handed *Find Ahksun*
+  (visit the landing at the cliff's edge) instead of First Battle; *Toward the Lights* walks them down; the wagon's location
+  trigger grants *First Battle*, which now counts the gaterbear only. Before, First Battle was auto-granted at the spawn and a
+  playtester completed it with the first wild fight. → [Quest System](?page=backend/07-quest-system),
+  [Opening Story](?page=unity/38-story-opening)
+  - `QuestRequirementType.QuestNotStarted = 6`: met only while the trainer holds no instance of the named quest in any status.
+    It keeps Find Ahksun away from every trainer who has started First Battle.
+  - **M15014** `SeedOpeningStoryLocations` seeds `story-ahksun-landing` (10 XP) and `story-philroes-wagon` (0 XP, discovery quest
+    First Battle). A replacing location push must contain both. → [Location Discoveries](?page=backend/24-location-discoveries)
+  - Deploy order: cr-api, then the Studio quest push (now sent in dependency order), then the location push. The committed offline
+    floor was migrated forward with the `integration/round2b` package's migrations (M10024, M15014, M16010; its production overlay is
+    untouched), and `OpeningLocationFloorTests` now fails a committed floor that lacks the two locations instead of skipping; the
+    release bake from the server keeps them because the package seeds them.
+- **Unity:** the quest registry is ordered so every quest follows the quests it names (Runaway Cargo used to be written before First
+  Capture, so a fresh offline install did not offer it at the farm gate until the second launch); Ahksun's glow burns from the first
+  frame; Philroe's `breath` fallback names no place; the legacy hub reorder (v0.1.6 trainers on Runaway Cargo) is folded in.
+
 ## 2026-10-10 — Merchant stock resolved by the server; offline NPC registry seed M16100 (live)
 
 - **Merchant stock (cr-api `8324296`, PR #72, live 2026-10-10):** `NpcMerchantService.StockFromSpawnerAsync` now
