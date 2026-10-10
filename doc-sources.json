@@ -178,7 +178,9 @@
         "Quests/CR.Quests.Data.Test/ObjectiveTemplateIdAlignment*.cs",
         "Quests/CR.Quests.Data.Test/RetireWelcomeQuest*.cs",
         "Convenience/CR.Data.Migrations.Test/WelcomeQuestSeedPostgresTests.cs",
-        "Game/CR.Game.Domain.Services/Implementation/Trainer/TrainerCreationService*.cs"
+        "Game/CR.Game.Domain.Services/Implementation/Trainer/TrainerCreationService*.cs",
+        "Quests/CR.Quests.Domain.Services/Implementation/ConditionEvaluator.cs",
+        "Quests/CR.Quests.Data/Enums/QuestRequirementType.cs"
       ],
       "cr-data": [
         "Assets/CR/Core/Data/Logic/QuestObjectiveValidation.cs",
@@ -191,7 +193,14 @@
         "Assets/CR/UI/Logic/QuestTracker*.cs",
         "Assets/CR/UI/Quests/QuestTrackerPresenter.cs",
         "Assets/CR/Quests/**/*.cs",
-        "Assets/CR/Core/Data/Logic/QuestAreaKeys.cs"
+        "Assets/CR/Core/Data/Logic/QuestAreaKeys.cs",
+        "Assets/CR/Core/Data/Logic/QuestRegistryOrder.cs",
+        "Assets/CR/Progress/Dialogue/ProgressRequirementConditionEvaluator.cs",
+        "Assets/CR/Core/Data/Registry/Definitions/QuestDefinition.cs",
+        "Assets/CR/Content/Defs/Quests/Find Ahksun.asset",
+        "Assets/CR/Content/Defs/Quests/Toward the Lights.asset",
+        "Assets/CR/Content/Defs/Quests/First Battle.asset",
+        "Assets/CR/Tests/Editor/OpeningChain*.cs"
       ]
     },
     "description": "Quest system: templates, objectives, rewards, instances, progress events, requirements, condition evaluation; grant mode / reward claim mode (M7017), AcceptQuestAsync restarts an abandoned/failed instance, content:write on template PUT/DELETE, objectives upserted by sort_order and the re-parenting risk"
@@ -1809,14 +1818,19 @@
         "Game/CR.Game.Domain.Services/Interfaces/Exploration/**/*.cs",
         "Game/CR.Game.Domain.Services/Models/Exploration/**/*.cs",
         "Game/CR.Game.Service.BFF/Endpoints/WorldLocationEntryEndpoints.cs",
-        "Convenience/CR.Api.IntegrationTests/WorldLocationEntryHttpTests.cs"
+        "Convenience/CR.Api.IntegrationTests/WorldLocationEntryHttpTests.cs",
+        "Talents/CR.Talents.Data.Migration/M15014SeedOpeningStoryLocations.cs"
       ],
       "cr-data": [
         "Assets/CR/Progression/Discovery/**/*.cs",
         "Assets/CR/Progression/WorldMapDiscoveryReader.cs",
         "Assets/CR/Core/Data/Editor/TrainerProgression/WorldLocationEntryDrawer.cs",
         "Assets/CR/Core/Data/Logic/WorldLocationTuningSync.cs",
-        "Assets/CR/Core/Data/Logic/LocationDiscoveryAudit.cs"
+        "Assets/CR/Core/Data/Logic/LocationDiscoveryAudit.cs",
+        "Assets/CR/Content/Defs/Progression/WorldLocations.asset",
+        "Assets/CR/Tests/Editor/OpeningLocationFloorTests.cs",
+        "Assets/CR/Game/World/Behaviours/LocationTriggerBehaviour.cs",
+        "Assets/CR/Tests/Editor/LocationTriggerTrainerSwitchTests.cs"
       ]
     },
     "description": "Location Discoveries v2: world_location discovery_xp/discovery_quest_key (M15010), trainer_location_discovery ledger (M15011), WorldLocationDiscoveryService, the LocationEntryService orchestrator, discovery quest grant (GrantQuestAsync Created flag), enter/discoveries routes, idempotency table, VisitLocation forwarding, Unity discovery router/registry/toast, WorldMapDiscoveryReader (P2), Studio pull/drift and content audit rules"
@@ -1916,7 +1930,13 @@
       "cr-data": [
         "Assets/CR/Game/Story/**",
         "Assets/CR/Resources/Story/**",
-        "Assets/CR/Game/OpenWorld/Editor/Corridor/CorridorStoryPlacer.cs"
+        "Assets/CR/Game/OpenWorld/Editor/Corridor/CorridorStoryPlacer.cs",
+        "Assets/CR/Content/Defs/Quests/Find Ahksun.asset",
+        "Assets/CR/Content/Defs/Quests/Toward the Lights.asset",
+        "Assets/CR/Content/Defs/Dialogues/dialogue-merchant-area-1.asset",
+        "Assets/CR/Game/OpenWorld/Editor/Corridor/Seeds/Act1AdjustmentsSeed.cs",
+        "Assets/CR/Tests/Editor/OpeningLocation*.cs",
+        "Assets/CR/Tests/Editor/DialoguePhilroeHubResolutionTests.cs"
       ]
     },
     "description": "Opening story client systems: IStoryFlags, LoreReadable, WorldBark, NpcEscort/EscortPlan, OneShotWorldEvent, PrologueController + gate, place flavour, capture-lesson hints, StoryText, the cr_story_script_page review-page command, the beat map on the built corridor and the CorridorStoryPlacer hook in cr_story_build_scenes"

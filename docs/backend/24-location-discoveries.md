@@ -66,6 +66,39 @@ per-trainer discovery ledger rather than a stat flag. Spec:
 An unauthored key advances nothing — not even a `VisitLocation` objective — because the key is the only
 thing the authority can check; a client-reported location would be an unchecked outcome.
 
+## The opening's two locations (M15014, 2026-10-10)
+
+> **Pending deploy (cr-api `integration/round2b`):** the migration is on the integration branch only; the Studio location push
+> follows the quest push.
+
+`M15014SeedOpeningStoryLocations` (Talents, both engines, insert-if-absent by content key, hand-written and deliberately
+not named `SeedTalentContent_` so a Studio re-export does not regenerate over it) seeds the two places the opening's first
+quests visit. The ids must match `WorldLocations.asset`, because the floor and the server carry the same id:
+
+| Key | Id | Name | Area | Discovery XP | Discovery quest |
+|---|---|---|---|---|---|
+| `story-ahksun-landing` | `474137a8-828f-4c04-b87a-19d84305b0ac` | Ahksun's Landing | Meadow | 10 | none |
+| `story-philroes-wagon` | `03292c37-6a09-4774-828e-b890c7e852ed` | Philroe's Wagon | Meadow | 0 | `quest-first-battle` |
+
+- The wagon is the first real use of a discovery quest in the story: its first entry grants First Battle (the grant skips the
+  requirement check, `GrantQuestAsync`), then reports `LocationEntered`, which advances Toward the Lights' `VisitLocation`
+  objective in the same response. The response's `grantedQuest` is First Battle on the first entry and null afterwards or when
+  the trainer already holds it; `progress.completedQuests` carries the quests the entry completed, and the discovery stat
+  `location_discovered_story-philroes-wagon` (First Battle's requirement) is written in the same call. An in-progress,
+  completed or claimed First Battle is returned untouched; an abandoned or failed one is restarted in place.
+- Discovery XP 0 grants nothing; the landing pays 10. These two places also count toward `locations_visited_total`, so the
+  Explorer achievement (visit 3 locations) now fires earlier for a new trainer.
+- **A replacing push retires every location it does not name**, so the Unity catalog must hold both entries (with these ids)
+  before any replacing push, or the push retires the rows. A push writes what it is sent: a null `discovery_quest_key` clears
+  the stored one.
+- **Offline needs them on the floor.** The offline authority reads `world_location` from the baked GameData floor and answers
+  an unknown key with `UnknownLocation` and no writes, so until the floor carries M15014's rows Find Ahksun can never complete
+  and the wagon grants nothing. The release step rebakes the floor; `OpeningLocationFloorTests` (Unity) holds the package's
+  floor, and the committed one once it is rebaked, to the catalog.
+- Deploy order: cr-api (enum value, evaluator, M15014), then the Studio quest push, then the Studio location push with both
+  entries in the catalog. Philroe's hub and the quest chain are described in [Quest System](?page=backend/07-quest-system) and
+  [Opening Story](?page=unity/38-story-opening).
+
 ## Idempotency
 
 | Case | Result |
@@ -116,6 +149,10 @@ used to call through) — `QuestDomainService`'s ctor no longer takes that depen
   .LocationDiscoveries`) and raises a guarded, multi-subscriber `Discovered` event — the source for the
   "Discovered: {name}" toast (`ToastKind.Discovery`, `DiscoveryToastAdapter`) and for
   `WorldMapDiscoveryReader` (see [World Map](?page=unity/35-world-map)).
+- `LocationTriggerBehaviour` sends the intent once per trigger instance and trainer: a trainer switch while the cell stays
+  loaded re-arms it (`IGameSessionService.OnTrainerChanged`), because the opening's first quests are completed by walking onto
+  two of these and the next new trainer of a session must be credited like the first. The authority stays idempotent, so a
+  re-fire only costs a call.
 - `QuestManager.OnLocationVisited` sends the enter intent through `ILocationEntryRouter`; a granted quest
   applies its instance and toasts before `ApplyServerProgress` runs — no double-counting against the old
   `RecordProgress` path, which this replaces.
