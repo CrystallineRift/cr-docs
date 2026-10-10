@@ -325,10 +325,26 @@
         "Assets/CR/Core/Data/Logic/Tests/PlayerErrorTextTests.cs",
         "Assets/CR/Core/Data/Repository/Implementation/Config/VersionCheckClientUnityHttp.cs",
         "Assets/CR/Core/Data/Logic/AuthRetryPolicy.cs",
-        "Assets/CR/Core/Data/Logic/Tests/AuthRetryPolicyTests.cs"
+        "Assets/CR/Core/Data/Logic/Tests/AuthRetryPolicyTests.cs",
+        "Assets/CR/Core/Data/Client/Implementation/AccountClientUnityHttp.cs",
+        "Assets/CR/Core/Data/Client/Implementation/TransportReply.cs",
+        "Assets/CR/Core/Data/Client/Implementation/HttpMethodExtensions.cs",
+        "Assets/CR/Core/Data/Logic/HttpRetryPolicy.cs",
+        "Assets/CR/Core/Data/Logic/HttpRetryExecutor.cs",
+        "Assets/CR/Core/Data/Logic/IdempotencyKey.cs",
+        "Assets/CR/Core/Data/Logic/Tests/HttpRetryPolicyTests.cs",
+        "Assets/CR/Core/Data/Logic/Tests/HttpRetryExecutorTests.cs",
+        "Assets/CR/Core/Data/Logic/Tests/IdempotencyKeyTests.cs",
+        "Assets/CR/Tests/Editor/SimpleWebClientRetryTests.cs",
+        "Assets/CR/Tests/Editor/HttpRetryLayeringTests.cs",
+        "Assets/CR/Tests/Editor/HttpMethodExtensionsTests.cs",
+        "Assets/CR/Tests/Editor/VersionCheckClientUnityHttpTests.cs",
+        "Assets/CR/Tests/Editor/AccountClientEmailLinkTests.cs",
+        "Assets/Plugins/Polly/**",
+        "Assets/link.xml"
       ]
     },
-    "description": "Online/offline repository pattern, Best HTTP, ServerRequestException family + PlayerErrorText, SQLite cache"
+    "description": "Online/offline repository pattern, Best HTTP, ServerRequestException family + PlayerErrorText, Idempotency-Key ownership and the Polly retry pipeline (HttpRetryPolicy/HttpRetryExecutor), SQLite cache"
   },
   "unity/06-localization": {
     "docPath": "docs/unity/06-localization.md",

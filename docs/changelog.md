@@ -156,6 +156,40 @@
   anchors learn the actor, target and opponent when a battle opens.
 - **CI.** `ci/check-fx-keys.sh` also checks `feelPlayerAddress` against the Addressables catalogue.
 
+## 2026-10-10 — Client retries (Polly) and one Idempotency-Key owner (cr-api-unity `feature/client-retries-v2`, pending merge)
+
+- **Retries:** every request through `SimpleWebClient` now runs under `HttpRetryExecutor`, a wrapper around one shared
+  Polly v8 `ResiliencePipeline`. Up to 3 retries after 0.5 s, 1 s and 2 s (each varied by up to 25%), on no response, 429,
+  502, 503, 504 and the 409 whose body is `idempotency_in_progress`. A `Retry-After` is a minimum for the wait, and one over
+  10 s is not waited for: the failure surfaces at once with `RetryAfterSeconds` intact, so the email link cooldown still
+  reaches its screen.
+  - **500 is not retried**, on any method. The handler ran and failed, which is usually deterministic, and for a keyed
+    write the idempotency middleware deletes the claim on a 5xx, so a retry would be a second real execution rather than a
+    replay.
+  - Never retried either: any other 4xx (a 401 keeps its own in-request re-auth), a signed-out session, a missing online
+    entry, cancellation.
+  - A call is not re-sent once the online session it started in was signed out or replaced (a new online entry); the
+    caller gets the failure that led to the backoff.
+  - `VersionCheckClientUnityHttp` opts out (`HttpRetryExecutor.SingleAttempt`): the startup gate and `ConnectivityProbe`
+    want their "no" at once, not after three backoffs on every launch without a network.
+- **Idempotency-Key:** `SimpleWebClient` is now the only place a key is minted. One GUID per logical call, created before
+  the retry loop and reused by every retry and by the 401 re-send; attached to every verb except GET, HEAD, OPTIONS and
+  TRACE; set after the caller's `before` hook so a request can never carry two. `AccountClientUnityHttp` no longer mints
+  its own for the two email-link POSTs. Reads carry none.
+- **Plugins:** `Assets/Plugins/Polly/` holds `Polly.Core` 8.5.2 and `Microsoft.Bcl.TimeProvider` 8.0.0, the NuGet
+  netstandard2.0 builds unmodified. The rest of Polly's chain is already supplied by the `com.cr.game.compat` package,
+  Unity's Mono class libraries and `Assets/Plugins/Roslyn/`, so shipping a second copy would be a duplicate plugin.
+  `Assets/link.xml` preserves both. No build profile overrides the project-wide Mono backend or the default stripping level.
+- **Review follow-ups:** a token fetch that failed because the auth server is unreachable is no longer retried by the data
+  call (the auth client has already retried the refresh, and nesting the two made one call send 16 refresh POSTs), and a
+  call that has been failing for 15 s is not sent again, so a host that drops connections costs one 20 s connect timeout
+  instead of four (`HttpRetryPolicy.RetryBudget`; Best HTTP has no request timeout here, only the connect one).
+- **Production step (not done):** once a minimum client version that sends keys on every write is enforced, set
+  `Idempotency__RequireKey=true` in the production `/opt/cr/.env` and restart the API. Before that, an unkeyed write is
+  accepted with a warning.
+- **Docs:** unity/05 (Retry Strategy, Idempotency Keys, request lifecycle, the 401 path); `doc-sources.json`.
+  → [HTTP Clients](?page=unity/05-http-clients)
+
 ## 2026-10-10 — Merchant stock resolved by the server; offline NPC registry seed M16100 (live)
 
 - **Merchant stock (cr-api `8324296`, PR #72, live 2026-10-10):** `NpcMerchantService.StockFromSpawnerAsync` now
