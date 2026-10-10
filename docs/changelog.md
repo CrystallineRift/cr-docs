@@ -50,6 +50,24 @@
   call each), backend/27 (the clear is no longer a keyed player route), unity/03, unity/37; `doc-sources.json`.
   → [Merchant Shop](?page=unity/18-merchant-shop#restocking)
 
+## 2026-10-10 — The unused "Gains more strength" growth profile is deleted (pending merge)
+
+- **Why:** `M9990` seeded it with values of 10 to 93, where every other profile uses 100 for "unmodified", so a
+  creature generated with it comes out at a fraction of its base stats. Production has no spawner template naming it
+  and no creature carrying it (checked 2026-10-10), and the generation service already sorts balanced profiles first
+  to keep it away from starters. The remaining seeded profiles are Balanced Growth, Fast Experience and Fire Kitten.
+- **cr-api** (`content/delete-gains-more-strength`, pending merge): `M10024DeleteGainsMoreStrengthGrowthProfile`
+  soft-deletes the row, found by its seed id `7bed9050-25c7-428a-8945-498085f505d4` or by its name. It fires only while
+  nothing refers to it: a non-deleted spawner template naming it (active or not), or any generated creature, keeps the
+  row, and the migration then changes nothing. `Down()` restores nothing.
+- **cr-api-unity** (`content/delete-gains-more-strength`, pending merge): the `Gains more strength` `GrowthProfileConfig`
+  asset and its `CRContent` Addressable entry are removed, so a Studio push no longer sends it, and the Spawner World
+  Behaviour's setup checklist lists the profiles that are really seeded. `GrowthProfileContentTests` pins it: no asset
+  by that name or id, no Addressable entry, and every spawner template still names a profile that exists.
+- **Offline floor:** `Assets/StreamingAssets/CR/game-data.bytes` still carries the row until the floor is re-baked from
+  a cr-api `main` that has `M10024`.
+- **Docs:** backend/03 (Spawner System), Common Mistakes.
+
 ## 2026-10-10 — Merchant stock resolved by the server; offline NPC registry seed M16100 (live)
 
 - **Merchant stock (cr-api `8324296`, PR #72, live 2026-10-10):** `NpcMerchantService.StockFromSpawnerAsync` now
