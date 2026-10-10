@@ -319,10 +319,10 @@ Other load-bearing details:
 - **The look follows the Stitch design "Cinematic Bottom-Bar Dialogue System"** (2026-09-23):
   a floating slate card (`rgba(2,6,23,0.84)`, hairline white border, 16px corners, 96% wide) capped
   at 42% of screen height; a teal speaker pill (rose for a player line, `dialogue--player`) over a
-  bold white line; choices in a right-hand column, each a button with a lettered teal badge (A, B,
-  …) and an arrow overlaid as absolutely positioned children so `Button.text` stays the option line;
-  and a low console strip with an "A CONFIRM" hint on the left and the Continue control on the
-  right. A portrait plate sits left of the text (slate, teal glow border) showing the speaker's
+  bold white line; choices in a right-hand column, each a button with a teal badge (the face button
+  that picks it, see below) and an arrow overlaid as absolutely positioned children so `Button.text`
+  stays the option line; and a low console strip with an "A CONFIRM" hint on the left and the Continue
+  control on the right, on plain lines only. A portrait plate sits left of the text (slate, teal glow border) showing the speaker's
   initials (`DialoguePanelPolicy.Initials`) until `NpcDefinition` carries art; three static pulse
   bars follow the pill as in the design. The typeface is the design's own Plus Jakarta Sans
   (`Assets/CR/UI/Fonts/PlusJakartaSans/`, SIL OFL 1.1, Bold for lines and choices, ExtraBold for
@@ -341,13 +341,29 @@ Other load-bearing details:
   double-advance (old and new button both live for one frame). Option buttons ARE rebuilt every
   Choice step; they are protected by a realtime-based debounce instead
   (`DialoguePanelPolicy.InputAccepted`).
+- **A choice is one press** (playtest fix, 2026-10-10: "it feels like a stutter to select something then
+  confirm it"). Picking an option chooses it and advances in one action: a click or tap, Submit on the
+  focused option (keyboard, or gamepad A; focus starts on the first option), or the face button its badge
+  shows. The badges read A, B, X, Y for the first four options (`DialoguePanelPolicy.BadgeGlyph`; a bullet
+  after that, because no button picks those), and B, X and Y pick the second to fourth options through
+  input actions armed only while a choice is pending (`PickByFaceButton`). Moving focus with the stick or
+  the arrows never answers. B is also Cancel: the pick answers that press and the Cancel the same press
+  raises is dropped (`DialoguePanelPolicy.CancelIsFacePick`), so one press never gives two answers; Escape,
+  and B on a choice with no second option, keep Cancel's decline meaning. With options on screen the
+  footer drops its "A CONFIRM" hint (`ShowsConfirmHint`) and the empty strip goes away; plain lines keep the
+  hint and the Continue prompt. A press inside the debounce window of a freshly shown step is ignored, so
+  the press that chose never also skips the line that follows. Pinned by `DialoguePanelPolicyTests` and
+  `DialogueScreenPresenterTests`; the face-button action wiring does not fire in edit mode, so that path is
+  proven in play mode.
 - **The body is a Text Animator `AnimatedLabel`, and lines can be typed out.** Each block of body
   text goes through `LoreText.Decorate` (lore keywords coloured, a relic shimmering) and, unless the
   player's Dialogue Text Speed is Instant, is typed by the label's `Typewriter`. While a line types a
   Continue / Submit / Cancel press only completes it and the next press advances (`DialogueLineReveal`);
-  a choice's options wait for their prompt; the panel carries `dialogue--typing`. With no
+  a choice's options wait for their prompt, so while a prompt types a press only completes it, and once
+  the options appear one press picks and advances (one press never both completes a line and picks or
+  advances); the panel carries `dialogue--typing`. With no
   `ITextDisplaySettings` bound lines are instant. Details, the safety timeout and the settings:
-  [Lore text](39-lore-text.md).
+  [Lore text](?page=unity/39-lore-text).
 - Sorting order 40 — above the shop (5) and battle summary (10), below the toast rig (60).
 - `OnContextChanged(UIContext newContext)` closes the panel whenever the game leaves the Overworld
   context (a battle starting, a cutscene) — `Close()` cancels whatever step is pending, which the

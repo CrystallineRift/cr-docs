@@ -683,7 +683,23 @@ locally in **both** modes, deliberately:
 - **Completed instances** — there is no `/completed` REST endpoint. The router already mirrors every
   server-returned instance into the local `quest_instance` table (active fetch, `/progress` results,
   claim results), so online play reads its own mirror instead of inventing a round-trip with nothing
-  to call.
+  to call. A quest the **server** completes on its own (a giver quest such as First Capture or Runaway
+  Cargo, completed by the authority and waiting for its turn-in) reaches the mirror through the active
+  fetch: `MirrorActiveAsync` reads by id (`GET /api/v1/quests/{instanceId}`) every locally active row the
+  server no longer lists, and mirrors what the server answers (Completed and unclaimed is ReadyToTurnIn;
+  Abandoned, Failed and Claimed likewise). It soft-deletes a row **only** when the server answers 404
+  (`IQuestClient.GetQuestInstanceAsync` returns null for that; any other failure still throws), because
+  `/active` drops completed, abandoned, failed and never-existing instances alike, so absence says
+  nothing about which. A row whose read fails is left as it was, the others are still settled, and the
+  first failure is rethrown so the cache warns, leaves the key stale and the next read retries; a late
+  answer never overwrites a row the claim or abandon path settled while it was on the wire. Online,
+  `GetCompletedQuestsAsync` first brings the active mirror current while its scope is stale (sharing the
+  active key's single fetch), because a consumer reacting to a completion asks for the history before
+  anything has refreshed the active list. Before this (playtest fix, 2026-10-10) a quest the server
+  completed mid-session vanished from the mirror: `quest.state` never read ReadyToTurnIn, Philroe's hub
+  fell through to its fallback line, and the turn-in, with First Capture's rewards, was skipped.
+  Pinned by `QuestMirrorTests`, `QuestMidSessionCompletionTests` (router → manager → snapshot → state
+  evaluator → hub → `quest.claim`, before and after the claim) and `QuestClientInstanceReadTests`.
 - **Templates** — templates are *content*, not player state. `QuestWorldBehaviour` syncs every
   `QuestDefinition` SO into the local `quest_template` tables at world init regardless of
   connectivity, so the local domain service is the correct source in either mode and costs no
@@ -1234,8 +1250,12 @@ what to do next, and how far along it is. Added 2026-09-26.
   conversation) and when the System tab's **Quest Tracker** toggle is off.
 - **Data:** every `IQuestService` event (`OnSessionReady`, `OnActiveQuestsRefreshed`, accepted,
   granted, objective updated, completed, abandoned, rewards claimed) only marks the card stale;
-  `Update` rebuilds on the main thread from `ActiveQuests`, fetching each template once per session
-  through `GetTemplateAsync`. `OnActiveQuestsRefreshed` fires after `RefreshActiveQuestsAsync` swaps
+  `Update` rebuilds on the main thread from `ActiveQuests` plus the completed history's quests that
+  still wait for their turn-in (Completed and unclaimed), fetching each template once per session
+  through `GetTemplateAsync`. A refresh replaces the in-memory list with the in-progress set, so a quest
+  the server finished mid-session drops out of it while its giver still owes the rewards; reading the
+  history keeps its "Return to *giver*" card (when both hold the id, the in-memory instance wins).
+  Pinned by `QuestTrackerTurnInTests`. `OnActiveQuestsRefreshed` fires after `RefreshActiveQuestsAsync` swaps
   in the authority's list (journal open, every dialogue snapshot) — without it the tracker kept the
   counts it drew before the swap (HUD 0/3 while the journal showed 2/3). Pinned by
   `QuestManagerRefreshTests`.
@@ -1283,7 +1303,8 @@ builder.Services.AddScoped<IQuestDomainService, QuestDomainService>();
 ```
 
 `IQuestInstanceRepository.DeleteInstanceAsync(instanceId)` soft-deletes an instance and its objective-progress rows.
-The Unity online router calls it for locally mirrored active instances the server no longer lists;
+The Unity online router calls it for a locally mirrored active instance the server no longer lists **and** answers
+404 for when asked by id (an unlisted instance the server still has is mirrored as the server reports it instead);
 `UpsertFromServerAsync` revives a deleted row (`deleted = false` on conflict) so a mirror sweep that raced a
 server-side accept heals on the next read.
 
