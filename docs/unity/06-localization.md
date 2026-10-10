@@ -305,6 +305,16 @@ from where the line lives: `dlg.{dialogueContentKey}.{nodeId}` for a line,
 back to the authored text. Node and option ids survive rewording, so nobody maintains a key list by
 hand.
 
+## Lore glossary forms
+
+The lore keywords the game colours in story text (soulstone, Actuators, Mirandale …) are matched by
+their **forms** in the text being shown, so a translation must say which words to look for. Each
+glossary term has one pack row, `gloss.<key>.forms`, whose value is the language's forms separated by
+`|` (`gloss.krytori.forms` = `krytorus|krytori`); it **replaces** that language's English forms, and a
+missing or blank row keeps English. *Export Translation Template* includes one row per term
+(`LoreGlossaryStringSource`); the matcher is rebuilt after every language change. Full story in
+[Lore text](39-lore-text.md).
+
 ## Legacy YAML tables
 
 > The rest of this page describes the older per-domain YAML loader. It works as described, but the

@@ -391,6 +391,11 @@
   },
   {
     "section": "Unity",
+    "title": "Lore Text (keyword styling and the dialogue typewriter)",
+    "path": "unity/39-lore-text"
+  },
+  {
+    "section": "Unity",
     "title": "Story Camera (Unity)",
     "path": "unity/39-story-camera"
   }

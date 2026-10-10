@@ -32,7 +32,7 @@ theme and the dialog's tokens would resolve to nothing.
 | `Assets/CR/UI/Theme/CrTheme.tss` | The theme: default Unity theme + `CrTheme.uss` |
 | `Assets/CR/UI/Common/ScaledWindow.cs` | `.cr-window` frame that sizes itself by UI Scale |
 | `Assets/CR/UI/Common/UiScaleApplier.cs` | Applies System → Graphics → "UI Scale" to every panel; exposes `ActiveScale` |
-| `Assets/CR/Tests/Editor/CrThemeTests.cs` | The guard tests |
+| `Assets/CR/Tests/Editor/CrThemeTests.cs` | The guard tests, including that the `--cr-lore-*` tokens equal `LorePalette` |
 
 ## Tokens
 
@@ -46,6 +46,7 @@ touching a screen.
 | **glass** | Dark translucent overlays | Market, Shop, battle Bag, target picker, evolution | `--cr-glass-scrim`, `-bg`, `-surface`, `-surface-raised`, `-surface-hover`, `-surface-active`, `-selected`, `-border`, `-border-mid`, `-border-soft`, `-focus`, `-accent`, `-text`, `-text-soft`, `-text-muted`, `-text-dim`; `--cr-currency` |
 | **hud** | Warm dark in-world notices | Toasts, quest tracker | `--cr-hud-surface`, `-text`, `-text-muted`, `-accent`; `--cr-reward`, `--cr-dialogue-accent` |
 | **status** | Semantic | Any family | `--cr-danger`, `--cr-warning`, `--cr-success`, `--cr-success-bright` |
+| **lore** | Pastel-on-dark / deep-on-light keyword colours in story text | Dialogue, barks, banner, tracker, journal (via `LorePalette`) | `--cr-lore-{relic,creature,person,place,order,event}-on-dark` / `-on-light`, `--cr-lore-emphasis-on-dark` / `-on-light` |
 
 ### Scales
 

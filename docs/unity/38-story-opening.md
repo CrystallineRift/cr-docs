@@ -26,7 +26,9 @@ decides whether the prompt shows.
 
 `IBarkService.Say(anchor, text, seconds)`, impl `WorldBarkService`: a world-space bubble (USS class `world-bark`).
 `BarkRule.Allowed(...)` suppresses barks during dialogue, battle and the tech demo. `Say` returns `true` only when the
-line was shown, so a caller that remembers "said once" never burns that memory on a suppressed line.
+line was shown, so a caller that remembers "said once" never burns that memory on a suppressed line. The bubble text
+goes through `LoreText.Decorate` (lore keywords coloured, never animated); the glossary that drives it,
+`Content/Text/glossary.json` (next to `names.json`), is covered in [Lore text](39-lore-text.md).
 
 ## NpcEscort and EscortPlan
 

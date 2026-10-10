@@ -501,6 +501,8 @@ encrypted prefs store) under a `GameConfigurationKeys` constant and is pushed li
 | Graphics | **Quest Tracker** toggle (`quest-tracker-toggle`) | `QuestTrackerHidden` | `QuestTrackerPresenter.SetShown` |
 | Game | Combat Speed dropdown | `BattlePacingScale` | `BattlePresentationSequencer` at battle start |
 | Game | **Story Camera** dropdown (`story-camera-dropdown`): Cinematic / Gentle (cuts only) / Off | `StoryCameraMode` | `StoryCameraSetting`, read at each cued line ([Story Camera](?page=unity/39-story-camera)) |
+| Game | **Text Effects** dropdown (`text-effects-dropdown`: Full / Static colour / Plain) | `LoreTextMode` (`full` / `static` / `plain`) | `ITextDisplaySettings` → `LoreText.Mode`, Text Animator behaviours on/off; see [Lore text](39-lore-text.md) |
+| Game | **Dialogue Text Speed** dropdown (`dialogue-speed-dropdown`: Instant / Fast / Normal) | `DialogueTextSpeed` (`instant` / `fast` / `normal`) | `ITextDisplaySettings` → `DialogueScreenPresenter`, from the next line |
 
 The tracker key stores the **hidden** flag, not "shown": the tracker is on by default and
 `TryGet<bool>` cannot tell "never written" from `false`, so an absent key has to mean the default.
