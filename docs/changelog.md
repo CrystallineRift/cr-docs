@@ -1,5 +1,43 @@
 # Changelog
 
+## 2026-10-10 — Merchant restock belongs to the authority; merchant spawners restock after 900 s (pending merge)
+
+- **Why:** the client decided when a shop was wiped and re-rolled. Offline, `NpcMerchantBehaviour` passed
+  `force: true` on every world load (`_refreshStockOnWorldLoad`), choosing an outcome that the server-authoritative
+  rule reserves for the authority. Online, the route has ignored `force` since the 2026-09-27 route lockdown, and
+  every merchant spawner was seeded with `restock_cooldown_seconds = 0` ("never auto-restock"), so no online shop
+  restocked: purchases shrank the stock and a bought-out item never came back.
+- **The call (cr-api `15c8d45` on `fix/merchant-restock-authority`, pending merge):**
+  `INpcMerchantService.StockFromSpawnerAsync` is now `(accountId, trainerId, npcId, ct)`, with no `force` and no
+  spawner key. The spawner's cooldown alone decides. A shop with no stock rows is rolled. A stocked shop is
+  re-rolled once the cooldown has elapsed since its newest row's `updated_at`, and kept when the cooldown is 0. A
+  purchase restamps the row it buys from (unless that sells out), so trading defers a restock. The caller-key Debug
+  log is gone, and every `MerchantStockNotAllowedException` refusal is unchanged.
+- **The route:** `POST /api/v1/merchants/{npcId}/stock-from-spawner` calls the new signature.
+  `StockFromSpawnerRequest` keeps `SpawnerContentKey` and `Force`, now optional and ignored, so v0.1.2 to v0.1.7
+  bodies still bind. `MerchantRestockHttpTests` posts a v0.1.7 body with `force: true` inside the cooldown and gets
+  200 `{ stocked: 0 }` with the stock unchanged.
+- **M6024 (cr-api `7145c33`, same branch):** `M6024SetMerchantRestockCooldowns` sets 900 s on
+  `starting-merchant-items` and `demo-merchant-area-1-items` … `demo-merchant-area-5-items`, only where the value is
+  still 0 and the row is not deleted, so an authored cooldown wins. It stamps `row_version` and `updated_at`, is
+  idempotent, and its `Down()` is a no-op. No content-schema bump: the floor is re-adopted by content hash. M6015's
+  comment that justified the 0 is corrected.
+- **Client (cr-api-unity `fix/merchant-restock-authority`, pending merge):** the router and `NpcMerchantBehaviour`
+  take the new signature. `_refreshStockOnWorldLoad` and the router's `force` branch are gone, and the request body
+  no longer sets `Force` or `SpawnerContentKey`. The world load always sends the intent, even with an empty
+  `_itemSpawnerContentKey`, and logs a refusal as a warning. Online, the intent goes out once per merchant per
+  session. The six `*MerchantItems.asset` spawners carry `restockCooldownSeconds: 900` to match M6024, and offline
+  play gets the 900 s from a floor baked with M6024. Until this branch merges, an Item Spawners push from a `main`
+  checkout still sends 0 and switches those shops' restock off again.
+- **Online shops restock again once cr-api deploys:** a shop falls due 15 minutes after its stock last changed. The
+  shipped v0.1.7 client asks on every world load (its `force: true` skipped the session memo, and the server ignores
+  the flag), so it sees a due shop restock on the next load. The new client asks once per session, so a shop that
+  falls due mid-session restocks on the first visit of a later session.
+- **build-packages.sh (cr-api `c98c8df`):** the post-build test summary prints each suite's real result line
+  instead of "(no summary)".
+- **Docs:** unity/18 (Restocking), backend/11 (Stocking a merchant, M6024), unity/03, unity/37; `doc-sources.json`.
+  → [Merchant Shop](?page=unity/18-merchant-shop#restocking)
+
 ## 2026-10-10 — Merchant stock resolved by the server; offline NPC registry seed M16100 (live)
 
 - **Merchant stock (cr-api `8324296`, PR #72, live 2026-10-10):** `NpcMerchantService.StockFromSpawnerAsync` now
@@ -2177,7 +2215,9 @@ Now:
   `AreaNpcKeys`. Ten new `NpcDefinition` SOs, registered and localised.
 - **Five stock spawners**, `demo-merchant-area-{n}-items`, seeded by `M6015` and authored as SOs;
   cheap crystals in area 1, radiant and the charm weighted toward area 5.
-- **Stock refreshes on every world load** (`NpcMerchantBehaviour` forces the re-roll).
+- **Stock refreshes on every world load** (`NpcMerchantBehaviour` forces the re-roll). (**Superseded
+  2026-10-10:** the client no longer forces anything, and the authority re-rolls a shop only once its
+  spawner's restock cooldown has elapsed; see "Merchant restock belongs to the authority" above.)
 - **Online is server-authoritative**: `NpcMerchantOnlineOfflineService` routes every merchant call
   to `/api/v1/merchants/*` when online, local SQLite when offline, sampled per call. No fallback.
   New `GET /merchants/{id}/multipliers`; 409 bodies now survive as `ConflictException` so a refused
@@ -2945,7 +2985,9 @@ It was also a gameplay exploit: reloading rerolled the shop's contents.
 
 A cooldown of 0 now means *"do not auto-restock"*, not *"restock every time"*. First-time stocking
 still happens (empty merchant), an elapsed cooldown still restocks, and `force: true` still
-restocks unconditionally. 5 new tests cover each branch.
+restocks unconditionally. 5 new tests cover each branch. (Later: from 2026-08-22 the world load passed
+`force: true` by default, and on 2026-10-10 `force` was removed from the call altogether and the merchant
+spawners got a 900 s cooldown; see "Merchant restock belongs to the authority" above.)
 
 Measured on the live save: merchant world-init **~40ms → ~19ms**, world init total **~290ms →
 ~275ms**, and the merchant's stock is now byte-identical across loads (previously re-rolled).

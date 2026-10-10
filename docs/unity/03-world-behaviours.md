@@ -84,6 +84,11 @@ Two things the numbers do argue for, if load time ever matters:
   ~4ms; the gap is `NpcMerchantBehaviour` calling `StockFromSpawnerAsync` on every world load.
   Invisible with two NPCs, but twenty merchants would add roughly 800ms to every load — restocking
   wants to become lazy (on first shop open) or interval-gated before the world fills out.
+  **It has since become interval-gated:** that ~40ms was a clear-and-re-roll on every load. The load
+  still sends the stock intent, but the authority re-rolls a stocked shop only once its spawner's
+  restock cooldown has elapsed (900 s on the shipped merchants), so a load inside the cooldown only
+  reads, and online the router asks once per merchant per session. See
+  [Merchant Shop → Restocking](?page=unity/18-merchant-shop#restocking).
 
 ## Component Overview
 
@@ -96,7 +101,7 @@ Two things the numbers do argue for, if load time ever matters:
 | `INpcSubInitializable` | Interface for NPC add-on components run after identity resolves |
 | `NpcWorldBehaviour` | Identity-only NPC world behaviour; dispatches to sub-behaviours |
 | `NpcCreatureGrantBehaviour` | Sub-behaviour: seeds a configured creature team onto the NPC |
-| `NpcMerchantBehaviour` | Sub-behaviour: stub for merchant NPC state |
+| `NpcMerchantBehaviour` | Sub-behaviour: sends the merchant's "stock this shop" intent on world init; exposes `MerchantNpcId` |
 | `NpcTrainerBehaviour` | Sub-behaviour: seeds creature team + items, caches both for battle |
 | `SpawnerWorldBehaviour` | World behaviour: ensures spawner zone exists; exposes `SpawnerId` |
 | `SpawnerEncounterBehaviour` | Activated by `SpawnerWorldBehaviour`; trigger-based wild encounter entry point |
@@ -392,9 +397,9 @@ GameObject: NPC_Cindris
      _interactionRadius: 3
 ```
 
-## `NpcMerchantBehaviour` — Merchant Stub
+## `NpcMerchantBehaviour` — Merchant Stock Intent
 
-`NpcMerchantBehaviour` implements `INpcSubInitializable`. It is currently a stub that marks the NPC as a merchant and exposes a stable `MerchantNpcId` for use by shop UI systems.
+`NpcMerchantBehaviour` implements `INpcSubInitializable`. On world init it sends the merchant's "stock this shop" intent, `INpcMerchantService.StockFromSpawnerAsync(accountId, trainerId, npcId)`, then marks itself ready and exposes a stable `MerchantNpcId` for the shop UI. It chooses neither the stock source nor a re-roll: the NPC registry row names the spawner, and the spawner's restock cooldown decides whether the shop is re-rolled (see [Merchant Shop → Restocking](?page=unity/18-merchant-shop#restocking)). A refusal is logged as a warning naming the NPC's content key.
 
 ### Example Inspector Setup
 
