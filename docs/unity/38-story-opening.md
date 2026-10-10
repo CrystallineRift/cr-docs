@@ -86,9 +86,10 @@ grant, objective and completion, and the client's only part is the location-ente
   syncs the shipped quests into an in-memory store to prove every reference resolves on the first pass. (Runaway Cargo used to be listed
   before First Capture, so on a fresh offline install the farm gate did not offer it until the second launch.)
 - **Offline needs the locations on the floor.** The offline authority answers an unknown location with nothing, so `story-ahksun-landing`
-  and `story-philroes-wagon` must be in the baked floor's `world_location` (cr-api M15014, ids from `WorldLocations.asset`). The
-  floor is rebaked by the release step; `OpeningLocationFloorTests` checks the package's floor against the catalog and holds the committed
-  floor to it once it carries the rows.
+  and `story-philroes-wagon` must be in the baked floor's `world_location` (cr-api M15014, ids from `WorldLocations.asset`); nothing at
+  runtime writes them there. `OpeningLocationFloorTests` checks the package's floor against the catalog and **fails** the run when the
+  committed floor lacks rows the installed package seeds (it skips only when the package does not seed them either), so a stale floor
+  cannot ship quietly.
 - **Philroe's hub** is unchanged for a new trainer from the wagon on (`help` while First Battle is active, `walk`, `caught`, the Runaway
   cases). Before the wagon trigger fires, and for a trainer whose First Battle was abandoned (the authority restarts it in place on the next
   sweep, so it reads as on offer, never Active), he is still pinned behind the gaterbear (`trapped`); his `breath` fallback names no place.

@@ -11,8 +11,10 @@
     It keeps Find Ahksun away from every trainer who has started First Battle.
   - **M15014** `SeedOpeningStoryLocations` seeds `story-ahksun-landing` (10 XP) and `story-philroes-wagon` (0 XP, discovery quest
     First Battle). A replacing location push must contain both. → [Location Discoveries](?page=backend/24-location-discoveries)
-  - Deploy order: cr-api, then the Studio quest push (now sent in dependency order), then the location push; the offline floor
-    needs a rebake or the two locations are unknown offline.
+  - Deploy order: cr-api, then the Studio quest push (now sent in dependency order), then the location push. The committed offline
+    floor was migrated forward with the `integration/round2b` package's migrations (M10024, M15014, M16010; its production overlay is
+    untouched), and `OpeningLocationFloorTests` now fails a committed floor that lacks the two locations instead of skipping; the
+    release bake from the server keeps them because the package seeds them.
 - **Unity:** the quest registry is ordered so every quest follows the quests it names (Runaway Cargo used to be written before First
   Capture, so a fresh offline install did not offer it at the farm gate until the second launch); Ahksun's glow burns from the first
   frame; Philroe's `breath` fallback names no place; the legacy hub reorder (v0.1.6 trainers on Runaway Cargo) is folded in.

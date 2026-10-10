@@ -93,8 +93,10 @@ quests visit. The ids must match `WorldLocations.asset`, because the floor and t
   the stored one.
 - **Offline needs them on the floor.** The offline authority reads `world_location` from the baked GameData floor and answers
   an unknown key with `UnknownLocation` and no writes, so until the floor carries M15014's rows Find Ahksun can never complete
-  and the wagon grants nothing. The release step rebakes the floor; `OpeningLocationFloorTests` (Unity) holds the package's
-  floor, and the committed one once it is rebaked, to the catalog.
+  and the wagon grants nothing; nothing at runtime puts them there. `OpeningLocationFloorTests` (Unity) holds the package's
+  floor to the catalog and the committed floor (`Assets/StreamingAssets/CR/game-data.bytes`) to the package: when the installed
+  package seeds both rows and the committed floor lacks one, the run **fails** (rebake it). It is skipped only when the package
+  does not seed them either.
 - Deploy order: cr-api (enum value, evaluator, M15014), then the Studio quest push, then the Studio location push with both
   entries in the catalog. Philroe's hub and the quest chain are described in [Quest System](?page=backend/07-quest-system) and
   [Opening Story](?page=unity/38-story-opening).
