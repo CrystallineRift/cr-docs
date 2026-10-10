@@ -1,74 +1,76 @@
 # Changelog
 
-## 2026-10-10 — Merchant restock belongs to the authority; merchant spawners restock after 900 s (pending merge)
+## 2026-10-10 — v0.1.8: the opening chain, story camera, lore text, game feel, merchant restock v2, client retries, playtest fixes
+
+One entry for the day. Unless a group says otherwise, everything here is on branches for release v0.1.8 and not
+deployed: cr-api `integration/round2b` (PRs #73 to #75 plus the opening-chain server) and the cr-api-unity lane
+branches merged into `release/v0.1.8`. The last group was already live on 2026-10-10.
+
+### Merchant restock v2: only a player near a merchant asks, and only traded stock restocks (pending release)
+
+cr-api `integration/round2b` (PR #74), cr-api-unity `fix/merchant-restock-v2-client`.
 
 - **Why:** the client decided when a shop was wiped and re-rolled. Offline, `NpcMerchantBehaviour` passed
   `force: true` on every world load (`_refreshStockOnWorldLoad`), choosing an outcome that the server-authoritative
   rule reserves for the authority. Online, the route has ignored `force` since the 2026-09-27 route lockdown, and
   every merchant spawner was seeded with `restock_cooldown_seconds = 0` ("never auto-restock"), so no online shop
-  restocked: purchases shrank the stock and a bought-out item never came back.
-- **The call (cr-api `15c8d45` on `fix/merchant-restock-authority`, pending merge):**
-  `INpcMerchantService.StockFromSpawnerAsync` is now `(accountId, trainerId, npcId, ct)`, with no `force` and no
-  spawner key. The spawner's cooldown alone decides. A shop with no stock rows is rolled. A stocked shop is
-  re-rolled once the cooldown has elapsed since its newest row's `updated_at`, and kept when the cooldown is 0. A
-  purchase that leaves stock behind restarts the cooldown (the row it bought from is restamped). A shop bought out
-  completely rolls again on the next ask, because the purchase path deletes a row it sells out; that is intended,
-  and cr-api `b37cf98` (same branch) pins both cases in `NpcMerchantServiceTests`. The caller-key Debug log is gone,
-  and every `MerchantStockNotAllowedException` refusal is unchanged.
-- **The route:** `POST /api/v1/merchants/{npcId}/stock-from-spawner` calls the new signature.
-  `StockFromSpawnerRequest` keeps `SpawnerContentKey` and `Force`, now optional and ignored, so v0.1.2 to v0.1.7
-  bodies still bind. `MerchantRestockHttpTests` posts a v0.1.7 body with `force: true` inside the cooldown and gets
-  200 `{ stocked: 0 }` with the stock unchanged.
-- **Clearing a shop is content-write only (cr-api `2649a5f`, same branch):** a shop with no stock rows is always
-  rolled, so a player who could empty one could re-roll it inside the cooldown, and one could:
-  `DELETE /api/v1/merchants/{npcId}/inventory` was a player route that answered 200 `{ cleared: true }`, and the
-  next stock intent rolled. It is now merchant-stock authoring like the inventory add, update and remove routes and
-  `restock`: `RequireContentWrite`, with the operator naming `accountId` and `trainerId` in the query (400 when
-  either is empty), no ownership guard and no idempotency key. A player token gets 403 before the handler runs and
-  the stock stays; `MerchantRestockHttpTests` pins both sides. No shipped client calls it in gameplay. The client
-  router makes the clear offline-only, like the other authoring writes: online it throws `NotSupportedException`
-  and sends nothing (cr-api-unity `fix/merchant-restock-authority`, pending merge).
-- **M6024 (cr-api `7145c33`, same branch):** `M6024SetMerchantRestockCooldowns` sets 900 s on
-  `starting-merchant-items` and `demo-merchant-area-1-items` … `demo-merchant-area-5-items`, only where the value is
-  still 0 and the row is not deleted, so an authored cooldown wins. It stamps `row_version` and `updated_at`, is
-  idempotent, and its `Down()` is a no-op. No content-schema bump: the floor is re-adopted by content hash. M6015's
-  comment that justified the 0 is corrected.
-- **Client (cr-api-unity `fix/merchant-restock-authority`, pending merge):** the router and `NpcMerchantBehaviour`
-  take the new signature. `_refreshStockOnWorldLoad` and the router's `force` branch are gone, and the request body
-  no longer sets `Force` or `SpawnerContentKey`. The world load always sends the intent, even with an empty
-  `_itemSpawnerContentKey`, and logs a refusal as a warning. Online, the intent goes out once per merchant per
-  session. The six `*MerchantItems.asset` spawners carry `restockCooldownSeconds: 900` to match M6024, and offline
-  play gets the 900 s from a floor baked with M6024. Until this branch merges, an Item Spawners push from a `main`
-  checkout still sends 0 and switches those shops' restock off again.
-- **Online shops restock again once cr-api deploys:** a shop falls due 15 minutes after its stock last changed. The
-  shipped v0.1.7 client asks on every world load (its `force: true` skipped the session memo, and the server ignores
-  the flag), so it sees a due shop restock on the next load. The new client asks once per session, so a shop that
-  falls due mid-session restocks on the first visit of a later session.
+  restocked: purchases shrank the stock and a bought-out item never came back. A first fix earlier the same day (v1,
+  never released) moved the decision to the authority, but it still asked on every world load and counted the
+  cooldown from the shelf's newest row, so a bought-out shop rolled again at once and a deploy would have re-rolled
+  every shop. v2 replaces both: the load scales with players standing near merchants, not with merchants in the
+  world, and stock nobody has traded with never restocks.
+- **The call (cr-api `15c8d45`):** `INpcMerchantService.StockFromSpawnerAsync` is now `(accountId, trainerId, npcId, ct)`,
+  with no `force` and no spawner key. `StockFromSpawnerRequest` keeps `SpawnerContentKey` and `Force`, optional and
+  ignored, so v0.1.2 to v0.1.7 bodies still bind: `MerchantRestockHttpTests` posts a v0.1.7 body with `force: true`
+  and gets 200 `{ stocked: 0 }` with the stock unchanged. Every `MerchantStockNotAllowedException` refusal is unchanged.
+- **The rule (cr-api `6f7bd1e`, `024b172`, `fe01e61`):** a shelf that was rolled and that nothing has touched since is
+  kept, however long ago the roll was, and that answer costs one row read with no write. A shelf never rolled is
+  rolled. A shelf touched by a purchase or a sale is re-rolled once the spawner's cooldown has run since the **last**
+  touch (0 = never), so a shelf someone is buying from is not replaced under them and a shop bought out completely
+  waits for the cooldown like any other. The roll is drawn first; one transaction then claims the shelf (a
+  compare-and-set on `stock_roll_seq` and the touch stamp the ask read) and replaces its rows, so concurrent asks roll
+  once and a trade that lands between an ask's read and its claim makes the claim lose. An empty roll is still a roll:
+  it is recorded, the shelf keeps its rows, and a warning is logged.
+- **M16010 (cr-api `28caf6e`):** `M16010AddMerchantStockStampsToNpcs` adds `stock_rolled_at`, `stock_touched_at` and
+  `stock_roll_seq` to `npcs` (player-data offline). The backfill stamps every live merchant that holds rows as rolled at
+  its newest row and leaves it untouched, so deploying re-rolls nothing; a shop bought out under the old rules (no
+  rows) is rolled once by its next ask. Purchase and sale stamp the touch inside their own transactions; the clear,
+  and an authoring edit that empties a shelf, reset it. The NPC repositories select the new columns, so M16010 must
+  run on player-data and every online cache, and the floor must be re-baked.
+- **The route (cr-api `df23de7`):** `POST /api/v1/merchants/{npcId}/stock-from-spawner` takes no Idempotency-Key (a key
+  that is sent is ignored; the route is in the exemption list as idempotent by construction) and has its own
+  per-account limiter, `cr-merchant-stock`, 30/min (`RateLimits:MerchantStockPerMinute`). `RoutePolicyCoverageTests`
+  now requires a limiter on every player POST, with the existing unlimited ones (purchase and sell among them) listed
+  as known gaps that may only shrink.
+- **Clearing a shop is content-write only (cr-api `2649a5f`):** `DELETE /api/v1/merchants/{npcId}/inventory` was a
+  player route that answered 200 `{ cleared: true }`, and the next stock intent rolled the emptied shop. It is now
+  merchant-stock authoring like the inventory add, update and remove routes and `restock`: `RequireContentWrite`, with
+  the operator naming `accountId` and `trainerId` in the query (400 when either is empty), no ownership guard and no
+  idempotency key. A player token gets 403 and the stock stays. The client router makes the clear offline-only, like
+  the other authoring writes: online it throws `NotSupportedException` and sends nothing.
+- **M6024 (cr-api `7145c33`):** `M6024SetMerchantRestockCooldowns` sets 900 s on `starting-merchant-items` and
+  `demo-merchant-area-1-items` … `demo-merchant-area-5-items`, only where the value is still 0 and the row is not
+  deleted, so an authored cooldown wins. It stamps `row_version` and `updated_at`, is idempotent, and its `Down()` is a
+  no-op. The six `*MerchantItems.asset` spawners carry `restockCooldownSeconds: 900` to match, pinned with the committed
+  floor by `MerchantRestockContentTests`.
+- **Client (cr-api-unity `fix/merchant-restock-v2-client`):** world init, login and cell streaming ask nothing.
+  `NpcInteractionBehaviour.EnterRange`, after the offer check, sends the ask (`NpcMerchantBehaviour.OnPlayerApproached`;
+  the first one after the merchant comes to life waits a random 0 to 2 s), and the shop asks again before it reads the
+  shelf (`ReadShelfAsync`). `MerchantStockAsks` rations both, the same online and offline: an ask in flight is joined,
+  one within 60 s of the last is not made, and the time is recorded before the call whatever happens. A reported roll
+  invalidates only that merchant's `MerchantStock` key; `CacheScope.MerchantStocked` and `GameChange.MerchantRestocked`
+  are deleted. The body is `{ trainerId }`. A refused purchase re-reads the shelf.
+- **Open:** the Cave, Shore, Crags and Dunes spawners have no guaranteed item, so a first roll comes up empty 0.16% to
+  2.8% of the time, and that shelf then stays empty until a sale and the cooldown, or an operator's clear. Content
+  pushes never re-roll a shelf; whether operators want an explicit "reset this merchant's shelves" action is undecided.
 - **build-packages.sh (cr-api `c98c8df`):** the post-build test summary prints each suite's real result line
   instead of "(no summary)".
-- **Docs:** unity/18 (Restocking), backend/11 (Stocking a merchant, M6024), backend/02 (merchant routes: who may
-  call each), backend/27 (the clear is no longer a keyed player route), unity/03, unity/37; `doc-sources.json`.
+- **Docs:** unity/18 (Restocking, rewritten), backend/11 (Stocking a merchant; Shelf stamps: M16010), backend/02
+  (merchant routes), backend/06 (the limiter), backend/12 (trades stamp the shelf), backend/27 (the exemption),
+  unity/03, unity/04, unity/05, unity/16, unity/37, unity/38; `doc-sources.json`.
   → [Merchant Shop](?page=unity/18-merchant-shop#restocking)
 
-## 2026-10-10 — The unused "Gains more strength" growth profile is deleted (pending merge)
-
-- **Why:** `M9990` seeded it with values of 10 to 93, where every other profile uses 100 for "unmodified", so a
-  creature generated with it comes out at a fraction of its base stats. Production has no spawner template naming it
-  and no creature carrying it (checked 2026-10-10), and the generation service already sorts balanced profiles first
-  to keep it away from starters. The remaining seeded profiles are Balanced Growth, Fast Experience and Fire Kitten.
-- **cr-api** (`content/delete-gains-more-strength`, pending merge): `M10024DeleteGainsMoreStrengthGrowthProfile`
-  soft-deletes the row, found by its seed id `7bed9050-25c7-428a-8945-498085f505d4` or by its name. It fires only while
-  nothing refers to it: a non-deleted spawner template naming it (active or not), or any generated creature, keeps the
-  row, and the migration then changes nothing. `Down()` restores nothing.
-- **cr-api-unity** (`content/delete-gains-more-strength`, pending merge): the `Gains more strength` `GrowthProfileConfig`
-  asset and its `CRContent` Addressable entry are removed, so a Studio push no longer sends it, and the Spawner World
-  Behaviour's setup checklist lists the profiles that are really seeded. `GrowthProfileContentTests` pins it: no asset
-  by that name or id, no Addressable entry, and every spawner template still names a profile that exists.
-- **Offline floor:** `Assets/StreamingAssets/CR/game-data.bytes` still carries the row until the floor is re-baked from
-  a cr-api `main` that has `M10024`.
-- **Docs:** backend/03 (Spawner System), Common Mistakes.
-
-## 2026-10-10 — The opening starts with Find Ahksun; First Battle begins at the wagon (branch, not deployed)
+### The opening starts with Find Ahksun; First Battle begins at the wagon (pending release)
 
 - **Quests (cr-api `integration/round2b`, cr-api-unity `feature/opening-find-ahksun`):** a new trainer is handed *Find Ahksun*
   (visit the landing at the cliff's edge) instead of First Battle; *Toward the Lights* walks them down; the wagon's location
@@ -87,7 +89,7 @@
   Capture, so a fresh offline install did not offer it at the farm gate until the second launch); Ahksun's glow burns from the first
   frame; Philroe's `breath` fallback names no place; the legacy hub reorder (v0.1.6 trainers on Runaway Cargo) is folded in.
 
-## 2026-10-10 — Story camera: arrival beats show what the dialogue talks about (cr-api-unity `feature/story-camera`)
+### Story camera: arrival beats show what the dialogue talks about (cr-api-unity `feature/story-camera`, pending release)
 
 - **Shots on dialogue lines.** `StoryShotCue` + `StoryShotPlan` cue a camera shot per line; `StoryCameraDirector` owns one
   Cinemachine camera above the overworld rig and releases it on every path (conversation end, trainer switch, battle
@@ -103,7 +105,7 @@
   double-sided.
 - Editor: `cr_story_author_shots`, `cr_story_render_shots`.
 
-## 2026-10-10 — Lore text: keyword styling and the dialogue typewriter (cr-api-unity `feature/lore-text`, not merged)
+### Lore text: keyword styling and the dialogue typewriter (cr-api-unity `feature/lore-text`, pending release)
 
 - **Keyword styling.** `LoreText.Decorate(localized, surface, palette)` colours the first occurrence per text block of
   glossary terms (soulstone, Summoning Shard, Seeker, krytori, the Actuators, Mirandale …) in dialogue, barks, the area
@@ -117,26 +119,9 @@
   Normal), persisted like Combat Speed.
 - **Dialogue typewriter.** The dialogue body is a Text Animator `AnimatedLabel`; lines are typed at Fast by default. A
   press while a line types only completes it and the next press advances; a choice's options wait for their prompt.
-- Page: [Lore text](unity/39-lore-text.md). Needs the Text Animator package (untracked; Asset Store id 341308).
+- Page: [Lore text](?page=unity/39-lore-text). Needs the Text Animator package (untracked; Asset Store id 341308).
 
-## 2026-10-10 — Game feel review fixes (cr-api-unity `feature/game-feel`)
-
-- **The capture wobble now answers the authority, not the throw.** It was bound to `CaptureAttempted`, which the bag
-  panel raises the moment the player confirms, so a throw the server refused still wobbled (and the broke-free cue matched
-  on `ActionOutcome.ItemId`, which cr-api stamps only on an opponent's own heal, so it could not match the player's own
-  step). New `CaptureResolving` event
-  (Soap asset, wiring entry, regenerated bridge) raised by `CaptureThrowWatcher` from the resolved outcome, ahead of the
-  catch or the miss; a refused throw raises neither it nor `CaptureFailed`. `BattleCoordinator.PlayStepsAsync` raises a
-  new `BattleEvents.ActionResolving` before each step is presented to give it a lead-in. `CaptureAttempted` stays as the
-  battle log's echo, and a test fails if a binding answers it. → [Game Feel](?page=unity/39-game-feel)
-- **Hit stop is capped per resolved action** (120 ms: an impact plus the faint it causes), and the content tests pin
-  which moments freeze time and which events they answer, so the cap holds by construction. It was documented per turn
-  and only tested pairwise.
-- **The feedback director no longer flips Feel's process-wide `GlobalMMFeedbacksActive` when it is disabled**, so it
-  cannot silence a player that was not its own.
-- **Reduced Motion hint** now says what it does: "Removes screen shake and hit stop, and softens light flashes."
-
-## 2026-10-10 — Game feel: the Feel bridge, real comfort settings, rumble, and ten moments (cr-api-unity `feature/game-feel`)
+### Game feel: the Feel bridge, real comfort settings, rumble, and ten moments (cr-api-unity `feature/game-feel`, pending release)
 
 - **Bridge.** A feedback binding can now play a Feel player prefab (`feelPlayerAddress`, `intensity`). The prefab
   declares what it does to the screen, time or hands (`CrFeelPlayerInfo`: Cosmetic, CameraMotion, ScreenFlash,
@@ -156,7 +141,24 @@
   anchors learn the actor, target and opponent when a battle opens.
 - **CI.** `ci/check-fx-keys.sh` also checks `feelPlayerAddress` against the Addressables catalogue.
 
-## 2026-10-10 — Client retries (Polly) and one Idempotency-Key owner (cr-api-unity `feature/client-retries-v2`, pending merge)
+Review fixes on the same branch:
+
+- **The capture wobble now answers the authority, not the throw.** It was bound to `CaptureAttempted`, which the bag
+  panel raises the moment the player confirms, so a throw the server refused still wobbled (and the broke-free cue matched
+  on `ActionOutcome.ItemId`, which cr-api stamps only on an opponent's own heal, so it could not match the player's own
+  step). New `CaptureResolving` event
+  (Soap asset, wiring entry, regenerated bridge) raised by `CaptureThrowWatcher` from the resolved outcome, ahead of the
+  catch or the miss; a refused throw raises neither it nor `CaptureFailed`. `BattleCoordinator.PlayStepsAsync` raises a
+  new `BattleEvents.ActionResolving` before each step is presented to give it a lead-in. `CaptureAttempted` stays as the
+  battle log's echo, and a test fails if a binding answers it. → [Game Feel](?page=unity/39-game-feel)
+- **Hit stop is capped per resolved action** (120 ms: an impact plus the faint it causes), and the content tests pin
+  which moments freeze time and which events they answer, so the cap holds by construction. It was documented per turn
+  and only tested pairwise.
+- **The feedback director no longer flips Feel's process-wide `GlobalMMFeedbacksActive` when it is disabled**, so it
+  cannot silence a player that was not its own.
+- **Reduced Motion hint** now says what it does: "Removes screen shake and hit stop, and softens light flashes."
+
+### Client retries (Polly) and one Idempotency-Key owner (cr-api-unity `feature/client-retries-v2`, pending release)
 
 - **Retries:** every request through `SimpleWebClient` now runs under `HttpRetryExecutor`, a wrapper around one shared
   Polly v8 `ResiliencePipeline`. Up to 3 retries after 0.5 s, 1 s and 2 s (each varied by up to 25%), on no response, 429,
@@ -190,7 +192,73 @@
 - **Docs:** unity/05 (Retry Strategy, Idempotency Keys, request lifecycle, the 401 path); `doc-sources.json`.
   → [HTTP Clients](?page=unity/05-http-clients)
 
-## 2026-10-10 — Merchant stock resolved by the server; offline NPC registry seed M16100 (live)
+### Playtest round 1 fixes (cr-api-unity `fix/playtest-round1`, pending release)
+
+- **A quest the server completes mid-session no longer vanishes (`4304ea80`).** Online, the server completes a giver
+  quest (First Capture, Runaway Cargo) without a claim and drops it from `/active`. `MirrorActiveAsync` soft-deleted
+  every local row the server stopped listing, and the completed history was reconciled once per session, so the quest
+  left the mirror: `quest.state` never read ReadyToTurnIn, Philroe's hub fell through to its fallback line, and the
+  turn-in (with First Capture's rewards) was skipped. Now each unlisted row is read by id from the server and mirrored
+  as the server answers; it is deleted only on a 404 (`IQuestClient.GetQuestInstanceAsync` returns null for that).
+  `GetCompletedQuestsAsync` brings the active mirror current first while its scope is stale, the HUD tracker also reads
+  the quests waiting for their turn-in, and the story smoke asserts First Capture reaches ReadyToTurnIn and is claimed
+  through Philroe. → [Quest System](?page=backend/07-quest-system#why-those-two-reads-do-not-branch-on-connectivity)
+- **A dialogue choice is one press (`67f4b683`).** A click or tap, Submit on the focused option, or the face button its
+  badge shows picks the option and advances. The badges read A, B, X, Y (a bullet past the fourth); B, X and Y pick the
+  second to fourth options while a choice is pending, and the Cancel that B also raises is dropped then. Moving focus
+  never answers. The footer's "A CONFIRM" hint shows on plain lines only. → [Dialogue System](?page=unity/31-dialogue-system)
+- **Layouts link their own stylesheet (`d159d13c`).** The arrival banner ("Cliff Ruins", "The Meadow") drew unstyled:
+  `AreaBannerPresenter` looked up the StyleSheet `Areas/AreaBanner` and got the empty `inlineStyle` sheet that UXML
+  import writes into `AreaBanner.uxml` at the same Resources key. Every Resources layout with a same-named `.uss` now
+  links it with `<Style src>`, and the seven presenters that looked a sheet up by a layout's name no longer do;
+  `ResourcesStyleSheetLinkTests` keeps it that way. → [UI Theme](?page=unity/33-ui-theme#restyling-and-adding-screens)
+
+### The unused "Gains more strength" growth profile is deleted (PR #75, pending release)
+
+- **Why:** `M9990` seeded it with values of 10 to 93, where every other profile uses 100 for "unmodified", so a
+  creature generated with it comes out at a fraction of its base stats. Production has no spawner template naming it
+  and no creature carrying it (checked 2026-10-10), and the generation service already sorts balanced profiles first
+  to keep it away from starters. The remaining seeded profiles are Balanced Growth, Fast Experience and Fire Kitten.
+- **cr-api** (`content/delete-gains-more-strength`, pending merge): `M10024DeleteGainsMoreStrengthGrowthProfile`
+  soft-deletes the row, found by its seed id `7bed9050-25c7-428a-8945-498085f505d4` or by its name. It fires only while
+  nothing refers to it: a non-deleted spawner template naming it (active or not), or any generated creature, keeps the
+  row, and the migration then changes nothing. `Down()` restores nothing.
+- **cr-api-unity** (`content/delete-gains-more-strength`, pending merge): the `Gains more strength` `GrowthProfileConfig`
+  asset and its `CRContent` Addressable entry are removed, so a Studio push no longer sends it, and the Spawner World
+  Behaviour's setup checklist lists the profiles that are really seeded. `GrowthProfileContentTests` pins it: no asset
+  by that name or id, no Addressable entry, and every spawner template still names a profile that exists.
+- **Offline floor:** `Assets/StreamingAssets/CR/game-data.bytes` still carries the row until the floor is re-baked from
+  a cr-api `main` that has `M10024`.
+- **Docs:** backend/03 (Spawner System), Common Mistakes.
+
+### Spawner sync carries the description and arena key; a refused spawner is a failure (pending release)
+
+- **cr-api (PR #73, `a669b3b`, `67d015c`):** `POST /api/v1/spawners/sync-config` accepts the spawner's optional
+  `description` and `battleArenaKey`: null, absent or blank keeps the server's value, a non-blank value sets it
+  (trimmed). The header is written by the id the sync read, and a spawner removed while its push runs is refused
+  (409 naming it) with nothing written.
+- **cr-api-unity (`fix/spawner-sync-gaps`):** Studio's push, the runtime and offline syncs and the pull send both fields
+  (blank as null, never `""`). `LocalSpawnerSyncClient` lets a refusal throw instead of reporting an empty definition as
+  synced, so each caller counts the spawner as not written and names it, and `SyncSpawnersAsync` reports `Failed` with
+  the spawners that did land counted. → [Content Sync](?page=unity/27-content-sync)
+
+### Placeholder gaterbear (cr-api-unity `content/gaterbear-placeholder`, pending release)
+
+- `creatures/gaterbear` is now a scaled (1.8x), olive-tinted Prefab Variant of the Wolf Pup with a portrait baked from
+  it, built by `cr_build_gaterbear_placeholder`; before, the definition pointed at Dragon Fire's prefab and icon, so the
+  wagon fight showed a dragon. It reaches players through the creature push (online) and a floor rebake (offline). The
+  AI content ledger row is updated. → [Opening Story](?page=unity/38-story-opening)
+
+### CI builds never borrow SQLite sidecars or `Assets/CR` (cr-api-unity PRs #73 and #74, merged to main)
+
+- `ci/link-assets.sh` symlinked every untracked file from the live project into the runner's checkout, including the
+  `game-data.bytes-wal` / `-shm` the open Editor keeps, so the 0.1.8-playtest1 Mac build shipped symlinks to the
+  Editor's live database inside `StreamingAssets/CR`. It now skips `*-wal`, `*-shm`, `*-journal` and their `.meta`
+  files, and `ci/build.sh` deletes any already under `Assets/StreamingAssets` before building.
+- It also skips the `Assets/CR` subtree: the game's code and content are all tracked, so anything untracked there is
+  uncommitted work in progress, and a build must ship the commit. → [Standalone Builds](?page=unity/21-standalone-builds#release-builds-in-ci-build-game)
+
+### Merchant stock resolved by the server; offline NPC registry seed M16100 (live, cr-api PR #72)
 
 - **Merchant stock (cr-api `8324296`, PR #72, live 2026-10-10):** `NpcMerchantService.StockFromSpawnerAsync` now
   picks the stock spawner itself: merchant content key → its NPC registry row under `ContentWorldId` → that row's
@@ -2368,8 +2436,9 @@ Now:
 - **Five stock spawners**, `demo-merchant-area-{n}-items`, seeded by `M6015` and authored as SOs;
   cheap crystals in area 1, radiant and the charm weighted toward area 5.
 - **Stock refreshes on every world load** (`NpcMerchantBehaviour` forces the re-roll). (**Superseded
-  2026-10-10:** the client no longer forces anything, and the authority re-rolls a shop only once its
-  spawner's restock cooldown has elapsed; see "Merchant restock belongs to the authority" above.)
+  2026-10-10:** the client no longer forces anything and asks only when the player walks up to a merchant,
+  and the authority re-rolls a shelf only after a trade, once its spawner's restock cooldown has run since the
+  last one; see "Merchant restock v2" in the 2026-10-10 entry above.)
 - **Online is server-authoritative**: `NpcMerchantOnlineOfflineService` routes every merchant call
   to `/api/v1/merchants/*` when online, local SQLite when offline, sampled per call. No fallback.
   New `GET /merchants/{id}/multipliers`; 409 bodies now survive as `ConflictException` so a refused
@@ -3138,8 +3207,9 @@ It was also a gameplay exploit: reloading rerolled the shop's contents.
 A cooldown of 0 now means *"do not auto-restock"*, not *"restock every time"*. First-time stocking
 still happens (empty merchant), an elapsed cooldown still restocks, and `force: true` still
 restocks unconditionally. 5 new tests cover each branch. (Later: from 2026-08-22 the world load passed
-`force: true` by default, and on 2026-10-10 `force` was removed from the call altogether and the merchant
-spawners got a 900 s cooldown; see "Merchant restock belongs to the authority" above.)
+`force: true` by default, and on 2026-10-10 `force` was removed from the call altogether, the merchant
+spawners got a 900 s cooldown that runs from the last trade, and a shelf nothing has traded with stopped
+restocking at all; see "Merchant restock v2" in the 2026-10-10 entry above.)
 
 Measured on the live save: merchant world-init **~40ms → ~19ms**, world init total **~290ms →
 ~275ms**, and the merchant's stock is now byte-identical across loads (previously re-rolled).

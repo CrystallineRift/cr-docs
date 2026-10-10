@@ -313,7 +313,7 @@ glossary term has one pack row, `gloss.<key>.forms`, whose value is the language
 `|` (`gloss.krytori.forms` = `krytorus|krytori`); it **replaces** that language's English forms, and a
 missing or blank row keeps English. *Export Translation Template* includes one row per term
 (`LoreGlossaryStringSource`); the matcher is rebuilt after every language change. Full story in
-[Lore text](39-lore-text.md).
+[Lore text](?page=unity/39-lore-text).
 
 ## Legacy YAML tables
 

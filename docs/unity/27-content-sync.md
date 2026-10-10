@@ -184,8 +184,8 @@ is a push error to fix in the Editor, not a server state.
 The same route accepts the spawner's optional `description` and `battleArenaKey`: null, absent or blank
 keeps the server's value, a non-blank value sets it (trimmed), and a spawner the push creates starts with
 an empty description and no arena key. Clearing either stays a Studio web action (the by-content-key PUT).
-This is the server contract; a Studio build only delivers an authored arena key (`meadow-arena`) or
-description once its push body sends them.
+Studio's push sends both (`ContentCreatorSyncHelper.BuildSpawnerSyncConfigBody`, by the same `TrimmedOrNull`
+rule), so an authored arena key such as `meadow-arena` reaches the server with the next Spawners push.
 
 ## Elemental reactions and the damage matrix
 

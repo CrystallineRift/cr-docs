@@ -28,7 +28,7 @@ decides whether the prompt shows.
 `BarkRule.Allowed(...)` suppresses barks during dialogue, battle and the tech demo. `Say` returns `true` only when the
 line was shown, so a caller that remembers "said once" never burns that memory on a suppressed line. The bubble text
 goes through `LoreText.Decorate` (lore keywords coloured, never animated); the glossary that drives it,
-`Content/Text/glossary.json` (next to `names.json`), is covered in [Lore text](39-lore-text.md).
+`Content/Text/glossary.json` (next to `names.json`), is covered in [Lore text](?page=unity/39-lore-text).
 
 ## NpcEscort and EscortPlan
 
@@ -280,7 +280,8 @@ Philroe's `pass` option. Each of these fails the run with a message naming the t
 Capture beats are random (the capture roll is the authority's), so the runner plays them like a player would. A missed
 lesson shard is retried (up to 3 times; the lesson zone stays armed until First Capture completes). Runaway Cargo gets up to
 8 attempts. Between attempts the runner heals with potions through `IItemUseDomainService` (the bag screen's use-item
-intent), buys potions and shards from Philroe through the merchant purchase intent when the bag is empty, and leaves the zone
+intent), buys potions and shards from Philroe through the merchant purchase intent when the bag is empty (it reads his shelf the
+way the shop does, the stock ask first and then the read, because nothing stocks a merchant at world load), and leaves the zone
 as soon as each battle closes, because standing in it re-arms the next encounter. A repeat-capture battle that the zone has
 already started is adopted rather than reset. Trainers are named `Smoke<MMddHHmmss>`. The runaway mode fails unless the barn
 reads `Sleep` after the claim, and every mode that reaches the barn fails unless the morning fires and reads back `Closed`.

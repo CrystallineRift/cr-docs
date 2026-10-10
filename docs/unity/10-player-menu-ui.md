@@ -501,7 +501,7 @@ encrypted prefs store) under a `GameConfigurationKeys` constant and is pushed li
 | Graphics | **Quest Tracker** toggle (`quest-tracker-toggle`) | `QuestTrackerHidden` | `QuestTrackerPresenter.SetShown` |
 | Game | Combat Speed dropdown | `BattlePacingScale` | `BattlePresentationSequencer` at battle start |
 | Game | **Story Camera** dropdown (`story-camera-dropdown`): Cinematic / Gentle (cuts only) / Off | `StoryCameraMode` | `StoryCameraSetting`, read at each cued line ([Story Camera](?page=unity/39-story-camera)) |
-| Game | **Text Effects** dropdown (`text-effects-dropdown`: Full / Static colour / Plain) | `LoreTextMode` (`full` / `static` / `plain`) | `ITextDisplaySettings` → `LoreText.Mode`, Text Animator behaviours on/off; see [Lore text](39-lore-text.md) |
+| Game | **Text Effects** dropdown (`text-effects-dropdown`: Full / Static colour / Plain) | `LoreTextMode` (`full` / `static` / `plain`) | `ITextDisplaySettings` → `LoreText.Mode`, Text Animator behaviours on/off; see [Lore text](?page=unity/39-lore-text) |
 | Game | **Dialogue Text Speed** dropdown (`dialogue-speed-dropdown`: Instant / Fast / Normal) | `DialogueTextSpeed` (`instant` / `fast` / `normal`) | `ITextDisplaySettings` → `DialogueScreenPresenter`, from the next line |
 | Game | **Reduced Motion** toggle (`reduced-motion-toggle`) | `ReducedMotion` | `IFeelSettings`: the feedback director, the battle camera shake |
 | Game | **Screen Shake** dropdown (`screen-shake-dropdown`, 100% / 50% / Off) | `ScreenShake` (the `ScreenShakeLevel` number, 0 = Full) | `IFeelSettings`: `BattleCameraShakeResponder`, camera-motion Feel moments |
