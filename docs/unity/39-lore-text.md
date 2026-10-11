@@ -157,7 +157,9 @@ TTF, make the panel text settings able to resolve it, and return
 
 The package is `Packages/com.febucci.text-animator-unity` (3.20.1) with its settings assets under
 `Assets/Plugins/Febucci`; neither is tracked in git, so a fresh clone must restore them like the other
-purchased packs (Asset Store id 341308). Notes for anyone touching it:
+purchased packs (Asset Store id 341308). The package lives outside `Assets/`, so `.gitignore` names it
+(`/Packages/com.febucci.text-animator-unity`) and `ci/check-vendor-untracked.sh` fails a release build if any of
+it is tracked. Notes for anyone touching it:
 
 - The game's own effects are assets under `Assets/CR/Resources/Lore/`: `CrRelicShimmer` (tag `crrelic`, a
   position effect, amplitude 0.8, slow) and `CrAstralPulse` (tag `crastral`, a colour effect easing to

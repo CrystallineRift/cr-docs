@@ -276,6 +276,10 @@ Ahksun rises and must complete Find Ahksun and hand out Toward the Lights; telep
 the box, outside the gaterbear zone and 16 m from Philroe) must grant First Battle and complete Toward the Lights before anything
 else; only then does it walk up to Philroe. First Capture must reach ReadyToTurnIn (completed, unclaimed) and be claimed through
 Philroe's `pass` option. Each of these fails the run with a message naming the trigger that did not reach the authority.
+A failed check ends the run there (the pillar beat's checks, the story camera's and the torn sky's included), and `failed` is
+final: no later step can move the phase on to `done`, and the report's last line reads `FAILED`. First Capture and Runaway Cargo
+are read from the completed history, the way `quest.state` reads them, never from the in-memory active list: a quest the
+authority has finished leaves that list.
 
 Capture beats are random (the capture roll is the authority's), so the runner plays them like a player would. A missed
 lesson shard is retried (up to 3 times; the lesson zone stays armed until First Capture completes). Runaway Cargo gets up to

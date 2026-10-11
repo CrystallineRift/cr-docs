@@ -177,10 +177,12 @@ private async Task OnInteractAsync()
    - Can battle → show "Press E to battle"
    - Neither → no prompt
 4. With something on offer, `EnterRange` subscribes Interact and shows the prompt; on a merchant it then calls
-   `NpcMerchantBehaviour.OnPlayerApproached()`, the walk-up stock ask (see
+   `NpcMerchantBehaviour.OnPlayerApproached(spawnedInside)`, the walk-up stock ask (see
    [Merchant Shop → Restocking](?page=unity/18-merchant-shop#restocking)). An NPC with nothing on offer yet (not
    ready, or an escort that is walking) enters range from `OnTriggerStay` once it is, which is also where a player
-   who spawned inside the sphere arrives.
+   who spawned inside the sphere arrives. `spawnedInside` is true when the first time the NPC measured the player they
+   were already within reach (the NPC remembers having seen them outside: `_playerSeenOutside`); it is what lets the
+   merchant's first ask wait its random 0 to 2 s only for that player and not for one who walked up.
 5. Player exits trigger → `OnTriggerExit` fires → hide all prompts
 
 ### How the Battle Sub-Behaviour Triggers a Battle

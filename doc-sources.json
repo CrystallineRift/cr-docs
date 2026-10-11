@@ -1342,6 +1342,7 @@
         "Assets/CR/Resources/configuration/GameSettings.asset",
         ".github/workflows/build-game.yml",
         "ci/link-assets.sh",
+        "ci/check-vendor-untracked.sh",
         "ci/build.sh",
         "ci/publish.sh",
         "ci/builds-index.sh",

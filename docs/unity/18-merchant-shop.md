@@ -35,9 +35,9 @@ authority decides whether anything is rolled (see [Restocking](#restocking)).
 | `Assets/CR/UI/Resources/MerchantShopItemRow.uxml` | One stock row — designer-editable template; the handler only binds data/callbacks by element name. |
 | `Assets/CR/UI/Resources/MerchantShopScreen.uss` | All styling via named classes (BattleBagPanel design language: deep navy, blue borders, dimmed overlay). Loaded from Resources as a fallback when the Inspector field is unassigned, so the screen never renders unstyled. |
 | `Assets/CR/Game/World/Behaviours/NpcInteractionBehaviour.cs` | Merchant interact branch; locates the screen lazily (`FindFirstObjectByType`) so shop-less scenes still resolve DI. |
-| `Assets/CR/Game/World/Behaviours/NpcMerchantBehaviour.cs` | Marks the NPC as a merchant; `OnPlayerApproached` sends the walk-up "stock this shop" ask (the first one after load waits 0 to 2 s). World init asks nothing. |
+| `Assets/CR/Game/World/Behaviours/NpcMerchantBehaviour.cs` | Marks the NPC as a merchant; `OnPlayerApproached(spawnedInside)` sends the walk-up "stock this shop" ask. Only the first ask after the merchant came to life can wait 0 to 2 s, and only when the player was already inside the range then. World init asks nothing. |
 | `Assets/CR/Npcs/Runtime/Merchant/Logic/MerchantStockAsks.cs` | The session's record per merchant: joins an ask in flight, skips one within 60 s of the last, records the time before the call. Used by the router in both modes. |
-| `Assets/CR/Npcs/Runtime/Merchant/Logic/MerchantShelfExtensions.cs` | `ReadShelfAsync`: the shop's "ask, then read". |
+| `Assets/CR/Npcs/Runtime/Merchant/Logic/MerchantShelfExtensions.cs` | `ReadShelfAsync`: the shop's "ask, then read". The ask gets `AskLimit` (3 s); past that the shop reads the shelf as it stands. |
 | `Assets/CR/Npcs/Runtime/Merchant/Logic/MerchantAskJitter.cs` | The random 0 to 2 s wait before a merchant's first ask. |
 
 ## Behaviour details
@@ -154,13 +154,20 @@ records whose shop it is and sets `IsReady`, so a world full of merchants costs 
 player goes near one. The intent goes out at two moments, the same online and offline:
 
 - **The player walks up to the merchant.** `NpcInteractionBehaviour.EnterRange`, after the offer check,
-  calls `NpcMerchantBehaviour.OnPlayerApproached()`. A merchant with nothing on offer (not ready yet, or
-  an escort that is walking) does not ask; it asks once `OnTriggerStay` finds it on offer. A player who
-  spawns or is restored inside the range gets there on the first Stay. The first ask after the merchant
-  came to life waits a random 0 to 2 s (`MerchantAskJitter`), so a crowd that logs in next to a shop
-  does not ask in the same instant. Later asks do not wait.
+  calls `NpcMerchantBehaviour.OnPlayerApproached(spawnedInside)`. A merchant with nothing on offer (not
+  ready yet, or an escort that is walking) does not ask; it asks once `OnTriggerStay` finds it on offer. A
+  player who spawns or is restored inside the range gets there on the first Stay. The first ask after the
+  merchant came to life waits a random 0 to 2 s (`MerchantAskJitter`) when `spawnedInside`, so a crowd that
+  logs in next to a shop does not ask in the same instant. `NpcInteractionBehaviour` says `spawnedInside`
+  when the first time it measured the player they were already within reach; a player it first saw outside
+  the reach walked up, is alone, and asks at once. Either way that first ask uses up the one wait: later
+  asks never wait.
 - **The shop opens.** `MerchantShopScreenHandler` reads the shelf through `ReadShelfAsync`
-  (`MerchantShelfExtensions`): ask first, then read. The re-read after a purchase does not ask again.
+  (`MerchantShelfExtensions`): ask first, then read. The ask is given `AskLimit` (3 s): an unreachable
+  server costs the shop one wait at the door, not the ask's timeout and then the read's. Past the limit the
+  ask is reported to the shop as a `TimeoutException`, left to finish on its own (if it restocks after all,
+  the router dirties that merchant's cached stock for the next read) and the shelf is read as it stands. The
+  re-read after a purchase does not ask again.
 
 `NpcMerchantOnlineOfflineService` rations both through one session-scoped record per merchant
 (`MerchantStockAsks`):
@@ -181,7 +188,8 @@ Online, a failed ask is warned about and surfaces as the router's `InvalidOperat
 ("… was not stocked …"), never as a local re-roll. Offline, the local refusal reaches the caller as it
 is. `NpcMerchantBehaviour` never throws from an ask: a refusal or a failure is one warning naming the
 NPC, a cancellation is routine, anything else is an error with its exception, and the common answer
-(0, stock kept) is a Debug line. When the shop's own ask fails, the shop shows the shelf as it stands.
+(0, stock kept) is a Debug line. When the shop's own ask fails or does not answer within 3 s, the shop
+shows the shelf as it stands.
 
 The online body is `{ trainerId }` and nothing else: the account comes from the token and the NPC from
 the route. The route takes no Idempotency-Key and ignores one that is sent (`SimpleWebClient` attaches

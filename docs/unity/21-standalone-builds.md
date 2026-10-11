@@ -153,7 +153,11 @@ builds the Windows, Linux and macOS players and publishes them to the content CD
 Rift Studio's Builds page finds them through `GET /api/v1/builds` (see
 [Architecture](?page=backend/01-architecture)). The steps are scripts under `ci/`:
 
-1. **`ci/link-assets.sh "$CR_ASSET_SOURCE"`** makes the runner's checkout buildable. About 13 GB of
+1. **`ci/check-vendor-untracked.sh`** fails the run when paid vendor source that installs outside `Assets/`
+   is tracked by git: today the Text Animator package, `Packages/com.febucci.text-animator-unity`, which the
+   `Assets/**` ignore rules never reach (`.gitignore` names it, without a trailing slash so the symlink the
+   next step makes is ignored too, and this catches a forced add).
+2. **`ci/link-assets.sh "$CR_ASSET_SOURCE"`** makes the runner's checkout buildable. About 13 GB of
    Asset Store packs under `Assets/` and `Packages/` are not in git, so the script walks the source
    project (the live checkout on the same Mac) and symlinks in whatever the checkout lacks: a missing
    directory whole, a missing file on its own. Tracked files are never touched, so the code that ships is
@@ -171,12 +175,12 @@ Rift Studio's Builds page finds them through `GET /api/v1/builds` (see
 
    It also skips `Library`, `Temp`, `Logs`, `Builds`, `ServerData`, `obj`, `UserSettings`, `.git`,
    `.idea`, `.vs` and dot-files at every level.
-2. **`ci/check-fx-keys.sh`** fails the run when an ability's sound or effect key, or an address in the
+3. **`ci/check-fx-keys.sh`** fails the run when an ability's sound or effect key, or an address in the
    feedback manifest, names nothing in the Addressables catalogue, before 40 minutes go into a build.
-3. **`ci/build.sh <version> [targets]`** runs Unity headless (`CR.Core.Data.Editor.Build.CiBuild.Run`) to
+4. **`ci/build.sh <version> [targets]`** runs Unity headless (`CR.Core.Data.Editor.Build.CiBuild.Run`) to
    build Addressables and the players, then zips each one as
    `Builds/CrystallineRift-<Windows|Linux|Mac>-<version>.zip`.
-4. **`ci/publish.sh <version>`** uploads `builds/<version>/` (immutable), `builds/latest/`,
+5. **`ci/publish.sh <version>`** uploads `builds/<version>/` (immutable), `builds/latest/`,
    `builds/latest.json` and the version's `manifest.json`, then has `ci/builds-index.sh` merge the version
    into `builds/index.json`. The zips are served only through signed URLs; the JSON stays public.
 

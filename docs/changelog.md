@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-10-11 — v0.1.8 review fixes: a failed smoke stays failed, a walk-up ask does not wait, the shop's ask is time-limited
+
+cr-api-unity `release/v0.1.8` (not deployed). Fixes to what the release review found; nothing here changes what the authority decides.
+
+- **Story smoke.** Four pillar-beat checks (the vista's story camera, the city going dark, the restore, the torn sky) recorded
+  a failure and let the run carry on, and the next phase assignment overwrote `failed`, so a city that never went dark ended
+  as `done` with the FAIL line scrolled out of `cr_story_smoke_status`. Each check now stops the run at its first failure, and
+  `failed` is final: the phase cannot leave it and the last line reads `FAILED`. The runner also stopped asserting First
+  Capture's state from the in-memory active list (a finished giver quest leaves it; the completed history, read the way
+  `quest.state` reads it, decides) and snapshots the list where it waits on it. → [Play-mode smoke](?page=unity/38-story-opening)
+- **Merchant first ask.** The 0 to 2 s wait applies only to a player who was already inside the range when the merchant came
+  to life (`OnPlayerApproached(spawnedInside)`); a walk-up asks at once. The wait is still the merchant's first ask's only.
+- **Shop ask limit.** The shop's "stock this shop" ask gets 3 s (`MerchantShelfExtensions.AskLimit`). An unreachable server
+  used to cost the ask's timeout and then the read's; now the shop reads the shelf as it stands after 3 s and the ask finishes
+  on its own. → [Merchant Shop → Restocking](?page=unity/18-merchant-shop#restocking)
+- **World map.** The gamepad shoulders no longer zoom: they are the menu's tab buttons, so a press changed tab. The triggers,
+  the mouse wheel and +/- zoom, as before.
+- **Vendor source.** The Text Animator package (`Packages/com.febucci.text-animator-unity`) is git-ignored, and
+  `ci/check-vendor-untracked.sh` fails a release build if any of it is tracked. → [Release builds in CI](?page=unity/21-standalone-builds)
+- **Open (not fixed here):** the committed floor still points `creature_gaterbear` at Dragon Fire's model and icon, so push
+  the creature from Studio and re-bake the floor before tagging; and Ahksun's Glow in `World_c0_r4` is a second always-on
+  real-time light next to the pillar's, against the pillar beat's budget of one.
+
 ## 2026-10-10 — v0.1.8: the opening chain, story camera, lore text, game feel, merchant restock v2, client retries, playtest fixes
 
 One entry for the day. Unless a group says otherwise, everything here is on branches for release v0.1.8 and not
