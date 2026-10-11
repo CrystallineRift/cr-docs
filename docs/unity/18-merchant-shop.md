@@ -101,7 +101,8 @@ is; a pad user has only that. Focus styles are deliberately brighter than hover 
      (e.g. `demo-merchant-area-1`); this bootstraps the NPC and runs sub-initializers. The key
      needs a Merchant row in the NPC registry, or the shop is refused. (`demo-merchant` will not
      do: the registry has it as a QuestGiver.)
-   - `NpcMerchantBehaviour` — sends the "stock this shop" intent on world init. Its
+   - `NpcMerchantBehaviour` — sends the "stock this shop" intent when the player walks up
+     (`OnPlayerApproached`), never at world init. Its
      `_itemSpawnerContentKey` (e.g. `demo-merchant-area-1-items`) does not choose the stock: the
      NPC registry row names the spawner. Keep the field equal to that row's spawner anyway, because
      the audit reads it.
@@ -192,9 +193,12 @@ NPC, a cancellation is routine, anything else is an error with its exception, an
 shows the shelf as it stands.
 
 The online body is `{ trainerId }` and nothing else: the account comes from the token and the NPC from
-the route. The route takes no Idempotency-Key and ignores one that is sent (`SimpleWebClient` attaches
-one to every write, see [HTTP Clients](?page=unity/05-http-clients)). A repeated or retried ask is
-harmless, because the roll is a compare-and-set.
+the route. The route takes no Idempotency-Key, and the client sends none: `StockFromSpawnerAsync` goes through
+`SimpleWebClient.PostOnce`, the per-call opt-out that mints no key and never retries (see
+[HTTP Clients](?page=unity/05-http-clients)), so a 503, a 429 or a dropped connection costs one send, not four,
+and the server's per-account limit on the ask stays true. A repeated ask would be harmless anyway, because the
+roll is a compare-and-set; the router, not the transport, decides when one is worth making. Purchase and sell
+stay keyed and retried.
 
 ### What the authority decides
 

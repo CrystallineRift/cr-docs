@@ -356,10 +356,12 @@
         "Assets/CR/Tests/Editor/AccountClientEmailLinkTests.cs",
         "Assets/Plugins/Polly/**",
         "Assets/link.xml",
-        "Assets/CR/Tests/Editor/WireSnapshot.cs"
+        "Assets/CR/Tests/Editor/WireSnapshot.cs",
+        "Assets/CR/Npcs/Runtime/Http/NpcMerchantClientUnityHttp.cs",
+        "Assets/CR/Tests/Editor/NpcMerchantClientStockAskTests.cs"
       ]
     },
-    "description": "Online/offline repository pattern, Best HTTP, ServerRequestException family + PlayerErrorText, Idempotency-Key ownership and the Polly retry pipeline (HttpRetryPolicy/HttpRetryExecutor), SQLite cache"
+    "description": "Online/offline repository pattern, Best HTTP, ServerRequestException family + PlayerErrorText, Idempotency-Key ownership and the Polly retry pipeline (HttpRetryPolicy/HttpRetryExecutor), SQLite cache; SimpleWebClient.PostOnce (the per-call opt-out of keys and retries used by the merchant stock ask)"
   },
   "unity/06-localization": {
     "docPath": "docs/unity/06-localization.md",
@@ -477,7 +479,9 @@
         "Assets/CR/UI/Common/UiIcon.cs",
         "Assets/CR/Game/Battle/Logic/BattleOutcomeSubtitle.cs",
         "Assets/CR/Game/Battle/BattleResult.cs",
-        "Assets/CR/UI/Battle/BattleSummaryScreen.cs"
+        "Assets/CR/UI/Battle/BattleSummaryScreen.cs",
+        "Assets/CR/Tests/Editor/BattleCoordinatorArenaTests.cs",
+        "Assets/CR/Tests/Editor/BattleArenaBattleOnlyTests.cs"
       ]
     },
     "description": "BattleCoordinator sequential turn loop with battle-scoped CancellationToken, BattleHttpDomainAdapter + OnlineOfflineBattleDomainService stack, BattleEvents static events (incl. StagingFailed), Arena system with IBattleStager returning BattleStagingResult (player teleport + creature visual spawn at PlayerCreaturePosition/OpponentCreaturePosition), self-registering BattleArenaRegistry, reactive Cinemachine 3 cinematic camera (BattleCinematicDirector conductor driven by CameraCue*/TurnStarted, editor-authored BattleCameraRig role vCams + BattleCameraProfile feel SO + decoupled BattleCameraShakeResponder via BattleCameraRigContext, BattleFormation slot model for 1v1->NvN, one-click rig builder + beat simulator), per-creature CreatureBattlePresenter (added to creature prefabs; the stager resolves the creature's shared CreatureReactionProfile from its CreatureDefinition by content key, flattens any base→variant inheritance via Resolve(), and hands the result to Bind; subscribes to BattleEvents and plays the creature's own body — animation+cry+feedback — per beat, with a standard Animator state-name convention in CreatureReactionDefaults and HasState-guarded fallbacks), ability VFX/SFX sourced from AbilityConfig keys on the outcome and played positionally by BattleAbilityFxResponder via a single positioned AbilityFxCue + BattleVisualRegistry (id→transform), BattleHUD with Guid-typed creature IDs and HP cache replay, BattleSync SOAP bridge, StartNpcBattle/StartWildBattle, NpcBattleRequest.BattleArenaKey, SpawnerEncounterBehaviour with encounter delay; trainer battles: bark-then-challenge flow (TrainerChallenged banner, Run hidden, RunRefused log, OpponentItemUsed), shared RunTurnLoopAsync with trainer AI decider + NPC item turns, TrainerBattleDefinition SO + Trainer Battle Author window (spawner plumbing hidden, deterministic md5 ids, bark conversation + scene stamp); Trainer Battle Author rebuilt as the project's first UXML/USS editor window (roster rail + dossier, readiness meter, checklist cards, plain-language copy); dev-only BattleDebugStatsOverlay (F3, Editor/DEVELOPMENT_BUILD only) rendering per-creature stat/status/ability/held-item/stat-modifier panels beside BattleHUD's cards, sourced from the same BattleEvents bus + TeamSync"
@@ -910,10 +914,15 @@
         "Assets/CR/UI/Theme/CrTheme.uss",
         "Assets/CR/UI/Common/ITextDisplaySettings.cs",
         "Assets/CR/UI/Common/TextDisplaySettings*.cs",
-        "Assets/CR/Tests/Editor/PlayerMenuTextSettingsTests.cs"
+        "Assets/CR/Tests/Editor/PlayerMenuTextSettingsTests.cs",
+        "Assets/CR/UI/Common/FocusScrollView.cs",
+        "Assets/CR/Tests/Editor/RuntimePanelLayoutHarness.cs",
+        "Assets/CR/Tests/Editor/SystemTabLayoutTests.cs",
+        "Assets/CR/Tests/Editor/StartupFlowStyleTests.cs",
+        "Assets/CR/UI/Resources/StartupFlow.uss"
       ]
     },
-    "description": "Player menu UI: 8-tab overlay (Team/Bag/Storage/Quests/Map/Talents/Achievements/System) wired to real domain data — PlayerTeamView squad sheet, BagScreenHandler backpack with BagItemPolicy filtering, QuestJournalView active/completed quests, AchievementsView rail (Summary/categories/Statistics) over AchievementBoardProjection, CR.UI.Logic pure rules, input wiring via UICoordinator; Quests tab 'Return to {giver}' status for a ReturnToGiver quest awaiting the player"
+    "description": "Player menu UI: 8-tab overlay (Team/Bag/Storage/Quests/Map/Talents/Achievements/System) wired to real domain data — PlayerTeamView squad sheet, BagScreenHandler backpack with BagItemPolicy filtering, QuestJournalView active/completed quests, AchievementsView rail (Summary/categories/Statistics) over AchievementBoardProjection, CR.UI.Logic pure rules, input wiring via UICoordinator; Quests tab 'Return to {giver}' status for a ReturnToGiver quest awaiting the player; the System page layout (FocusScrollView, flex-shrink 0 rows, compact buttons, RuntimePanelLayoutHarness + SystemTabLayoutTests)"
   },
   "backend/09-battle-persistence": {
     "docPath": "docs/backend/09-battle-persistence.md",
@@ -1371,10 +1380,16 @@
         "Assets/CR/Prefabs/Areas/CR_NPC_*.prefab",
         "Assets/CR/Game/Areas/Presentation/**",
         "Assets/CR/Resources/Areas/**",
-        "Assets/CR/Game/World/Behaviours/TrainerLocationTracker.cs"
+        "Assets/CR/Game/World/Behaviours/TrainerLocationTracker.cs",
+        "Assets/CR/Game/Battle/Arena/BattleArena.cs",
+        "Assets/CR/Game/OpenWorld/Editor/BattleOnlyProxyExtensions.cs",
+        "Assets/CR/Game/OpenWorld/Editor/FallbackCellProxyBaker.cs",
+        "Assets/CR/Game/OpenWorld/Editor/WorldValidationRules.cs",
+        "Assets/CR/Tests/Editor/BattleArenaBattleOnlyTests.cs",
+        "Assets/CR/Tests/Editor/ProxyBakerBattleOnlyTests.cs"
       ]
     },
-    "description": "Core + additive area scenes, the area template, content prefabs, doors and async transitions; trainer last-location persistence (M4013 last_area_key/pos/yaw, TrainerLocationTracker throttled saves + forced on switch/quit, TrainerResumeRule teleport/transition resume) and trainer-switch world re-init (AreaWorldInitializer.ResetForNewSession)"
+    "description": "Core + additive area scenes, the area template, content prefabs, doors and async transitions; trainer last-location persistence (M4013 last_area_key/pos/yaw, TrainerLocationTracker throttled saves + forced on switch/quit, TrainerResumeRule teleport/transition resume) and trainer-switch world re-init (AreaWorldInitializer.ResetForNewSession); the arena's battle-only list (BattleArena.battleOnly hidden in Awake / shown by Activate / hidden by Deactivate, cr_arena_battle_only, the validation error, the proxy baker skip)"
   },
   "23-game-audio": {
     "docPath": "docs/unity/23-game-audio.md",
@@ -1767,7 +1782,8 @@
         "Assets/CR/Game/Evolution/**/*.cs",
         "Assets/CR/Resources/Evolution/**",
         "Assets/CR/Game/World/Logic/EncounterSuppression.cs",
-        "Assets/CR/UI/Logic/UIContext.cs"
+        "Assets/CR/UI/Logic/UIContext.cs",
+        "Assets/CR/Game/Battle/Arena/BattleArena.cs"
       ]
     },
     "description": "Authoring evolution rules on CreatureDefinition, the inspector section and its validation, Crystalline Rift Studio push/pull/revert/diff, the seed migration export (M13003) and floor rebake, runtime rule sync"
@@ -1986,10 +2002,17 @@
         "Assets/CR/Core/Data/Editor/WorldMapDefinitionEditor.cs",
         "Assets/CR/Core/Data/Editor/TrainerProgression/WorldMapTools.cs",
         "Assets/CR/Progression/*WorldMapDiscoveryReader.cs",
-        "Assets/CR/Content/Defs/WorldMap/**"
+        "Assets/CR/Content/Defs/WorldMap/**",
+        "Assets/CR/Game/OpenWorld/OpenWorldMapLayoutSource.cs",
+        "Assets/CR/UI/Resources/PlayerMenuWindow.uss",
+        "Assets/CR/UI/Theme/CrTheme.uss",
+        "Assets/CR/Tests/Editor/WorldMapTabLayoutTests.cs",
+        "Assets/CR/Tests/Editor/WorldMapPadBindingsTests.cs",
+        "Assets/CR/Tests/Editor/RuntimePanelLayoutHarness.cs",
+        "Assets/CR/Resources/InputSystem_Actions.inputactions"
       ]
     },
-    "description": "World map: client-only WorldMapDefinition (nodes, routes, art addresses, unknown-area switch), Studio scan/validate/fix tooling and CLI, CR.UI.WorldMap.Logic (state builder, layout, navigator, quest targets), the player menu Map tab and canvas, the discovery reader seam (P2: real WorldMapDiscoveryReader over the shared LocationDiscoveries cache)"
+    "description": "World map: client-only WorldMapDefinition (nodes, routes, art addresses, unknown-area switch), Studio scan/validate/fix tooling and CLI, CR.UI.WorldMap.Logic (state builder, layout, navigator, quest targets), the player menu Map tab and canvas, the discovery reader seam (P2: real WorldMapDiscoveryReader over the shared LocationDiscoveries cache); the open-world map (nodeDisplay Markers, WorldMapViewport zoom 1-8 and pan, WorldMapLabelPlacer declutter with measured widths, WorldMapCurrentLocation, tab-fill rule, gamepad: right stick pans, triggers zoom, shoulders stay the tab strip's)"
   },
   "unity/36-talents-ui": {
     "docPath": "docs/unity/36-talents-ui.md",
@@ -2031,7 +2054,7 @@
         "Assets/CR/Tests/Editor/StoryDialogueStagingSyncTests.cs"
       ]
     },
-    "description": "Opening story client systems: IStoryFlags, LoreReadable, WorldBark, NpcEscort/EscortPlan, OneShotWorldEvent, PrologueController + gate, place flavour, capture-lesson hints, StoryText, the cr_story_script_page review-page command, the beat map on the built corridor and the CorridorStoryPlacer hook in cr_story_build_scenes"
+    "description": "Opening story client systems: IStoryFlags, LoreReadable, WorldBark, NpcEscort/EscortPlan, OneShotWorldEvent, PrologueController + gate, place flavour, capture-lesson hints, StoryText, the cr_story_script_page review-page command, the beat map on the built corridor and the CorridorStoryPlacer hook in cr_story_build_scenes; the vista build now delegates to MirandaleVistaBuilder (see unity/42-pillar-cutscene)"
   },
   "unity/37-open-world": {
     "docPath": "docs/unity/37-open-world.md",
@@ -2044,7 +2067,9 @@
         "Assets/CR/Core/DI/OpenWorldBindingsExtensions.cs",
         "Assets/CR/Art/Terrain/**",
         "Assets/CR/Art/Sky/**",
-        "Assets/CR/Art/OpenWorld/**"
+        "Assets/CR/Art/OpenWorld/**",
+        "Assets/CR/Tests/Editor/ProxyBakerBattleOnlyTests.cs",
+        "Assets/CR/Tests/Editor/ProxyBakerLodTests.cs"
       ]
     },
     "description": "Open world: streamed 256 m cells, region mask, Dormant/Active rings, region identity, world_mode switch, Editor tools and cr_world_* CLI, regions.json, tech-demo areas; the Act 1 corridor builder (layout asset, steps, containers, idempotency, overrides, revert, checks, edge guards), terrain proxies, sun override, vendor-LOD guard, resume ground lift, Deck budget"
@@ -2196,8 +2221,8 @@
     },
     "description": "How to add a field to an existing cr-admin-web resource descriptor or add a whole new resource: FieldMeta/RowColumn kinds, fieldsFromSchema inference vs explicit override, the ResourceDescriptor shape, registry.ts registration, and the renderFieldsForm/descriptor.test patterns used to prove a field round-trips and validates."
   },
-  "unity/39-story-camera": {
-    "docPath": "docs/unity/39-story-camera.md",
+  "unity/40-story-camera": {
+    "docPath": "docs/unity/40-story-camera.md",
     "repos": {
       "cr-api": [],
       "cr-data": [
@@ -2222,10 +2247,14 @@
         "Assets/CR/Tests/Editor/OneShotWorldEventStageTests.cs",
         "Assets/CR/Tests/Editor/FakeStoryCamera*.cs",
         "Assets/CR/Tests/Editor/FakeBattleCoordinator.cs",
-        "Assets/CR/Tests/Editor/ScriptedDialogue.cs"
+        "Assets/CR/Tests/Editor/ScriptedDialogue.cs",
+        "Assets/CR/Game/Story/Logic/StoryRelease*.cs",
+        "Assets/CR/Tests/Editor/StoryBeatCameraHoldTests.cs",
+        "Assets/CR/UI/Dialogue/DialogueScreenPresenter.cs",
+        "Assets/CR/Tests/Editor/DialogueScreenPresenterTests.cs"
       ]
     },
-    "description": "Story camera: StoryShotCue/StoryShotPlan, StoryCameraDirector (one Cinemachine camera, blend save/restore, release paths, pitch reframe), the Story camera setting (Cinematic/Gentle/Off), per-line OneShotWorldEvent stages, hold-Cancel skip + the menu gate, the authoring and preview commands and the two authored beats"
+    "description": "Story camera: StoryShotCue/StoryShotPlan, StoryCameraDirector (one Cinemachine camera, blend save/restore, release paths, pitch reframe), the Story camera setting (Cinematic/Gentle/Off), per-line OneShotWorldEvent stages, hold-Cancel skip + the menu gate, the authoring and preview commands and the two authored beats; the stage hold (BeginStage/EndStage, StoryReleaseDeferral, 10 s cap), the CinemachineImpulseListener gated by Reduced Motion, the dialogue panel ignoring Cancel while a beat holds the gate"
   },
   "unity/39-lore-text": {
     "docPath": "docs/unity/39-lore-text.md",
@@ -2261,13 +2290,16 @@
         "Assets/CR/Tests/Editor/PlayerMenuTextSettingsTests.cs",
         "Assets/CR/Tests/Editor/DialogueLoreTagDiagnosticsTests.cs",
         "Assets/CR/Game/Story/Smoke/TextDisplayCommands.cs",
-        "Assets/CR/Tests/Editor/TextDisplaySettings*Tests.cs"
+        "Assets/CR/Tests/Editor/TextDisplaySettings*Tests.cs",
+        "asset-store-packages.json",
+        "ci/check-vendor-untracked.sh",
+        ".gitignore"
       ]
     },
     "description": "Lore keyword styling and the dialogue typewriter: LoreText.Decorate pipeline and surfaces (Plain/Rich/Animated), glossary.json (terms, categories, forms, emphasis, effects, styleOverride) and its Resources asset, matching rules, <cr:em>/<cr:term>/<cr:no> author tags and the raw-Text-Animator-tag validator, LorePalette and the --cr-lore-* tokens, the Order small-caps look and the serif hook, the Text Animator effect assets (crrelic/crastral), the Text Effects and Dialogue Text Speed settings, DialogueLineReveal press semantics, gloss.<key>.forms pack rows, tests and live checks"
   },
-  "unity/39-game-feel": {
-    "docPath": "docs/unity/39-game-feel.md",
+  "unity/41-game-feel": {
+    "docPath": "docs/unity/41-game-feel.md",
     "repos": {
       "cr-api": [],
       "cr-data": [
@@ -2298,9 +2330,88 @@
         "Assets/CR/Tests/Editor/GameDataFeelSettingsPersistenceTests.cs",
         "Assets/CR/Tests/Editor/GameFeelBindingsContainerTests.cs",
         "Assets/CR/Tests/Editor/HpChangedIntensityAdapterTests.cs",
-        "Assets/CR/Content/Feel/*.prefab"
+        "Assets/CR/Content/Feel/*.prefab",
+        "Assets/CR/Game/Story/Content/Feel/*.prefab",
+        "Assets/CR/Game/Story/PillarBurstFeel.cs",
+        "Assets/CR/Game/Story/StoryMomentPreload.cs",
+        "Assets/CR/Tests/Editor/PillarShatterPrefabTests.cs",
+        "Assets/CR/Tests/Editor/PillarBurstFeelTests.cs",
+        "Assets/CR/Tests/Editor/StoryMomentPreloadTests.cs",
+        "Assets/CR/Tests/Editor/StoryFeelBoundaryTests.cs"
       ]
     },
-    "description": "Game feel with More Mountains Feel 5.9.1: FeedbackBinding.feelPlayerAddress/intensity, CrFeelPlayerInfo motion classes (Cosmetic/CameraMotion/ScreenFlash/TimeScale/Haptic) and the engine-free settings gate, FeedbackDirector + FeelPlayerPool (preload, one pooled instance per address, anchor play, no global Feel switch, per-moment timing), payload-aware intensity adapters (HpChangedData damage), Reduced Motion / Screen Shake / Rumble settings (IFeelSettings, FeelSettingsStore, GameDataFeelSettingsPersistence), HapticsResponder + MMF_CrRumble + RumbleCoalescer (Nice Vibrations gamepad rumble, reset on pause/focus/battle close), BattleCameraShakeResponder scaling, BattleOpponentCreature anchor, the ten authored moments under Content/Feel built by FeelMomentBuilder, HeavyHit and CaptureResolving Soap wiring (CaptureThrowWatcher / CaptureThrowVerdict raise the wobble cue from the authority's outcome, never from the throw), the Steam Deck budget (hit stop capped per resolved action) and its content tests, check-fx-keys.sh feelPlayerAddress check, and what still needs cr-api (crit / super-effective)"
+    "description": "Game feel with More Mountains Feel 5.9.1: FeedbackBinding.feelPlayerAddress/intensity, CrFeelPlayerInfo motion classes (Cosmetic/CameraMotion/ScreenFlash/TimeScale/Haptic) and the engine-free settings gate, FeedbackDirector + FeelPlayerPool (preload, one pooled instance per address, anchor play, no global Feel switch, per-moment timing), payload-aware intensity adapters (HpChangedData damage), Reduced Motion / Screen Shake / Rumble settings (IFeelSettings, FeelSettingsStore, GameDataFeelSettingsPersistence), HapticsResponder + MMF_CrRumble + RumbleCoalescer (Nice Vibrations gamepad rumble, reset on pause/focus/battle close), BattleCameraShakeResponder scaling, BattleOpponentCreature anchor, the ten authored moments under Content/Feel built by FeelMomentBuilder, HeavyHit and CaptureResolving Soap wiring (CaptureThrowWatcher / CaptureThrowVerdict raise the wobble cue from the authority's outcome, never from the throw), the Steam Deck budget (hit stop capped per resolved action) and its content tests, check-fx-keys.sh feelPlayerAddress check, and what still needs cr-api (crit / super-effective); IFeelMomentPlayer.PreloadAsync and the pillar's two moments (feel/pillar-shatter, feel/pillar-boom) built by PillarShatterMomentBuilder"
+  },
+  "unity/42-pillar-cutscene": {
+    "docPath": "docs/unity/42-pillar-cutscene.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [
+        "Assets/CR/Game/Story/OneShotPresenter.cs",
+        "Assets/CR/Game/Story/IOneShotAftermath.cs",
+        "Assets/CR/Game/Story/CityLightsOut.cs",
+        "Assets/CR/Game/Story/SkyTear.cs",
+        "Assets/CR/Game/Story/SkyStorm.cs",
+        "Assets/CR/Game/Story/RoarOneShots.cs",
+        "Assets/CR/Game/Story/PillarBurstFeel.cs",
+        "Assets/CR/Game/Story/PillarCharge.cs",
+        "Assets/CR/Game/Story/StoryMomentPreload.cs",
+        "Assets/CR/Game/Story/DormantInstanceExtensions.cs",
+        "Assets/CR/Game/Story/IReducedMotionSetting.cs",
+        "Assets/CR/Game/Story/ReducedMotionSetting.cs",
+        "Assets/CR/Game/Story/Logic/OneShotLifecycle.cs",
+        "Assets/CR/Game/Story/Logic/Skyline*.cs",
+        "Assets/CR/Game/Story/Logic/HouseShape*.cs",
+        "Assets/CR/Game/Story/Logic/RoofKind.cs",
+        "Assets/CR/Game/Story/Logic/Rift*.cs",
+        "Assets/CR/Game/Story/Logic/PillarChargePlan.cs",
+        "Assets/CR/Game/Story/Logic/ChargeLook.cs",
+        "Assets/CR/Game/Story/Logic/LightsOutWave.cs",
+        "Assets/CR/Game/Story/Logic/Storm*.cs",
+        "Assets/CR/Game/Story/Logic/Roar*.cs",
+        "Assets/CR/Game/Story/Logic/StoryMotionKind.cs",
+        "Assets/CR/Game/Story/Logic/ReducedMotion*.cs",
+        "Assets/CR/Game/Story/Logic/SeededRandom.cs",
+        "Assets/CR/Game/Story/Logic/GroundPoint.cs",
+        "Assets/CR/Game/Story/Logic/StoryMeshData.cs",
+        "Assets/CR/Game/Story/Logic/StoryVec3.cs",
+        "Assets/CR/Game/Story/Logic/StoryReleaseDeferral.cs",
+        "Assets/CR/Game/Story/Logic/Tests/*.cs",
+        "Assets/CR/Game/Story/Editor/Mirandale*.cs",
+        "Assets/CR/Game/Story/Editor/SkylineBuildReport.cs",
+        "Assets/CR/Game/Story/Editor/StoryColliderExtensions.cs",
+        "Assets/CR/Game/Story/Editor/StoryMeshExtensions.cs",
+        "Assets/CR/Game/Story/Editor/VistaShots.cs",
+        "Assets/CR/Game/Story/Editor/StorySceneBuilder.cs",
+        "Assets/CR/Game/Story/Shaders/*.shader",
+        "Assets/CR/Game/Story/Art/Mirandale/**",
+        "Assets/CR/Game/Story/Content/Feel/*.prefab",
+        "Assets/CR/Core/Feedback/Story/**",
+        "Assets/CR/Core/Feedback/IFeelMomentPlayer.cs",
+        "Assets/CR/Core/Feedback/FeedbackDirector.cs",
+        "Assets/CR/Core/DI/StoryCameraBindingsExtensions.cs",
+        "Assets/CR/Game/Story/StoryCameraDirector.cs",
+        "Assets/CR/Game/Story/OneShotWorldEvent.cs",
+        "Assets/CR/Game/Story/Smoke/StorySmokeRunner.cs",
+        "Assets/CR/UI/Dialogue/DialogueScreenPresenter.cs",
+        "Assets/CR/Scenes/World/World.unity",
+        "Assets/CR/Tests/Editor/Pillar*.cs",
+        "Assets/CR/Tests/Editor/Mirandale*.cs",
+        "Assets/CR/Tests/Editor/SkyTearTests.cs",
+        "Assets/CR/Tests/Editor/SkyStormTests.cs",
+        "Assets/CR/Tests/Editor/CityLightsOutTests.cs",
+        "Assets/CR/Tests/Editor/RoarOneShotsTests.cs",
+        "Assets/CR/Tests/Editor/StoryMomentPreloadTests.cs",
+        "Assets/CR/Tests/Editor/ReducedMotionSettingTests.cs",
+        "Assets/CR/Tests/Editor/StoryCameraShakeGateTests.cs",
+        "Assets/CR/Tests/Editor/StoryBeatCameraHoldTests.cs",
+        "Assets/CR/Tests/Editor/StoryFeelBoundaryTests.cs",
+        "Assets/CR/Tests/Editor/FakeFeelMomentPlayer.cs",
+        "Assets/CR/Tests/Editor/FakeReducedMotionSetting.cs",
+        "Assets/CR/Core/Feedback/Tests/FeedbackDirectorPlayModeTests.cs",
+        "Assets/CR/Game/Story/Content/Text/ledger-rows.md"
+      ]
+    },
+    "description": "Pillar cutscene (the Mirandale vista beat): the three cued lines and their stages, OneShotPresenter / OneShotLifecycle (arm, begin, settle, reset) and the aftermath on restore, SkyTear (the sky stays torn across region swaps, own-scene only), SkyStorm (trimmed Hovl bolts, HS_EffectSound removed, thunder), CityLightsOut (shader globals, one window material), RoarOneShots, PillarCharge, the two Feel moments (feel/pillar-shatter CameraMotion, feel/pillar-boom Cosmetic) through IFeelMomentPlayer with PreloadAsync on the charge, the story camera's impulse listener and the stage hold (StoryReleaseDeferral), the Reduced Motion table (StoryMotionKind), the hold-Cancel skip and the dialogue panel's Cancel gate, MirandaleVistaBuilder / MirandaleSkylineBuilder (cr_story_build_skyline, seeded, idempotent, 60k budget), PillarShatterMomentBuilder, cr_story_render_vista, the smoke's pillar checks, tests, and the AI-chosen numbers logged in the ledger"
   }
 }

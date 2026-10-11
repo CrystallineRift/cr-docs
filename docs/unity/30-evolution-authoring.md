@@ -204,7 +204,10 @@ and `EvolutionReturnRescue` puts them back. A point belonging to another area is
 they may load into that area later and still need it.
 
 Teardown runs in a `finally` behind a fade: a cutscene that throws must not leave someone parked in
-an arena with no input and no encounters, which is indistinguishable from a hang.
+an arena with no input and no encounters, which is indistinguishable from a hang. The set is dressed
+exactly as for a battle (`arena.Activate()` after the teleport: biome and the battle-only backdrop, which is
+hidden the rest of the time) and `arena.Deactivate()` runs in that same `finally`, with the `!= null` check
+because the arena's cell may have unloaded meanwhile.
 :::
 
 - **Timing matters at the battle seam.** Candidates are raised on `BattleClosed`, not when the

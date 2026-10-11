@@ -134,11 +134,23 @@ someone else. The caller then gets the failure that led to the backoff.
 **Threads.** Every attempt resumes on the caller's synchronisation context (the Unity main thread): an attempt raises the
 rate-limit events and writes the log. Polly would resume on the thread pool by default.
 
-**Where retries are off.** `VersionCheckClientUnityHttp` overrides `RetryExecutor` with
-`HttpRetryExecutor.SingleAttempt`. `GameSessionManager.Start` awaits the version check before the database gate on
-every launch, and `ConnectivityProbe` uses it to ask whether the server is there right now: both want their "no" at
-once, not after three backoffs on every launch without a network. Offline play's domain calls go to the local services
-rather than these clients, so they are untouched.
+**Where retries are off.** Two opt-outs, at two scopes:
+
+- *Per client.* `VersionCheckClientUnityHttp` overrides `RetryExecutor` with `HttpRetryExecutor.SingleAttempt`.
+  `GameSessionManager.Start` awaits the version check before the database gate on every launch, and `ConnectivityProbe`
+  uses it to ask whether the server is there right now: both want their "no" at once, not after three backoffs on every
+  launch without a network.
+- *Per call.* `SimpleWebClient.PostOnce<TR, TD>(path, data, …)` is a POST asked once: it mints **no Idempotency-Key** and
+  runs on the single-attempt executor, everything else unchanged (including the auth layer's one re-send after a rejected
+  token, which is not a retry of the ask). It exists for an intent whose route takes no key and whose repeat is the
+  caller's to decide: the merchant "stock this shop" ask (`NpcMerchantClientUnityHttp.StockFromSpawnerAsync`), which the
+  server limits per account and the router has already chosen to make once a minute. Merged as they were, merchant
+  restock v2 and the retries sent that ask four times on a 503 / 429 / dropped connection, with a key the route ignores.
+  A per-client opt-out would have stopped the merchant's purchase and sell from being retried, which they should be.
+  `NpcMerchantClientStockAskTests` scripts the transport and pins it: wire shape, no key, one send for each of those
+  failures, an empty answer reads 0, and a purchase is still keyed and retried.
+
+Offline play's domain calls go to the local services rather than these clients, so they are untouched.
 
 **Cancellation.** `HttpRetryExecutor.ExecuteAsync` takes a `CancellationToken` and a cancel ends the retries (even
 mid-backoff), but the `Get`/`Post`/`Put`/`Delete` methods do not take one yet (a known gap, see Request Lifecycle).
@@ -189,9 +201,10 @@ same key while the first attempt is still running is the 409 `idempotency_in_pro
   (`/auth/*`, `POST /account`) are sent with a key too, which the server ignores because it has no principal to
   scope one to; they are retried like everything else but are not replay-protected.
 - **Unkeyed routes ignore it.** The middleware acts only on routes marked `RequireIdempotencyKey`. A player write
-  the server deliberately leaves unkeyed (the exemptions listed on the backend page, among them the merchant
-  "stock this shop" intent since restock v2) receives the header and ignores it; such a route is safe to repeat
-  by construction (the stock roll is a compare-and-set), so a retry of it is harmless too.
+  the server deliberately leaves unkeyed (the exemptions listed on the backend page) receives the header and ignores
+  it; such a route is safe to repeat by construction, so a retry of it is harmless too. The one exception on the client
+  is the merchant "stock this shop" ask, which goes through `PostOnce` and so carries no key and is never retried (the
+  server limits it per account; see *Where retries are off*).
 
 **Production switch.** The server accepts a missing key (`Idempotency:RequireKey` is off, with a warning in the
 log), which is what keeps old clients working. Once a minimum client version that sends keys on every write is

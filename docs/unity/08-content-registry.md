@@ -774,6 +774,14 @@ whose refresh timing is `EditorMemoPolicy` (pure, 7 tests):
 The header's answer is recomputed from the IMGUI body rather than the editor tick, so an idle
 window in the background costs nothing.
 
+:::caution Known bug (logged 2026-10-11): Push All reads a cached asset list
+**Push All** iterates the asset list the window loaded when it opened, not a fresh scan, so a definition created
+after the window was opened (a new quest, spawner or dialogue asset, however it was registered) is **not pushed**
+until the window reloads. Close and reopen Crystalline Rift Studio (or let a domain reload re-create it) before
+pushing new assets, and check the per-row badges: a new asset with no badge was not sent. The fix is to make the
+push read through the same invalidated cache as the counts.
+:::
+
 ### Background jobs and progress
 
 Caching stopped the window re-scanning the project on every repaint, but two problems remained.

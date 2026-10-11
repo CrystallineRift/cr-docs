@@ -49,15 +49,21 @@ Plays once per trainer (`event.<eventKey>` flag): optional dialogue (awaits its 
 `OneShotRule.ShouldPlay(alreadyPlayed, blocked)`. Used for the pillar shattering and Ahksun rising.
 
 Per-line **stages** (`OneShotStage`) pull parts of that sequence forward to the dialogue line that talks about them (the
-crystal rises on `r1`; the rifts open on `s1`; the charge, burst and lights-out run on `s2`); a stage no line reached
-still runs after the dialogue, and the flag is still written only at the end. Holding Cancel for 1 s **skips** the beat
-(camera back at once, conversation cancelled, end state shown, flag written). The camera shots the same lines cue are
-described in [Story Camera](?page=unity/39-story-camera).
+crystal rises on `r1`; the rifts and the storm open on `s1`; the charge, burst, lights-out and roars run on `s2`); a stage no
+line reached still runs after the dialogue, and the flag is still written only at the end. While a stage runs the event
+holds the story camera (`IStoryCameraDirector.BeginStage` / `EndStage`), so a line that sends the camera back, or the end of
+the conversation, waits until the burst has gone off. Holding Cancel for 1 s **skips** the beat (camera back at once,
+conversation cancelled, end state shown, flag written); the dialogue panel ignores Cancel while the beat holds
+`IStoryBeatGate`, so the press that starts the hold never advances a line. The camera shots the same lines cue are
+described in [Story Camera](?page=unity/40-story-camera); the vista beat's presenters, builders and Feel burst in
+[Pillar Cutscene](?page=unity/42-pillar-cutscene).
 
 A restore (load, cell stream-in, trainer switch) shows the END state without replaying: after enabling an object it
-calls every `IOneShotAftermath` under it — `CrystalRise` jumps to its final pose, `LightFlash` stays dark. A trainer
-switch during the dialogue never starts the prelude; a switch during the prelude puts the new trainer's view back;
-a cell unloaded mid-prelude ends the beat unplayed. `PillarCharge` drops its tint whenever it is switched off.
+calls every `IOneShotAftermath` under it — `CrystalRise` jumps to its final pose, and each `OneShotPresenter` of the vista
+(`SkyTear`, `CityLightsOut`, `SkyStorm`, `RoarOneShots`, `PillarBurstFeel`) **settles** at its end state without ever
+beginning (the dark city and the torn sky show, nothing flashes or roars). A trainer switch during the dialogue never
+starts the prelude; a switch during the prelude puts the new trainer's view back; a cell unloaded mid-prelude ends the beat
+unplayed. `PillarCharge` drops its tint whenever it is switched off.
 
 ## The opening quest chain
 
@@ -159,12 +165,15 @@ replaces its own `[Story …]` root and leaves hand-placed objects alone:
 - **prologue** — writes `Assets/CR/Scenes/Prologue/Prologue_Earth.unity` (room blockout, readables, the stone,
   the portal volume, `PrologueController`, a `SceneContext` parented to `CoreContext`) and adds it to Build Settings.
 - **arrival** — `World_c0_r4`: the ruin inscription readable, the `arrival-ahksun-rises` event (crystal with
-  `CrystalRise`, its camera shots and the r1 stage: see [Story Camera](?page=unity/39-story-camera)), the `story-ahksun-landing` trigger and `Ahksun Glow`, and Ahksun's first-sight bark. Triggers sit on the ramp, outside the player rig's 20 m lock-on
+  `CrystalRise`, its camera shots and the r1 stage: see [Story Camera](?page=unity/40-story-camera)), the `story-ahksun-landing` trigger and `Ahksun Glow`, and Ahksun's first-sight bark. Triggers sit on the ramp, outside the player rig's 20 m lock-on
   sphere at the start spawn (a trigger nearer the edge fires the moment the game starts).
-- **vista** — `World.unity` (always loaded, so the pillar and the trigger can reference each other): the
-  Mirandale pillar + city lights at (354, 60, 758), the `arrival-pillar-shatters` event on the ramp with
-  `HCFX_Explosion_02`, a `LightFlash` and the `RiftFlicker` sky quads (double-sided, so they show from the ground), with the
-  event's camera shots and the s1 / s2 stages. Adds a `SceneContext` to World.unity.
+- **vista** — `World.unity` (always loaded, so the pillar and the trigger can reference each other): `MirandaleVistaBuilder`
+  builds the great blue crystal over the city centre (354, 758) with its light and its charge, the seeded skyline (34
+  low-poly houses, 5 wall towers), the tear in the sky, the storm and the burst (lights-out, Feel moments, roars), every
+  stage-switched object inactive; then the `arrival-pillar-shatters` event on the ramp with `PillarBurstVfx` at a `Burst
+  Anchor` the pillar's switch-off does not take, its camera shots and the s1 / s2 stages. Adds a `SceneContext` to
+  World.unity. Details: [Pillar Cutscene](?page=unity/42-pillar-cutscene). The first placeholders (14 copper columns, 7
+  magenta quads, `RiftFlicker`) are gone.
 - **descent** — `World_c0_r3`: Philroe moved to the wagon, `NpcEscort` + `EscortDirector` with five waypoints
   (all in this cell — Unity cannot serialise cross-scene references), the three story encounter zones, the three
   place triggers (switchback, farm, and `story-philroes-wagon`), Ahksun's barks, the farm (gate, fence, barn, Izzandra,
@@ -238,7 +247,8 @@ visit trigger and the `entrance` spawn point are kept.
   (`IDialogueLineFeed.LineShown`, raised by `DialogueService` before each line) and hides it when the conversation
   ends. The bond-line Hellcat (T6) on `help-bond` / `help-bond-explain` uses it; the real Hellcat is the server-granted
   starter.
-- `CrystalRise`, `LightFlash`, `RiftFlicker` — presentation movers driven by `PresentationMath`.
+- `CrystalRise`, `LightFlash` — presentation movers driven by `PresentationMath` (`RiftFlicker` is gone with the placeholder
+  rifts; the vista's pieces are `OneShotPresenter`s, see [Pillar Cutscene](?page=unity/42-pillar-cutscene)).
 
 ## Whiteout in the open world
 

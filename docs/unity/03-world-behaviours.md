@@ -102,7 +102,7 @@ Two things the numbers do argue for, if load time ever matters:
 | `INpcSubInitializable` | Interface for NPC add-on components run after identity resolves |
 | `NpcWorldBehaviour` | Identity-only NPC world behaviour; dispatches to sub-behaviours |
 | `NpcCreatureGrantBehaviour` | Sub-behaviour: seeds a configured creature team onto the NPC |
-| `NpcMerchantBehaviour` | Sub-behaviour: sends the merchant's "stock this shop" intent on world init; exposes `MerchantNpcId` |
+| `NpcMerchantBehaviour` | Sub-behaviour: records whose shop it is and exposes `MerchantNpcId`; sends the merchant's "stock this shop" intent when the player walks up (`OnPlayerApproached`), never at world init |
 | `NpcTrainerBehaviour` | Sub-behaviour: seeds creature team + items, caches both for battle |
 | `SpawnerWorldBehaviour` | World behaviour: ensures spawner zone exists; exposes `SpawnerId` |
 | `SpawnerEncounterBehaviour` | Activated by `SpawnerWorldBehaviour`; trigger-based wild encounter entry point |

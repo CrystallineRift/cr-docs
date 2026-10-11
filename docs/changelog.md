@@ -19,11 +19,22 @@ cr-api-unity `release/v0.1.8` (not deployed). Fixes to what the release review f
   the mouse wheel and +/- zoom, as before.
 - **Vendor source.** The Text Animator package (`Packages/com.febucci.text-animator-unity`) is git-ignored, and
   `ci/check-vendor-untracked.sh` fails a release build if any of it is tracked. → [Release builds in CI](?page=unity/21-standalone-builds)
+- **Sky storm.** The pillar beat's lightning bolt lost the vendor's sound script with the sound it plays: `SkyStorm.Trim`
+  destroyed the bolt's `AudioSource` but Hovl's `HS_EffectSound` kept calling `PlayOneShot` on it and threw a
+  `MissingReferenceException` on every repeat (three per beat in the smoke). The script is switched off and destroyed first,
+  found by name so the story compiles without the pack. → [Pillar Cutscene](?page=unity/42-pillar-cutscene)
+- **Proxy baker.** `cr_world_bake_proxy` leaves out every renderer a `BattleArena` lists as battle-only: the scene is saved
+  with the arena backdrop active (it is hidden only at runtime), so the far-field proxy carried the pale green tube for as
+  long as the proxy was up. The `c0_r3` proxy is rebaked. → [Area Scenes](?page=unity/22-area-scenes)
+- **Docs.** The three pages numbered 39 are now [Lore text](?page=unity/39-lore-text), [Story Camera](?page=unity/40-story-camera)
+  and [Game Feel](?page=unity/41-game-feel); the Mirandale vista has its own page, [Pillar Cutscene](?page=unity/42-pillar-cutscene).
 - **Open (not fixed here):** the committed floor still points `creature_gaterbear` at Dragon Fire's model and icon, so push
-  the creature from Studio and re-bake the floor before tagging; and Ahksun's Glow in `World_c0_r4` is a second always-on
-  real-time light next to the pillar's, against the pillar beat's budget of one.
+  the creature from Studio and re-bake the floor before tagging; Ahksun's Glow in `World_c0_r4` is a second always-on
+  real-time light next to the pillar's, against the pillar beat's budget of one; and Crystalline Rift Studio's **Push All**
+  reads the asset list cached when the window opened, so an asset created since is not pushed until the window reloads
+  (logged; → [Content Registry → Reading the window](?page=unity/08-content-registry)).
 
-## 2026-10-10 — v0.1.8: the opening chain, story camera, lore text, game feel, merchant restock v2, client retries, playtest fixes
+## 2026-10-10 — v0.1.8: the opening chain, story camera, pillar cutscene, lore text, game feel, merchant restock v2, client retries, playtest fixes
 
 One entry for the day. Unless a group says otherwise, everything here is on branches for release v0.1.8 and not
 deployed: cr-api `integration/round2b` (PRs #73 to #75 plus the opening-chain server) and the cr-api-unity lane
@@ -118,7 +129,7 @@ cr-api `integration/round2b` (PR #74), cr-api-unity `fix/merchant-restock-v2-cli
   Cinemachine camera above the overworld rig and releases it on every path (conversation end, trainer switch, battle
   start, destroyed anchor, the line that returns to the player), restoring the Brain's blend and the rig's pitch. Authored
   for `arrival-ahksun-rises` (pan from the glade to Mirandale, medium on the crystal, city wide) and
-  `arrival-pillar-shatters` (low angle up at the rifts, long lens on the pillar). See [Story Camera](?page=unity/39-story-camera).
+  `arrival-pillar-shatters` (low angle up at the rifts, long lens on the pillar). See [Story Camera](?page=unity/40-story-camera).
 - **Visuals during their lines.** `OneShotWorldEvent` per-line stages: the crystal rises on r1, the rifts open on s1, the
   charge, burst and lights-out run on s2; unfired stages still run after the dialogue; the flag is written at the end.
 - **Skippable.** Hold Cancel (B / Esc) for 1 s: camera back, conversation cancelled, end state shown. The player menu
@@ -151,7 +162,7 @@ cr-api `integration/round2b` (PR #74), cr-api-unity `fix/merchant-restock-v2-cli
   TimeScale, Haptic) and `FeedbackDirector` plays one pooled instance at the binding's anchor at
   `intensity x what the event carried x what the settings allow`. The gate and the intensity rules are engine-free
   (`CR.Core.Feedback.Logic`) and tested. `CR.Core.Feedback` references Feel; nothing else does. →
-  [Game Feel](?page=unity/39-game-feel)
+  [Game Feel](?page=unity/41-game-feel)
 - **Settings made real.** System, Game: Reduced Motion (it was a static mock-up), Screen Shake (100 / 50 / 0 %) and
   Rumble, persisted like Combat Speed. `BattleCameraShakeResponder` scales its force by them and stays the only thing that
   shakes the camera in a battle.
@@ -173,13 +184,66 @@ Review fixes on the same branch:
   (Soap asset, wiring entry, regenerated bridge) raised by `CaptureThrowWatcher` from the resolved outcome, ahead of the
   catch or the miss; a refused throw raises neither it nor `CaptureFailed`. `BattleCoordinator.PlayStepsAsync` raises a
   new `BattleEvents.ActionResolving` before each step is presented to give it a lead-in. `CaptureAttempted` stays as the
-  battle log's echo, and a test fails if a binding answers it. → [Game Feel](?page=unity/39-game-feel)
+  battle log's echo, and a test fails if a binding answers it. → [Game Feel](?page=unity/41-game-feel)
 - **Hit stop is capped per resolved action** (120 ms: an impact plus the faint it causes), and the content tests pin
   which moments freeze time and which events they answer, so the cap holds by construction. It was documented per turn
   and only tested pairwise.
 - **The feedback director no longer flips Feel's process-wide `GlobalMMFeedbacksActive` when it is disabled**, so it
   cannot silence a player that was not its own.
 - **Reduced Motion hint** now says what it does: "Removes screen shake and hit stop, and softens light flashes."
+
+### Pillar cutscene: the Mirandale vista (cr-api-unity `feature/pillar-cutscene`, pending release)
+
+The `arrival-pillar-shatters` beat has something to show. Page: [Pillar Cutscene](?page=unity/42-pillar-cutscene).
+
+- **The vista.** `MirandaleVistaBuilder` (from `cr_story_build_scenes --args vista`) builds the great blue crystal
+  (PurePoly `PP_Crystal_Gradient_05`, 54 m, floating over the city centre, with the vista's one real-time light and its 1.5 s
+  blue-purple-red charge), the skyline, the tear in the sky (seeded cracks on a sphere, `StorySkyRift.shader`), the storm
+  (three Hovl bolts trimmed of their light, sound and ground effects, thunder) and the burst (lights-out, Feel moments,
+  roars). Every stage-switched object is built inactive; the burst's explosion hangs from a `Burst Anchor` the pillar's
+  switch-off does not take (the old VFX was parented under the pillar the same stage switched off). The first placeholders
+  (14 copper columns, 7 magenta quads, `RiftFlicker`, two story materials) are gone.
+- **The skyline** (`cr_story_build_skyline`, seeded 1157, diff-based, idempotent, `--args dry`): 34 generated ~100-triangle
+  houses (10 variants wearing the City pack's wall and roof materials, one shared window material) and 5 pack wall towers on a
+  120 m ring, 4.4k of the 60k Deck budget, static-batched, no shadows or probes, colliders off (a picture, not a place; the
+  crystal's mesh collider cut the corridor's sightline checks). The pack's complete buildings were 3,500 to 21,000 triangles each.
+- **Stages.** s1 opens the rifts and the storm; s2 charges 1.5 s, bursts (explosion, flash, boom, camera impulse), hides
+  the pillar, runs a 0.9 s front of darkness across the city's windows (three shader globals, so no material asset is written
+  and the houses stay batched) and the roars from 1.2 s; s3 returns to the player **only after the stage has ended**
+  (`BeginStage` / `EndStage`, `StoryReleaseDeferral`, 10 s cap): a reader who reached s3 in under the charge used to watch
+  the burst from behind the player. The dialogue panel ignores Cancel while a skippable beat holds the gate, so the press
+  that starts the hold never advances a line.
+- **Every piece settles on a reload.** `OneShotPresenter` / `OneShotLifecycle`: enabling only arms, the first frame begins, a
+  restore settles at the end state without beginning, switching off resets the authored world. The dark city and the torn
+  sky are what a trainer who has seen the beat comes back to. `SkyTear` keeps the sky torn under the region environment's
+  swaps (every crossing and the first placement after a reload used to put the plain sky back) and only touches its own
+  scene's sky.
+- **Reduced Motion** (`StoryMotionKind` / `ReducedMotionExtensions`, one table): the shake, the flash and the bolts are
+  skipped, the charge's pulse and the rifts' glow hold steady, the front becomes an even fade; sound and the outcome are never
+  removed. `IReducedMotionSetting` reads the System tab's key at every use; the story camera's new `CinemachineImpulseListener`
+  has gain 0 under it.
+- **Smoke.** The offline story smoke checks the city goes dark, the sky is torn and in view (after the beat, after a restore
+  and after the walk down), three thunder rolls, the burst moment asked for once, three roars, and a restore that plays nothing.
+- **Editor.** `cr_story_render_vista` renders the beat's states from the ramp (lit, charge, half-crossed wave, dark, rifts,
+  burst, bolt) to PNGs; `PillarBurstVfx.prefab` is written only when missing or stale, so a designer's tweak survives a rebuild.
+- **Ledger.** Every number (the city, the crystal, the tear, the storm, the roars, the lights-out, the Feel moments, the
+  stage timing) has a row in the [AI content ledger](?page=content/01-ai-content-ledger); the audio is stand-in clips.
+
+### Integration on `release/v0.1.8`: merchant v2 meets the retries, the burst meets the Feel director (pending release)
+
+- **The stock ask is asked once (`15f6ac84`).** Merged as they were, client retries keyed and retried every POST and merchant
+  v2's stock ask is the one write the server takes with no key and limits per account, so a 503 / 429 / dropped connection
+  sent the ask four times with a key the route ignores. `SimpleWebClient.PostOnce` is the per-call opt-out (no key, the
+  single-attempt executor, the auth layer's one re-send after a rejected token kept); `NpcMerchantClientUnityHttp.StockFromSpawnerAsync`
+  uses it, and purchase and sell stay keyed and retried. `NpcMerchantClientStockAskTests` scripts the transport: wire shape,
+  no key, one send per failure. → [HTTP Clients](?page=unity/05-http-clients), [Merchant Shop](?page=unity/18-merchant-shop)
+- **The pillar burst plays through the game-feel director (`eb146cb6`).** The cutscene lane had a player of its own
+  (`PrefabMomentPlayer`, which woke a prefab that played itself and read Reduced Motion directly); it is gone, and
+  `PillarBurstFeel` asks `IFeelMomentPlayer` for two moments at the crystal: `feel/pillar-shatter` (impulse + 0.25 s flash,
+  `CameraMotion`: Reduced Motion removes it, Screen Shake scales it and Off takes the flash with the shake) and `feel/pillar-boom`
+  (`Cosmetic`, a prefab of its own so sound stays under Reduced Motion). `IFeelMomentPlayer.PreloadAsync` is new: the director
+  loads and pools a player ahead of its first play on its own token, and `StoryMomentPreload` on the charge warms both moments
+  during the 1.5 s. `PillarShatterMomentBuilder` builds both. → [Game Feel](?page=unity/41-game-feel), [Pillar Cutscene](?page=unity/42-pillar-cutscene)
 
 ### Client retries (Polly) and one Idempotency-Key owner (cr-api-unity `feature/client-retries-v2`, pending release)
 
@@ -235,6 +299,31 @@ Review fixes on the same branch:
   import writes into `AreaBanner.uxml` at the same Resources key. Every Resources layout with a same-named `.uss` now
   links it with `<Style src>`, and the seven presenters that looked a sheet up by a layout's name no longer do;
   `ResourcesStyleSheetLinkTests` keeps it that way. → [UI Theme](?page=unity/33-ui-theme#restyling-and-adding-screens)
+- **The System page scrolls and nothing on it shrinks (`4dceaf4e`, `da3f4ac6`).** "What the heck happened to the system page":
+  the page is about 900 px tall and sat in a plain container inside a window with about 520 px of content height, and UI
+  Toolkit's default `flex-shrink: 1` squeezed every 50 px row to 15, 8, 3 or 1 px until the controls overlapped. It is now a
+  `FocusScrollView` (a `ScrollView` that scrolls the focused control into view, which UI Toolkit never does), every block is
+  `flex-shrink: 0`, rows are a fixed 50 px, and the "Open folder" and tech-demo buttons are as wide as their text in a wrapping
+  card. `RuntimePanelLayoutHarness` lays a real runtime panel out in EditMode at a chosen size and reproduces the play-mode
+  numbers; `SystemTabLayoutTests` covers 1280×800 and 1920×1080 × UI scale 0.75 / 1 / 1.5 (28 of 30 cases failed before). The
+  legacy startup sheet's title rule (`unity-text-align`, `font-weight`: not USS) is fixed and pinned. → [Player Menu → Layout](?page=unity/10-player-menu-ui)
+- **The World Map fills its page, zooms and pans, and names never overlap (`1fa44993`, `f0f6d354`, `4b46f6ea`).** "This map
+  could use more real estate": Unity 6 makes the `TabView` the logical parent of its `Tab`s and selectors walk logical parents,
+  so the fill rules written through the content container never matched; the Map tab now opts in with `tab-fill`. The map
+  takes everything but a 22% info panel, opens at 2.5× on the player's marker, zooms 1 to 8 (wheel about the pointer, +/-/0,
+  the gamepad triggers) and pans (drag past 5 px, the right stick), always clamped to the image. In the open world each of the
+  74 regions is a 16 px marker with a plain-text name (10 to 15 px with zoom) that `WorldMapLabelPlacer` places on the first
+  free side in priority order (the player's region, discovered, the rest) or hides until zoom makes room; widths are measured
+  with the label's own `MeasureTextSize`, not guessed (the guess drew "The Meadow" over its neighbour and was 60% short for
+  wide capitals and CJK). "You are here" pins the region tracker's key only, never the legacy area loader's menu-backdrop scene.
+  A press released outside the map no longer blocks the next drag, and a second finger no longer steals one.
+  → [World Map → The open-world map](?page=unity/35-world-map)
+- **The arena backdrop is battle-only (`cb238aca`, `8fe9d0b1`).** In the open world the dressed arena stood in plain sight,
+  and its 31 m backdrop read as a pale green cylinder in the meadow. `BattleArena.battleOnly` lists what exists only while a
+  fight is staged: hidden in `Awake`, shown by `Activate`, hidden by `Deactivate`, which `BattleCoordinator` now runs first
+  under the cover in `CloseWithFadeAsync` and in `AbortUnstagedEncounter`, and `EvolutionStageDirector` runs round its cutscene
+  in the same arena. `cr_dress_arenas` registers the backdrop, `cr_arena_battle_only` catches up arenas dressed earlier
+  (`World_c0_r3` was), and `cr_world_validate` reports an unlisted backdrop as an error. → [Area Scenes](?page=unity/22-area-scenes)
 
 ### The unused "Gains more strength" growth profile is deleted (PR #75, pending release)
 

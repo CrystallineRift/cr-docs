@@ -19,6 +19,7 @@ it are in [Opening Story](?page=unity/38-story-opening).
 | `IStoryCameraDirector` / `StoryCameraDirector` | One `CinemachineCamera` above the overworld rig; poses it, blends to and from it, releases it |
 | `IStoryCameraSetting` / `StoryCameraSetting` | The player's "Story camera" choice over `IGameDataRepository` |
 | `OneShotStage` + `OneShotStageTracker` | A per-line stage of a `OneShotWorldEvent` (visuals on the line that talks about them) |
+| `StoryReleaseDeferral` in `CR.Game.Story.Logic` | Pure. Whether a release may hand the view back while the beat still has stages in flight, and the 10 s cap on that wait |
 | `IStoryBeatGate` / `StoryBeatGate` | Keeps the player menu shut while a skippable beat plays |
 | `OverworldCameraGate.ReframePitch()` | Puts the overworld rig's pitch back after a release |
 | `StoryCameraBindingsExtensions.BindStoryCamera()` (`Core/DI`) | The installer's bindings: setting, gate, and the NonLazy director |
@@ -75,6 +76,17 @@ were missed.
 - **Refusals.** A shot with no subject (an anchor the scene lost, or one a cell unload destroyed) takes nothing and warns
   with the line id; a `Pan` with no `panFrom` shows as a still shot and warns; a main camera with no
   `CinemachineBrain` warns once. A refused shot while one is held leaves the held shot alone.
+- **Shake.** The camera carries a `CinemachineImpulseListener`, so an impulse raised while a shot is up (the pillar's burst,
+  `feel/pillar-shatter`) shakes it. Under Reduced Motion the listener's gain is 0 (`ShakeGain`; `IReducedMotionSetting`, read
+  when the camera is taken): the impulse fires and nothing moves. It is the only thing a story shot does with an impulse;
+  the battle rig's responder is separate.
+- **Stages hold the view.** `BeginStage` / `EndStage` bracket every stage a `OneShotWorldEvent` runs. A `ReturnToPlayer`
+  line or the conversation's end that arrives while a stage is running is kept (the first to wait wins: the line's own blend
+  beats the `DialogueEnded` 0.8 s that follows it) and goes when the last stage ends, with its blend. A skip, a trainer
+  switch, a battle start, a lost anchor and `Disposed` never wait and drop any wait; a newer shot drops it too; a wait that
+  outlasts `StoryReleaseDeferral.MaxWaitSeconds` (10 s) is let go with a warning so a stage that never reports back cannot
+  strand the camera on a shot. Why: a reader who got to `s3` in under the pillar's 1.5 s charge watched the burst from behind
+  the player.
 - **Release.** Every path hands the view back, puts the Brain's blend back and, afterwards, the rig's pitch:
 
 | Reason | Blend back |
@@ -98,6 +110,8 @@ A `OneShotStage` pulls part of the beat forward to the line that talks about it:
 `runPrelude` (the event's purple-red charge runs first, for `preludeSeconds`) and `spawnVfx` (the burst).
 
 - A stage fires on `LineShown` for its node, once per play. Stages run one after another in the order the lines come.
+- Every stage is bracketed by `IStoryCameraDirector.BeginStage` / `EndStage` in a `finally`, so a skip, a trainer switch or a
+  stage that throws still ends it, and the director's return to the player waits for it (above).
 - A stage no line reached still runs after the dialogue, in authored order, and the end state is the event's own toggles
   plus every stage's.
 - Anything a stage switched is not switched again at the end (`_handled`): a `LightFlash` that played and put itself out
@@ -120,7 +134,10 @@ Holding Cancel (gamepad B, keyboard Esc) for 1 s (`skipHoldSeconds`, `HoldToSkip
 
 The device is read directly (as the prologue skip does), never Submit / South, which is Jump. Esc is also the player
 menu's open key, so `IStoryBeatGate` keeps the menu shut from the beat's first line until it ends (`PlayerMenuWindow.MenuInputBlocked`
-includes the gate, like the prologue). The first line also shows a one-time toast, "Hold Esc / B to skip"
+includes the gate, like the prologue). The same gate makes `DialogueScreenPresenter` ignore **Cancel** while a beat holds it:
+the press that started the hold used to count as Continue on a line (and picked the decline option on a choice), so the next
+line's stage and shot fired for the second the skip needed to land; Continue / Submit and the option buttons work as before,
+and Cancel is Continue again once the beat is over. The first line also shows a one-time toast, "Hold Esc / B to skip"
 (`StoryText.SkipBeatHint`); a beat that never ran (busy, not ready) shows nothing and locks nothing.
 
 ## The setting
@@ -155,21 +172,25 @@ moves the crystal, and the aim rides along, rising with it).
 | | r1 | Medium on the rising crystal from the ring of rune stones (205.2, 31.7, 1095.2), fov 30, 1.2 s. **Stage:** the crystal is enabled on this line and rises while Ahksun speaks |
 | | r2 | Wide on the city between the gate posts (211, 32.2, 1092), fov 62, 1.0 s |
 | | r3 | ReturnToPlayer, 1.2 s. r4, r5, r5b and the optional r2b have no shot |
-| Vista (`World.unity`) | s1 | Wide, low angle up at the rifts from the ramp (216, 21.2, 1060), fov 80, 1.2 s. **Stage:** the rifts open |
-| | s2 | LongLens on the pillar over the city, same mark, fov 24, 1.0 s (a push-in). **Stage:** 1.5 s charge, burst, flash, pillar gone, city lights out |
-| | s3 | ReturnToPlayer, 1.5 s |
+| Vista (`World.unity`) | s1 | Wide, low angle up at the rifts from the ramp (216, 21.2, 1060), fov 80, 1.2 s. **Stage:** the sky tears and the storm breaks (three bolts, thunder) |
+| | s2 | LongLens on the pillar over the city, same mark, fov 24, 1.0 s (a push-in). **Stage:** 1.5 s blue-purple-red charge, burst (explosion, flash, camera impulse, boom), pillar gone, city lights out, roars |
+| | s3 | ReturnToPlayer, 1.5 s, held until the s2 stage has ended |
 
-The placeholder crystal is a 15 cm shard, so the r1 shot is close. The rift strips were single-sided and lie flat facing
-up, so they were invisible from the ground; `Story_SkyRift.mat` is now double-sided (`_Cull` 0), and `StorySceneBuilder`
-keeps it that way.
+The placeholder crystal is a 15 cm shard, so the r1 shot is close. The vista's pieces (the rift mesh and its shader, the
+skyline, the presenters) are described in [Pillar Cutscene](?page=unity/42-pillar-cutscene); the first placeholder rift
+strips, which were single-sided and invisible from the ground, are gone with their material.
 
 ## Tests
 
-`StoryShotPlanTests`, `StoryCameraModeTests`, `StoryCameraReleaseTests`, `OneShotStageTrackerTests` (pure, in
+`StoryShotPlanTests`, `StoryCameraModeTests`, `StoryCameraReleaseTests` (including `WaitsForStages`),
+`StoryReleaseDeferralTests`, `OneShotStageTrackerTests` (pure, in
 `CR.Game.Story.Logic.Tests`); `StoryCameraDirectorTests` (every release path restores the blend, missing anchors, pose
-blends, pitch reset), `StoryShotCueTests`, `StoryShotPoseTests`, `StoryCameraSettingTests`,
+blends, pitch reset, a release held and let go on each stage path), `StoryCameraShakeGateTests` (the listener's gain under
+Reduced Motion), `StoryBeatCameraHoldTests` (the pillar beat end to end with the real director, cue and event, `s3`
+arriving while the `s2` prelude is still waiting), `StoryShotCueTests`, `StoryShotPoseTests`, `StoryCameraSettingTests`,
 `StoryCameraBindingsContainerTests`, `StoryBeatGateTests`, `OneShotWorldEventStageTests` (stage ordering, unfired stages
-after the end, flag only at the end, restore to the aftermath, skip, gate, hint), `StoryShotAuthoringTests`, and
+after the end, flag only at the end, restore to the aftermath, skip, gate, hint, stages bracketed on every path),
+`DialogueScreenPresenterTests` (Cancel ignored while a beat holds the gate), `StoryShotAuthoringTests`, and
 `StoryShotScenesTests`, which audits the real scenes (every cued node is a line of the real dialogue, anchors in the
 event's own scene, marks above the corridor ground, the corridor placer's dry run aborts nothing and changes nothing).
 `StorySmokeRunner` checks that the story camera is the Brain's live camera during each beat and released after it

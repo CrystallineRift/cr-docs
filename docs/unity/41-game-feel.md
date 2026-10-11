@@ -34,7 +34,7 @@ if any binding answers `CaptureAttempted`.
 | `FeedbackBinding.feelPlayerAddress`, `.intensity` | `Assets/CR/Core/Feedback/` | Which Feel prefab a binding plays, and how strongly (0 to 2, default 1) |
 | `CrFeelPlayerInfo` | root of every Feel prefab | Declares the prefab's `FeelMotionClass` so the settings gate knows what to remove |
 | `FeedbackDirector` + `FeelPlayerPool` | `Assets/CR/Core/Feedback/` | Preloads each player once, keeps one instance under the director, plays it at the binding's anchor. Every Feel playback goes through it (that is how the settings gate reaches it); it never touches Feel's process-wide `GlobalMMFeedbacksActive`, so disabling it cannot silence a player that was not its own |
-| `IFeelMomentPlayer` | `Assets/CR/Core/Feedback/` | The director's direct-play door for a cutscene beat: `PlayAsync("feel/...", position, intensity)`, same pool and same gate, no event binding |
+| `IFeelMomentPlayer` | `Assets/CR/Core/Feedback/` | The director's direct-play door for a cutscene beat: `PlayAsync("feel/...", position, intensity)`, same pool and same gate, no event binding. `PreloadAsync(address)` loads the prefab and builds its pooled player ahead of the first play, so a beat that knows its burst is coming (the pillar's 1.5 s charge, `StoryMomentPreload`) starts it on the frame it asks. The load runs on the director's own token: a caller walking away (a skipped beat) cannot cancel it under a play that shares it. Never plays, never throws; a moment that cannot load is logged here and once more when it is played |
 | `IFeedbackIntensityAdapter` | `CR.Core.Feedback.Logic` (engine-free) | Turns what an event carried into an intensity multiplier. First: `HpChangedIntensityAdapter` |
 | `IFeelSettings` / `FeelSettingsStore` | `CR.Core.Feedback.Logic` | The player's Reduced Motion, Screen Shake and Rumble. Persisted by `GameDataFeelSettingsPersistence` |
 | `HapticsResponder` | `Assets/CR/Game/Feedback/` | The only owner of the rumble motors (Nice Vibrations gamepad support) |
@@ -180,9 +180,13 @@ keep those stops apart.
   it onto `ActionOutcome` (as `TypeEffectiveness`, and `IsCritical` once a crit mechanic exists), the REST DTO passes both
   through; then the client raises `SuperEffectiveHit` / `CriticalHit` from the outcome. The client must not derive either
   from HP numbers.
-* **The pillar burst** is authored by the pillar cutscene lane and played from the cutscene's second stage. Give its root
-  a `CrFeelPlayerInfo` (`CameraMotion`) and play it through `IFeelMomentPlayer.PlayAsync`, so it shares the pool and the
-  Reduced Motion / Screen Shake gate.
+* **The pillar burst** is done: the cutscene's second stage plays two moments through `IFeelMomentPlayer` (`PillarBurstFeel`),
+  and `StoryMomentPreload` warms both with `PreloadAsync` while the 1.5 s charge builds. `feel/pillar-shatter` is the camera
+  impulse and the white-violet flash, declared `CameraMotion` (Reduced Motion removes it, Screen Shake scales it, and a Screen
+  Shake of Off takes the flash with the shake, because a moment has one class); `feel/pillar-boom` is the low boom, declared
+  `Cosmetic`, a moment of its own because the settings promise that sound stays under Reduced Motion. The story reads no
+  setting for them; the director is the one gate. Built by `PillarShatterMomentBuilder` in its own asmdef under
+  `Assets/CR/Core/Feedback/Story/Editor/`. See [Pillar Cutscene](?page=unity/42-pillar-cutscene).
 * **Feel's demo folders** (about 340 MB, compiled into the runtime assembly through asmrefs) are still in `Assets/Feel`.
 
 ## Tests
@@ -195,4 +199,5 @@ keep those stops apart.
 | `GameFeelBindingsContainerTests` | Zenject resolves the Feel bindings exactly as the installer binds them |
 | `CaptureThrowVerdictTests`, `CaptureThrowWatcherTests` | Which outcome is the player's own throw, and that only the outcome cues the wobble and the broke-free cue (a refused throw cues neither; the throw itself cues nothing) |
 | `BattleCoordinatorActionSeamTests` | `PlayStepsAsync` announces each step before presenting it and resolves it after, so the wobble leads the catch and the miss |
-| `FeedbackDirectorPlayModeTests` | A raised event plays its Feel player exactly once; Reduced Motion and Screen Shake gates; payload scaling; a disabled director plays nothing but leaves Feel's global switch and other players alone; direct plays; and the real authored prefabs through the real director (hit stop holds time and lets go, the flash lights and goes dark, the wobble asks for three light rumble pulses) |
+| `FeedbackDirectorPlayModeTests` | A raised event plays its Feel player exactly once; Reduced Motion and Screen Shake gates; payload scaling; a disabled director plays nothing but leaves Feel's global switch and other players alone; direct plays; `PreloadAsync` (the player is pooled ahead, a play finds it, a caller's cancel does not cancel the load); and the real authored prefabs through the real director (hit stop holds time and lets go, the flash lights and goes dark, the wobble asks for three light rumble pulses) |
+| `PillarShatterPrefabTests`, `PillarBurstFeelTests`, `StoryMomentPreloadTests`, `StoryFeelBoundaryTests` | The pillar's two moments (declared classes covered by their feedbacks, the settings decisions for each, flash ≤ 0.3 s on the only light, boom constant, addresses), the story's side of the door, and that no source outside `Assets/CR/Core/Feedback` names a Feel type |
