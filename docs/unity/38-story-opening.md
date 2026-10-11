@@ -275,6 +275,8 @@ camera was the Brain's live camera during the beat and is released after it (ski
 row in the local game-data (the server content sync soft-deletes creatures the server does not have); production content
 with `creature_gaterbear` was pushed and the offline floor rebaked on 2026-10-09.
 
+**Cleanup.** The runner creates a throwaway trainer per run (`Smoke<digits>` / `OwSmoke<digits>`, `SmokeTrainerNames`) and deletes the ones it made through `ITrainerDomainService` when the run ends, on every exit path: done, failed, or a throw (the report header reads `cleanup` until that finishes, and the terminal phase is written last). If an Editor crash or an older run left some behind, `unity run --command cr_smoke_cleanup` removes them from the local `playerData.bytes`. It matches only the `Smoke<digits>` / `OwSmoke<digits>` shape, so a trainer named "Smokey" is safe; it is direct SQL because it runs in edit mode with no container.
+
 Its model is a placeholder: `creatures/gaterbear` is a scaled (1.8x), olive-tinted Prefab Variant of the Wolf Pup,
 built by `cr_build_gaterbear_placeholder`, with a portrait baked from it at `icons/creatures/creature_gaterbear`. Before
 that the definition pointed at Dragon Fire's prefab and icon, so the wagon fight showed a dragon. Changing a

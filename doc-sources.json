@@ -308,7 +308,6 @@
         "Assets/CR/Game/World/Behaviours/NpcInteractionRouting.cs",
         "Assets/CR/Game/World/Behaviours/NpcInteractionRoute.cs",
         "Assets/CR/Game/World/Behaviours/NpcTrainerBarkPolicy.cs",
-        "Assets/CR/Game/World/Behaviours/DialogueBackend.cs",
         "Assets/CR/Npcs/Gift/**/*.cs"
       ]
     },
@@ -1015,23 +1014,6 @@
       ]
     },
     "description": "Battle DB tables (battle with active creature IDs, mission_state, guaranteed_capture_ready, battle_round, battle_round_input, battle_action_log), persistent HP/conditions on generated_creature_current_stats + generated_creature_status_conditions, IBattleRepository, IGeneratedCreatureRepository, BattleDomainService, BattleHttpDomainAdapter, REST endpoints, DI wiring, ability progression, animation_key + VFX/SFX keys on abilities; trainer battles (battle_type Wild/Trainer, minted battle trainer via npcs.battle_trainer_id, run refused without turn cost, heal-on-start, 1.5x XP / 2x currency, TrainerBattleAIDomainService swap→heal→attack, opponent_content_key M8017, M10020 Meadow demo trainer); elemental reactions as authored content (elemental_reaction table M12006, IElementalReactionRepository, /api/v1/elemental-reactions, resolver injection + ActionOutcome.ReactionLogLine) and the versioned elemental_damage matrix (/api/v1/elemental-damage, active-version pointer honoured with a has-rows fallback, M12007 Radiant self-multiplier fix + DECIMAL(4,2) widening); server-tracked battle missions (#1 C2) and the capture-mission pool (#7, M20001) — see backend/26-capture-missions"
-  },
-  "unity/11-dialogue-integration": {
-    "docPath": "docs/unity/11-dialogue-integration.md",
-    "repos": {
-      "cr-api": [],
-      "cr-data": [
-        "Assets/CR/Dialogue/Interface/IDialogueHandler.cs",
-        "Assets/CR/Dialogue/Implementation/PixelCrushersDialogueHandler.cs",
-        "Assets/CR/Quests/Dialogue/QuestDialogueBridge.cs",
-        "Assets/CR/Game/World/Behaviours/NpcDialogueBehaviour.cs",
-        "Assets/CR/Game/World/Behaviours/NpcInteractionBehaviour.cs",
-        "Assets/CR/Core/Data/Registry/Definitions/QuestDefinition.cs",
-        "Assets/CR/Core/Data/Editor/QuestDefinitionEditor.cs",
-        "Assets/CR/Core/DI/LocalDevGameInstaller.cs"
-      ]
-    },
-    "description": "LEGACY: Dialogue System abstraction: IDialogueHandler interface, PixelCrushersDialogueHandler MonoBehaviour, QuestDialogueBridge, NpcDialogueBehaviour interact-driven conversation start (replaces ProximitySelector use-key), conversation dropdown in QuestObjectiveDefinition editor, abort-detection flag pattern; conversationTitle/conversationId fields removed from QuestObjectiveDefinition, superseded by the CR dialogue system (unity/31, unity/32) for new content"
   },
   "unity/12-scriptable-objects": {
     "docPath": "docs/unity/12-scriptable-objects.md",
@@ -1809,7 +1791,6 @@
         "Assets/CR/Game/World/Behaviours/NpcInteractionBehaviour.cs",
         "Assets/CR/Game/World/Behaviours/NpcInteractionRouting.cs",
         "Assets/CR/Game/World/Behaviours/NpcTrainerBarkPolicy.cs",
-        "Assets/CR/Game/World/Behaviours/DialogueBackend.cs",
         "Assets/CR/Game/World/Behaviours/NpcInteractionRoute.cs",
         "Assets/CR/Tests/Editor/DialogueCoreLayeringTests.cs",
         "Assets/CR/UI/Logic/DialogueLineReveal.cs",

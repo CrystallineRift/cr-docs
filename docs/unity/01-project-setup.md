@@ -283,6 +283,7 @@ each still runs headlessly, which is how they are usually driven anyway:
 | Wire Area Audio | `unity run --command cr_wire_area_audio` |
 | Restore Asset Store Packages | `unity run --command cr_assets_restore` |
 | Author Demo Trainer (Meadow Scout) | `unity run --command cr_author_demo_trainer` |
+| Delete leftover smoke-run trainers | `unity run --command cr_smoke_cleanup` |
 | Fix LOD / Prop / Trunk Colliders | `cr_fix_lod_colliders`, `cr_fix_prop_colliders`, `cr_fix_trunk_colliders` |
 | Wire Pickup Visual | `unity run --command cr_wire_pickup_visual` |
 

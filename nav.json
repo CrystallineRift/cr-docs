@@ -251,11 +251,6 @@
   },
   {
     "section": "Unity",
-    "title": "Dialogue System Integration (Legacy)",
-    "path": "unity/11-dialogue-integration"
-  },
-  {
-    "section": "Unity",
     "title": "Scriptable Objects",
     "path": "unity/12-scriptable-objects"
   },

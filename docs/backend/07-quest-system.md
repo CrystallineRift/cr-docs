@@ -577,7 +577,7 @@ that was not already active for the trainer when the session started — regardl
 active:
 
 - auto-granted on trainer select (`QuestGranterBehaviour` → `AcceptQuestAsync`)
-- accepted from a dialogue node (`QuestDialogueBridge.HandleQuestAccepted` → `AcceptQuestAsync`)
+- accepted from a dialogue node (the `quest.accept` action → `AcceptQuestAsync`)
 - discovered purely server-side on a later sync (`RefreshActiveQuestsAsync`, e.g. opening the
   Quests tab after the server granted something the client never requested)
 
@@ -620,8 +620,7 @@ both sides of the seam:
 - **Client:** `IQuestService.AcceptQuestAsync(string questContentKey)` is the only accept. Every
   caller already holds the key — `QuestGranterBehaviour` (the SO's `contentKey`), `QuestAutoGranter`
   (the server's available list), `QuestAcceptActionHandler` (the dialogue arg), `PickupBehaviour`
-  (the reward's `ReferenceKey`). The legacy Lua hook (`QuestDialogueBridge`) resolves its UUID to a
-  template first. `QuestOnlineOfflineRepository.AcceptQuestAsync` sends the key online and hands the
+  (the reward's `ReferenceKey`). `QuestOnlineOfflineRepository.AcceptQuestAsync` sends the key online and hands the
   same key to the local `QuestDomainService` offline — the same boundary, the same code.
 - **Reads:** an online instance names the *server's* template id. When the local content has no row
   under that id, `QuestOnlineOfflineRepository.GetQuestTemplateAsync` answers from the server via

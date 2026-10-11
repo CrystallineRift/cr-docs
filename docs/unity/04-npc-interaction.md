@@ -250,52 +250,39 @@ Any scene-level UI (e.g., battle screen controller) subscribes to `OnBattleStart
 
 ## Dialogue NPCs: NpcDialogueBehaviour
 
-`NpcDialogueBehaviour` is the dialogue marker sub-behaviour. It wraps the Pixel Crushers
-`DialogueSystemTrigger` on the same GameObject (configured with trigger = **On Use**) and
-exposes two members to the interaction system:
+`NpcDialogueBehaviour` is the dialogue marker sub-behaviour. It looks up the CR-authored dialogue
+for the NPC's content key (see [Dialogue System](?page=unity/31-dialogue-system)) and exposes two
+members to the interaction system:
 
-- `HasConversation` — true when a conversation is assigned and none is currently running
-  (guarded by the shared `isInConversation` BoolVariable set by `DialogueStateBridge`)
-- `StartConversation(Transform actor)` — forwards to `DialogueSystemTrigger.OnUse(actor)`,
-  which checks the trigger's accepted tags/conditions against the player transform
+- `HasConversation` — true when the NPC has a dialogue and none is currently running
+  (`DialogueService.IsActive` is false)
+- `StartConversation(...)` — starts the NPC's dialogue through `DialogueService`, off the NPC's own
+  `destroyCancellationToken`
 
 The dialogue branch is the **lowest-priority** dispatch in `NpcInteractionBehaviour`
 (after grant, trainer battle, and merchant). It does not call
-`QuestManager.OnNpcInteracted` — `QuestDialogueBridge` records that when the conversation
-completes, so triggering would double-count.
+`QuestManager.OnNpcInteracted` — the dialogue's `quest.recordTalk` action records that, so
+triggering here would double-count.
 
-> **Do not use the Pixel Crushers `ProximitySelector`/`Selector` use-key on the player.**
-> It polls its own raw key globally and fires whichever `Usable` is in range, even while
-> the player is interacting with a different NPC. Disable or remove those components;
-> all interaction flows through the single `Player/Interact` input action.
+Setup: add `NpcDialogueBehaviour` + `NpcInteractionBehaviour` to the NPC (the interaction behaviour
+injects a dialogue behaviour itself if the prefab lacks one). All interaction flows through the
+single `Player/Interact` input action. Whether the NPC talks is data: a dialogue row for its content
+key. `HasCrDialogue` is **computed** on every access, never cached at init time, because a player can
+press Interact before async NPC init has finished.
 
-Setup: add `DialogueSystemTrigger` (On Use, conversation assigned) + `NpcDialogueBehaviour`
-(assign the shared `isInConversation` BoolVariable) + `NpcInteractionBehaviour` to the NPC.
-See [Dialogue Integration](?page=unity/11-dialogue-integration) for the conversation/quest
-bridge details.
-
-### Two dialogue backends and the routing table
-
-`NpcDialogueBehaviour` can drive a conversation through either of two backends
-(`DialogueBackend`): the legacy Pixel Crushers `DialogueSystemTrigger` (`Plugin`), or a CR-authored
-dialogue document (`Cr`, see [Dialogue System](?page=unity/31-dialogue-system)). `Backend` is
-**computed** on every access — `Cr` if a CR dialogue was found for this NPC's content key during
-`InitializeAsync`, else `Plugin` if a trigger is configured, else `None` — never cached at init time,
-because a player can press Interact before async NPC init has finished.
-
-The full dispatch flow above (grant → battle → market/merchant → dialogue) is still current, but the
-"dialogue" and "battle" branches now fan out further once a CR backend is involved.
+The dispatch flow above (grant → battle → market/merchant → dialogue) fans out further on the
+"dialogue" and "battle" branches.
 `NpcInteractionRouting.Decide` (`Assets/CR/Game/World/Behaviours/NpcInteractionRouting.cs`) is the
 pure decision table `NpcInteractionBehaviour` actually calls:
 
 | Route | When |
 |---|---|
 | `GiveCreature` | Always wins if a creature is pending. |
-| `IgnoredConversationBusy` | Backend is `Cr` and a conversation for this NPC is already running/starting — the press is swallowed and nothing is recorded. |
-| `TrainerBarkCr` / `TrainerBarkPlugin` | Can battle and a bark conversation is configured — the bark plays first; the battle starts only if it resolves to `Completed` (or the NPC turns out to have no bark at all). |
+| `IgnoredConversationBusy` | The NPC has a dialogue and a conversation for this NPC is already running/starting — the press is swallowed and nothing is recorded. |
+| `TrainerBarkCr` | Can battle and a bark conversation is configured — the bark plays first; the battle starts only if it resolves to `Completed` (or the NPC turns out to have no bark at all). |
 | `TrainerBattleNow` | Can battle, no bark to play. |
 | `Market` / `Merchant` | As before. |
-| `DialogueCr` / `DialoguePlugin` / `DialoguePluginBlocked` | Plain conversation, routed by backend; `DialoguePluginBlocked` is a configured Plugin trigger with no resolvable player transform. |
+| `DialogueCr` | Plain conversation. |
 | `None` | Nothing to do — the press still counts as a TalkToNpc interaction. |
 
 `NpcInteractionRouting.RecordsTalkProgress(route)` says whether `NpcInteractionBehaviour` itself
@@ -415,11 +402,9 @@ the same physical button.
 
 ## Talk progress is an intent
 
-A press that counts as talking (see `NpcInteractionRouting.RecordsTalkProgress`; conversation routes — including
-a plugin trainer bark — leave it to the conversation) calls `QuestManager.TalkToNpcAsync(contentKey)`, which goes
-through `NpcTalkOnlineOfflineService`: online the talk route, offline the DLL `NpcTalkService`. The Pixel
-Crushers bridge sends the actor's `content_key` field only — an actor without one sends nothing (a Warning names
-the fix). The server counts one talk per NPC per quest; the client never counts it.
+A press that counts as talking (see `NpcInteractionRouting.RecordsTalkProgress`; conversation routes leave it to the
+conversation's `quest.recordTalk` action) calls `QuestManager.TalkToNpcAsync(contentKey)`, which goes
+through `NpcTalkOnlineOfflineService`: online the talk route, offline the DLL `NpcTalkService`. The server counts one talk per NPC per quest; the client never counts it.
 
 ## Related Pages
 
