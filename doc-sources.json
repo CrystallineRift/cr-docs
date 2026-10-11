@@ -2420,18 +2420,15 @@
     "docPath": "docs/unity/43-roaming-encounters.md",
     "repos": {
       "cr-api": [
-        "Game/CR.Game.Data.Migration/*AppConfig*.cs",
-        "Game/**/AppConfig*.cs",
-        "Game/CR.Game.Model.REST/**/AppConfig*.cs",
-        "Game/CR.Game.Service.REST/Endpoints/*AppConfig*.cs",
+        "Game/**/*AppConfig*.cs",
         "Spawner/**/*Population*.cs",
         "Spawner/**/SpawnClaim*.cs",
         "Spawner/**/ISpawnClaim*.cs",
         "Spawner/CR.Spawner.Data.Migration/M5020*.cs",
         "Spawner/**/CreatureSpawnDomainService.cs",
-        "Spawner/**/SeededRandom*.cs",
-        "Battle/**/BattleEncounterDomainService.cs",
-        "Battle/**/EncounterIntent.cs"
+        "Spawner/**/SeededSpawnRandomSource.cs",
+        "Npcs/**/BattleEncounterDomainService.cs",
+        "Npcs/**/EncounterIntent.cs"
       ],
       "cr-data": [
         "Assets/CR/Game/World/Behaviours/RoamingSpawnerBehaviour.cs",
@@ -2453,5 +2450,22 @@
       ]
     },
     "description": "Roaming encounters: app_config.roaming_spawners flag + admin routes + version-check field, deterministic window/bucket population (fnv1a64+splitmix64), spawn_claim and any-contact claims, population endpoint, EncounterIntent bucket/slot and its 422/409 errors, client RoamingSpawnerBehaviour/WildCreatureBehaviour/RoamWalker/animator builder, culling and cap, offline and Editor override, Studio Game Config page"
+  },
+  "unity/44-ahksun-companion": {
+    "docPath": "docs/unity/44-ahksun-companion.md",
+    "repos": {
+      "cr-data": [
+        "Assets/CR/Game/Story/CompanionShardBehaviour.cs",
+        "Assets/CR/Game/Story/ICompanionAnchor.cs",
+        "Assets/CR/Game/Story/BarkAnchorOffset.cs",
+        "Assets/CR/Game/Story/WorldBarkView.cs",
+        "Assets/CR/Game/Story/ProximityBark.cs",
+        "Assets/CR/Game/Story/Editor/AhksunShardPrefabBuilder.cs",
+        "Assets/CR/Game/World/Logic/Companion*.cs",
+        "Assets/CR/Tests/Editor/CompanionShardBehaviourTests.cs",
+        "Assets/CR/Tests/Editor/DialogueOptionButtonSizingTests.cs"
+      ]
+    },
+    "description": "Ahksun companion shard (CompanionShardBehaviour, follow math, hide rules), shard-anchored barks (ICompanionAnchor, BarkAnchorOffset), dialogue option button sizing"
   }
 }

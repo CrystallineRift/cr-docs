@@ -179,6 +179,16 @@ Feedback tuning composed by AI: the numbers that decide how a hit, a faint, a ca
 | UI text: System, Game rows "Reduced Motion" (hint "Removes screen shake and hit stop, and softens light flashes. Sound and rumble stay."), "Screen Shake" with choices "100%" / "50%" / "Off", "Rumble" | System tab | `cr-api-unity/Assets/CR/UI/Resources/PlayerMenuWindow.uxml` (`reduced-motion-*`, `screen-shake-*`, `rumble-*`), `Assets/CR/UI/Text/SettingsText.cs` + language packs | 2026-10-10 | 2026-10-10 | AI draft |
 | Moment descriptions written into each prefab's `CrFeelPlayerInfo` note (e.g. "A held beat and a golden flash at the moment of the catch.") | Feedback Bindings window | the `Note` strings in `FeelMoments.cs` | 2026-10-10 | 2026-10-10 | AI draft |
 
+## Roaming encounters (cr-api-unity `feature/roaming-encounters`, 2026-10-11)
+
+Cosmetic and tooling copy composed by AI; none of it played yet. How the system works: [Roaming Encounters](?page=unity/43-roaming-encounters).
+
+| Item (what was generated) | Where it's used | Where to update it | Created | Updated | Status |
+|---|---|---|---|---|---|
+| `feel/wild-contact` moment (`Wild_Contact`): pale-green to warm-white flash (peak 3, range 4 m, 0.20 s decay) 1.8 m above the creature plus a light rumble tick; cosmetic class; note text "A short pale-green flash and a light tick when the Seeker touches a wild creature roaming the world..." | The instant the Seeker touches a roaming wild creature, before the battle is asked for | `cr-api-unity/Assets/CR/Core/Feedback/Editor/FeelMoments.cs` (`WildContact`) then `CR -> Feedback -> Rebuild Feel Moments (overwrite)`; prefab `Assets/CR/Content/Feel/Wild_Contact.prefab` | 2026-10-11 | 2026-10-11 | AI draft |
+| Studio Game Config help copy: the "Roaming spawners (override)" popup tooltip ("Inherit follows the server (online) or the local app_config (offline); On/Off forces it on this machine. Not committed; player builds ignore it."), the reset-button tooltip and the status notes | Studio Configuration panel; cr-admin-web System, Game Config page | `cr-api-unity/Assets/CR/Core/Data/Editor/StudioConfigurationPanel.cs`; cr-admin-web `src/pages/system/GameConfigPage.tsx` | 2026-10-11 | 2026-10-11 | AI draft |
+| Roam tuning numbers: walk 1.2 m/s, pause 2 to 6 s, slope limit 35 degrees, contact sphere 1.2 m, 3 s post-battle grace, awareness radius + 20 m, cull radius + 60 m, cap 12 models, 60 s re-ask debounce, `roamRadius` 15 m | Roaming creature behaviour | `RoamWalker.cs`, `WildCreatureBehaviour.cs`, `RoamingSpawnerBehaviour.cs`, `RoamingBudget`/`RoamingAsks`; `roamRadius` on the `CR_EncounterZone` prefab | 2026-10-11 | 2026-10-11 | AI draft |
+
 ## Earlier content — provenance audit pending
 
 Content created before this ledger existed. Some of it was drafted by AI in earlier sessions; each item needs its origin confirmed and then a row above (or removal from this list if human-made).

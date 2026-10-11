@@ -2,7 +2,7 @@
 
 One admin switch turns every spawner from **Ambush** to **Roaming**. Ambush (flag off, the default) is the old behaviour: an invisible trigger, a 2 to 5 s delay, and the server rolls the species at battle start. Roaming shows each spawner's creatures as 3D models wandering inside the spawn radius, and walking into one battles **that** creature. Flag off is exactly today's behaviour.
 
-> Status: designed and built across the cr-api, cr-api-unity and cr-admin-web lanes. Names below are **as specified; verify after merge** (class, route and migration names come from the design spec, not from merged code). Spec: `docs/superpowers/specs/2026-10-11-roaming-encounters-design.md` in cr-api-unity.
+> Status: built across the cr-api, cr-api-unity and cr-admin-web lanes (not yet merged or played). Names below match the as-built lane reports. Spec: `docs/superpowers/specs/2026-10-11-roaming-encounters-design.md` in cr-api-unity.
 
 ## Server-authoritative
 
@@ -14,14 +14,14 @@ The client sends intents only: "trainer T is at spawner S" and "trainer T touche
 
 | Where | How |
 |---|---|
-| Client, online | `roamingSpawners` field on the anonymous `GET /api/v1/version-check` response. Read at session start and again on resume from background. No separate fetch path. |
+| Client, online | `roaming_spawners` field (snake_case only) on the anonymous `GET /api/v1/version-check` response. Read at session start and at each online entry (`ConnectivityProbe`); a server flip mid-session is seen at the next one. No separate fetch path. |
 | Admin read | `GET /api/v1/admin/app-config` returns `AppConfigResponse { roamingSpawners, updatedAtUtc }` |
 | Admin write | `PUT /api/v1/admin/app-config/roaming-spawners` body `{ enabled }`, 200 with `AppConfigResponse` |
 | Policy | Both admin routes are `RequireAdmin` and listed in `RoutePolicyManifest` |
-| Offline | The `app_config` row is in the floor bake, so a bundled build carries prod's value at bake time |
-| Editor | `GameSettings.RoamingSpawnersOverride` (`Inherit`, `On`, `Off`), kept in EditorPrefs and set from the Studio configuration panel. Editor only, wins over the other sources |
+| Offline | Read from the local `app_config` row (`IAppConfigRepository`, 30 s ration, refreshed when a spawner area initialises). The row is in the floor bake, so a bundled build carries prod's value at bake time. An unreadable row means off |
+| Editor | `RoamingSpawnersOverride` (`Inherit`, `On`, `Off`) in the EditorPrefs overrides (`IGameSettingsOverrides.RoamingSpawners`), set from the Studio Configuration panel (`StudioConfigurationPanel`). It is **not** a `GameSettings` field, so the committed asset never ships it. Editor only, wins over the other sources |
 
-Client side, `IRoamingSpawnersFlag` merges those sources and raises `Changed`. The admin UI is in [Studio: Game Config](#studio-system-game-config) below.
+Client side, `IRoamingSpawnersFlag` merges those sources and raises `Changed`. The admin UI is in [Studio: System Game Config](#studio-system-game-config) below.
 
 ## Population: deterministic, nothing stored
 
@@ -70,17 +70,17 @@ The `cr-battle-start` limiter and Idempotency-Key are unchanged.
 | Piece | Role |
 |---|---|
 | `SpawnerEncounterBehaviour` (on `CR_EncounterZone`) | Flag off: untouched. Flag on: the ambush trigger is disabled and `RoamingSpawnerBehaviour` (same prefab, off by default) is enabled |
-| `RoamingSpawnerBehaviour` | Asks for the population when the player enters an awareness sphere of `radius + 20 m`; re-asks at `bucketEndsAtUtc` while inside; one request in flight per spawner; 60 s debounce (`RoamingAsks`, same shape as `MerchantStockAsks`). Spawns one `WildCreatureBehaviour` per slot at a seeded point in the disk, snapped to terrain |
+| `RoamingSpawnerBehaviour` | Asks for the population when the player enters an awareness sphere of `radius + 20 m` (`RoamingAwarenessRelay` child trigger); re-asks at `bucketEndsAtUtc` while inside; one request in flight per spawner; 60 s debounce (`RoamingAsks`, same shape as `MerchantStockAsks`). Spawns one `WildCreatureBehaviour` per slot at a seeded point in the roam disk, snapped to terrain. The disk is the encounter zone's new `roamRadius` (default 15 m), separate from the spawn radius |
 | `ISpawnerPopulationClient` | Online: the `POST` above. Offline: the same domain service on local SQLite, through the router pattern of `OnlineOfflineBattleEncounterDomainService` |
 | `WildCreatureBehaviour` | Thin MonoBehaviour (Assembly-CSharp): the model, its trigger, its animator |
 | `RoamWalker` | Pure logic in `CR.Game.World.Logic`, unit-tested: seeded waypoints inside the disk, pause 2 to 6 s, walk 1.2 m/s, turn toward the target, Y by downward raycast (the `EscortWalker` pattern), slopes over 35 degrees rejected. No NavMesh, no Malbers AI |
-| `CreatureWorldAnimatorBuilder` | Editor command. Generates `<key>_World.controller` (Idle, Walk, float `Speed`) from each Cute Series pack's `@Idle` and `@Walk Forward In Place` clips, and adds a `CreatureWorldAnimation` component (the controller reference) to each creature prefab. `BattleStager` is unchanged. The Gaterbear placeholder is idle only |
+| `CreatureWorldAnimatorBuilder` | Editor command. Generates `<key>_World.controller` (Idle, Walk, float `Speed`) from each Cute Series pack's `@Idle` and `@Walk Forward In Place` clips, and adds a `CreatureWorldAnimation` component (the controller reference) to each creature prefab. `BattleStager` is unchanged. The builder falls back to Move, Slither, Fly, Roll or Run Forward In Place when a pack has no Walk clip. The Gaterbear placeholder is a Wolf Pup variant and walks with the Wolf Pup clips |
 
 The model is loaded with `IGameAssetLoader.LoadAssetByKeyAsync<GameObject>("creatures/<species>")`, the same key `BattleStager` uses. `WildCreatureBehaviour` swaps the Animator controller at spawn.
 
 ### Culling and cap
 
-Models live only while the spawner's cell is Active (`IWorldStreamer.CellStateChanged`) **and** the player is within `radius + 60 m`. Global cap of 12 models; the nearest spawners win. Population is re-asked on return and never cached across cells.
+Models live only while the spawner's cell is Active (the zone is enabled only while its cell is Active, so no streamer subscription is needed) **and** the player is within `radius + 60 m`. Global cap of 12 models; the nearest spawners win. Population is re-asked on return and never cached across cells.
 
 ### Contact
 
@@ -101,13 +101,13 @@ Same boundary, same code: the router calls the cr-api domain services against th
 
 Terrain-only wandering can walk into props (a SphereCast follow-up is noted). Out of scope: per-spawner modes, creatures that notice, chase or flee, shared populations, nameplates, and the creature surviving a flee.
 
-## Studio: System -> Game Config
+## Studio: System Game Config
 
 Admin only. cr-admin-web page `src/pages/system/GameConfigPage.tsx` (resource `src/resources/system-game-config/page.tsx`, hook `src/api/hooks/useAppConfig.ts`), under the System group of the nav. It shows a **Roaming spawners** checkbox with the last-updated time. Toggling is an optimistic TanStack mutation against `PUT /api/v1/admin/app-config/roaming-spawners`; a failure rolls the checkbox back and shows an error toast. A non-admin gets 403 and does not see the page. Deploy cr-api first, then the web Studio. Players pick the change up at their next session start or resume.
 
 ## Tests
 
-API: seeded-roll determinism and Ambush-odds equality (both paths), population (flag off, claimed slots omitted), claim PK and purge, `EncounterIntent` validation errors, route-policy manifest. Unity: `RoamWalker` (pure), flag precedence incl. Editor override, population client router online/offline, `SpawnerEncounterBehaviour` switching, culling cap. Web: Vitest + msw (read, toggle, 403 gating), `nav.test.ts` count 33 to 34.
+API: seeded-roll determinism and Ambush-odds equality (both paths), population (flag off, claimed slots omitted), claim PK and purge, `EncounterIntent` validation errors, route-policy manifest. Unity: `RoamWalker` and `SplitMix64` (pure), flag precedence incl. Editor override, population client router online/offline, `SpawnerEncounterBehaviour` switching, culling cap. Web: Vitest + msw (read, toggle, 403 gating), `nav.test.ts` count 33 to 34.
 
 ## Not yet checked in play
 
