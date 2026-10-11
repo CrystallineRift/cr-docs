@@ -149,6 +149,13 @@ out.
 The source prefab is unpacked completely rather than kept as a variant, so a CR creature never
 inherits from a vendor prefab that a pack reimport can change or delete.
 
+A creature with no model of its own can be a placeholder built from one the project already owns. `cr_build_gaterbear_placeholder`
+is that for the gaterbear: a Prefab Variant of the CR `wolfpup.prefab` (a variant of a CR prefab, not of the vendor's, so
+the rule above still holds) at 1.8x scale with a tinted copy of the wolf's material, made Addressable at `creatures/gaterbear`,
+with its portrait baked through `cr_bake_portraits` and the definition pointed at both. It is safe to re-run after tuning the tint or
+scale. Replacing it with a real model means overwriting the prefab at the same address and re-baking the portrait. Every placeholder
+like this has a row in the [AI content ledger](?page=content/01-ai-content-ledger).
+
 Push the result with `cr_sync_creatures` (the same call Crystalline Rift Studio's per-row Push makes), then
 re-bake the offline floor:
 

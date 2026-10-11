@@ -451,8 +451,8 @@ foreach (var key in _registry.CreatureKeys)
 | Method | HTTP call | Notes |
 |--------|-----------|-------|
 | `SyncCreature(def)` | `PUT /api/v1/creatures/by-content-key/{contentKey}` | Pushes all base stat fields |
-| `SyncSpawner(def)` | `PUT /api/v1/spawners/by-content-key/{contentKey}` | Pushes spawner metadata + `battleArenaKey` only |
-| `SyncSpawnerFull(def)` | `POST /api/v1/spawners/sync-config` | Pushes metadata **and** pools + templates atomically — this is what **Push All** uses for spawners |
+| `SyncSpawner(def)` | `PUT /api/v1/spawners/by-content-key/{contentKey}` | Pushes spawner metadata + `battleArenaKey` only. Nothing calls it. The PUT writes exactly what it is sent, so a blank `battleArenaKey` (sent as null) or an empty `description` clears the server's value — unlike Push All below |
+| `SyncSpawnerFull(def)` | `POST /api/v1/spawners/sync-config` | Pushes metadata **and** pools + templates atomically — this is what **Push All** uses for spawners. The body carries the asset's `description` and `battleArenaKey` too, trimmed and sent as null when blank (`BuildSpawnerSyncConfigBody`): the route reads null as *keep the server's value*, so Push All never blanks what a web edit wrote |
 | `SyncNpc(def)` | `PUT /api/v1/npc/content-registry`, then (no gift authored) `DELETE /api/v1/npc/content-registry/{contentKey}/gift-creature` | Upserts the NPC content-registry row (`contentKey`, `npcType`, `itemSpawnerContentKey`, `giftTemplateCreatureContentKey`). It sends no `isRematchable`, and no longer needs to: the server's field is nullable, so an omitted flag is *preserved* rather than reset — an NPC-tab push can no longer switch a trainer's rematch off. A null gift on the PUT also means *keep*, so when the asset authors **no** gift creature the push follows up with the idempotent gift `DELETE` (`NpcGiftClearUrl`) — clearing the field in the Studio clears it on the server. Pull fills the field back from the server's gift id (mapped to a creature key through the server creature list), so Pull → Push round-trips a gift instead of deleting it. A server row with **no** gift keeps the authored key, the same rule as `itemSpawnerContentKey` (`SyncFieldMerge.PreferServerUnlessBlank`), so a pull never blanks a gift that was authored but not yet pushed; an id that resolves to no creature also leaves the key and ends Pull with a warning. **Pushing an NPC whose asset authors no gift clears any gift set elsewhere (e.g. in the web Studio)** — run Pull first so the asset picks it up |
 | `SyncTrainerBattle(def)` | five calls, below | Pushes a `TrainerBattleDefinition`'s team, its cached-team reset, the trainer's identity and its battle-item loadout — see *A trainer battle push is five writes* |
 
@@ -773,6 +773,14 @@ whose refresh timing is `EditorMemoPolicy` (pure, 7 tests):
 
 The header's answer is recomputed from the IMGUI body rather than the editor tick, so an idle
 window in the background costs nothing.
+
+:::caution Known bug (logged 2026-10-11): Push All reads a cached asset list
+**Push All** iterates the asset list the window loaded when it opened, not a fresh scan, so a definition created
+after the window was opened (a new quest, spawner or dialogue asset, however it was registered) is **not pushed**
+until the window reloads. Close and reopen Crystalline Rift Studio (or let a domain reload re-create it) before
+pushing new assets, and check the per-row badges: a new asset with no badge was not sent. The fix is to make the
+push read through the same invalidated cache as the counts.
+:::
 
 ### Background jobs and progress
 

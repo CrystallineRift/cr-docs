@@ -215,8 +215,12 @@ The server resolves it inside `BattleTurnDomainService.SubmitTurnAsync` (online)
 offline, and the resulting `ActionOutcome` comes back through the normal turn loop — presented like
 any other step by `BattleCoordinator.PlayStepsAsync`, not by this handler. A capture attempt is
 detected client-side *before* submitting (`_itemDefinitionCache`'s `EffectType == CaptureCreature`)
-purely to fire pre-result VFX (ball arc, screen shake) and arm a one-shot listener for the "broke
-free" miss cue — the server alone still decides whether the throw lands.
+purely to echo the throw in the battle log (`CaptureAttempted`, the player's own intent; nothing that has
+to be true hangs on it) and to hand the throw to a `CaptureThrowWatcher`. The watcher cues from the
+resolved outcome only: `CaptureResolving` (the Feel wobble) ahead of the verdict when the server took
+the throw, `CaptureFailed` ("broke free") once a miss has been shown, and neither for a refused throw —
+the server alone still decides whether the throw is taken and whether it lands. A new throw replaces a
+pending one, and the battle starting or ending cancels it.
 
 ### Capture Success
 

@@ -117,6 +117,7 @@ public interface IBattleCoordinator
 | `PlayerMustSwap` | `(string trainerId)` | Player's active creature fainted but has a backup; HUD must force a swap |
 | `BattleEnded` | `(bool playerWon, string outcomeLabel)` | Show result screen |
 | `RunAttempted` | `(bool success)` | Show escape message |
+| `ActionResolving` | `(ActionOutcome outcome)` | Every resolved action, raised once per step **before** its presentation plays: the authority has decided and nothing has been shown yet. The lead-in to `ActionResolved`, for a presenter that has to cue something ahead of the verdict from the outcome itself (`CaptureThrowWatcher` raises `CaptureResolving` from it) |
 | `ActionResolved` | `(ActionOutcome outcome)` | Every resolved action, raised once per turn **after** its presentation has played. The outbound seam for battle extensions — see [Battle Extensions](?page=unity/24-battle-extensions) |
 | `MissionProgressed` | `(string missionName, int current, int threshold)` | An in-battle mission ticked forward (e.g. applying Burn); HUD shows a fading progress toast |
 | `MissionCompleted` | `(string missionName, string unlockedAbilityName)` | An in-battle mission finished and unlocked a move for the rest of the battle; HUD shows a completion banner |
@@ -148,6 +149,7 @@ StartBattleAsync
        else
            IWildBattleAIDomainService.DecideActionAsync → submit via IBattleDomainService
            IBattleDomainService.SubmitActionAsync → ActionOutcome
+    └─ RaiseActionResolving(outcome)                                              ← lead-in seam (before the beats)
     └─ await IBattlePresentationSequencer.PlayOutcomeAsync(outcome, action, ctx)   ← paced beats
     └─ RaiseActionResolved(outcome)                                               ← extension seam
     └─ if outcome.BattleEnded → RaiseBattleEnded → break
@@ -312,10 +314,11 @@ The HTTP base URL resolves through `IGameConfiguration` via `GameConfigurationKe
 | `playerCreatureSlots` / `opponentCreatureSlots` | `List<Transform>` | Optional per-side stand points for 2v2/NvN/boss; empty → the single creature position above is slot 0 |
 | `defaultBiome` | `BiomeType` | The biome active when the arena awakens |
 | `biomes` | `BiomeEnvironment[]` | Maps each `BiomeType` to a root `GameObject` to activate/deactivate |
+| `battleOnly` | `GameObject[]` | Objects that exist only while a fight is staged here (the dressing's `[Arena Backdrop]` tube). Hidden in `Awake` and by `Deactivate`, shown by `Activate`; in the open world the arena stands in plain sight, so nothing that is not scenery shows between fights. `cr_dress_arenas` registers the backdrop; `cr_arena_battle_only` catches up older arenas; `cr_world_validate` reports an unlisted backdrop as an error. See [Area Scenes](?page=unity/22-area-scenes) |
 
 `BiomeType` enum values: `Grassland`, `Forest`, `Cave`, `Desert`, `Mountain`, `Beach`, `Swamp`, `Tundra`, `Volcanic`.
 
-`BattleArena.Activate(BiomeType? biome)` activates the arena at the given (or default) biome. `SetBiome(biome)` can be called at any time to swap active environment roots. `Deactivate()` hides all environment roots.
+`BattleArena.Activate(BiomeType? biome)` dresses the set: the given (or default) biome plus every battle-only object. `SetBiome(biome)` can be called at any time to swap active environment roots. `Deactivate()` hides all environment roots and the battle-only objects again. The coordinator remembers the arena it lit (`_activeArena`) and `DeactivateActiveArena()` (idempotent, fake-null safe: the cell can unload under a battle) runs on every way out: first under the cover in `CloseWithFadeAsync`, and in `AbortUnstagedEncounter`. `EvolutionStageDirector` stages its cutscene in the same arena with the same `Activate` / `Deactivate` pair.
 
 Use **CR > Battle > Create Placeholder Arena** (editor menu) to scaffold a new arena GameObject with all child transforms pre-wired and `arenaKey` set to `"arena_placeholder"`.
 
@@ -333,10 +336,10 @@ The battle camera is a **reactive, editor-authored Cinemachine 3 system**. `Batt
 | `BattleCameraRig` | Editor-authored prefab: one `CinemachineCamera` per `BattleCameraRole` (`Establishing`, `Action`, `Reaction`, `LowAngle`, `Hero`), a `CinemachineTargetGroup`, a `CinemachineImpulseSource`, and a `BattleCameraProfile`. Assigned to `BattleArena.cameraRig`. |
 | `BattleCameraProfile` | ScriptableObject of feel values (blend seconds, action/faint holds, orbit °/s, intro radius multiplier, shake force). Persists across Play-mode tuning; framing lives on the vCams. |
 | `BattleFormation` | Maps the live battle onto arena slot anchors (`AttackerAnchor`/`DefenderAnchor`/`AllActiveAnchors`). 1v1 today; shaped for NvN / N-v-1. |
-| `BattleCameraShakeResponder` | Decoupled shake. Reacts to `CameraCueDefender`/`HeavyHit`/`CameraCueFaint`, coalesces same-frame signals into one force-scaled impulse, fires the rig's impulse source. Reaches the active rig via the shared `BattleCameraRigContext`. |
+| `BattleCameraShakeResponder` | Decoupled shake. Reacts to `CameraCueDefender`/`HeavyHit`/`CameraCueFaint`, coalesces same-frame signals into one force-scaled impulse, fires the rig's impulse source. Reaches the active rig via the shared `BattleCameraRigContext`. The force is scaled by the player's Screen Shake setting (100 / 50 / 0 %, and 0 under Reduced Motion) through `IFeelSettings`; it stays the only thing that shakes the camera in a battle (a [Feel moment](?page=unity/41-game-feel) never does). |
 | `ScreenFader` | Full-screen white overlay (code-built top-most UGUI canvas, no prefab) that **masks the camera cut** into and out of battle. The coordinator awaits `FadeAsync(target, seconds)` around staging/`EnterBattle` and around `CloseBattle`'s teardown. |
 
-**Battle in/out transition (fade-masked cut).** Rather than easing the camera back to the player on exit, the coordinator fades to white (`~0.3s`), then switches the camera under the cover. On entry: fade to white → stage + `EnterBattle` → fade from white (the intro sweep plays as it clears). On exit: fade to white → `ExitBattle` (which now sets the Brain blend to **`Cut`** for an instant snap back to the player, restoring the overworld's saved blend a frame later) + arena teardown → fade from white onto the overworld. Applies to both wild and NPC battles.
+**Battle in/out transition (fade-masked cut).** Rather than easing the camera back to the player on exit, the coordinator fades to white (`~0.3s`), then switches the camera under the cover. On entry: fade to white → `arena.Activate()` + stage + `EnterBattle` → fade from white (the intro sweep plays as it clears). On exit (`CloseWithFadeAsync`): fade to white → `DeactivateActiveArena()` (the battle-only backdrop goes first, before anything below can throw) → `ExitBattle` (which now sets the Brain blend to **`Cut`** for an instant snap back to the player, restoring the overworld's saved blend a frame later) + `ExitArenaAsync` → `BattleClosed` → fade from white onto the overworld. Applies to both wild and NPC battles.
 
 **Beat → shot role**
 
@@ -393,7 +396,7 @@ Lookups go `GeneratedCreature` (via `IGeneratedCreatureRepository.GetCreature`) 
 
 `BattleCoordinator` inspects the result after `EnterArenaAsync` and logs an Error + raises `BattleEvents.StagingFailed("opponent visual" | "player visual")` when a creatureId was passed in but no visual spawned. The battle still proceeds.
 
-`BattleCoordinator.EndBattle` calls `_stager.ExitArenaAsync` alongside `_cameraController.ExitBattle()`, so the same teardown path covers both player teleport restore and creature visual cleanup.
+`BattleCoordinator.CloseWithFadeAsync` (reached from `CloseBattle`) calls `_stager.ExitArenaAsync` alongside `_cameraController.ExitBattle()`, after `DeactivateActiveArena()`, so the same teardown path covers the arena's battle-only dressing, the player teleport restore and the creature visual cleanup.
 
 ## `SpawnerEncounterBehaviour`
 
@@ -919,7 +922,8 @@ finally
 ```
 
 `AbortUnstagedEncounter` is deliberately quiet — the player never left the overworld, so the correct
-outcome is to leave them there. It cancels any pending action source, sets the ended/closed flags so
+outcome is to leave them there. It cancels any pending action source, puts back any arena that was lit
+(`DeactivateActiveArena()`: nothing should be, but whatever is goes back), sets the ended/closed flags so
 a later `CloseBattle` cannot manufacture a `force_close` result, and raises
 `BattleEvents.EncounterAborted` for anything that wants to react.
 
@@ -998,9 +1002,11 @@ works because **the database pool is derived data** — the asset is the source,
 at world init. A pool that lost its templates (a bad sync, a soft-delete sweep) is rebuilt from the
 asset; soft-deleted rows are invisible to the read path, so the sync writes fresh ones.
 
-It cannot fix a definition that is itself wrong. If the asset holds templates with no creature key,
-the sync resolves nothing, the prune guard declines to delete anything, and `TryRestoreAsync` returns
-false — logged as an error, because the content needs a person and no retry will change that.
+It cannot fix a definition that is itself wrong. If the asset holds templates with no creature key, or
+no templates at all, the writer refuses it (it throws, and the tables are left as they were) and
+`TryRestoreAsync` returns false — logged as an error naming the spawner, because the content needs a
+person and no retry will change that. Online, a server config the writer refuses is a failed pull: recovery
+warns and falls back to the authored definition.
 
 `EnsureReadyAsync` runs the same check **when the zone activates**, so the common case is repaired
 before the player ever walks into the grass, and an unfixable zone reports itself at world init

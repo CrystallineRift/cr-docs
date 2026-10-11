@@ -155,7 +155,6 @@ dirties whole scopes. Opening a window, switching tabs, entering an area or savi
 | TeamHealed | Creature |
 | PickupCollected | Items, Trainer, Creature, CreatureSlots, InventoryList, ItemInventoryList, ActiveQuests, Stats, TrainerProgress, AchievementBoard |
 | MerchantPurchase / MerchantSell | Items, Trainer, MerchantStock, Stats |
-| MerchantRestocked | MerchantStock, MerchantMultipliers, MerchantStocked |
 | QuestAccepted / QuestAbandoned | ActiveQuests |
 | QuestProgressRecorded | ActiveQuests, TrainerProgress, AchievementBoard |
 | QuestClaimed | ActiveQuests, Items, Trainer, Creature, CreatureSlots, InventoryList, ItemInventoryList, Stats, TrainerProgress, AchievementBoard |
@@ -178,7 +177,9 @@ through the same server-authority treatment as items (see the dialogue and conte
 **Call-site inventory.** Every online write raises its change; a new online write that is not in this list is a bug.
 `PlayerStateCache` itself subscribes `BattleEvents.BattleClosed` and clears everything on trainer/account change.
 `PlayerWhiteoutHandler` → TeamHealed · `PickupBehaviour` → PickupCollected · `NpcMerchantOnlineOfflineService` →
-MerchantPurchase/Sell/Restocked · `QuestOnlineOfflineRepository` → QuestAccepted/Abandoned/Claimed/ProgressRecorded ·
+MerchantPurchase/Sell (a restock the server reports invalidates only that merchant's `MerchantStock` key, not a scope;
+`MerchantRestocked` and the `MerchantStocked` once-per-session memo were deleted with merchant restock v2) ·
+`QuestOnlineOfflineRepository` → QuestAccepted/Abandoned/Claimed/ProgressRecorded ·
 `OnlineOfflineItemDomainService` + `HeldItemOnlineOfflineRepository` → ItemUsed/HeldItemChanged ·
 `EvolutionOnlineOfflineRepository` → EvolutionCommitted · `GeneratedCreatureOnlineRepository` → CreatureCaptured/Released ·
 `TrainerCreatureInventoryOnlineRepository` → CreatureMoved · `MarketManager` → MarketListed/ListingCancelled/Purchased (a purchase also reads the bought creature once, so the
@@ -232,8 +233,13 @@ the local table can be behind the server but never wrong. Each is mirrored once 
 `cache.EnsureMirroredAsync(key, reconcile)` (`PlayerStateCacheExtensions.cs`), under the scopes `CollectedPickups`,
 `CompletedQuests` (id = trainerId) and `TrainerDefeats` (id = accountId). A caller that arrives mid-reconcile waits
 for it; a failed reconcile is warned and retried on the next call; offline nothing runs; cancellation propagates. No
-`GameChange` names these scopes (`TerminalMirrorsAreNeverInvalidatedByAGameChange`) — the write path mirrors each new
-row itself — so only `Clear` (trainer or account change) reopens them. This replaced the separate `SessionReconcile`
+`GameChange` names these scopes (`TerminalMirrorsAreNeverInvalidatedByAGameChange`) — each new row is mirrored where
+it is born — so only `Clear` (trainer or account change) reopens them. For completed quests that is two places: the
+claim path writes the claimed instance, and the active-set mirror (`QuestOnlineOfflineRepository.MirrorActiveAsync`)
+reads by id any instance the server stops listing as active and mirrors what the server says, which is how a quest the
+server completed on its own (a giver quest waiting for its turn-in) enters `CompletedQuests`. `GetCompletedQuestsAsync`
+brings the active mirror current first while its scope is stale (see
+[Quest System → Why those two reads do not branch on connectivity](?page=backend/07-quest-system#why-those-two-reads-do-not-branch-on-connectivity)). This replaced the separate `SessionReconcile`
 gate, which the four callers had each owned an instance of. `AchievementUnlocks` used to be a fifth terminal-mirror
 scope; it is gone along with the online/offline achievement-unlock router (see above) — achievement state online is
 now the memoised `AchievementBoard` read, not a mirrored local table.

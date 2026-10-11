@@ -34,7 +34,7 @@ All game assets load through `IOpenWorldAssets`; the mode comes from `WorldModeS
 Hysteresis: unload only past ring radius + 32 m; Active demotes at 40 + 16 m. One load and one unload in flight at a time.
 `CellActivator` (one per cell scene) promotes (runs the cell's `IWorldInitializable`s once per visit, enables activatable
 behaviours and animators) and demotes (disables them, `CullCompletely`). A re-promotion re-runs world init, like today's
-per-load. **World init per visit:** `IWorldInitializable`s of a cell run on each promotion (merchant stock re-rolls per visit); ones on inactive objects (parked content, e.g. the demo quest-giver the corridor build parks) are skipped and logged by name, so an initializable must be active at promotion: one switched on later in the visit (a OneShotWorldEvent's `enableOnPlay`, a story beat) is not initialized until the next promotion, and nothing in the scenes does that today (`IWorldInitializable` states the contract); a trainer switch mid-promotion restarts the cell's promote with the new context. A failed load retries with backoff (1, 2, 4 s) and does not block other cells.
+per-load. **World init per visit:** `IWorldInitializable`s of a cell run on each promotion (a merchant's promotion sends no stock call: the player walking up to it does, at most once a minute per merchant, and the authority re-rolls a shelf only after a trade and its restock cooldown; see [Merchant Shop → Restocking](?page=unity/18-merchant-shop#restocking)); ones on inactive objects (parked content, e.g. the demo quest-giver the corridor build parks) are skipped and logged by name, so an initializable must be active at promotion: one switched on later in the visit (a OneShotWorldEvent's `enableOnPlay`, a story beat) is not initialized until the next promotion, and nothing in the scenes does that today (`IWorldInitializable` states the contract); a trainer switch mid-promotion restarts the cell's promote with the new context. A failed load retries with backoff (1, 2, 4 s) and does not block other cells.
 
 **Hold at edge.** If the player outruns streaming (resume, slow Deck) `WorldEdgeHold` covers the screen and gates gameplay input
 (`GameplayInputHolds`, which `PlayerInputGate` honours) while a built cell within ~4 m is not yet Active, then releases. After 5 s it
@@ -80,7 +80,7 @@ Menu `CR/World/...`; every CLI command is `cr_world_*` and takes **one string** 
 | `cr_world_migrate_area` | `"Key,x,z"` e.g. `Meadow,250,880` | Copies a legacy area scene's content into the right cell(s), offset so the area default spawn lands at world (x, z). Doors are dropped. The legacy scene is read, never saved. |
 | `cr_world_refresh_activatables` | `"c,r"` or `""` (every built cell) | Re-collects a cell's activatables (see below) and saves the cell. |
 | `cr_world_validate` | none | Objects outside their cell (+/- 2 m, looks inside migrated containers and nested gameplay placements), built cells missing from Build Settings, regions with no profile, unresolved NPC keys, ocean spawns, terrain seams > 1 mm, > 4 terrain layers (warning), corridor story objects buried > 0.5 m, corridor builder children outside their cell. Summary `E error(s), W warning(s), I info`; checks skipped for a missing provider/mask/profile set show as warnings. |
-| `cr_world_bake_proxy` | `"c,r"` | Bakes the cell's far-field proxy to `Resources/OpenWorld/Proxies/Proxy_c{c}_r{r}.prefab` via `ICellProxyBaker` (built-in fallback baker: copies of enabled renderers ≥ 8 m, one LOD level per group, shadows off, plus a `TerrainProxy` per terrain; Amplify baker later). |
+| `cr_world_bake_proxy` | `"c,r"` | Bakes the cell's far-field proxy to `Resources/OpenWorld/Proxies/Proxy_c{c}_r{r}.prefab` via `ICellProxyBaker` (built-in fallback baker: copies of enabled renderers ≥ 8 m, one LOD level per group, nothing a `BattleArena` lists as battle-only, shadows off, plus a `TerrainProxy` per terrain; Amplify baker later). |
 | `cr_world_add_lods` | `"c,r"` | Adds `LODGroup`s to the cell's large renderers (grouped; small clutter gets a cull distance); vendor LODGroups (from the prefab's source chain, variants included) are kept and counted. Idempotent: rewrites a group only when it differs from the plan and saves the cell only when it wrote one. The corridor build's `lods` step runs the same pass over its owned containers. |
 | `cr_world_audit_vendor_lods` | `"c,r[,fix]"` | Lists vendor LODGroups carrying instance overrides; `fix` reverts them and saves the cell. Run before `cr_world_add_lods`. |
 | `cr_world_build_backdrop` | none | Builds the ocean plane + mountain ring blockout prefab (`OpenWorld/WorldBackdrop`), instanced in `World.unity`; skips ring cubes over built cells and adds the `VistaGround` (land mesh of unbuilt cells near Mirandale, `M_VistaGround.mat`). |
@@ -244,7 +244,9 @@ built-cell borders that face unbuilt cells (584 today); none within 20 m of the 
 - `cr_world_audit_vendor_lods --args c,r[,fix]` lists (and with `fix` reverts) LODGroup overrides on vendor prefab instances. Run it before
   `cr_world_add_lods`. A vendor group is any LODGroup that comes from the prefab's **source chain**, so prefab variants (Remesh `BigGate`,
   whose model root has no LODGroup) are recognised; `cr_world_add_lods` skips and counts them.
-- `cr_world_bake_proxy` copies only the last LOD level of a group, skips disabled renderers (vendor collider hulls), and adds a
+- `cr_world_bake_proxy` copies only the last LOD level of a group, skips disabled renderers (vendor collider hulls) and everything a
+  `BattleArena` lists as battle-only (the arena's `[Arena Backdrop]` tube is saved active and hidden only at runtime, so the bake has to leave it
+  out itself: `BattleOnlyProxyExtensions.BattleOnlyRenderers`; see [Area Scenes](?page=unity/22-area-scenes)), and adds a
   `TerrainProxy` child per terrain: 65 × 65 mesh, skirts to y −10 on edges facing unbuilt cells, 256² colour map from the layers
   (`Resources/OpenWorld/Proxies/Terrain/ProxyTerrain_c{c}_r{r}.asset/.png/.mat`). The material is saved with URP's opaque setup already
   applied (RenderType tag, MotionVectors pass off, `_MainTex` = `_BaseMap`), so URP does not rewrite it on first play. A rebake does
@@ -276,7 +278,9 @@ See [Setting Up the World System → Tweak and rebuild the corridor](?page=guide
 In open mode `OpenWorldMapLayoutSource` replaces the legacy node layout: every region (sub-regions included; not mountain, ocean or unassigned) is shown
 with `WorldMapUnknownAreaDisplay.AllVisible` (no fog; discovery of regions deferred). `WorldMapDefinition.backgroundSprite` draws `world-map.png` in a
 child element sized to the same canvas rect as the nodes (`WorldMapLayout.BackgroundRect`), and `IWorldMapMarkerSource` places an exact player marker from
-`IOpenWorldPlayer` (refreshed on tab open, not live). See [World Map](?page=unity/35-world-map).
+`IOpenWorldPlayer` (refreshed on tab open, not live). Since v0.1.8 the definition is built with `nodeDisplay = Markers` (a 16 px marker per
+region with a decluttered name beside it), the tab fills its page and the map zooms (1 to 8, opening at 2.5× on the player) and pans;
+the pin is the region tracker's key only, never the legacy area loader's. See [World Map → The open-world map](?page=unity/35-world-map).
 
 ## Story start and migration
 

@@ -46,7 +46,7 @@ See [NPC System](?page=backend/02-npc-system) for the server side.
 | `NpcWorldBehaviour` | Resolves NPC backend identity; dispatches to sub-behaviours |
 | `NpcCreatureGrantBehaviour` | Seeds a designer-configured creature team; tracks grant state |
 | `NpcTrainerBehaviour` | Seeds creature team + item inventory; caches both; exposes `CanBattle` |
-| `NpcMerchantBehaviour` | Marks the NPC as a merchant; exposes `MerchantNpcId` |
+| `NpcMerchantBehaviour` | Marks the NPC as a merchant; exposes `MerchantNpcId`; sends the "stock this shop" intent when the player walks up (`OnPlayerApproached`), never at world init |
 | `NpcInteractionBehaviour` | Proximity + E-press dispatcher; fires `OnBattleRequested` |
 
 ## `NpcWorldBehaviour`
@@ -176,7 +176,14 @@ private async Task OnInteractAsync()
    - Grant pending → show "Press E to receive creature"
    - Can battle → show "Press E to battle"
    - Neither → no prompt
-4. Player exits trigger → `OnTriggerExit` fires → hide all prompts
+4. With something on offer, `EnterRange` subscribes Interact and shows the prompt; on a merchant it then calls
+   `NpcMerchantBehaviour.OnPlayerApproached(spawnedInside)`, the walk-up stock ask (see
+   [Merchant Shop → Restocking](?page=unity/18-merchant-shop#restocking)). An NPC with nothing on offer yet (not
+   ready, or an escort that is walking) enters range from `OnTriggerStay` once it is, which is also where a player
+   who spawned inside the sphere arrives. `spawnedInside` is true when the first time the NPC measured the player they
+   were already within reach (the NPC remembers having seen them outside: `_playerSeenOutside`); it is what lets the
+   merchant's first ask wait its random 0 to 2 s only for that player and not for one who walked up.
+5. Player exits trigger → `OnTriggerExit` fires → hide all prompts
 
 ### How the Battle Sub-Behaviour Triggers a Battle
 

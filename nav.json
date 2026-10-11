@@ -388,5 +388,25 @@
     "section": "Unity",
     "title": "Opening Story (Unity)",
     "path": "unity/38-story-opening"
+  },
+  {
+    "section": "Unity",
+    "title": "Lore Text (keyword styling and the dialogue typewriter)",
+    "path": "unity/39-lore-text"
+  },
+  {
+    "section": "Unity",
+    "title": "Story Camera (Unity)",
+    "path": "unity/40-story-camera"
+  },
+  {
+    "section": "Unity",
+    "title": "Game Feel (More Mountains Feel)",
+    "path": "unity/41-game-feel"
+  },
+  {
+    "section": "Unity",
+    "title": "Pillar Cutscene (Unity)",
+    "path": "unity/42-pillar-cutscene"
   }
 ]

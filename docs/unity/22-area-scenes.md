@@ -767,6 +767,40 @@ defect in this feature was found in an image rather than in a log. Particle syst
 edit mode, so ambient FX are absent from the shots, and the AZURE foliage shader renders its leaves
 red in batch mode — neither reflects how the scene looks in the Editor.
 
+### The backdrop is battle-only
+
+In the open world an arena stands in plain sight between fights, and the 31 m tube read as a pale green
+cylinder in the meadow. `BattleArena` therefore carries a **battle-only list** (`battleOnly`, Inspector
+header *Battle-only*): objects that exist only while a fight is staged there. `Awake` hides every entry
+(whatever the scene saved as active is put away on the first frame), `Activate` shows them with the biome,
+and `Deactivate` hides them again with the environment roots. The list is the one marker; nothing is tagged
+or matched by name at runtime. A destroyed entry (its cell unloaded) is Unity's fake null, so the loop tests
+`!= null`, never `?.`.
+
+Who dresses and undresses the set:
+
+| Caller | When |
+|---|---|
+| `BattleCoordinator` (wild and NPC paths) | `arena.Activate()` right before `EnterArenaAsync`; the arena is remembered as `_activeArena` |
+| `BattleCoordinator.CloseWithFadeAsync` | `DeactivateActiveArena()` first under the white cover, before the camera cut and `ExitArenaAsync`: the single teardown every staged battle reaches (win, defeat, flee, capture, error, force-close, whiteout) |
+| `BattleCoordinator.AbortUnstagedEncounter` | the same `DeactivateActiveArena()`: nothing should be lit, but whatever is goes back |
+| `EvolutionStageDirector` | the cutscene is staged in the same arena: `arena.Activate()` after the player is teleported, `arena.Deactivate()` in the `finally` behind the fade ([Evolution authoring](?page=unity/30-evolution-authoring)) |
+
+`DeactivateActiveArena` is idempotent and a no-op when nothing was lit.
+
+Editor side (`Assets/CR/Game/Areas/Editor/ArenaBackdropExtensions.cs`): `cr_dress_arenas` lists the backdrop it
+builds through `RegisterBackdropsAsBattleOnly` (idempotent; on a prefab instance the change is recorded as an
+override). An arena dressed before the list existed is brought up to date with
+**`cr_arena_battle_only`** (`--scenes a.unity,b.unity`, or every `World_c*_r*` cell when omitted; a scene open
+with unsaved edits is skipped). `cr_world_validate` reports an unlisted `[Arena Backdrop]` as an **error**
+("would stand in plain sight between fights"), and `World_c0_r3` (the meadow arena) was fixed that way.
+
+The far-field proxy has to know too: `cr_world_bake_proxy` reads the scene as saved, where the backdrop is
+active, and would have copied the tube into the proxy for as long as the proxy is up. `FallbackCellProxyBaker`
+leaves out every renderer on or under an object some arena in the scene lists as battle-only
+(`BattleOnlyProxyExtensions.BattleOnlyRenderers`, inactive arenas and entries included); the `c0_r3` proxy was
+rebaked. See [Open World](?page=unity/37-open-world).
+
 ## Two things that would otherwise loop or break
 
 **Doors ping-ponging.** A trigger reports an overlap every frame, and the player is placed near the
