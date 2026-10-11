@@ -274,9 +274,8 @@ and falls to an idle line only when nothing else matches — the same first-matc
   `ReturnToGiver` + no giver to `ClaimNow` — the same as `AutoOnCompletion` — specifically so a
   quest never strands its own reward behind a giver that does not exist. If a quest is meant to
   require a return trip, it must have a `giverNpcContentKey`.
-- **On the CR backend, only `quest.recordTalk` records a talk for an NPC that has a dialogue.**
-  Unlike the legacy Plugin path (where `QuestDialogueBridge` records any completed conversation
-  automatically), a CR-authored dialogue linked to an NPC records nothing on its own. A `TalkToNpc`
+- **Only `quest.recordTalk` records a talk for an NPC that has a dialogue.**
+  A CR-authored dialogue linked to an NPC records nothing on its own. A `TalkToNpc`
   objective targeting that NPC needs a reachable `quest.recordTalk` action somewhere in its
   dialogue, or the objective can never progress — with no error anywhere to say so. This is exactly
   what audit rule 6 exists to catch before it ships.

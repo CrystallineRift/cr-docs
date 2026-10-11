@@ -89,11 +89,11 @@ Defines a creature species. Base stats here feed directly into the backend's `ba
 **Instances:** `Assets/CR/Content/Defs/NPCs/`  
 **Backend sync:** Via Crystalline Rift Studio tool → `/api/v1/npcs`
 
-Defines an NPC template. The `contentKey` here is also the actor `Name` that must be set in the Pixel Crushers Dialogue System database for this NPC (see [Dialogue System Integration](./11-dialogue-integration.md)).
+Defines an NPC template. A `DialogueDefinition` links to the NPC by this `contentKey` (see [Dialogue System](?page=unity/31-dialogue-system)).
 
 | Field | Type | Purpose |
 |-------|------|---------|
-| `contentKey` | string | DB key (e.g. `"npc_elder_rowan"`) — must match Dialogue System actor name |
+| `contentKey` | string | DB key (e.g. `"npc_elder_rowan"`) — dialogues link by this key |
 | `displayNameKey` | string | Localization key (e.g. `"npc_elder_rowan_name"`) |
 | `npcType` | string | Backend NpcType enum value (`"Npc"` or `"Trainer"`) |
 
@@ -206,11 +206,7 @@ See [Quest System → Quest categories and area key](?page=backend/07-quest-syst
 | `isOptional` | bool | Yes | If true, quest can complete without this objective |
 | `sortOrder` | int | Yes | Display ordering — **also the upsert match key server-side**: see [Quest System → Objectives are upserted by sort order](?page=backend/07-quest-system#objectives-are-upserted-by-sort-order) before reordering an existing quest's objectives |
 
-> **`conversationTitle`/`conversationId` are gone.** The Dialogue System conversation binding these
-> two game-client-only fields used to provide has been removed from `QuestObjectiveDefinition`
-> entirely — see [Dialogue System Integration](?page=unity/11-dialogue-integration) (now documented
-> as the legacy path) and [Dialogue System](?page=unity/31-dialogue-system) for the CR dialogue
-> system that replaces it for new content.
+> **`conversationTitle`/`conversationId` are gone.** Quest objectives carry no dialogue binding; dialogue is authored as `DialogueDefinition` content (see [Dialogue System](?page=unity/31-dialogue-system)).
 
 **QuestObjectiveType values:** `DefeatCreature`, `DefeatAnyCreature`, `DefeatCreaturesFromList`, `DealDamageOfType`, `DealDamage`, `HealAmount`, `WinBattles`, `CaptureCreature`, `CaptureAnyCreature`, `ReachCreatureLevel`, `VisitLocation`, `TalkToNpc`, `CollectItem`, `CompleteQuest`, `DefeatTrainer`, `DefeatAnyTrainer`, `DefeatTrainersFromList`
 
@@ -593,19 +589,6 @@ Each `CreatureReaction` field (all optional):
 
 ---
 
-### Dialogue Database (`CR Dialog.asset`)
-
-**Location:** `Assets/CR/CR Dialog.asset`  
-**Backend sync:** None — plugin-native format
-
-This is the Pixel Crushers Dialogue System's own `DialogueDatabase` ScriptableObject. It stores all actors, conversations, and dialogue entries in the plugin's format. `DialogueManager` loads it at runtime; all CR systems access it through `IDialogueHandler` (see [Dialogue System Integration](./11-dialogue-integration.md)).
-
-This asset is authored in the Pixel Crushers **Dialogue Editor** window (`Tools → Pixel Crushers → Dialogue System → Dialogue Editor`), not the standard inspector.
-
-**Important:** Every NPC actor in this database must have its `Name` field set to match the NPC's `content_key`.
-
----
-
 ## Summary: What Syncs to the Backend
 
 Every row below pushes the same way: **Crystalline Rift Studio → the owning tab → ⬆ Push All** (or the global ⬆ Push All Content). Inspectors no longer carry their own sync buttons — see [One way to reach the server](08-content-registry.md#one-way-to-reach-the-server).
@@ -628,4 +611,3 @@ Every row below pushes the same way: **Crystalline Rift Studio → the owning ta
 | `CreatureAnimationProfile` | — | Client-only |
 | `CreatureReactionProfile` | — | Client-only |
 | `BattleCameraProfile` | — | Client-only |
-| `CR Dialog.asset` (DialogueDatabase) | — | Client-only (Pixel Crushers) |

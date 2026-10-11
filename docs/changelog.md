@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-11 — Pixel Crushers Dialogue System removed; NPC battle trainers flagged; smoke runner cleans up
+
+Pixel Crushers Dialogue System removed 2026-10-11. cr-api-unity `feature/strip-dialogue-system`, cr-api `fix/npc-battle-trainer-rows` (not deployed).
+
+- **Dialogue.** The CR dialogue system is the only one. `PixelCrushersDialogueHandler`, `IDialogueHandler`, `QuestDialogueBridge`, the `DialogueBackend` enum and `CR Dialog.asset` are gone; `NpcInteractionRouting` lost its plugin routes (`TrainerBarkPlugin`, `DialoguePlugin`, `DialoguePluginBlocked`); `NpcDialogueBehaviour.Backend` became `HasCrDialogue`. `DialogueStateBridge` (conversation gating) lives on its own root object. The legacy integration page is deleted. → [Dialogue System](?page=unity/31-dialogue-system)
+- **NPC trainer rows.** Minted battle trainers are flagged `trainers.is_npc` with `npc_content_key` (M4014, M8020 repair), hidden from the player trainer list, and reused on every mint instead of duplicated. → [Battle Persistence](?page=backend/09-battle-persistence)
+- **Smoke runner.** `StorySmokeRunner` deletes the trainers it creates when the run ends; `cr_smoke_cleanup` removes leftovers. → [Play-mode smoke](?page=unity/38-story-opening)
+
 ## 2026-10-11 — v0.1.8 review fixes: a failed smoke stays failed, a walk-up ask does not wait, the shop's ask is time-limited
 
 cr-api-unity `release/v0.1.8` (not deployed). Fixes to what the release review found; nothing here changes what the authority decides.
@@ -4083,7 +4091,6 @@ Dialogue scripts can now trigger quest acceptance by calling `AcceptQuest("templ
 - `PixelCrushersDialogueHandler` — registers the `AcceptQuest` Lua function in `Start()` and unregisters in `OnDestroy()`. Raises `IDialogueHandler.OnQuestAcceptedFromDialogue`.
 - `IDialogueHandler` — `event Action<string> OnQuestAcceptedFromDialogue` added.
 - `QuestDialogueBridge` — subscribes to `OnQuestAcceptedFromDialogue` and calls `QuestManager.AcceptQuestAsync(guid)`.
-- → [Dialogue Integration — Quest Acceptance](?page=unity/11-dialogue-integration#quest-acceptance-from-dialogue)
 
 ### Quest reward dispatcher
 

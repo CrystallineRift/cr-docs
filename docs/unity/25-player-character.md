@@ -65,9 +65,9 @@ relay until somebody clicks it.
 | `cr_build_player_model` | Builds `Assets/CR/Prefabs/Player/CR_Player.prefab` from the Malbers player + BoZo body. |
 | `cr_swap_player_in_scene` | Swaps the body of the player already in `Core.unity`, **in place**. |
 
-Prefer the in-scene command for the live player. The scene instance carries around a dozen CR and
-Dialogue System components the Malbers prefab has never seen — `TrainerWorldBehaviour`,
-`TrainerMovementController`, `ProximitySelector`, `DialogueSystemEvents` and friends — so "delete it
+Prefer the in-scene command for the live player. The scene instance carries around a dozen CR
+components the Malbers prefab has never seen — `TrainerWorldBehaviour`,
+`TrainerMovementController` and friends — so "delete it
 and drop the new prefab in" silently throws all of that away, along with the Cinemachine camera's
 tracking target.
 
