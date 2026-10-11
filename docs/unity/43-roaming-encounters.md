@@ -1,0 +1,114 @@
+# Roaming Encounters (API + Unity)
+
+One admin switch turns every spawner from **Ambush** to **Roaming**. Ambush (flag off, the default) is the old behaviour: an invisible trigger, a 2 to 5 s delay, and the server rolls the species at battle start. Roaming shows each spawner's creatures as 3D models wandering inside the spawn radius, and walking into one battles **that** creature. Flag off is exactly today's behaviour.
+
+> Status: designed and built across the cr-api, cr-api-unity and cr-admin-web lanes. Names below are **as specified; verify after merge** (class, route and migration names come from the design spec, not from merged code). Spec: `docs/superpowers/specs/2026-10-11-roaming-encounters-design.md` in cr-api-unity.
+
+## Server-authoritative
+
+The client sends intents only: "trainer T is at spawner S" and "trainer T touched slot N of window W at spawner S". The server (offline: the same cr-api DLLs on local SQLite) decides species, level, whether the slot is still available, and the battle. Model positions are cosmetic and never sent. Identity comes from the token, never the body.
+
+## The flag
+
+`app_config.roaming_spawners` (boolean, default false, Game domain, global for all spawners).
+
+| Where | How |
+|---|---|
+| Client, online | `roamingSpawners` field on the anonymous `GET /api/v1/version-check` response. Read at session start and again on resume from background. No separate fetch path. |
+| Admin read | `GET /api/v1/admin/app-config` returns `AppConfigResponse { roamingSpawners, updatedAtUtc }` |
+| Admin write | `PUT /api/v1/admin/app-config/roaming-spawners` body `{ enabled }`, 200 with `AppConfigResponse` |
+| Policy | Both admin routes are `RequireAdmin` and listed in `RoutePolicyManifest` |
+| Offline | The `app_config` row is in the floor bake, so a bundled build carries prod's value at bake time |
+| Editor | `GameSettings.RoamingSpawnersOverride` (`Inherit`, `On`, `Off`), kept in EditorPrefs and set from the Studio configuration panel. Editor only, wins over the other sources |
+
+Client side, `IRoamingSpawnersFlag` merges those sources and raises `Changed`. The admin UI is in [Studio: Game Config](#studio-system-game-config) below.
+
+## Population: deterministic, nothing stored
+
+| Term | Rule |
+|---|---|
+| Window length | `bucketSeconds = spawner.spawn_cooldown_seconds` (zero or less means 300) |
+| Bucket | `floor(unixNow / bucketSeconds)` |
+| Slots | `count = clamp(spawner.max_capacity, 1, 6)` (zero or less means 3) |
+| Seed | `splitmix64(fnv1a64(trainerId bytes + spawnerId bytes + bucket))` |
+
+The PRNG is our own (fnv1a64 into splitmix64), not `System.Random`, so the server and the offline DLL agree on every platform. The roll is the **same** weighted selection `CreatureSpawnDomainService` uses at battle start (pool weight times rarity multiplier plus the talent shift, the template `spawn_probability`, level uniform in the template's min to max), refactored to take an `IRandomSource`. The default source is today's random; population and validation use the seeded one. One code path, so Ambush and Roaming draw from identical odds.
+
+### Asking for the population
+
+`POST /api/v1/spawners/{spawnerKey}/population`, body `{ trainerId }`. `RequirePlayer` + `RequirePlayerTrainer`; limiter `cr-spawner-population` at 30/min per account; no Idempotency-Key (safe to repeat; the client uses `SimpleWebClient.PostOnce`).
+
+```
+SpawnerPopulationResponse { spawnerKey, roaming: bool, bucket: long, bucketSeconds: int,
+  bucketEndsAtUtc, slots: [ { slot: int, speciesKey, level: int, seed: long } ] }
+```
+
+Flag off: `roaming=false`, empty `slots`, no DB write. Slots already claimed in this bucket are omitted (one indexed SELECT).
+
+## Claims
+
+`spawn_claim` is the only new table (Spawner domain, `M5020`): `trainer_id`, `spawner_id`, `bucket` (bigint), `slot` (int), `claimed_at`, `deleted`. Primary key `(trainer_id, spawner_id, bucket, slot)`. Each insert also runs a lazy purge, `DELETE ... WHERE trainer_id = @t AND claimed_at < now - 2 days`, so rows are bounded.
+
+**Any contact claims the slot**: win, capture, loss, the player fleeing, or the creature fleeing. The sighting is gone until the next window. There is no battle-end hook.
+
+## Battle start
+
+`EncounterIntent` gains `Bucket` (`long?`) and `Slot` (`int?`). In `BattleEncounterDomainService.StartEncounterAsync`, for `Kind = Wild`:
+
+| Flag | Request | Result |
+|---|---|---|
+| on | bucket and slot present, bucket current or previous | recompute the window's roll, insert the claim, battle uses the slot's species and level, the random roll is skipped |
+| on | bucket not current or previous | `422 spawn_bucket_expired` |
+| on | claim already exists (PK hit) | `409 spawn_slot_claimed` |
+| on | bucket or slot missing | `422 roaming_requires_slot` (closes the ambush-path farm) |
+| off | any | fields ignored, today's path |
+
+The `cr-battle-start` limiter and Idempotency-Key are unchanged.
+
+## Unity client
+
+| Piece | Role |
+|---|---|
+| `SpawnerEncounterBehaviour` (on `CR_EncounterZone`) | Flag off: untouched. Flag on: the ambush trigger is disabled and `RoamingSpawnerBehaviour` (same prefab, off by default) is enabled |
+| `RoamingSpawnerBehaviour` | Asks for the population when the player enters an awareness sphere of `radius + 20 m`; re-asks at `bucketEndsAtUtc` while inside; one request in flight per spawner; 60 s debounce (`RoamingAsks`, same shape as `MerchantStockAsks`). Spawns one `WildCreatureBehaviour` per slot at a seeded point in the disk, snapped to terrain |
+| `ISpawnerPopulationClient` | Online: the `POST` above. Offline: the same domain service on local SQLite, through the router pattern of `OnlineOfflineBattleEncounterDomainService` |
+| `WildCreatureBehaviour` | Thin MonoBehaviour (Assembly-CSharp): the model, its trigger, its animator |
+| `RoamWalker` | Pure logic in `CR.Game.World.Logic`, unit-tested: seeded waypoints inside the disk, pause 2 to 6 s, walk 1.2 m/s, turn toward the target, Y by downward raycast (the `EscortWalker` pattern), slopes over 35 degrees rejected. No NavMesh, no Malbers AI |
+| `CreatureWorldAnimatorBuilder` | Editor command. Generates `<key>_World.controller` (Idle, Walk, float `Speed`) from each Cute Series pack's `@Idle` and `@Walk Forward In Place` clips, and adds a `CreatureWorldAnimation` component (the controller reference) to each creature prefab. `BattleStager` is unchanged. The Gaterbear placeholder is idle only |
+
+The model is loaded with `IGameAssetLoader.LoadAssetByKeyAsync<GameObject>("creatures/<species>")`, the same key `BattleStager` uses. `WildCreatureBehaviour` swaps the Animator controller at spawn.
+
+### Culling and cap
+
+Models live only while the spawner's cell is Active (`IWorldStreamer.CellStateChanged`) **and** the player is within `radius + 60 m`. Global cap of 12 models; the nearest spawners win. Population is re-asked on return and never cached across cells.
+
+### Contact
+
+A child trigger sphere of 1.2 m, tag Player. On contact the model freezes facing the player, then `BattleCoordinator.StartWildBattleAsync(WildBattleRequest + Bucket + Slot)` runs. No 2 to 5 s delay. After any battle there is a 3 s grace that ignores contacts. A server 409 or 422 despawns that model and re-asks. One Feel moment, `feel/wild-contact`, goes through the existing bridge. No new UI and no new settings.
+
+## Offline
+
+Same boundary, same code: the router calls the cr-api domain services against the player's local SQLite. Local `spawn_claim` is the authority for offline play only and never syncs to the server. The flag comes from the local `app_config` row (floor bake) unless the Editor override is set.
+
+## Load notes
+
+- Ask on arrival and at window rollover only: 1 SELECT, 30/min cap.
+- Battle start adds one PK insert. The flag rides the existing version-check.
+- Rows are at most the contacts per trainer per 2 days. Nothing is shared between players, so no herd effect.
+- Steam Deck: at most 12 Cute Series models, Animator `CullCompletely`, one raycast per 0.2 s each; worst case under 2 ms.
+
+## Known limits (v1)
+
+Terrain-only wandering can walk into props (a SphereCast follow-up is noted). Out of scope: per-spawner modes, creatures that notice, chase or flee, shared populations, nameplates, and the creature surviving a flee.
+
+## Studio: System -> Game Config
+
+Admin only. cr-admin-web page `src/pages/system/GameConfigPage.tsx` (resource `src/resources/system-game-config/page.tsx`, hook `src/api/hooks/useAppConfig.ts`), under the System group of the nav. It shows a **Roaming spawners** checkbox with the last-updated time. Toggling is an optimistic TanStack mutation against `PUT /api/v1/admin/app-config/roaming-spawners`; a failure rolls the checkbox back and shows an error toast. A non-admin gets 403 and does not see the page. Deploy cr-api first, then the web Studio. Players pick the change up at their next session start or resume.
+
+## Tests
+
+API: seeded-roll determinism and Ambush-odds equality (both paths), population (flag off, claimed slots omitted), claim PK and purge, `EncounterIntent` validation errors, route-policy manifest. Unity: `RoamWalker` (pure), flag precedence incl. Editor override, population client router online/offline, `SpawnerEncounterBehaviour` switching, culling cap. Web: Vitest + msw (read, toggle, 403 gating), `nav.test.ts` count 33 to 34.
+
+## Not yet checked in play
+
+Wander feel and slopes, contact then battle on Deck, frame time with 12 models, the prefab edits by the animator builder (battle visuals still bind), flag flip on resume.

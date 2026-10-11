@@ -85,7 +85,8 @@
         "Game/CR.Game.Model/Sync/UnresolvedContentReferenceException.cs",
         "Convenience/CR.Data.Migrations.Test/GainsMoreStrengthGrowthProfileDeletion*Tests.cs",
         "Convenience/CR.Api.IntegrationTests/SpawnerSyncDefinitionFieldsHttpTests.cs",
-        "Convenience/CR.Data.Migrations.Test/SpawnerSyncDefinitionFieldsSqliteTests.cs"
+        "Convenience/CR.Data.Migrations.Test/SpawnerSyncDefinitionFieldsSqliteTests.cs",
+        "Spawner/**/SpawnClaim*.cs"
       ],
       "cr-data": [
         "Assets/CR/Core/Data/Registry/Definitions/SpawnerDefinition.cs",
@@ -2168,7 +2169,8 @@
         "src/components/resource/RowsEditor.tsx",
         "src/components/resource/ResourceList.tsx",
         "src/components/resource/problems.ts",
-        "src/components/resource/rowErrors.ts"
+        "src/components/resource/rowErrors.ts",
+        "src/pages/system/GameConfigPage.tsx"
       ]
     },
     "description": "Studio web (cr-admin-web) shared content-editing UI: the ResourceForm/ResourceDetail layout (sections, two-column grid, pinned save footer, ValidationSummary jump-to-problem, Advanced raw-JSON tab, per-field Raw JSON toggle, read-only ValueView mode), ResourceList (count pill, `/` filter, EmptyState), and the FieldMeta/RowColumn editor kinds (object, rows with reorder/duplicate/collapse, siblingRef, assetKey, map, flags, reference, typedParams, typedMeta, json fallback) a descriptor composes from. cr-admin-web is not watched for staleness by scripts/check-stale.js (REPO_PATHS only covers cr-api/cr-data) — the cr-admin-web globs here are for a human skimming this file, not the automated check."
@@ -2413,5 +2415,43 @@
       ]
     },
     "description": "Pillar cutscene (the Mirandale vista beat): the three cued lines and their stages, OneShotPresenter / OneShotLifecycle (arm, begin, settle, reset) and the aftermath on restore, SkyTear (the sky stays torn across region swaps, own-scene only), SkyStorm (trimmed Hovl bolts, HS_EffectSound removed, thunder), CityLightsOut (shader globals, one window material), RoarOneShots, PillarCharge, the two Feel moments (feel/pillar-shatter CameraMotion, feel/pillar-boom Cosmetic) through IFeelMomentPlayer with PreloadAsync on the charge, the story camera's impulse listener and the stage hold (StoryReleaseDeferral), the Reduced Motion table (StoryMotionKind), the hold-Cancel skip and the dialogue panel's Cancel gate, MirandaleVistaBuilder / MirandaleSkylineBuilder (cr_story_build_skyline, seeded, idempotent, 60k budget), PillarShatterMomentBuilder, cr_story_render_vista, the smoke's pillar checks, tests, and the AI-chosen numbers logged in the ledger"
+  },
+  "unity/43-roaming-encounters": {
+    "docPath": "docs/unity/43-roaming-encounters.md",
+    "repos": {
+      "cr-api": [
+        "Game/CR.Game.Data.Migration/*AppConfig*.cs",
+        "Game/**/AppConfig*.cs",
+        "Game/CR.Game.Model.REST/**/AppConfig*.cs",
+        "Game/CR.Game.Service.REST/Endpoints/*AppConfig*.cs",
+        "Spawner/**/*Population*.cs",
+        "Spawner/**/SpawnClaim*.cs",
+        "Spawner/**/ISpawnClaim*.cs",
+        "Spawner/CR.Spawner.Data.Migration/M5020*.cs",
+        "Spawner/**/CreatureSpawnDomainService.cs",
+        "Spawner/**/SeededRandom*.cs",
+        "Battle/**/BattleEncounterDomainService.cs",
+        "Battle/**/EncounterIntent.cs"
+      ],
+      "cr-data": [
+        "Assets/CR/Game/World/Behaviours/RoamingSpawnerBehaviour.cs",
+        "Assets/CR/Game/World/Behaviours/WildCreatureBehaviour.cs",
+        "Assets/CR/Game/World/Behaviours/SpawnerEncounterBehaviour.cs",
+        "Assets/CR/Game/World/Logic/RoamWalker*.cs",
+        "Assets/CR/Game/World/**/RoamingSpawnersFlag*.cs",
+        "Assets/CR/Game/World/**/IRoamingSpawnersFlag.cs",
+        "Assets/CR/Game/World/**/RoamingAsks.cs",
+        "Assets/CR/**/SpawnerPopulationClient*.cs",
+        "Assets/CR/**/ISpawnerPopulationClient.cs",
+        "Assets/CR/**/CreatureWorldAnimat*.cs",
+        "Assets/CR/Tests/Editor/Roam*Tests.cs"
+      ],
+      "cr-admin-web": [
+        "src/pages/system/GameConfigPage.tsx",
+        "src/resources/system-game-config/page.tsx",
+        "src/api/hooks/useAppConfig.ts"
+      ]
+    },
+    "description": "Roaming encounters: app_config.roaming_spawners flag + admin routes + version-check field, deterministic window/bucket population (fnv1a64+splitmix64), spawn_claim and any-contact claims, population endpoint, EncounterIntent bucket/slot and its 422/409 errors, client RoamingSpawnerBehaviour/WildCreatureBehaviour/RoamWalker/animator builder, culling and cap, offline and Editor override, Studio Game Config page"
   }
 }

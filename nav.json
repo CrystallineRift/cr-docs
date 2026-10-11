@@ -408,5 +408,10 @@
     "section": "Unity",
     "title": "Pillar Cutscene (Unity)",
     "path": "unity/42-pillar-cutscene"
+  },
+  {
+    "section": "Unity",
+    "title": "Roaming Encounters (API + Unity)",
+    "path": "unity/43-roaming-encounters"
   }
 ]

@@ -25,7 +25,7 @@ The pool selection uses `weight × rarity_multiplier` as a composite weight. Thi
 The spawner is global, read-only content and holds no per-player runtime counters. The service deliberately enforces **no capacity and no cooldown** — wild creatures are generated fresh on demand. This keeps the same template usable by every trainer simultaneously with no contention and nothing to "reset."
 
 - `current_count`, `last_spawn_time`, `account_id`, and `trainer_id` were **dropped** by `M5017` (they were never read/written by stateless spawning). `row_version` remains.
-- `max_capacity` and `spawnCooldownSeconds` persist in the schema and the `SpawnerDefinition` SO for descriptive/admin purposes, but are not enforced during a spawn.
+- `max_capacity` and `spawnCooldownSeconds` are not enforced during a spawn. With the global `app_config.roaming_spawners` flag on they set the **roaming** population: `max_capacity` is the creature count (1..6) and `spawn_cooldown_seconds` the window length (default 300 s). Ambush spawns ignore them. See [Roaming Encounters](?page=unity/43-roaming-encounters).
 - Validation now checks only that the spawner exists and is active (`is_active`). A `BypassValidation` flag on the request skips even the active check (used by quest rewards and other deterministic spawns).
 
 ### Why Does `CreateFromSpawnerAsync` Accept an Optional `seed`?
@@ -73,8 +73,8 @@ The Unity-side `SpawnerDefinition` ScriptableObject mirrors the backend `content
 | `battleArenaKey` | Arena key used to look up the `BattleArena` MonoBehaviour in the scene. Must match `BattleArena.arenaKey` on the corresponding arena prefab. Leave empty to skip arena teleportation during wild encounters. Also stored in `spawner.battle_arena_key` on the backend (M5013). |
 | `displayName` | Human-readable label for the zone (synced from server). |
 | `description` | Description text (synced from server). |
-| `maxCapacity` | Max creatures alive at once (default 5). Synced from server. |
-| `spawnCooldownSeconds` | Seconds between spawn cycles (default 300). Synced from server. |
+| `maxCapacity` | Roaming creature count per window (clamped 1 to 6; zero or less means 3). Only used when the roaming flag is on; see [Roaming Encounters](?page=unity/43-roaming-encounters). Synced from server. |
+| `spawnCooldownSeconds` | Roaming window length in seconds (default 300; zero or less means 300). Only used when the roaming flag is on. Synced from server. |
 | `pools[]` | One or more weighted pools, each containing creature templates (see below). |
 
 `SpawnerDefinition` is the **single** source of truth for spawner content — it holds the zone's pools and templates directly. (The older scene-attached `SpawnerZoneConfig` SO has been removed; everything is authored as a `SpawnerDefinition` in the content registry, via the Spawners / Spawn Pools tabs of Crystalline Rift Studio or `Assets → Create → CR → Content → Spawner Definition`.)
