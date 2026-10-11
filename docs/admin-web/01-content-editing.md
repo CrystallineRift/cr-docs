@@ -83,3 +83,7 @@ reference target, or visibility rule.
 
 See `cr-admin-web/src/components/editors/README.md` for the field-by-field API (`FieldMeta`,
 `RowColumn`, `ReferenceTarget`, `SiblingRef`, `MapKeySpec`) that a descriptor writes against.
+
+## System -> Game Config
+
+Admin-only page with the global **Roaming spawners** switch (flips every spawner between Ambush and Roaming). It is not a content resource: it reads and writes `app_config` through `/api/v1/admin/app-config`. Details in [Roaming Encounters](?page=unity/43-roaming-encounters).
