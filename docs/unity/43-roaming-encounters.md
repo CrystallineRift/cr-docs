@@ -70,7 +70,7 @@ The `cr-battle-start` limiter and Idempotency-Key are unchanged.
 | Piece | Role |
 |---|---|
 | `SpawnerEncounterBehaviour` (on `CR_EncounterZone`) | Flag off: untouched. Flag on: the ambush trigger is disabled and `RoamingSpawnerBehaviour` (same prefab, off by default) is enabled |
-| `RoamingSpawnerBehaviour` | Asks for the population when the player enters an awareness sphere of `radius + 20 m` (`RoamingAwarenessRelay` child trigger); re-asks at `bucketEndsAtUtc` while inside; one request in flight per spawner; 60 s debounce (`RoamingAsks`, same shape as `MerchantStockAsks`). Spawns one `WildCreatureBehaviour` per slot at a seeded point in the roam disk, snapped to terrain. The disk is the encounter zone's new `roamRadius` (default 15 m), separate from the spawn radius |
+| `RoamingSpawnerBehaviour` | Asks for the population when the player enters an awareness sphere of `roamRadius + 20 m` (`RoamingAwarenessRelay` child trigger); re-asks at `bucketEndsAtUtc` while inside; one request in flight per spawner; 60 s debounce (`RoamingAsks`, same shape as `MerchantStockAsks`). Spawns one `WildCreatureBehaviour` per slot at a seeded point in the roam disk, snapped to terrain. The disk is the encounter zone's new `roamRadius` (default 15 m), separate from the spawn radius |
 | `ISpawnerPopulationClient` | Online: the `POST` above. Offline: the same domain service on local SQLite, through the router pattern of `OnlineOfflineBattleEncounterDomainService` |
 | `WildCreatureBehaviour` | Thin MonoBehaviour (Assembly-CSharp): the model, its trigger, its animator |
 | `RoamWalker` | Pure logic in `CR.Game.World.Logic`, unit-tested: seeded waypoints inside the disk, pause 2 to 6 s, walk 1.2 m/s, turn toward the target, Y by downward raycast (the `EscortWalker` pattern), slopes over 35 degrees rejected. No NavMesh, no Malbers AI |
@@ -80,7 +80,7 @@ The model is loaded with `IGameAssetLoader.LoadAssetByKeyAsync<GameObject>("crea
 
 ### Culling and cap
 
-Models live only while the spawner's cell is Active (the zone is enabled only while its cell is Active, so no streamer subscription is needed) **and** the player is within `radius + 60 m`. Global cap of 12 models; the nearest spawners win. Population is re-asked on return and never cached across cells.
+Models live only while the spawner's cell is Active (the zone is enabled only while its cell is Active, so no streamer subscription is needed) **and** the player is within `roamRadius + 60 m`. Global cap of 12 models; the nearest spawners win. Population is re-asked on return and never cached across cells.
 
 ### Contact
 
