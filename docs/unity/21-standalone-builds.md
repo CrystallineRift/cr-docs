@@ -344,6 +344,58 @@ macOS ships **openrsync** (`rsync 2.6.9 compatible`), not GNU rsync 3.x. The fla
 (`-a --partial --human-readable -v --delete -e`) are all accepted by it, and the executable bit
 survives — both verified against openrsync rather than assumed.
 
+## Build and Editor speed
+
+What a player build spends its time on (measured on the v0.1.9 and v0.1.10 CI runs, M4 Max):
+
+| Phase | Warm cache | Cold shader cache |
+|---|---|---|
+| Addressables, per target | 30–130 s | same |
+| Player, per target | 5–7 min | 30–40 min |
+| Three targets end to end | ~30 min | ~115 min |
+
+Almost all of the gap is **shader variant compilation**. `Library/ShaderCache` on the runner is kept
+between runs (`clean: false`), so a normal build hits it tens of thousands of times. A package
+update that touches URP includes (the Oct 2026 upgrade did) invalidates the whole cache once; the
+next build is back to warm numbers. Builds run on the same Mac as the live Editor, so the Editor
+crawls while a build is running.
+
+Settings that keep the numbers down (all in the repo):
+
+- **One quality level.** `ProjectSettings/QualitySettings.asset` carries only `PC`. The former
+  `Mobile` level had its own URP asset (`Assets/Settings/Mobile_RPAsset.asset`, now unreferenced).
+  It already listed Standalone under excluded platforms, so desktop builds were not compiling its
+  variants; it is gone so nobody re-enables it by accident, because every URP asset a build's
+  quality list includes adds its keyword set to the shader variants.
+- **Vendor textures capped at 1024 px.** `VendorTextureSizeCap` (an `AssetPostprocessor` in
+  `Assets/CR/Core/Data/Editor/Build/`) applies `VendorTextureCapPolicy` on every texture import:
+  anything under `Assets/` that is not project content (`Assets/CR`, `Assets/Settings`,
+  StreamingAssets, Addressables data) is capped at 1024 when its source is larger. Cubemaps,
+  `.hdr`/`.exr` panoramas and `Skybox`/`Lightmap` paths are exempt. Textures were 2.6 GB of the
+  3.0 GB v0.1.10 player. Unity writes the capped size back into the texture's `.meta`
+  (`DefaultTexturePlatform` block), so the runner's symlinked packs carry it too. Adding the
+  postprocessor reimported every texture once (about 6 minutes on the M4 Max); it has no
+  `GetVersion` on purpose so that never repeats. `unity cmd cr_vendor_texture_cap_scan` audits
+  (count of oversized sources not yet capped, expected 0); `cr_vendor_texture_cap_apply` rewrites
+  and reimports any that slipped in while the postprocessor was absent.
+- **BoZo `Resources/` folders renamed to `Catalog/`.** The pack's demo save/creator systems load
+  outfits, decals and texture packages by name from `Resources`, which drags every outfit texture
+  into every build. CR references outfits directly, so only `Materials/Resources` (the
+  `BSMC_StylizedShader` material package `OutfitSystem` loads at runtime) keeps the name. Vendor
+  packs are not in git; redo the rename after an Asset Store restore.
+- **Artifact garbage collection on.** `EditorSettings.asset` `m_ArtifactGarbageCollection: 1`
+  removes unreferenced `Library/Artifacts` on Editor start instead of a Library wipe and full
+  reimport. Asset Inventory's preview generation had left 17 GB of orphaned artifacts.
+- **Enter Play Mode without domain reload.** `m_EnterPlayModeOptions: 1` (scene reload stays on).
+  Statics must reset themselves; anything that misbehaves on the second Play is a bug to fix,
+  not a reason to turn the reload back on.
+
+Not in the repo, but on the dev machine: Asset Inventory 4 generates previews by importing whole
+packs into `Assets/_AssetInventoryPreviewsTemp`, which turned every asset refresh into a 20–40 s
+stall while indexing. `~/.local/share/AssetInventoryConfig.json` now has
+`recreatePreviewsAfterIndexing: false` and `bulkPreviewThreshold: 0`; previews come from the
+packages' bundled images, and the Preview Wizard still generates the rest on demand.
+
 ## Troubleshooting
 
 - **`CS0103: The name 'AotHelper' does not exist`** (in `com.unity.services.core` editor code,
