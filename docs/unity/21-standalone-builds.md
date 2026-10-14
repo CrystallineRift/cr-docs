@@ -342,9 +342,11 @@ Settings that keep the numbers down (all in the repo):
 - **Artifact garbage collection on.** `EditorSettings.asset` `m_ArtifactGarbageCollection: 1`
   removes unreferenced `Library/Artifacts` on Editor start instead of a Library wipe and full
   reimport. Asset Inventory's preview generation had left 17 GB of orphaned artifacts.
-- **Enter Play Mode without domain reload.** `m_EnterPlayModeOptions: 1` (scene reload stays on).
-  Statics must reset themselves; anything that misbehaves on the second Play is a bug to fix,
-  not a reason to turn the reload back on.
+- **Domain reload stays ON for Play.** It was switched off for a day (2026-10-12) and reverted:
+  without a reload, the second and later Plays never signal the quest readiness gate for a new
+  trainer, the dialogue service gives up after 30 s and the prologue letter never unlocks the
+  stone. `LoreReadable` now warns with the start status when a read does not end. Turning the
+  reload off again means first finding the state that survives a Play without it.
 
 Not in the repo, but on the dev machine: Asset Inventory 4 generates previews by importing whole
 packs into `Assets/_AssetInventoryPreviewsTemp`, which turned every asset refresh into a 20–40 s
