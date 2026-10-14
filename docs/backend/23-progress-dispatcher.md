@@ -32,6 +32,7 @@ the same cr-api DLLs over the player's local SQLite. Spec: `cr-api-unity/docs/su
 | `ItemCollected` (Via=Pickup) | `PickupDomainService.CollectAsync` | the claim won; one per granted Item reward |
 | `ItemUsed`, `KeyItemActivated` | `ItemUseDomainService` | consume + effect succeeded |
 | `NpcTalked` | `NpcTalkService` | key validated; FirstTime when `npc_met_{key}` goes 0 → 1 |
+| `ReadableRead` | `ReadableReadService` (`POST /api/v1/readables/{key}/read`) | key names an authored dialogue document (else `UnknownReadable`); FirstTime when `readable_read_{key}` goes 0 → 1 |
 | `QuestCompleted` | `QuestObjectiveProjector` | the completion compare-and-set (InProgress → Completed, 1 row) |
 | `BattleWon`, `CreatureDefeated`, `TrainerDefeated` | `BattleDomainService` | after the existing KO-once (`TryCreditKnockOutAsync`) and battle-end (`TryEndBattleAsync`) CAS, one `CreatureDefeated` per credited KO, `BattleWon` (+ `TrainerDefeated`, `Facts[FirstTime]` from the NPC-trainer win) on a win, and the same pair on a **forfeit win** (opponent Run 3×, or an owed swap 3×) — all batched through a single `SafeRecordAllAsync` call per action so achievements evaluate once |
 | `LocationEntered` | `LocationEntryService.EnterAsync` (BFF `POST .../world-locations/enter` — the only caller since Phase E retired the `/quests/progress` compat route) | a genuine `world_location` entry (`Facts[FirstTime]` set on first discovery); see [Location Discoveries](?page=backend/24-location-discoveries) |
@@ -48,6 +49,7 @@ the same cr-api DLLs over the player's local SQLite. Spec: `cr-api-unity/docs/su
 | ItemCollected | `items_collected_total` +Quantity | CollectItem (+Quantity) |
 | ItemUsed / KeyItemActivated | — (`items_used_*` is `ItemUseDomainService`'s own record) | UsedItem / ActivateKeyItem (target = item content key) |
 | NpcTalked | `npcs_talked_to_total` +1 **only on FirstTime** (distinct NPCs) | TalkToNpc (distinct keys per quest instance) |
+| ReadableRead | none (no lifetime stat) | ReadReadable (distinct keys per quest instance) |
 | LocationEntered | `locations_visited_total` +1, `location_discovered_{key}` MAX 1 — both only on `Facts[FirstTime]` | VisitLocation (distinct keys per quest instance) |
 | QuestCompleted | `quests_completed` +1, `quest_completed_{key}` +1 — at completion, not claim | CompleteQuest (target = quest content key) |
 
@@ -76,6 +78,7 @@ scan of every production stat write). Adding a writer means adding its row there
 |---|---|
 | `battles_won`, `battles_lost`, `creatures_defeated_total`, `trainers_defeated_total`, `creatures_captured_total`, `items_collected_total`, `npcs_talked_to_total`, `quests_completed`, `quest_completed_{key}`, `locations_visited_total`, `location_discovered_{key}` | `LifetimeStatProjector` |
 | `npc_met_{key}` | `NpcTalkService` |
+| `readable_read_{key}` | `ReadableReadService` |
 | `trainer_xp` | `TrainerProgressionService` (and `RewardGrantService`'s raw fallback when Talents is not wired) |
 | `trainer_level` | `TrainerProgressionService` |
 | `species_captured_{id}` | `LifetimeStatProjector`, fed by `ProgressFacts.BaseCreatureId` on `CreatureCaptured` (stamped by `CaptureAttemptService`) — `TrainerProgressionService` only reads it now, as the first-of-species gate |
