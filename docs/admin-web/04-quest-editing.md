@@ -17,6 +17,7 @@ requirement enums themselves, see [Quest System](../backend/07-quest-system.md).
 | 9 Defeat creatures from a list | Creatures (comma-separated) | content keys, `targetReferenceIds` |
 | 10 Visit location | Location (empty matches any) | **world-location content key** — `LocationEntryService` reports `Location.ContentKey` |
 | 11 Talk to NPC | NPC (empty matches any) | **NPC content key** |
+| 12 Read readable | Readable (dialogue key), required | **dialogue content key**, count 1 |
 | 20 Collect item, 21 Activate key item, 22 Used item | Item (empty matches any) | **item content key** — see "The id/key bug", below |
 | 30 Complete quest | Quest | **quest content key** |
 | 40 Defeat trainer | Trainer (empty matches any) | a typed trainer-battle content key (no trainer-battle resource here yet, so it's text, not a picker) |

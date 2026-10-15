@@ -507,7 +507,7 @@ E deleted the whole compat vertical — `IQuestDomainService.RecordProgressEvent
 that calls this, and the route itself answers 410 regardless of `objectiveType`. Every objective now
 advances through the real intent that produces it, never a client-reported progress event:
 - `TalkToNpc` → the talk intent, `NpcTalkService` (via `POST /api/v1/trainers/{t}/npcs/{npcKey}/talk`)
-- `ReadReadable` → the read intent, `ReadableReadService` (via `POST /api/v1/readables/{key}/read`)
+- `ReadReadable` → the read intent, `ReadableReadService` (via `POST /api/v1/trainers/{t}/readables/{key}/read`)
 - `VisitLocation` → `POST /api/v1/trainers/{t}/world-locations/enter`
   (`LocationEntryService.EnterAsync`) — see [Location Discoveries](?page=backend/24-location-discoveries)
 - Every battle/defeat/capture/item/quest-completion type → produced by the authority itself
@@ -902,7 +902,7 @@ ever arrives through `LocationEntryService.EnterAsync` (the BFF `POST .../world-
 — it claims the discovery ledger, awards per-location XP (a flat rule amount or the location's own
 override), grants a discovery quest if one is authored, and emits `LocationEntered` — see [Location
 Discoveries](?page=backend/24-location-discoveries); `TalkToNpc` only ever arrives through the talk
-intent (`NpcTalkService`, `POST /api/v1/trainers/{t}/npcs/{npcKey}/talk`), and `ReadReadable` only through the read intent (`ReadableReadService`, `POST /api/v1/readables/{key}/read`). Every battle-outcome type —
+intent (`NpcTalkService`, `POST /api/v1/trainers/{t}/npcs/{npcKey}/talk`), and `ReadReadable` only through the read intent (`ReadableReadService`, `POST /api/v1/trainers/{t}/readables/{key}/read`). Every battle-outcome type —
 `WinBattles`, `DefeatCreature`, `DefeatAnyCreature`, `DefeatCreaturesFromList`, `DefeatTrainer`,
 `DefeatAnyTrainer`, `DefeatTrainersFromList` — moved server-side once `BattleDomainService` itself
 started emitting `BattleWon`/`CreatureDefeated`/`TrainerDefeated` (including on a forfeit win —
@@ -919,7 +919,7 @@ line at claim time) and returns any newly-unlocked achievements on `QuestClaimRe
 ### Readable reads
 
 `ReadReadable` (12) is the objective for a letter, photo or sign the player reads to its end. The client sends one intent:
-`POST /api/v1/readables/{key}/read` (Dialogue Service.REST, identity from the token, no body). `IReadableReadService.ReadAsync(accountId,
+`POST /api/v1/trainers/{t}/readables/{key}/read` (Dialogue Service.REST, identity from the token, no body). `IReadableReadService.ReadAsync(accountId,
 trainerId, readableKey, ct)` lowercases the key and checks that it names an authored dialogue document; an unknown key returns
 `UnknownReadable` and counts nothing (the endpoint answers like the NPC talk route's unknown NPC). A known key sets the first-time flag
 `readable_read_<key>` (stats `MaxAsync(1)`, a flag and not a counter, the same reasoning as `npc_met_{key}`), then emits
@@ -929,6 +929,13 @@ trainerId, readableKey, ct)` lowercases the key and checks that it names an auth
 Template validation requires a target, the same rule as `TalkToNpc`. Offline, the same service runs over the local SQLite.
 The client never reports progress: it sends the intent, the response says what happened. See
 [Progress Dispatcher](?page=backend/23-progress-dispatcher).
+
+**Prologue skip.** Skipping the prologue is also an intent: `POST /api/v1/trainers/{trainerId}/story/prologue/skip` (no body, account from the token).
+`IPrologueSkipService.SkipAsync(accountId, trainerId, ct)` loads the configured prologue quest (`StoryOptions.PrologueQuestKey`, default
+`quest-grans-letter`) and records a readable read, through `IReadableReadService`, for every `ReadReadable` objective target, so the quest
+completes through the normal path (idempotent flags). It returns `PrologueSkipResult { Status (Skipped | NoPrologueQuest), ReadableKeys, Progress }`;
+`NoPrologueQuest` means no such quest is authored and nothing is counted. The player says "I skipped"; the server decides what that completes.
+Offline, the same service runs over the local SQLite.
 
 `ReachTalentRank` (50) is the one type that is **not** count-up-to-target: `TalentService` raising a
 rank (a spend, or an admin set-rank that raises) emits a `TalentRankReached` outcome whose `Quantity`

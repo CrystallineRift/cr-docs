@@ -32,7 +32,7 @@ the same cr-api DLLs over the player's local SQLite. Spec: `cr-api-unity/docs/su
 | `ItemCollected` (Via=Pickup) | `PickupDomainService.CollectAsync` | the claim won; one per granted Item reward |
 | `ItemUsed`, `KeyItemActivated` | `ItemUseDomainService` | consume + effect succeeded |
 | `NpcTalked` | `NpcTalkService` | key validated; FirstTime when `npc_met_{key}` goes 0 → 1 |
-| `ReadableRead` | `ReadableReadService` (`POST /api/v1/readables/{key}/read`) | key names an authored dialogue document (else `UnknownReadable`); FirstTime when `readable_read_{key}` goes 0 → 1 |
+| `ReadableRead` | `ReadableReadService` (`POST /api/v1/trainers/{t}/readables/{key}/read`) | key names an authored dialogue document (else `UnknownReadable`); FirstTime when `readable_read_{key}` goes 0 → 1 |
 | `QuestCompleted` | `QuestObjectiveProjector` | the completion compare-and-set (InProgress → Completed, 1 row) |
 | `BattleWon`, `CreatureDefeated`, `TrainerDefeated` | `BattleDomainService` | after the existing KO-once (`TryCreditKnockOutAsync`) and battle-end (`TryEndBattleAsync`) CAS, one `CreatureDefeated` per credited KO, `BattleWon` (+ `TrainerDefeated`, `Facts[FirstTime]` from the NPC-trainer win) on a win, and the same pair on a **forfeit win** (opponent Run 3×, or an owed swap 3×) — all batched through a single `SafeRecordAllAsync` call per action so achievements evaluate once |
 | `LocationEntered` | `LocationEntryService.EnterAsync` (BFF `POST .../world-locations/enter` — the only caller since Phase E retired the `/quests/progress` compat route) | a genuine `world_location` entry (`Facts[FirstTime]` set on first discovery); see [Location Discoveries](?page=backend/24-location-discoveries) |

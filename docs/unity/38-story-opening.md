@@ -71,7 +71,9 @@ A new trainer is handed **Gran's Letter** first, in the Earth prologue. It has t
 letter." (`prologue-letter`), "Look at the photo she left you." (`prologue-photo`), "Inspect the glowing shard." (`prologue-ahksun-wakes`).
 Each is counted by the server when the player reads that readable to its end (the read intent, never a reported outcome). The Meadow
 spawn then hands out **Find Ahksun**, which requires `QuestCompleted` `quest-grans-letter` besides its existing requirement, so it
-cannot be held before the prologue is done.
+cannot be held before the prologue is done. Gran's Letter itself requires `QuestNotStarted` `quest-find-ahksun`, so a trainer already past the
+opening never receives it. **Skip** sends the prologue skip intent (`POST /api/v1/trainers/{trainerId}/story/prologue/skip`); the server records every
+`ReadReadable` objective of Gran's Letter, so it completes and Find Ahksun still grants.
 
 A new trainer is handed **Find Ahksun** at the spawn once Gran's Letter is complete, not First Battle. First Battle used to be auto-granted there, so the
 fight quest sat in the tracker a hundred metres above the gaterbear, and a playtester finished it with the first wild fight.
@@ -120,7 +122,7 @@ grant, objective and completion, and the client's only part is the location-ente
 ## PrologueController and the gate
 
 The prologue is its own scene (`Prologue_Earth`): letter, photo, guitar, then Ahksun wakes. `PrologueController` raises
-`Completed` and offers `Skip()`. The order is a gate: `PrologueStep` is `Exploring=0, LetterRead=1, StoneUnlocked=2, PortalOpen=3,
+`Completed` and offers `Skip()`, which sends the skip intent (fire-and-forget, logged) before completing locally. The order is a gate: `PrologueStep` is `Exploring=0, LetterRead=1, StoneUnlocked=2, PortalOpen=3,
 Completed=4`, and `PrologueProgress(letterKey, photoKey, stoneKey, letterSeen, photoSeen, stoneSeen)` moves letter to `LetterRead`,
 the photo (`prologue-photo`, only after the letter) to `StoneUnlocked`, and the stone to `PortalOpen`. The stone is interactable only
 at `StoneUnlocked`, and a resume rebuilds the step from the `readable.seen.*` flags. These are presentation gates; the objectives
