@@ -19,7 +19,7 @@ presentation (show once, skip intro); they grant nothing.
 
 `MonoBehaviour` with `dialogueContentKey` and `displayName`. Shows the usual interaction indicator; on Interact it calls
 `IDialogueService.StartAsync(key, new DialogueNpcContext(key, displayName))` and sets `readable.seen.<key>`.
-Raises `Read` (and static `AnyRead`). When the read ends (`DialogueStartStatus.Ended`) it sends the read intent through `IQuestService.ReadReadableAsync(key)` (`[InjectOptional]`, the `Configure` seam takes it), which calls `POST /api/v1/readables/{key}/read` online or the local `ReadableReadService` offline; the server counts the `ReadReadable` objective ([Quest System](?page=backend/07-quest-system#readable-reads)). It is fire-and-forget with a logged failure and never blocks the read. `ReadablePromptRule.Decide(hasDialogue, dialogueActive, inBattle, inTechDemo)`
+Raises `Read` (and static `AnyRead`). When the read ends (`DialogueStartStatus.Ended`) it sends the read intent through `IQuestService.ReadReadableAsync(key)` (`[InjectOptional]`, the `Configure` seam takes it), which calls `POST /api/v1/trainers/{trainerId}/readables/{readableKey}/read` online or the local `ReadableReadService` offline; the server counts the `ReadReadable` objective ([Quest System](?page=backend/07-quest-system#readable-reads)). It is fire-and-forget with a logged failure and never blocks the read. `ReadablePromptRule.Decide(hasDialogue, dialogueActive, inBattle, inTechDemo)`
 decides whether the prompt shows.
 
 ## WorldBark
