@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-10-14 — Prologue quest: Gran's Letter comes first, the shard glows only after the photo
+
+cr-api `feature/prologue-quest`, cr-api-unity `feature/prologue-quest`, cr-admin-web, cr-docs `docs/prologue-quest` (not deployed). Offline works on merge; online needs a cr-api deploy and a Studio quest push (Gran's Letter and Find Ahksun's new requirement).
+
+- **New objective type.** `ReadReadable` (12) counts a lore readable read to its end, distinct per key. The client sends one intent, `POST /api/v1/trainers/{t}/readables/{key}/read`; `ReadableReadService` validates the key against the authored dialogues (`UnknownReadable` otherwise), emits `ReadableRead`, and the server counts the objective. `LoreReadable` sends the intent when a read ends. → [Quest System](?page=backend/07-quest-system#readable-reads), [Progress Dispatcher](?page=backend/23-progress-dispatcher)
+- **First quest.** New trainers start with **Gran's Letter**: read the letter, look at the photo, inspect the glowing shard. Find Ahksun now requires it. → [Opening Story](?page=unity/38-story-opening)
+- **Skip.** Skipping the prologue sends `POST /api/v1/trainers/{trainerId}/story/prologue/skip`; the server completes every `ReadReadable` objective of the configured prologue quest (`NoPrologueQuest` if none), so Find Ahksun still grants. Gran's Letter requires `QuestNotStarted` Find Ahksun, so trainers past the opening never get it. → [Quest System](?page=backend/07-quest-system#readable-reads)
+- **Shard glow.** In the prologue the shard stays dark until the photo is looked at (`PrologueStep.StoneUnlocked`), then `AhksunCrystalGlow` lights it. The old gate (letter alone unlocked the stone) is gone.
+- **Content ledger.** Quest name, description and the three objective lines are AI drafts. → [AI Content Ledger](?page=content/01-ai-content-ledger)
+
 ## 2026-10-11 — Pixel Crushers Dialogue System removed; NPC battle trainers flagged; smoke runner cleans up
 
 Pixel Crushers Dialogue System removed 2026-10-11. cr-api-unity `feature/strip-dialogue-system`, cr-api `fix/npc-battle-trainer-rows` (not deployed).

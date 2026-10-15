@@ -1,6 +1,6 @@
 # Opening Story (Unity)
 
-Client systems for the opening story: a one-time Earth prologue, the arrival at the cliff's edge (Find Ahksun), the walk
+Client systems for the opening story: a one-time Earth prologue, the first quest Gran's Letter, the arrival at the cliff's edge (Find Ahksun), the walk
 down to the Meadow wagon (Toward the Lights, where First Battle begins), an escorted walk to the farm, lore readables,
 world barks, a scripted capture lesson and place flavour. All of it is **presentation**:
 the client sends only existing intents (start dialogue, accept quest, enter trigger, battle actions); quest progress,
@@ -19,7 +19,7 @@ presentation (show once, skip intro); they grant nothing.
 
 `MonoBehaviour` with `dialogueContentKey` and `displayName`. Shows the usual interaction indicator; on Interact it calls
 `IDialogueService.StartAsync(key, new DialogueNpcContext(key, displayName))` and sets `readable.seen.<key>`.
-Raises `Read` (and static `AnyRead`). `ReadablePromptRule.Decide(hasDialogue, dialogueActive, inBattle, inTechDemo)`
+Raises `Read` (and static `AnyRead`). When the read ends (`DialogueStartStatus.Ended`) it sends the read intent through `IQuestService.ReadReadableAsync(key)` (`[InjectOptional]`, the `Configure` seam takes it), which calls `POST /api/v1/trainers/{trainerId}/readables/{readableKey}/read` online or the local `ReadableReadService` offline; the server counts the `ReadReadable` objective ([Quest System](?page=backend/07-quest-system#readable-reads)). It is fire-and-forget with a logged failure and never blocks the read. `ReadablePromptRule.Decide(hasDialogue, dialogueActive, inBattle, inTechDemo)`
 decides whether the prompt shows.
 
 ## WorldBark
@@ -67,14 +67,23 @@ unplayed. `PillarCharge` drops its tint whenever it is switched off.
 
 ## The opening quest chain
 
-A new trainer is handed **Find Ahksun** at the spawn, not First Battle. First Battle used to be auto-granted there, so the
+A new trainer is handed **Gran's Letter** first, in the Earth prologue. It has three `ReadReadable` objectives, in order: "Read Gran's
+letter." (`prologue-letter`), "Look at the photo she left you." (`prologue-photo`), "Inspect the glowing shard." (`prologue-ahksun-wakes`).
+Each is counted by the server when the player reads that readable to its end (the read intent, never a reported outcome). The Meadow
+spawn then hands out **Find Ahksun**, which requires `QuestCompleted` `quest-grans-letter` besides its existing requirement, so it
+cannot be held before the prologue is done. Gran's Letter itself requires `QuestNotStarted` `quest-find-ahksun`, so a trainer already past the
+opening never receives it. **Skip** sends the prologue skip intent (`POST /api/v1/trainers/{trainerId}/story/prologue/skip`); the server records every
+`ReadReadable` objective of Gran's Letter, so it completes and Find Ahksun still grants.
+
+A new trainer is handed **Find Ahksun** at the spawn once Gran's Letter is complete, not First Battle. First Battle used to be auto-granted there, so the
 fight quest sat in the tracker a hundred metres above the gaterbear, and a playtester finished it with the first wild fight.
 The chain is content only (assets under `Assets/CR/Content/Defs/Quests/`, staged in `quests.json`); the authority decides every
 grant, objective and completion, and the client's only part is the location-enter intent a trigger sends.
 
 | Quest | Key | Objective | Requirement | Granted | Done by |
 |---|---|---|---|---|---|
-| Find Ahksun (sort 0, Main Story) | `quest-find-ahksun` | `VisitLocation` `story-ahksun-landing` ×1 | `QuestNotStarted` `quest-first-battle` | the auto-granter, at session start | walking onto the arrival strip |
+| Gran's Letter (sort -1, Main Story) | `quest-grans-letter` | `ReadReadable` ×1 each: `prologue-letter`, `prologue-photo`, `prologue-ahksun-wakes` | none | the auto-granter, at session start | reading the letter, the photo, then inspecting the glowing shard |
+| Find Ahksun (sort 0, Main Story) | `quest-find-ahksun` | `VisitLocation` `story-ahksun-landing` ×1 | `QuestNotStarted` `quest-first-battle`, `QuestCompleted` `quest-grans-letter` | the auto-granter, at session start | walking onto the arrival strip |
 | Toward the Lights (sort 1) | `quest-the-way-down` | `VisitLocation` `story-philroes-wagon` ×1 | `QuestCompleted` `quest-find-ahksun` | the auto-granter, when Find Ahksun is claimed | the wagon's first entry |
 | First Battle (sort 1) | `quest-first-battle` | `DefeatCreature` `creature_gaterbear` ×1 | `StatThreshold` `location_discovered_story-philroes-wagon` ≥ 1 | the wagon location's `discovery_quest_key` (the authority grants it on the first entry); the auto-granter is the safety net | the gaterbear's defeat |
 
@@ -113,7 +122,16 @@ grant, objective and completion, and the client's only part is the location-ente
 ## PrologueController and the gate
 
 The prologue is its own scene (`Prologue_Earth`): letter, photo, guitar, then Ahksun wakes. `PrologueController` raises
-`Completed` and offers `Skip()`; the stone interaction unlocks after `readable.seen.prologue-letter`.
+`Completed` and offers `Skip()`, which sends the skip intent (fire-and-forget, logged) before completing locally. The order is a gate: `PrologueStep` is `Exploring=0, LetterRead=1, StoneUnlocked=2, PortalOpen=3,
+Completed=4`, and `PrologueProgress(letterKey, photoKey, stoneKey, letterSeen, photoSeen, stoneSeen)` moves letter to `LetterRead`,
+the photo (`prologue-photo`, only after the letter) to `StoneUnlocked`, and the stone to `PortalOpen`. The stone is interactable only
+at `StoneUnlocked`, and a resume rebuilds the step from the `readable.seen.*` flags. These are presentation gates; the objectives
+they line up with are counted by the server.
+
+**Shard glow.** `AhksunCrystalGlow` (`CR.Game.Story`, on the shard prefab root, added by `AhksunShardPrefabBuilder`) has
+`SetLit(bool)`, which enables or disables every Light and ParticleSystem under it (emission stops or plays). `Apply()` calls
+`stoneProp.GetComponent<AhksunCrystalGlow>()?.SetLit(step >= StoneUnlocked)`, so the shard is dark until the photo has been looked
+at, then glows to say "inspect the glowing shard". Default is lit, so the companion shard and the arrival crystal are unchanged.
 `PrologueGateRule.Decide(hasEverBeenPlaced, startSpawnPlan)` is true only for a never-placed trainer on the start
 spawn. `OpenWorldBootstrap`, before placing the player, suspends streaming, loads the prologue additively alone,
 awaits `Completed`, unloads, resumes streaming and continues placement. `world.placed` is set after the first
@@ -282,6 +300,8 @@ built by `cr_build_gaterbear_placeholder`, with a portrait baked from it at `ico
 that the definition pointed at Dragon Fire's prefab and icon, so the wagon fight showed a dragon. Changing a
 creature's `assetKey` or icon key reaches players only through the same two steps as its row: push `creature_gaterbear`
 (online reads the key from the server) and rebake the offline floor (offline reads it from `game-data.bytes`).
+
+`NaturalPrologue` waits for `quest-grans-letter` to be active, reads the letter and asserts the shard is still inactive, reads the photo and asserts it is active, inspects the shard and walks into the portal, then waits for Gran's Letter to complete.
 
 The runner follows the chain: at the spawn Find Ahksun is active and First Battle is not; teleporting onto the arrival strip plays
 Ahksun rises and must complete Find Ahksun and hand out Toward the Lights; teleporting to the wagon box's northern edge (inside
