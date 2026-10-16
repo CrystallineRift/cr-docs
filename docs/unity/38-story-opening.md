@@ -122,7 +122,10 @@ grant, objective and completion, and the client's only part is the location-ente
 ## PrologueController and the gate
 
 The prologue is its own scene (`Prologue_Earth`): letter, photo, guitar, then Ahksun wakes. `PrologueController` raises
-`Completed` and offers `Skip()`, which sends the skip intent (fire-and-forget, logged) before completing locally. The order is a gate: `PrologueStep` is `Exploring=0, LetterRead=1, StoneUnlocked=2, PortalOpen=3,
+`Completed` and offers `Skip()`, which sends the skip intent (fire-and-forget, logged) before completing locally. **Players
+cannot skip the room**: the Skip pill and the Cancel / Start / Esc hold exist only while the controller's `allowSkip` is on
+(a serialized field, off in `Prologue_Earth`; `SetAllowSkip` is the seam for tests and the smoke's `hold` scenario), so
+`Skip()` is reached only by code (the smoke's `skip` mode, the trainer-switch teardown). The order is a gate: `PrologueStep` is `Exploring=0, LetterRead=1, StoneUnlocked=2, PortalOpen=3,
 Completed=4`, and `PrologueProgress(letterKey, photoKey, stoneKey, letterSeen, photoSeen, stoneSeen)` moves letter to `LetterRead`,
 the photo (`prologue-photo`, only after the letter) to `StoneUnlocked`, and the stone to `PortalOpen`. The stone is interactable only
 at `StoneUnlocked`, and a resume rebuilds the step from the `readable.seen.*` flags. These are presentation gates; the objectives
@@ -283,7 +286,9 @@ region, reveal; the healed dialog waits for it. The target is `IWhiteoutSafePoin
 GameSettings or the Studio override; Editor and development builds only — `#if UNITY_EDITOR || DEVELOPMENT_BUILD`)
 runs `StorySmokeRunner`. `portal` (`PortalPlacesScenario`) walks the prologue naturally into the portal, checks the
 player is placed and records visited places, then switches to a second new trainer and checks its Places start empty
-and its first region entry still shows flavour; it needs `IVisitedPlacesSource`, so open mode only. Every mode drives the
+and its first region entry still shows flavour; it needs `IVisitedPlacesSource`, so open mode only. `hold` first proves the
+shipped room: with `allowSkip` off a 3 s Esc hold moves no fill, skips nothing and opens no menu; it then arms the skip through
+`SetAllowSkip(true)` and checks a short hold does not skip and a full hold skips once. Every mode drives the
 startup UI to a new offline trainer and walks every beat through the player's own entry points (readables,
 events, NPC conversations, `SubmitPlayerAction` with `BattleActionParser.Serialise(BattleAction)`, teleports through
 `IOpenWorldPlayer`). One line per step in
