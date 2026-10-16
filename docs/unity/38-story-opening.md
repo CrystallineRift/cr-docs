@@ -125,7 +125,15 @@ The prologue is its own scene (`Prologue_Earth`): letter, photo, guitar, then Ah
 `Completed` and offers `Skip()`, which sends the skip intent (fire-and-forget, logged) before completing locally. **Players
 cannot skip the room**: the Skip pill and the Cancel / Start / Esc hold exist only while the controller's `allowSkip` is on
 (a serialized field, off in `Prologue_Earth`; `SetAllowSkip` is the seam for tests and the smoke's `hold` scenario), so
-`Skip()` is reached only by code (the smoke's `skip` mode, the trainer-switch teardown). The order is a gate: `PrologueStep` is `Exploring=0, LetterRead=1, StoneUnlocked=2, PortalOpen=3,
+`Skip()` is reached only by code (the smoke's `skip` mode, the trainer-switch teardown).
+
+**Camera indoors.** The overworld rig (6 m arm, no damping into collision) snaps into the bedroom's walls and ceiling, so
+`IndoorCameraProfile` on the `PrologueController` object pulls the arm to 3.2 m and damps the obstacle moves (0.3 s in,
+0.5 s out) while the scene is loaded, and gives the rig its exact previous values back when the scene goes. It writes both
+the rig's own `CameraDistance` and the follow's (`ThirdPersonFollowTarget.SetCameraDistance` touches neither until its Awake
+has found the follow). `StorySceneBuilder.BuildPrologue` adds it. Tests: `IndoorCameraProfileTests`.
+
+The order is a gate: `PrologueStep` is `Exploring=0, LetterRead=1, StoneUnlocked=2, PortalOpen=3,
 Completed=4`, and `PrologueProgress(letterKey, photoKey, stoneKey, letterSeen, photoSeen, stoneSeen)` moves letter to `LetterRead`,
 the photo (`prologue-photo`, only after the letter) to `StoneUnlocked`, and the stone to `PortalOpen`. The stone is interactable only
 at `StoneUnlocked`, and a resume rebuilds the step from the `readable.seen.*` flags. These are presentation gates; the objectives
