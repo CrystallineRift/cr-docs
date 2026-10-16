@@ -134,8 +134,9 @@ the rig's own `CameraDistance` and the follow's (`ThirdPersonFollowTarget.SetCam
 has found the follow). `StorySceneBuilder.BuildPrologue` adds it. Tests: `IndoorCameraProfileTests`.
 
 **Fixed cameras.** The room is shot from four fixed corner cameras instead of the follow rig: `[Fixed Cameras]` holds a
-`FixedCameraSet` and, per floor quadrant, a `CinemachineCamera` (no body or aim; the transform is the shot, FOV 55, just
-under the ceiling looking at the quadrant's middle) and a `FixedCameraZone` (trigger box, overlapping its neighbours by
+`FixedCameraSet` and, per floor quadrant, a `CinemachineCamera` (no body or aim; the transform is the shot, FOV 68, just
+under the ceiling in the corner diagonally opposite the zone, looking across the room toward the zone so the whole room
+and the player are in frame and the next zone is a 90° cut) and a `FixedCameraZone` (trigger box, overlapping its neighbours by
 0.75 m, the portal's player-tag check). Entering a zone makes its camera live at priority 20 (above the rig's 10, below
 battle's 100) and every other one 0; last zone entered wins, leaving changes nothing, so the overlap never flickers. The
 set's `BlendCreatedEvent` listener makes any blend into or out of one of its cameras a cut. On `Start` the zone containing
