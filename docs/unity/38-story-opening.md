@@ -133,6 +133,15 @@ cannot skip the room**: the Skip pill and the Cancel / Start / Esc hold exist on
 the rig's own `CameraDistance` and the follow's (`ThirdPersonFollowTarget.SetCameraDistance` touches neither until its Awake
 has found the follow). `StorySceneBuilder.BuildPrologue` adds it. Tests: `IndoorCameraProfileTests`.
 
+**Fixed cameras.** The room is shot from four fixed corner cameras instead of the follow rig: `[Fixed Cameras]` holds a
+`FixedCameraSet` and, per floor quadrant, a `CinemachineCamera` (no body or aim; the transform is the shot, FOV 55, just
+under the ceiling looking at the quadrant's middle) and a `FixedCameraZone` (trigger box, overlapping its neighbours by
+0.75 m, the portal's player-tag check). Entering a zone makes its camera live at priority 20 (above the rig's 10, below
+battle's 100) and every other one 0; last zone entered wins, leaving changes nothing, so the overlap never flickers. The
+set's `BlendCreatedEvent` listener makes any blend into or out of one of its cameras a cut. On `Start` the zone containing
+`PlayerSpawn` is live, so the first frame is a fixed shot. `cr_prologue_fixed_cameras` lays the set out from the room's
+`Floor_` and `SM_Ceiling` renderers (re-run replaces it). Tests: `FixedCameraSetTests`.
+
 The order is a gate: `PrologueStep` is `Exploring=0, LetterRead=1, StoneUnlocked=2, PortalOpen=3,
 Completed=4`, and `PrologueProgress(letterKey, photoKey, stoneKey, letterSeen, photoSeen, stoneSeen)` moves letter to `LetterRead`,
 the photo (`prologue-photo`, only after the letter) to `StoneUnlocked`, and the stone to `PortalOpen`. The stone is interactable only
