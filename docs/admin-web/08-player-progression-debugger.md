@@ -17,7 +17,7 @@ from the route; NPC trainers are never listed or readable.
   Completed, Abandoned, Failed.
 - **Flags**: the player's server-owned flags (`trainer_stat`), filterable by category. At most 2000 are returned; if there
   are more the section says it is truncated. (The API also returns defeated trainer NPCs and item totals; the page does not show them yet.)
-- **Timeline**: the player's stat events and admin actions merged, newest first, 50 at a time with **Load more**.
+- **Timeline**: the player's stat events and admin actions merged, newest first, 50 at a time with **Load older**.
 
 ## How state is decided
 
@@ -30,7 +30,7 @@ Locked, not Completed. See [Quest System](../backend/07-quest-system.md).
 ## View as a player
 
 Picking **View as** loads that player's progress and applies it to the editors: the map colours cards by state; the canvas
-shows a **Live** badge on branch cases and conditional choice options and seeds **Play** with the player's real world
+marks branch cases and conditional choice options with a tick, cross or ? (tooltips "Holds for this player", "Does not hold for this player", "Not known for this player") and seeds **Play** with the player's real world
 ("Viewing as {trainer}"). Anything the payload cannot answer (for example a creature level or used-item requirement) is
 listed under "Not known for this player" instead of guessed. If the fetch fails the page says "Can't view as player" and
 seeds nothing.
