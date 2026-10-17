@@ -51,6 +51,12 @@ that tie deterministically rather than the schema forbidding it.
 `document` holds the full canonical JSON — up to `DialogueLimits.MaxSerializedBytes` (256 KB, enforced
 in the domain service and REST layer, not by the column type).
 
+### `row_version` (M14003)
+
+M14003 adds `row_version BIGINT NOT NULL DEFAULT 1` to `dialogue` (a column-exists guard makes it safe to run twice). It is
+the optimistic-concurrency counter described in [Optimistic Concurrency](28-optimistic-concurrency.md): `rowVersion` is
+returned on detail, list items and bulk results, and bulk items accept `expectedRowVersion`. Layout-only changes do not bump it.
+
 ## Repository semantics (`BaseDialogueRepository`)
 
 One abstract base holds every SQL statement; `CR.Dialogue.Data.Postgres`/`.Sqlite` supply only the
@@ -216,6 +222,15 @@ same as it reads any other content. Only `PUT /api/v1/dialogues/bulk` and `DELET
 The accepted risk this leaves: any authenticated player can enumerate every dialogue document, same
 as every other piece of shipped content (it is already baked into the client).
 
+## Studio editor routes
+
+Added for the web canvas (all documented in the OpenAPI spec):
+
+- `GET /api/v1/dialogues/vocabulary` returns the combinators, conditions and actions with descriptors (`type`, `displayName`, `description`, `isAction`, `sentence`, `args[]` with `key`, `kind` of quest/npc/item/stat/enum/int/text, `required`, `values`, `defaultValue`, `hint`). The canvas builds its sentence editor from it.
+- `POST /api/v1/dialogues/validate` (content-write) runs the same validator as save on one dialogue and returns `{ findings: [{ severity, nodeId, code, message }] }` (capped at 100) without writing. Besides the existing rules it reports `missing-required-arg`, `unknown-arg`, `bad-arg-value`, and the lore tag checks (`lore.raw-effect-tag`, `lore.author-tag`), all as warnings.
+- `GET /api/v1/dialogues/quest-links` (content-write) lists which quests each dialogue node offers, pays out, counts a talk for, or checks (`role` `offers` / `paysOut` / `countsTalk` / `checks`). It is cached and recomputed only when the live dialogues' `MAX(updated_at)` and count change.
+- `GET /api/v1/dialogues?includeDocument=true` adds each item's `document`. It needs content-write and the page size is clamped to 50, so clients page with `offset` until a short page.
+
 ## REST behavior, status codes
 
 - `PUT /bulk` reads and bounds the request body manually (`IHttpMaxRequestBodySizeFeature`, set
@@ -231,6 +246,7 @@ as every other piece of shipped content (it is already baked into the client).
   all-or-nothing**: every item is validated before anything is written, and the whole batch is written
   in a single database transaction — a failure no validator could see (a constraint, a race) rolls
   back every row, never a partial write.
+- `409` (`row-version-conflict`) when any item's `expectedRowVersion` does not match (or a write race is lost). The check covers the whole batch before validation and before anything is written; the response lists every conflicting item and `applied` is always empty. The shape and the rules for `0`, deleted rows and layout-only edits are in [Optimistic Concurrency](28-optimistic-concurrency.md). `DELETE /by-content-key/{key}?expectedRowVersion=n` returns 409 the same way.
 - Findings in a 400 response are capped at 100 per item (`MaxFindingsPerItem`), with a `Truncated`
   count when more existed — a hostile document (e.g. an array of thousands of nulls, well within the
   256 KB cap) produces one `null-element` finding per element; capping keeps a bad item from blowing

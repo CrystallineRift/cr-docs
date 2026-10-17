@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-10-17 — Studio node editors: dialogue canvas, quest story map, progression debugger, row-version conflicts
+
+cr-api `feature/studio-quests`, `feature/studio-dialogues`, `feature/studio-debugger`, cr-api-unity `feature/studio-sync-row-version`, cr-admin-web `feature/studio-node-editors`, cr-docs `docs/studio-node-editors` (none deployed). Deploy order: cr-api first (migrations M17004, M17005, M14003, M9005, M13003, M4015, Auth 19), then the web build, then the Unity release. Deploy notes: [Optimistic Concurrency](?page=backend/28-optimistic-concurrency#deploy-notes).
+
+- **Dialogue canvas.** The web Studio edits a dialogue as cards and arrows, with a server-driven rule builder, live checks, a quest list and a Play preview. New server routes: `vocabulary`, `validate`, `quest-links`, `includeDocument`. → [Dialogue Canvas](?page=admin-web/06-dialogue-canvas), [Dialogue Server Domain](?page=backend/21-dialogue-domain)
+- **Quest story map.** Quests are cards, prerequisites are arrows, story lines are lanes. Quests gain `quest_line` and `line_step` (there is no separate quest kind), and the server refuses prerequisite loops. Card positions are stored in `quest_map_layout`. → [Quest Story Map](?page=admin-web/07-quest-story-map), [Quest System](?page=backend/07-quest-system#studio-concurrency-and-story-lines)
+- **Conflicts instead of overwrites.** Dialogues, quest templates and the map layout use `row_version`: a Studio push or web save with a stale version gets a 409 and a conflict dialog (web) or conflict box with Pull / Recreate (Unity). Layout moves never conflict. Old callers still work; flip `Studio:RequireExpectedRowVersion` after the Unity release. → [Optimistic Concurrency](?page=backend/28-optimistic-concurrency), [Dialogue Authoring](?page=unity/32-dialogue-authoring)
+- **Player progression debugger.** Admins see a player's quest states, flags and timeline (read-only) and can view the map and the canvas as that player. → [Player Progression Debugger](?page=admin-web/08-player-progression-debugger), [Moderation](?page=backend/18-moderation#progression-debugger-routes)
+- **Server-owned stat keys.** `readable_read_`, `npc_met_` and `quest_completed_` joined the deny-list; an audit query is in the deploy notes. → [Stats System](?page=backend/08-stats-system)
+- **One-time step.** In Unity, Pull once before the first push of assets that were never pulled (a create-only push onto an existing key is a 409).
+
 ## 2026-10-14 — Prologue quest: Gran's Letter comes first, the shard glows only after the photo
 
 cr-api `feature/prologue-quest`, cr-api-unity `feature/prologue-quest`, cr-admin-web, cr-docs `docs/prologue-quest` (not deployed). Offline works on merge; online needs a cr-api deploy and a Studio quest push (Gran's Letter and Find Ahksun's new requirement).

@@ -221,7 +221,8 @@
         "Assets/CR/Tests/Editor/QuestMirrorTests.cs",
         "Assets/CR/Tests/Editor/QuestRouterRig.cs",
         "Assets/CR/Tests/Editor/QuestSqliteFixtureBase.cs",
-        "Assets/CR/Tests/Editor/QuestTrackerTurnInTests.cs"
+        "Assets/CR/Tests/Editor/QuestTrackerTurnInTests.cs",
+        "Assets/CR/Core/Data/Editor/QuestEditorSyncHelper.cs"
       ]
     },
     "description": "Quest system: templates, objectives, rewards, instances, progress events, requirements, condition evaluation; grant mode / reward claim mode (M7017), AcceptQuestAsync restarts an abandoned/failed instance, content:write on template PUT/DELETE, objectives upserted by sort_order and the re-parenting risk"
@@ -235,6 +236,9 @@
       ],
       "cr-data": [
         "Assets/CR/Stats/**/*.cs"
+      ],
+      "cr-admin-web": [
+        "src/pages/live/progression/**"
       ]
     },
     "description": "CR.Stats lifetime stat tracking domain: trainer_stat, stat_event, operators, StatKey constants"
@@ -1614,11 +1618,16 @@
     "repos": {
       "cr-api": [
         "Moderation/**/*.cs",
-        "Moderation/**/*.csproj"
+        "Moderation/**/*.csproj",
+        "Quests/CR.Quests.Domain.Services/**/*.cs",
+        "Stats/**/*.cs"
       ],
       "cr-data": [
         "Assets/CR/Core/Data/Editor/LiveOps/**",
         "Assets/CR/Game/World/Editor/Admin*"
+      ],
+      "cr-admin-web": [
+        "src/pages/live/**"
       ]
     },
     "description": "Live-ops moderation: account_moderation/admin_action, shadow bans and the hidden-seller rule, player dossiers, currency/item adjustments, and the /api/v1/admin routes behind RequireAdmin"
@@ -1805,7 +1814,8 @@
     "docPath": "docs/unity/32-dialogue-authoring.md",
     "repos": {
       "cr-api": [
-        "Quests/CR.Quests.Data.Migration/M7020*.cs"
+        "Quests/CR.Quests.Data.Migration/M7020*.cs",
+        "Dialogue/CR.Dialogue.Service.REST/**/*.cs"
       ],
       "cr-data": [
         "Assets/CR/Dialogue/Editing/**/*.cs",
@@ -1829,7 +1839,9 @@
         "Assets/CR/Content/Defs/Dialogues/*.asset",
         "Assets/CR/Content/Defs/Quests/*.asset",
         "Assets/CR/Content/Defs/_Parked/Dialogues/*.asset",
-        "Assets/CR/Content/Defs/_Parked/Quests/*.asset"
+        "Assets/CR/Content/Defs/_Parked/Quests/*.asset",
+        "Assets/CR/Core/Data/Editor/QuestEditorSyncHelper.cs",
+        "Assets/CR/Core/Data/Editor/ContentStudioTool*.cs"
       ]
     },
     "description": "Dialogue authoring workflow: Studio Dialogues tab, the guide-NPC scaffold menu, the GraphView node editor (typed condition/action editors, findings the server can't see, the changed-outside-editor guard, undo), DialogueContentAudit's 12 rules and where they run, push/pull/review, the shipped dialogues (active vs parked under Defs/_Parked, ContentParking), the Meadow Merchant as the main story's Act 1, the guide graph's branch order, authoring rules that bite (auto-grant/claim, sort-order upsert danger), preview pane"
@@ -2162,7 +2174,9 @@
       "cr-api": [],
       "cr-data": [],
       "cr-admin-web": [
-        "src/resources/dialogues/**"
+        "src/resources/dialogues/**",
+        "src/components/canvas/dialogue/**",
+        "src/lib/graph/**"
       ]
     },
     "description": "Studio web dialogue editing: the structured `document` graph editor (speakers, nodes by type — line/choice/branch/action/end —, options, branch cases, conditions/actions with typed args, entry node) built on the shared `object`/`rows`/`siblingRef`/`map` kinds, and the legacy free-JSON document's round-trip-safe `.loose()` schema with the Advanced tab as escape hatch for anything unrecognised."
@@ -2184,7 +2198,8 @@
       "cr-api": [],
       "cr-data": [],
       "cr-admin-web": [
-        "src/resources/quests/**"
+        "src/resources/quests/**",
+        "src/pages/quests/**"
       ]
     },
     "description": "Studio web quest editing: which key family (item/creature/NPC/world-location content key vs quest/item/creature GUID vs free-typed trainer/talent key) each objective/requirement/reward target picker uses, the fix for objective types 21/22 (Activate key item / Used item) which used to point their picker at the item GUID instead of the content key `ItemUseDomainService` actually emits, and the `targetMetadata`/reward `metadata` `typedMeta` columns (wired up, currently empty specs — no objective or reward type parses metadata server-side yet)."
@@ -2448,5 +2463,79 @@
       ]
     },
     "description": "Ahksun companion shard (CompanionShardBehaviour, follow math, hide rules), shard-anchored barks (ICompanionAnchor, BarkAnchorOffset), dialogue option button sizing"
+  },
+  "admin-web/06-dialogue-canvas": {
+    "docPath": "docs/admin-web/06-dialogue-canvas.md",
+    "repos": {
+      "cr-api": [
+        "Dialogue/CR.Dialogue.Service.REST/**/*.cs",
+        "Dialogue/CR.Dialogue.Model/**/*.cs"
+      ],
+      "cr-data": [],
+      "cr-admin-web": [
+        "src/components/canvas/dialogue/**",
+        "src/lib/graph/**",
+        "src/resources/dialogues/**"
+      ]
+    },
+    "description": "Web dialogue canvas: cards, rule builder, checks, Play, conflicts. cr-admin-web globs are not checked by check-stale."
+  },
+  "admin-web/07-quest-story-map": {
+    "docPath": "docs/admin-web/07-quest-story-map.md",
+    "repos": {
+      "cr-api": [
+        "Quests/CR.Quests.Service.REST/**/*.cs",
+        "Quests/CR.Quests.Data.Migration/M1700[45]*.cs"
+      ],
+      "cr-data": [],
+      "cr-admin-web": [
+        "src/pages/quests/**",
+        "src/lib/graph/quest/**",
+        "src/resources/quest-map/**",
+        "src/resources/quests/**"
+      ]
+    },
+    "description": "Web quest story map and layout document. cr-admin-web globs are not checked by check-stale."
+  },
+  "admin-web/08-player-progression-debugger": {
+    "docPath": "docs/admin-web/08-player-progression-debugger.md",
+    "repos": {
+      "cr-api": [
+        "Moderation/**/*.cs",
+        "Stats/**/*.cs",
+        "Quests/CR.Quests.Domain.Services/**/*.cs"
+      ],
+      "cr-data": [],
+      "cr-admin-web": [
+        "src/pages/live/**",
+        "src/components/viewAs/**",
+        "src/lib/graph/playthrough/realWorld.ts"
+      ]
+    },
+    "description": "Admin progression debugger and View as. cr-admin-web globs are not checked by check-stale."
+  },
+  "backend/28-optimistic-concurrency": {
+    "docPath": "docs/backend/28-optimistic-concurrency.md",
+    "repos": {
+      "cr-api": [
+        "Dialogue/CR.Dialogue.Data/**/*.cs",
+        "Dialogue/CR.Dialogue.Data.Migration/M14003*.cs",
+        "Dialogue/CR.Dialogue.Service.REST/**/*.cs",
+        "Quests/CR.Quests.Data/**/*.cs",
+        "Quests/CR.Quests.Data.Migration/M1700[45]*.cs",
+        "Quests/CR.Quests.Service.REST/**/*.cs"
+      ],
+      "cr-data": [
+        "Assets/CR/Core/Data/Registry/Sync/**",
+        "Assets/CR/Game/World/Editor/DialogueEditorSyncHelper.cs",
+        "Assets/CR/Core/Data/Editor/ContentStudioTool*.cs"
+      ],
+      "cr-admin-web": [
+        "src/api/conflicts.ts",
+        "src/api/rowVersion.ts",
+        "src/components/resource/ConflictDialog.tsx"
+      ]
+    },
+    "description": "row_version contract: expectedRowVersion, 409 body, deploy notes."
   }
 }

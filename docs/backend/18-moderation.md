@@ -196,6 +196,9 @@ sets it (and `AdminActorName`) through its environment or secret store, never in
 | DELETE | `/market/listings/{id}` | `ReasonRequest` | `MarketListingView` (post-removal, `state = Cancelled`) | 400, 404, 409 `AlreadySold`/`StorageFull` |
 | GET | `/actions?accountId=&trainerId=&listingId=&offset=&limit=` | | `AdminAction[]`, newest first | |
 
+| GET | `/trainers/{trainerId}/progression?flagCategory=` | | `PlayerProgressionResponse { trainer, quests[], flags[], flagsTruncated, defeatedTrainerNpcKeys[], itemTotals[] }` | 404 (missing trainer or NPC trainer) |
+| GET | `/trainers/{trainerId}/timeline?before=&limit=` | | `{ items[], nextBefore }` (stat events and admin actions merged, newest first; `limit` default 50, clamped 1..200) | 400 on a bad `before` cursor |
+
 Both item routes and both shadow-ban routes are method pairs on the same path; the two `DELETE`s
 that carry a body (`/shadow-ban`, `/trainers/{id}/items`, `/market/listings/{id}`) read it via
 `[FromBody]` — minimal APIs accept a request body on `DELETE`, and the reason is not optional, so it
@@ -358,3 +361,15 @@ database).
 - [Spawner System](03-spawner-system.md) — the pools, templates and weighted draw `GrantCreatureFromSpawnerAsync` rolls.
 - [Talents](25-talents.md) — `SetTalentRankAsync`/`RespecTalentsAsync`, the `respec` flag on `GrantTrainerXpAsync`, and `WouldOverspendTalents`.
 - [Creature Generation](04-creature-generation.md) — `CreateFromSpawnerAtLevelAsync` and what a template decides.
+
+## Progression debugger routes
+
+The two `GET /trainers/{trainerId}/progression` and `/timeline` routes feed the web
+[Player Progression Debugger](../admin-web/08-player-progression-debugger.md). Rules:
+
+- **Admin only and read-only.** Both are `RequireAdmin` (editor and content-write keys and player tokens get 403). A read writes no `admin_action` row; only state-changing routes above are audited.
+- **The trainer id comes from the route.** NPC trainers are hidden (404).
+- **`progression`** reuses the quest domain: each quest gets a state (Locked 0, Available 1, InProgress 2, ReadyToTurnIn 3, Completed 4, Abandoned 5, Failed 6) decided over all of the trainer's instances of that template, with the same offer check as the NPC's list (see [Quest System](07-quest-system.md)), and each requirement carries its current `actual` value when computable. `flags` are the trainer's `trainer_stat` values with a `category`, capped at 2000 (`flagsTruncated`); `?flagCategory=` filters server-side.
+- **`timeline`** merges `stat_event` and `admin_action` rows. The cursor `before` is opaque (`<utc ticks>_<id>`); each source is read in `(occurred_at DESC, id DESC)` order and the merge uses the same order, so events with identical times are neither skipped nor repeated. `nextBefore` is set only when more exist.
+- **Player search** (`GET /players?q=`) ignores NPC trainers and matches by email prefix or trainer-name prefix; new Postgres indexes on `LOWER(trainers.name)` and `LOWER(accounts.email)` (with `text_pattern_ops`) back it.
+- **Indexes.** `admin_action (target_trainer_id, occurred_at DESC, id)` (M13003) and `stat_event (trainer_id, occurred_at DESC, id)` (Stats M9005, see [Stats](08-stats-system.md)).

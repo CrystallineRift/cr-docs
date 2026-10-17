@@ -190,8 +190,9 @@ uses. A `VisitLocation` objective's target is likewise picked from `ContentPicke
 `visit-location-target-uncatalogued` audit rule, since the authority advances nothing for a key it cannot
 resolve; see [Location Discoveries](?page=backend/24-location-discoveries).
 
-**Supersedes checklist step 0b's `quest_kind`.** Main Story means "main", and every other category is a side quest. Only
-`quest_line` / `line_step` remain planned.
+**Supersedes checklist step 0b's `quest_kind`.** Main Story means "main", and every other category is a side quest, so
+there is no separate `quest_kind` column. `quest_line` / `line_step` shipped with M17004; see
+[Studio concurrency and story lines](#studio-concurrency-and-story-lines).
 
 ## The shipped quest chain
 
@@ -1054,6 +1055,20 @@ rewards (see "Server authority hardening" below) can carry a genuinely new unloc
 `ApplyServerProgress` is what gets that unlock to the achievement toast. `ReportUnlocks`/
 `ReportTrainerProgress` now have exactly one call site each, inside `ApplyServerProgress`.
 
+### Studio concurrency and story lines
+
+M17004 adds three columns to `quest_template`: `row_version BIGINT NOT NULL DEFAULT 1`, `quest_line VARCHAR(64) NULL` and
+`line_step INTEGER NULL`. M17005 adds `quest_map_layout`. The Studio story map and the Unity Studio use them.
+
+- **Story line.** `questLine` is a slug (`^[a-z0-9][a-z0-9-]{0,63}$`, else 400 `invalid_quest_line`); `lineStep` is an order within the line (1 or more, else 400 `invalid_line_step`; a step with no line is also 400). On the bulk request, `questLine: ""` clears the line and step, `null` keeps the stored value, and a `null` `lineStep` keeps it. Both are presentation and grouping only: the authority does not use them to offer or gate a quest. Category (`Main Story` vs side) is unchanged.
+- **Row version.** Entities (list, `by-content-key`, bulk success `templates[]`) carry `rowVersion`. Bulk rows accept `expectedRowVersion` and `DELETE` accepts `?expectedRowVersion=`; the rules and the 409 body are in [Optimistic Concurrency](?page=backend/28-optimistic-concurrency). The up-front check runs before line, objective, requirement and cycle validation, so a stale push gets the 409 first; basic 400s (blank key, undefined enum, area length) are all raised before anything is written.
+- **Requirement keys.** `requirements[].referenceContentKey` (by-content-key and `includeChildren`) is the target quest's content key for `QuestCompleted` / `QuestNotStarted`, resolved by the server including deleted templates; `null` means the target is gone. Clients must use it and never map GUIDs to keys themselves.
+- **`GET /api/v1/quests/templates?includeChildren=true`** returns each template with objectives, rewards and requirements in one call (three table reads grouped in memory). It needs content-write (403 `forbidden` otherwise); the default list is unchanged and open.
+- **Loops are refused.** A bulk push that would create a `QuestCompleted` cycle returns 400 `{ error: "requirement_cycle", message, quests: [keys] }`. The check walks stored live requirements plus the batch and starts from the batch's own keys, so an old loop elsewhere does not block an unrelated push.
+- **Map layout.** `GET`/`PUT /api/v1/quests/map-layout/{scope}` (content-write) stores the story map's card positions and lane colours as one JSON document per scope, with the same `rowVersion` and 409 contract. It is presentation only and not in the game client. Validation: scope slug, document an object up to 256 KB, at most 2000 positions, colours `#rrggbb`; errors are 400 `invalid_scope`, `invalid_document`, `invalid_expected_row_version`.
+- **Rollout flag.** `Studio:RequireExpectedRowVersion` (default `false`); when `true`, a write without `expectedRowVersion` is 400 `expected_row_version_required`. Until then such a write logs a Warning with the caller.
+- **Revive.** An unconditional write onto a soft-deleted template now revives it. It used to hit the `content_key` unique constraint and return 500.
+
 ### Crystalline Rift Studio sync: `PUT /api/v1/quests/templates/bulk`
 
 Used by the Unity editor Crystalline Rift Studio to push `QuestDefinition` ScriptableObjects to the server. Each entry is matched by `content_key` and the template row plus all its objectives, rewards, and requirements are replaced atomically.
@@ -1063,6 +1078,9 @@ are the only two quest endpoints gated behind `AuthorizationPolicies.RequireCont
 other quest route (accept, progress, claim, abandon, the reads) stays on the ordinary player-token
 policy. This is the exact same content-write gate the dialogue endpoints use (see
 [Dialogue Server Domain](?page=backend/21-dialogue-domain)).
+
+Each request row also takes `expectedRowVersion`, `questLine` and `lineStep`; a stale version returns 409
+`row-version-conflict` (see [Studio concurrency and story lines](#studio-concurrency-and-story-lines)).
 
 ```json
 PUT /api/v1/quests/templates/bulk
