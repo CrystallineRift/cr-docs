@@ -125,7 +125,27 @@ The prologue is its own scene (`Prologue_Earth`): letter, photo, guitar, then Ah
 `Completed` and offers `Skip()`, which sends the skip intent (fire-and-forget, logged) before completing locally. **Players
 cannot skip the room**: the Skip pill and the Cancel / Start / Esc hold exist only while the controller's `allowSkip` is on
 (a serialized field, off in `Prologue_Earth`; `SetAllowSkip` is the seam for tests and the smoke's `hold` scenario), so
-`Skip()` is reached only by code (the smoke's `skip` mode, the trainer-switch teardown). The order is a gate: `PrologueStep` is `Exploring=0, LetterRead=1, StoneUnlocked=2, PortalOpen=3,
+`Skip()` is reached only by code (the smoke's `skip` mode, the trainer-switch teardown).
+
+**Camera indoors.** The overworld rig (6 m arm, no damping into collision) snaps into the bedroom's walls and ceiling, so
+`IndoorCameraProfile` on the `PrologueController` object pulls the arm to 3.2 m and damps the obstacle moves (0.3 s in,
+0.5 s out) while the scene is loaded, and gives the rig its exact previous values back when the scene goes. It writes both
+the rig's own `CameraDistance` and the follow's (`ThirdPersonFollowTarget.SetCameraDistance` touches neither until its Awake
+has found the follow). `StorySceneBuilder.BuildPrologue` adds it. Tests: `IndoorCameraProfileTests`.
+
+**Fixed cameras.** The room is shot from four fixed corner cameras instead of the follow rig, with Cinemachine's own
+pieces. `[Fixed Cameras]` holds, per quadrant of the room's interior, a plain `CinemachineCamera` (no body or aim; the
+transform is the shot, FOV 68, 2.35 m up in the corner diagonally opposite the quadrant looking back toward it, priority 20
+— above the rig's 10, below the story director's 50 and battle's 100) and a trigger box with a `CinemachineTriggerAction`
+(`WithTag` Player) whose enter action **Activates** the camera and whose exit action **Deactivates** it: zones overlap by
+0.75 m, so the camera of the zone entered last is live and the boundary never flickers. The spawn's camera starts active.
+`Assets/CR/Content/Camera/PrologueCameraCuts.asset` (`CinemachineBlenderSettings`, on the Core Brain's Custom Blends) gives
+every blend into or out of a `Prologue Cam …` a 0.6 s ease (`BlendSeconds`; the Brain's default 2 s reads as a drift). `cr_prologue_fixed_cameras` measures the interior by casting from
+`PlayerSpawn` to the nearest wall renderers (the floor tiles run under the walls and into an alcove), plans the shots
+(`FixedCameraLayout`, pure), slides a corner that lands inside a prop toward the centre, writes the cuts asset and saves
+the scene; `cr_core_camera_cuts_install` points the Core Brain at the asset. Tests: `FixedCameraLayoutTests`.
+
+The order is a gate: `PrologueStep` is `Exploring=0, LetterRead=1, StoneUnlocked=2, PortalOpen=3,
 Completed=4`, and `PrologueProgress(letterKey, photoKey, stoneKey, letterSeen, photoSeen, stoneSeen)` moves letter to `LetterRead`,
 the photo (`prologue-photo`, only after the letter) to `StoneUnlocked`, and the stone to `PortalOpen`. The stone is interactable only
 at `StoneUnlocked`, and a resume rebuilds the step from the `readable.seen.*` flags. These are presentation gates; the objectives
