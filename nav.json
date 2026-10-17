@@ -30,6 +30,21 @@
     "path": "admin-web/05-developer-guide"
   },
   {
+    "section": "Admin Web",
+    "title": "Dialogue Canvas",
+    "path": "admin-web/06-dialogue-canvas"
+  },
+  {
+    "section": "Admin Web",
+    "title": "Quest Story Map",
+    "path": "admin-web/07-quest-story-map"
+  },
+  {
+    "section": "Admin Web",
+    "title": "Player Progression Debugger",
+    "path": "admin-web/08-player-progression-debugger"
+  },
+  {
     "section": "Backend",
     "title": "Backend Architecture",
     "path": "backend/01-architecture"
@@ -163,6 +178,11 @@
     "section": "Backend",
     "title": "Idempotency Keys",
     "path": "backend/27-idempotency-keys"
+  },
+  {
+    "section": "Backend",
+    "title": "Optimistic Concurrency (row_version)",
+    "path": "backend/28-optimistic-concurrency"
   },
   {
     "section": "Introduction",

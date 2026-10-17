@@ -502,7 +502,7 @@ Sync is **drift-free**: SOs are the source of truth and pushes are idempotent up
 - **⬆ Push All** — loops every local definition on the tab and upserts it (`SyncCreature` / `SyncNpc` / `SyncSpawnerFull`). No server fetch; the server overwrites by `content_key`. A status line reports `N pushed, M failed`, and per-row badges show each result.
 - **⬇ Pull** — the rare reverse-bootstrap. After a confirm dialog, calls `FetchAll*()`, then for each server entry overwrites the matching local SO (`ApplyTo*`) or creates one (`CreateAssetSilent` + register into `ContentDefinitionProvider`) for server-only keys. Spawners additionally fetch `/by-content-key/{key}/config` so pools + templates come down too. Reports `N updated, M created`.
 
-There is no diff preview, conflict resolution, or in-review delete step — push always wins, and removing a backend record is done explicitly via **Unregister** (below).
+There is no diff preview, conflict resolution, or in-review delete step — push always wins, and removing a backend record is done explicitly via **Unregister** (below). (This describes the older sync helpers. Quests and dialogues in the Studio window are different: they carry a row version and a 409 shows a conflict box on the row, see [Dialogue Authoring](?page=unity/32-dialogue-authoring).)
 
 `CreateAssetSilent<T>()` is an internal helper that creates a definition SO asset at a default path without opening a save dialog, handling name collisions by appending `_1`, `_2`, etc.
 

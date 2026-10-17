@@ -58,7 +58,7 @@ CR.Spawner.Service.REST    ← ASP.NET minimal-API endpoints
 | `spawner_spawn_history` | Full spawn event log |
 
 Key columns on `spawner`:
-- `row_version` — incremented on update; reserved for optimistic concurrency
+- `row_version` — incremented on update; not used to reject writes on spawners (the enforced version contract lives on dialogues and quests, see [Optimistic Concurrency](?page=backend/28-optimistic-concurrency))
 - `is_active` — only active spawners accept spawn requests (the one runtime check)
 - `current_count`, `last_spawn_time`, `account_id`, `trainer_id` — **dropped** by `M5017` (per-trainer scoping + stateful spawning are gone)
 - `deleted` — soft delete flag
