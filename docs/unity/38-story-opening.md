@@ -139,8 +139,8 @@ transform is the shot, FOV 68, 2.35 m up in the corner diagonally opposite the q
 — above the rig's 10, below the story director's 50 and battle's 100) and a trigger box with a `CinemachineTriggerAction`
 (`WithTag` Player) whose enter action **Activates** the camera and whose exit action **Deactivates** it: zones overlap by
 0.75 m, so the camera of the zone entered last is live and the boundary never flickers. The spawn's camera starts active.
-`Assets/CR/Content/Camera/PrologueCameraCuts.asset` (`CinemachineBlenderSettings`, on the Core Brain's Custom Blends) makes
-every blend into or out of a `Prologue Cam …` a cut. `cr_prologue_fixed_cameras` measures the interior by casting from
+`Assets/CR/Content/Camera/PrologueCameraCuts.asset` (`CinemachineBlenderSettings`, on the Core Brain's Custom Blends) gives
+every blend into or out of a `Prologue Cam …` a 0.6 s ease (`BlendSeconds`; the Brain's default 2 s reads as a drift). `cr_prologue_fixed_cameras` measures the interior by casting from
 `PlayerSpawn` to the nearest wall renderers (the floor tiles run under the walls and into an alcove), plans the shots
 (`FixedCameraLayout`, pure), slides a corner that lands inside a prop toward the centre, writes the cuts asset and saves
 the scene; `cr_core_camera_cuts_install` points the Core Brain at the asset. Tests: `FixedCameraLayoutTests`.
