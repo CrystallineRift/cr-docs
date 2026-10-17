@@ -138,7 +138,7 @@ at, then glows to say "inspect the glowing shard". Default is lit, so the compan
 `PrologueGateRule.Decide(hasEverBeenPlaced, startSpawnPlan)` is true only for a never-placed trainer on the start
 spawn. `OpenWorldBootstrap`, before placing the player, suspends streaming, loads the prologue additively alone,
 awaits `Completed`, unloads, resumes streaming and continues placement. `world.placed` is set after the first
-successful placement.
+successful placement. While lit the shard is alive: the crystal child bobs (6 cm over 2.6 s) and turns (24°/s) and the Glow light pulses (up to 1.6× over 1.5 s), fading in over a 1.2 s wake on dark → lit (`ShardPulse`, pure, in `CR.Game.Story.Logic`); dark puts it back to the authored pose and intensity exactly. The motion is on the crystal child, never the root, so `CrystalRise` and the companion's follow are untouched; the tunables are serialized and `Animate` switches it off. Tests: `ShardPulseTests`, `AhksunCrystalGlowTests`.
 
 `ProloguePortal` completes the prologue only for the player's own collider (tag `Player`, then the Malbers tags):
 the rig's 10/20 m child trigger spheres share its Malbers tags and overlapped the volume the moment it activated.
