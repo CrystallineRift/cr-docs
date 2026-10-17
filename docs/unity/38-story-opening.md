@@ -134,7 +134,8 @@ they line up with are counted by the server.
 **Shard glow.** `AhksunCrystalGlow` (`CR.Game.Story`, on the shard prefab root, added by `AhksunShardPrefabBuilder`) has
 `SetLit(bool)`, which enables or disables every Light and ParticleSystem under it (emission stops or plays). `Apply()` calls
 `stoneProp.GetComponent<AhksunCrystalGlow>()?.SetLit(step >= StoneUnlocked)`, so the shard is dark until the photo has been looked
-at, then glows to say "inspect the glowing shard". Default is lit, so the companion shard and the arrival crystal are unchanged.
+at, then glows to say "inspect the glowing shard". Default is lit, so the companion shard and the arrival crystal are unchanged. While lit the shard is alive: the crystal child bobs (6 cm over 2.6 s) and turns (24°/s) and the Glow light pulses (up to 1.6× over 1.5 s), fading in over a 1.2 s wake on dark → lit (`ShardPulse`, pure, in `CR.Game.Story.Logic`); dark puts it back to the authored pose and intensity exactly. The motion is on the crystal child, never the root, so `CrystalRise` and the companion's follow are untouched; the tunables are serialized and `Animate` switches it off. Tests: `ShardPulseTests`, `AhksunCrystalGlowTests`.
+
 `PrologueGateRule.Decide(hasEverBeenPlaced, startSpawnPlan)` is true only for a never-placed trainer on the start
 spawn. `OpenWorldBootstrap`, before placing the player, suspends streaming, loads the prologue additively alone,
 awaits `Completed`, unloads, resumes streaming and continues placement. `world.placed` is set after the first
