@@ -102,13 +102,26 @@ floor, streamed deltas):
 ## Offline data floor
 
 `Assets/StreamingAssets/CR/game-data.bytes` ships in every build and is the offline content
-floor. After backend content changes, re-run `build-packages.sh` (re-bakes the floor) before
-building players, or offline play in the build won't see the new content.
+floor. **A player build never migrates it**: `GameDataAdopter` copies it as-is, and the content
+repositories in the linked cr-api package query whatever columns the package's migrations add. So
+the committed floor must carry every migration the package runs, and `game-data_schema_version.txt`
+must name the package's head. v0.2.0 shipped the v0.1.9 floor (schema 20002) against a package at
+20005: every quest and dialogue sync failed at boot with `no such column: quest_line`.
+
+After backend changes, re-run `build-packages.sh` (it re-bakes the floor and copies it into
+`Assets/StreamingAssets/CR/`) and **commit both floor files** before building players; a build uses
+the committed floor, and the auto-copy only lands in the working tree. To keep the production overlay
+rows a fresh bake drops (story creatures pushed from Studio, such as the gaterbear), migrate the
+committed floor forward instead:
+`dotnet run --project cr-api/Convenience/CR.Data.Migrations.Tool -- <out.bytes> <out_version.txt> --base Assets/StreamingAssets/CR/game-data.bytes`.
+Two guards catch a stale floor: `BundledFloorSchemaTests` (EditMode) and `ci/check-floor-schema.sh`,
+which fails the build-game run before the build starts.
 
 ## Build checklist
 
 1. `build-packages.sh` fresh (DLLs + both natives + baked floor current) — or **CR > Content >
-   Rebake Offline Floor** / `unity cmd cr_rebake_floor` when only content changed.
+   Rebake Offline Floor** / `unity cmd cr_rebake_floor` when only content changed — and the two
+   floor files committed (see Offline data floor above).
 2. Addressables group is whole: the Ability Workbench **Publish** re-registers every ability's
    FX/SFX (`AbilityPublishPipeline`), which is how `CRContent` is rebuilt if entries go missing;
    an Addressables build (`BuildPlayerContent`) with `error=''` confirms no dangling assets.
@@ -177,10 +190,14 @@ Rift Studio's Builds page finds them through `GET /api/v1/builds` (see
    `.idea`, `.vs` and dot-files at every level.
 3. **`ci/check-fx-keys.sh`** fails the run when an ability's sound or effect key, or an address in the
    feedback manifest, names nothing in the Addressables catalogue, before 40 minutes go into a build.
-4. **`ci/build.sh <version> [targets]`** runs Unity headless (`CR.Core.Data.Editor.Build.CiBuild.Run`) to
+4. **`ci/check-floor-schema.sh`** bakes the package head with the linked cr-api checkout's Migrations.Tool
+   and fails the run when the committed floor lacks one of those migration versions or
+   `game-data_schema_version.txt` disagrees with the head: a player build never migrates the floor
+   (v0.2.0 shipped one 11 migrations behind).
+5. **`ci/build.sh <version> [targets]`** runs Unity headless (`CR.Core.Data.Editor.Build.CiBuild.Run`) to
    build Addressables and the players, then zips each one as
    `Builds/CrystallineRift-<Windows|Linux|Mac>-<version>.zip`.
-5. **`ci/publish.sh <version>`** uploads `builds/<version>/` (immutable), `builds/latest/`,
+6. **`ci/publish.sh <version>`** uploads `builds/<version>/` (immutable), `builds/latest/`,
    `builds/latest.json` and the version's `manifest.json`, then has `ci/builds-index.sh` merge the version
    into `builds/index.json`. The zips are served only through signed URLs; the JSON stays public.
 

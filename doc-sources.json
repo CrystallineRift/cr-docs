@@ -1330,9 +1330,12 @@
     "docPath": "docs/unity/21-standalone-builds.md",
     "repos": {
       "cr-api": [
-        "Convenience/CR.Game.Compat/build-packages.sh"
+        "Convenience/CR.Game.Compat/build-packages.sh",
+        "Convenience/CR.Data.Migrations.Tool/Program.cs"
       ],
       "cr-data": [
+        "ci/check-floor-schema.sh",
+        "Assets/CR/Tests/Editor/BundledFloorSchemaTests.cs",
         "Assets/CR/Core/Data/Editor/Build/BuildProfileSetupTool.cs",
         "Assets/CR/Core/Data/Editor/Build/PlayerBuild/**",
         "Assets/CR/Core/Data/Editor/Build/SteamDeck/**",
