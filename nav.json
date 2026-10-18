@@ -45,6 +45,16 @@
     "path": "admin-web/08-player-progression-debugger"
   },
   {
+    "section": "Admin Web",
+    "title": "Talent Tree Editor",
+    "path": "admin-web/09-talent-tree-editor"
+  },
+  {
+    "section": "Admin Web",
+    "title": "Quest Flow Editor",
+    "path": "admin-web/10-quest-flow-editor"
+  },
+  {
     "section": "Backend",
     "title": "Backend Architecture",
     "path": "backend/01-architecture"

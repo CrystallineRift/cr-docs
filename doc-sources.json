@@ -2024,10 +2024,14 @@
         "Assets/CR/Content/Defs/Talents/**",
         "Assets/CR/Game/World/Editor/TalentTreeEditorSyncHelper.cs",
         "Assets/CR/Progression/TrainerModifierApplier.cs",
-        "Assets/CR/Core/Movement/Runtime/TrainerMoveSpeedLogic.cs"
+        "Assets/CR/Core/Movement/Runtime/TrainerMoveSpeedLogic.cs",
+        "Assets/CR/Core/Data/Registry/Definitions/TalentUnlockRuleEntry.cs",
+        "Assets/CR/Core/Data/Logic/TalentSeed*.cs",
+        "Assets/CR/Core/Data/Editor/TalentTreeSeedMigrationExporter.cs",
+        "Assets/CR/Game/World/Editor/TalentTree*.cs"
       ]
     },
-    "description": "Talents UI (Phase 2 Unity lane): TalentTreeDefinition authoring SO + custom inspector calling cr-api's real TalentTreeValidation, Studio push/export + CLI, the three starter trees, the Talents tab (TalentNodeStateBuilder over the real TalentRules/TrainerProgress), ITalentProgressReader/ITalentActions wired to the real server/offline TalentService (TalentOnlineOfflineRouter, TalentClientUnityHttp); movement-speed is a real client-applied effect (TrainerModifierApplier + TrainerMoveSpeedLogic pushing MalbersMovementController.SetSpeed)"
+    "description": "Talents UI (Phase 2 Unity lane): TalentTreeDefinition authoring SO + custom inspector calling cr-api's real TalentTreeValidation, Studio push/export + CLI, the three starter trees, the Talents tab (TalentNodeStateBuilder over the real TalentRules/TrainerProgress), ITalentProgressReader/ITalentActions wired to the real server/offline TalentService (TalentOnlineOfflineRouter, TalentClientUnityHttp); movement-speed is a real client-applied effect (TrainerModifierApplier + TrainerMoveSpeedLogic pushing MalbersMovementController.SetSpeed); server-sourced content reader (TalentTreeContentReader, offline floor fallback), TalentNodeStateMapper over TrainerProgress.TalentStates, reason/effect text, unlock rules + scalesFrom authoring, per-tree push with row_version, Pull, seed export gate"
   },
   "unity/38-story-opening": {
     "docPath": "docs/unity/38-story-opening.md",
@@ -2092,11 +2096,20 @@
         "Moderation/CR.Moderation.Model.REST/AdminActionKind.cs",
         "Moderation/CR.Moderation.Domain.Services/Models/ModerationReason.cs",
         "Quests/CR.Quests.Data/Extensions/QuestCompletionExtensions.cs",
-        "Quests/CR.Quests.Domain.Services/Implementation/QuestObjectiveProjector.cs"
+        "Quests/CR.Quests.Domain.Services/Implementation/QuestObjectiveProjector.cs",
+        "Game/CR.Game.Model/Progression/Talent*.cs",
+        "Game/CR.Game.Model/Progression/CamelCaseEnumJsonConverter.cs",
+        "Game/CR.Game.Model/Progression/TrainerProgress.cs",
+        "Talents/CR.Talents.Data.Migration/M1510[56]*.cs",
+        "Convenience/CR.Game.Compat/**/TrainerModifiers.cs"
       ],
-      "cr-data": []
+      "cr-data": [],
+      "cr-admin-web": [
+        "src/resources/talent-trees/**",
+        "src/lib/talents/**"
+      ]
     },
-    "description": "Talents Phase 2: talent_tree/talent/trainer_talent/trainer_talent_lock (M15101-M15104), TalentBuild/TalentRules/TalentTreeValidation (pure, Compat), TalentService spend/respec/admin-set-rank, the player + content REST routes, every effect consumer (crystal save, loot, pickup currency, rare encounters, damage, creature XP/exp share, Mentor), the quest gate + ReachTalentRank/TalentRankReached tie-in, and the admin SetTalentRank/RespecTalents routes + WouldOverspendTalents"
+    "description": "Talents Phase 2: talent_tree/talent/trainer_talent/trainer_talent_lock (M15101-M15104), TalentBuild/TalentRules/TalentTreeValidation (pure, Compat), TalentService spend/respec/admin-set-rank, the player + content REST routes, every effect consumer (crystal save, loot, pickup currency, rare encounters, damage, creature XP/exp share, Mentor), the quest gate + ReachTalentRank/TalentRankReached tie-in, and the admin SetTalentRank/RespecTalents routes + WouldOverspendTalents; unlock rules (M15106), fixpoint evaluation, TalentStates, synergy effects and CreatureSpeedPercent, talent_tree.row_version (M15105)"
   },
   "backend/26-capture-missions": {
     "docPath": "docs/backend/26-capture-missions.md",
@@ -2495,7 +2508,7 @@
         "src/resources/quests/**"
       ]
     },
-    "description": "Web quest story map and layout document. cr-admin-web globs are not checked by check-stale."
+    "description": "Web quest story map and layout document. cr-admin-web globs are not checked by check-stale. Links to the quest flow and talent editors."
   },
   "admin-web/08-player-progression-debugger": {
     "docPath": "docs/admin-web/08-player-progression-debugger.md",
@@ -2523,19 +2536,56 @@
         "Dialogue/CR.Dialogue.Service.REST/**/*.cs",
         "Quests/CR.Quests.Data/**/*.cs",
         "Quests/CR.Quests.Data.Migration/M1700[45]*.cs",
-        "Quests/CR.Quests.Service.REST/**/*.cs"
+        "Quests/CR.Quests.Service.REST/**/*.cs",
+        "Talents/CR.Talents.Data/**/*.cs",
+        "Talents/CR.Talents.Data.Migration/M15105*.cs",
+        "Talents/CR.Talents.Service.REST/**/*.cs"
       ],
       "cr-data": [
         "Assets/CR/Core/Data/Registry/Sync/**",
         "Assets/CR/Game/World/Editor/DialogueEditorSyncHelper.cs",
-        "Assets/CR/Core/Data/Editor/ContentStudioTool*.cs"
+        "Assets/CR/Core/Data/Editor/ContentStudioTool*.cs",
+        "Assets/CR/Game/World/Editor/TalentTreeEditorSyncHelper.cs"
       ],
       "cr-admin-web": [
         "src/api/conflicts.ts",
         "src/api/rowVersion.ts",
-        "src/components/resource/ConflictDialog.tsx"
+        "src/components/resource/ConflictDialog.tsx",
+        "src/resources/talent-trees/descriptor.ts"
       ]
     },
-    "description": "row_version contract: expectedRowVersion, 409 body, deploy notes."
+    "description": "row_version contract: expectedRowVersion, 409 body, deploy notes. Includes talent trees (M15105, no bump on identical content)."
+  },
+  "admin-web/09-talent-tree-editor": {
+    "docPath": "docs/admin-web/09-talent-tree-editor.md",
+    "repos": {
+      "cr-api": [
+        "Talents/CR.Talents.Domain.Services/**/*.cs",
+        "Talents/CR.Talents.Service.REST/**/*.cs"
+      ],
+      "cr-data": [],
+      "cr-admin-web": [
+        "src/resources/talent-trees/**",
+        "src/lib/talents/**",
+        "src/components/talents/**",
+        "src/pages/live/progression/TalentStates.tsx"
+      ]
+    },
+    "description": "Web talent tree editor: grid, inspector, checks, Try it, All trees, View as player, staged Apply and conflicts. cr-admin-web globs are not checked by check-stale."
+  },
+  "admin-web/10-quest-flow-editor": {
+    "docPath": "docs/admin-web/10-quest-flow-editor.md",
+    "repos": {
+      "cr-api": [
+        "Quests/CR.Quests.Service.REST/**/*.cs"
+      ],
+      "cr-data": [],
+      "cr-admin-web": [
+        "src/resources/quests/**",
+        "src/components/quests/flow/**",
+        "src/lib/quests/**"
+      ]
+    },
+    "description": "Web single-quest flow editor: four columns, neighbours, fixed goal order, save and conflicts. cr-admin-web globs are not checked by check-stale."
   }
 }

@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-10-17 — Talent unlock rules, synergy effects, talent tree editor, quest flow editor
+
+cr-api `feature/talent-rules-and-editors`, cr-api-unity `feature/talent-rules-sync`, cr-admin-web `feature/talent-quest-editors`, cr-docs `docs/talent-quest-editors` (none deployed). Deploy order: cr-api first (migrations M15105, M15106; rebuild the compat packages), then the web build, then the Unity release. Then, in Studio, **Pull talent trees once** before any talent push (assets never pulled have version 0 and a push would 409), and rebake the offline floor with the package build.
+
+- **Unlock rules.** A talent can require another talent at a rank (any tree), points spent in a tree, or a finished quest. The server enforces them on spend (`talent-rule-locked`), refuses rule loops across trees, and evaluates the build as a fixpoint, so the order of stored rows no longer matters. A content edit that breaks a spent talent shows as "Respec required". → [Talents](?page=backend/25-talents#unlock-rules)
+- **Talent states from the server.** `TrainerProgress.TalentStates` gives each talent a state, every unmet reason and resolved current/next values. The game and the debugger render it and never recompute rules; `QuestLockedTalentIds` is deprecated. → [Talents](?page=backend/25-talents#talent-states-for-clients)
+- **Synergy effects.** An effect can be a percent of another effect's total. New `CreatureSpeedPercent` (35, cap 0 to 50%) scales player-side creature Speed from the move speed bonus, which affects first turn, escape chance and battle snapshots. → [Talents](?page=backend/25-talents#synergy-effects)
+- **Talent tree editor (web).** Grid per tree with tiers, cards, rule chips, inspector, live checks, Try it, All trees and View as player. → [Talent Tree Editor](?page=admin-web/09-talent-tree-editor)
+- **Quest flow editor (web).** One quest as How it starts, Goals, Turn in, Rewards, with neighbours (including talents it unlocks). Saved goals cannot be reordered. → [Quest Flow Editor](?page=admin-web/10-quest-flow-editor)
+- **Talent row versions.** `talent_tree.row_version` (M15105) with per-tree 409s; identical trees never bump. → [Optimistic Concurrency](?page=backend/28-optimistic-concurrency#talent-trees)
+- **Unity.** Studio edits rules and synergy, pushes one tree at a time with conflict rows, and gains **Pull talent trees**; the seed export refuses stale trees. The Talents tab reads trees from the server (floor offline) and shows every lock reason. → [Talents UI (Unity)](?page=unity/36-talents-ui)
+- **Content move.** In-game talent content is now server/local DB content, not the baked SOs, so web edits reach players.
+
 ## 2026-10-17 — Studio node editors: dialogue canvas, quest story map, progression debugger, row-version conflicts
 
 cr-api `feature/studio-quests`, `feature/studio-dialogues`, `feature/studio-debugger`, cr-api-unity `feature/studio-sync-row-version`, cr-admin-web `feature/studio-node-editors`, cr-docs `docs/studio-node-editors` (none deployed). Deploy order: cr-api first (migrations M17004, M17005, M14003, M9005, M13003, M4015, Auth 19), then the web build, then the Unity release. Deploy notes: [Optimistic Concurrency](?page=backend/28-optimistic-concurrency#deploy-notes).
