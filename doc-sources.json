@@ -1382,7 +1382,17 @@
         "Assets/CR/Game/OpenWorld/Editor/FallbackCellProxyBaker.cs",
         "Assets/CR/Game/OpenWorld/Editor/WorldValidationRules.cs",
         "Assets/CR/Tests/Editor/BattleArenaBattleOnlyTests.cs",
-        "Assets/CR/Tests/Editor/ProxyBakerBattleOnlyTests.cs"
+        "Assets/CR/Tests/Editor/ProxyBakerBattleOnlyTests.cs",
+        "Assets/CR/Game/Areas/IAreaBannerStatus.cs",
+        "Assets/CR/Game/Areas/Logic/AreaBannerLayout.cs",
+        "Assets/CR/UI/Logic/HudNoticeHold.cs",
+        "Assets/CR/UI/Logic/TopCenterNoticeRule.cs",
+        "Assets/CR/UI/Logic/QuestTrackerReveal.cs",
+        "Assets/CR/UI/Logic/QuestTrackerLayout.cs",
+        "Assets/CR/UI/Achievements/AchievementToastPresenter.cs",
+        "Assets/CR/UI/Quests/QuestTrackerPresenter.cs",
+        "Assets/CR/Core/Notifications/PendingToastQueue.cs",
+        "Assets/CR/Resources/Areas/AreaBanner.uss"
       ]
     },
     "description": "Core + additive area scenes, the area template, content prefabs, doors and async transitions; trainer last-location persistence (M4013 last_area_key/pos/yaw, TrainerLocationTracker throttled saves + forced on switch/quit, TrainerResumeRule teleport/transition resume) and trainer-switch world re-init (AreaWorldInitializer.ResetForNewSession); the arena's battle-only list (BattleArena.battleOnly hidden in Awake / shown by Activate / hidden by Deactivate, cr_arena_battle_only, the validation error, the proxy baker skip)"
@@ -2058,7 +2068,27 @@
         "Assets/CR/Game/OpenWorld/Editor/Corridor/Seeds/Act1AdjustmentsSeed.cs",
         "Assets/CR/Tests/Editor/OpeningLocation*.cs",
         "Assets/CR/Tests/Editor/DialoguePhilroeHubResolutionTests.cs",
-        "Assets/CR/Tests/Editor/StoryDialogueStagingSyncTests.cs"
+        "Assets/CR/Tests/Editor/StoryDialogueStagingSyncTests.cs",
+        "Assets/CR/Game/Story/RepeatingBark.cs",
+        "Assets/CR/Game/Story/PotionTossCue.cs",
+        "Assets/CR/Game/Story/Logic/OneShotEventPlan.cs",
+        "Assets/CR/Game/Story/Logic/OneShotEventStep.cs",
+        "Assets/CR/Game/Story/Logic/RepeatingBarkRule.cs",
+        "Assets/CR/Game/Story/Logic/ArcPath.cs",
+        "Assets/CR/Game/Story/Logic/WagonSmokeRule.cs",
+        "Assets/CR/Game/Story/Logic/ChooserAttachState.cs",
+        "Assets/CR/Game/OpenWorld/IScriptedPlayerMover.cs",
+        "Assets/CR/Game/OpenWorld/ScriptedPlayerMover.cs",
+        "Assets/CR/Game/OpenWorld/Logic/ScriptedMove*.cs",
+        "Assets/CR/Core/Movement/Runtime/Scripted*.cs",
+        "Assets/CR/Core/Movement/Runtime/IScriptedMoveHost.cs",
+        "Assets/CR/Game/World/Logic/ContactRule.cs",
+        "Assets/CR/Game/World/Logic/StationaryChargeRule.cs",
+        "Assets/CR/Game/World/Logic/ChargePhase.cs",
+        "Assets/CR/Game/World/Logic/ChargeStep.cs",
+        "Assets/CR/Game/World/Logic/WagonPopulationRule.cs",
+        "Assets/CR/Tests/Editor/WagonOpeningTextTests.cs",
+        "Assets/CR/Tests/Editor/WagonSmokeRuleTests.cs"
       ]
     },
     "description": "Opening story client systems: IStoryFlags, LoreReadable, WorldBark, NpcEscort/EscortPlan, OneShotWorldEvent, PrologueController + gate, place flavour, capture-lesson hints, StoryText, the cr_story_script_page review-page command, the beat map on the built corridor and the CorridorStoryPlacer hook in cr_story_build_scenes; the vista build now delegates to MirandaleVistaBuilder (see unity/42-pillar-cutscene)"

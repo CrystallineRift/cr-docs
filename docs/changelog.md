@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-10-18 — Wagon opening: Philroe's call-out, one gaterbear, HUD notices
+
+cr-api-unity `feature/wagon-opening-cutscene`, cr-docs `docs/wagon-opening-cutscene` (not merged or deployed). **Studio push after merge:** `story-gaterbear-wagon`, `dialogue-merchant-area-1`, `dialogue-izzandra-farm`, `quest-runaway-cargo`.
+
+- **Staged call-out.** Philroe repeats "Help!" until the player enters the wagon trigger; then First Battle activates, the HUD and input are held, he calls out, the player runs to the mark on a scripted route, the conversation plays with story shots and a potion toss, and holding Cancel skips it. Presentation only. → [Opening Story](?page=unity/38-story-opening#wagon-opening-philroes-call-out-and-one-gaterbear)
+- **One gaterbear.** The wagon spawner holds one stationary gaterbear that stands on a mark, charges once when the gate opens (dialogue heard or call-out played) and is hidden after First Battle.
+- **Content.** Izzandra reacts to the shout; the Mudcalf pen canon (rail down, three Mudcalves bolted) is in Philroe's offer and the Runaway Cargo description. AI-written rows are in the content ledger.
+- **HUD notices.** Banner capped to 56% width; top-centre toasts wait for the banner and a new `HudNoticeHold`; the quest tracker reveals after the banner; toast queue cap 12. → [HUD notices](?page=unity/22-area-scenes#hud-notices)
+- **Open.** The scripted run is proven on a stand-in rig only; smoke in Play on the real Malbers rig is pending.
+
 ## 2026-10-18 — Battle rounds: both sides choose, the server orders by Speed (build v0.2.0)
 
 cr-api `feature/battle-simultaneous-rounds`, cr-api-unity `feature/battle-simultaneous-rounds`, cr-docs `docs/battle-simultaneous-rounds` (none deployed). **Deploy order: publish the v0.2.0 build first (or in the same window), then merge and deploy cr-api via cr-ops.** Migrations 20003 and 20004 run on deploy; rebuild the compat packages (`build-packages.sh --clean` from merged main) before the Unity build, and copy the `.bytes` floor.

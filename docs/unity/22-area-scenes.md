@@ -371,6 +371,24 @@ Two more traps the tests pin down:
   from `evt.newRect` there measures the card and feeds its padding back into itself — a layout
   loop. The handler ignores any event whose target is not the band.
 
+## HUD notices
+
+The top of the screen is shared by the arrival banner, the quest and discovery toasts and the quest tracker.
+
+- **Banner.** Max width 56% of the panel, centred; band 8% of height; panel `sortingOrder` 35. `AreaBannerPresenter` also
+  implements `IAreaBannerStatus` (`IsShowing`, `Cleared`), the only thing others wait on; consumers take it
+  `[InjectOptional]` (null means never showing).
+- **TopCenter rule.** `TopCenterNoticeRule.MayShow(holdActive, ctx, bannerShowing)`: a top-centre toast starts only in the
+  Overworld, with no `HudNoticeHold` and no banner on screen. Otherwise it stays queued and is re-checked when the hold
+  lifts, the banner clears or the context changes. `AchievementToastPresenter` gates the TopCenter slot through
+  `PendingToastQueue.TryDequeueDrainable`; the queue cap is 12 (oldest dropped).
+- **HudNoticeHold.** Static counted hold (`Hold` / `Release`, `Lifted` event on the last release) taken by staged scenes such
+  as the wagon call-out. Not a `UIContext`, so the dialogue panel's context does not change. A banner arrival during a hold
+  is dropped. A leaked hold hides HUD notices for the session, so callers must balance it.
+- **Tracker reveal.** `QuestTrackerReveal`: cards that first appear while the banner shows wait for it to clear plus 0.3 s
+  before the tracker fades in. Hide rules (hold, not Overworld, menu open, the player's setting) always win. The tracker
+  polls `HudNoticeHold.Active`. Width is x14 of the layout unit (`QuestTrackerLayout`).
+
 ## The battle camera across scenes
 
 `BattleArena.cameraRig` is a direct object reference, and Core owns the one `BattleCameraRig`. An
