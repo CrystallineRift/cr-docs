@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-10-18 — Battle rounds: both sides choose, the server orders by Speed (build v0.2.0)
+
+cr-api `feature/battle-simultaneous-rounds`, cr-api-unity `feature/battle-simultaneous-rounds`, cr-docs `docs/battle-simultaneous-rounds` (none deployed). **Deploy order: publish the v0.2.0 build first (or in the same window), then merge and deploy cr-api via cr-ops.** Migrations 20003 and 20004 run on deploy; rebuild the compat packages (`build-packages.sh --clean` from merged main) before the Unity build, and copy the `.bytes` floor.
+
+- **One round, both sides.** The player picks, the server AI picks blind, the server resolves and returns every step in order. Item, capture, switch and run go first (player, then opponent); attacks go by current Speed, recomputed every round (condition modifiers and the talent Speed bonus included). Speed ties are a server coin flip. → [Battle Rounds](?page=backend/09-battle-persistence#battle-rounds)
+- **KO cancels the slower move.** The step is `Interrupted` and the HUD says "X fainted before it could act". Replacements arrive after the round: the AI swaps at once, the player gets a swap-only round with no opponent action.
+- **Condition ticks.** Damage-over-time now ticks once per round, after the attacks, as `ConditionTick` steps. Only each side's active creature ticks (a benched creature with a condition does not tick until it is switched back in, as in Pokémon), and a step is emitted only when the tick dealt damage or a condition ended. A tick KO pays XP and loot like any KO. Battle rolls use a private per-battle salt, so they cannot be predicted from the battle id and round.
+- **Refusals cost nothing.** An illegal switch, a Run in a trainer battle or a rejected item returns only the refusal step and the same round key. The 3-strike forfeit counters stay.
+- **Resync.** Battle state now returns `lastRoundNumber`, `lastRoundSteps` and `endReason`. A client that lost a response replays the last round and continues; a round left half-resolved returns 409 `round_incomplete`.
+- **Forced update.** Migration 20004 raises `min_client_version` to `0.2.0`. Old builds can still parse the wire (additive) but are blocked from online play until updated; the Unity Editor and every build need `bundleVersion` 0.2.0 or higher to play online. → [Asset Management](?page=backend/10-asset-management)
+- **Unity.** Per-step turn cues for both sides, Interrupted and tick playback, swap-only menu, optimistic switch committed only when the Switch step plays, resync instead of ending the battle on a network error, draw counted as a loss, six-line paced HUD log. → [Battle System](?page=unity/07-battle-system#battle-rounds-client)
+- **Playtest pending.** Scripted story fights (gaterbear at the wagon, the capture lesson, the three runaway captures) may need balance tweaks now that the opponent can act first; none were changed.
+
 ## 2026-10-17 — Talent unlock rules, synergy effects, talent tree editor, quest flow editor
 
 cr-api `feature/talent-rules-and-editors`, cr-api-unity `feature/talent-rules-sync`, cr-admin-web `feature/talent-quest-editors`, cr-docs `docs/talent-quest-editors` (none deployed). Deploy order: cr-api first (migrations M15105, M15106; rebuild the compat packages), then the web build, then the Unity release. Then, in Studio, **Pull talent trees once** before any talent push (assets never pulled have version 0 and a push would 409), and rebake the offline floor with the package build.
