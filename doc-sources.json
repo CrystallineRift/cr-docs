@@ -222,7 +222,7 @@
         "Assets/CR/Tests/Editor/QuestRouterRig.cs",
         "Assets/CR/Tests/Editor/QuestSqliteFixtureBase.cs",
         "Assets/CR/Tests/Editor/QuestTrackerTurnInTests.cs",
-        "Assets/CR/Core/Data/Editor/QuestEditorSyncHelper.cs"
+        "Assets/CR/Game/World/Editor/QuestEditorSyncHelper.cs"
       ]
     },
     "description": "Quest system: templates, objectives, rewards, instances, progress events, requirements, condition evaluation; grant mode / reward claim mode (M7017), AcceptQuestAsync restarts an abandoned/failed instance, content:write on template PUT/DELETE, objectives upserted by sort_order and the re-parenting risk"
@@ -1840,7 +1840,7 @@
         "Assets/CR/Content/Defs/Quests/*.asset",
         "Assets/CR/Content/Defs/_Parked/Dialogues/*.asset",
         "Assets/CR/Content/Defs/_Parked/Quests/*.asset",
-        "Assets/CR/Core/Data/Editor/QuestEditorSyncHelper.cs",
+        "Assets/CR/Game/World/Editor/QuestEditorSyncHelper.cs",
         "Assets/CR/Core/Data/Editor/ContentStudioTool*.cs"
       ]
     },
@@ -2027,7 +2027,7 @@
         "Assets/CR/Core/Movement/Runtime/TrainerMoveSpeedLogic.cs",
         "Assets/CR/Core/Data/Registry/Definitions/TalentUnlockRuleEntry.cs",
         "Assets/CR/Core/Data/Logic/TalentSeed*.cs",
-        "Assets/CR/Core/Data/Editor/TalentTreeSeedMigrationExporter.cs",
+        "Assets/CR/Core/Data/Editor/TrainerProgression/TalentTreeSeedMigrationExporter.cs",
         "Assets/CR/Game/World/Editor/TalentTree*.cs"
       ]
     },
@@ -2101,7 +2101,7 @@
         "Game/CR.Game.Model/Progression/CamelCaseEnumJsonConverter.cs",
         "Game/CR.Game.Model/Progression/TrainerProgress.cs",
         "Talents/CR.Talents.Data.Migration/M1510[56]*.cs",
-        "Convenience/CR.Game.Compat/**/TrainerModifiers.cs"
+        "Game/CR.Game.Model/Progression/TrainerModifiers.cs"
       ],
       "cr-data": [],
       "cr-admin-web": [

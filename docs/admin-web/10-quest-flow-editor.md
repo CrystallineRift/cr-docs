@@ -9,7 +9,7 @@ The columns are plain React, not a React Flow canvas, so there are no arrows ins
 
 ## The four columns
 
-1. **How it starts.** Who gives the quest (or "starts automatically"), the requirements as sentences with **Add requirement**
+1. **How it starts.** Who gives the quest (or "Starts by itself", subtitle "Auto when available"), the requirements as sentences with **Add requirement**
    (a new one defaults to "Quest completed" with the target empty), and the conversations that offer the quest
    (from `GET /api/v1/dialogues/quest-links`, `offers`).
 2. **Goals.** One block per objective: the type as a sentence, a target picker, a count, the journal text, and required or

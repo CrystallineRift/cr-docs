@@ -51,7 +51,7 @@ The canvas has three modes in a toggle: **Edit**, **Try it** and **All trees**.
   trainer level curve) and click to add a rank, right-click or shift-click to remove one (refused when it would strand a
   talent that depends on it). It runs a TypeScript port of the server's evaluation, pinned by golden fixtures copied from
   cr-api (`src/lib/talents/fixtures/evaluation`, README names the source commit). The totals bar includes synergy values, tier
-  dividers show "N more points" or "unlocked", and each quest gate has a "pretend done" switch.
+  dividers show "N more points" or "unlocked", and a "Pretend these quests are done" fieldset has one checkbox per quest.
 - **All trees** draws the trees side by side with green lines for cross-tree talent and points rules. Clicking a card, a line
   or a tree name jumps to that talent.
 - **View as player** (admin only) picks a player and shows that trainer's real build. Unlike Try it, it uses only the server's
@@ -66,7 +66,7 @@ The [Player Progression Debugger](08-player-progression-debugger.md) dossier sho
 Talent trees are a **sync-all** resource: the server takes the whole set of trees you send. The editor keeps that, with
 staging made visible:
 
-- **Save** stages the open tree and stays on the canvas. A bar reads "N trees staged - Saved here, not live yet" with an
+- **Save** stages the open tree and stays on the canvas. A bar reads "N trees staged · Saved here, not live yet" with an
   **Apply** button. **Review & Apply** on the list does the same.
 - **Apply** sends only the trees that changed, each with its `expectedRowVersion`, then stays on the page and picks up the new
   versions. Trees you did not change are not sent. The bulk route cannot delete, so Delete is hidden on this resource.

@@ -50,7 +50,7 @@ composite tab. `TrainerProgressionPipelineCommands` has `cr_talent_trees_push`, 
 - **Push** is one `PUT /api/v1/talents/trees/bulk` per tree, so conflicts are reported per tree. Each carries the
   tree's `expectedRowVersion` and its unlock rules and `scalesFrom`; the body is built from the DLL's `TalentTreeUpsert` and
   parsed from the raw response (not the status-only helper) so the 409 body is readable. On success each tree's
-  `serverRowVersion` is updated. A 409 shows a conflict row on the tree with **Pull this tree** and **Recreate**
+  `serverRowVersion` is updated. A 409 shows a conflict row on the tree with **Pull this tree** (and **Recreate**, only when the server tree was deleted)
   (see [Optimistic Concurrency](?page=backend/28-optimistic-concurrency)).
 - **Pull** reads `GET /api/v1/talents/trees` and applies every field, including rules, synergy and version, to the SOs. A
   tree that exists only on the server (for example one made in the web editor) gets a new SO asset under the talent trees
@@ -80,7 +80,7 @@ It renders:
 - a tree selector row (click/D-pad only, **not** the menu's L1/R1 bumpers — those already switch
   `PlayerMenuWindow` tabs)
 - a tier grid built from the server's states (`TalentNodeStateMapper`), one row per tier (an empty tier is hidden)
-- a detail pane with current/next rank values (from the states' resolved `effects`; a talent with several effects lists each, and rank 0 shows `next`), every lock reason ("Needs 10 points in Capture (you have 4)", "Needs Vanguard rank 3", the tier gate, "choose-one taken", the quest by **name**), a synergy line such as "Creatures' Speed +25% (50% of your move speed bonus)", a respec hint for an `invalid` talent, a Spend button (disabled while a request is in flight or the
+- a detail pane with current/next rank values (from the states' resolved `effects`; a talent with several effects lists each, and rank 0 shows `next`), every lock reason ("Needs 10 points in Capture (you have 4)", "Needs Vanguard rank 3", the tier gate, "choose-one taken", the quest by **name**), a synergy line such as "Creatures' Speed +25% (from your Move Speed bonus)" (format "{target} +{value}% (from your {source} bonus)"), a respec hint for an `invalid` talent, a Spend button (disabled while a request is in flight or the
   node isn't spendable), and a Respec button behind a one-button `MessageDialog` acknowledgement
 - quest-locked nodes name the quest and offer "Show in journal"; a refusal shows `PlayerErrorText` for the
   `TalentSpendError` and re-renders from the returned progress
