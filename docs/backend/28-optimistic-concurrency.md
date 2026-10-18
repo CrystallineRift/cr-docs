@@ -4,7 +4,7 @@ Studio content (dialogues, quest templates, the quest map layout) is edited from
 Crystalline Rift Studio and the web Studio. `row_version` is the one contract both use to avoid silently overwriting
 each other. This page is the single source of the contract; the web and Unity pages link here instead of repeating it.
 
-Applies to three tables: `dialogue` (M14003), `quest_template` (M17004) and `quest_map_layout` (M17005). Other tables
+Applies to four tables: `dialogue` (M14003), `quest_template` (M17004), `quest_map_layout` (M17005) and `talent_tree` (M15105). Other tables
 that carry a `row_version` column (for example `spawner`) are unchanged and do not reject stale writes.
 
 ## The column
@@ -52,6 +52,17 @@ The write itself is a compare-and-swap: `UPDATE ... SET row_version = row_versio
 two writers pass the pre-check together, the loser updates zero rows and gets the same 409. A race on first insert
 (unique violation) is also reported as 409.
 
+## Talent trees
+
+A tree is the versioned unit; its talents are children, so a talent change bumps the tree by 1. `PUT /api/v1/talents/trees/bulk`
+checks every tree up front (409, nothing written), then compare-and-swaps each tree inside its own transaction; a mid-batch
+loss is a 409 with the saved trees in `applied`. A successful response carries each tree's `rowVersion`, and the GET list and
+by-key routes return it. The bulk route cannot delete trees.
+
+**No bump on identical content.** Talent trees are edited sync-all, so clients send every tree. The server compares each
+incoming tree (tree fields plus talents, normalised) with the stored one; when equal it neither bumps the version nor checks it.
+Identical trees in an Apply therefore never bump or conflict. See [Talents](?page=backend/25-talents#row-version).
+
 ## Dialogue layout does not conflict
 
 A dialogue document holds both content and a presentation `layout` (node positions). The server compares the incoming
@@ -81,7 +92,7 @@ ScriptableObject-to-SQLite sync clients pass no expectation and never carry a ve
 Old callers that send no `expectedRowVersion` still work. Each such bulk or delete logs a Warning with the caller (name
 and account). Once every client sends the field, set `Studio:RequireExpectedRowVersion` to `true`: a write without it is
 then a 400 `expected_row_version_required` (dialogues also list the offending `items`). The flag covers dialogue bulk and
-delete, quest bulk and delete, and the map layout `PUT`. Default is `false`. See [Deploy notes](#deploy-notes).
+delete, quest bulk and delete, the map layout `PUT` and the talent tree bulk `PUT`. Default is `false`. See [Deploy notes](#deploy-notes).
 
 ## Deploy notes
 
@@ -104,8 +115,11 @@ WHERE s.deleted = false
 
 5. **One-time Unity Pull for assets that were never pulled.** A Studio asset that has never been pulled has `serverRowVersion` 0, so its first push is create-only. If the server already has a row with that key, the push is a 409 (the row is shown as a conflict, with **Pull this row**). Pull once after upgrading, before pushing, so each asset adopts the server's version.
 
+6. **Talent trees: Pull once, then push.** Talent tree assets in Unity have never been pulled, so they carry version 0. Run **Pull talent trees** once in Studio before any talent push, or each push is a create-only 409. Then rebake the offline floor (package build), whose export refuses while a tree is behind.
+
 ## Related
 
 - [Dialogue Server Domain](?page=backend/21-dialogue-domain) for the table and bulk semantics.
 - [Quest System](?page=backend/07-quest-system#studio-concurrency-and-story-lines) for the quest fields and the layout document.
+- [Talents](?page=backend/25-talents#row-version), [Talent Tree Editor](?page=admin-web/09-talent-tree-editor) and [Talents UI (Unity)](?page=unity/36-talents-ui) for talent trees.
 - [Dialogue Authoring (Unity)](?page=unity/32-dialogue-authoring) and [Dialogue Editing](../admin-web/02-dialogue-editing.md) for how each client shows a conflict.

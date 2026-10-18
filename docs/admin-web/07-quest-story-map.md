@@ -14,6 +14,8 @@ React Flow with ELK auto-layout (the same setup as the [Dialogue Canvas](06-dial
   A quest that starts automatically (`AutoWhenAvailable`) gets a "Starts automatically" badge and skips the offer check.
 - A legend explains the arrows and the card states; filters narrow by area, line or "has checks".
 
+- A talent that is gated by a quest (`unlockQuestKey`) links here from the [Talent Tree Editor](09-talent-tree-editor.md) (its gold quest chip opens the map focused on that quest).
+
 ## Checks
 
 Pure rules over the loaded quests flag, for example: a quest nobody offers, a prerequisite loop, a broken prerequisite, a
@@ -24,7 +26,7 @@ refused by the server (`400 requirement_cycle`), and the map answers with "That 
 
 - Drag an arrow from one card to another to add a prerequisite (confirmed); select an arrow and delete it to remove one.
 - The inspector edits name, description, giver, line and step, and can remove objectives and rewards. Full objective and
-  reward editing stays on the quest page ([Quest Editing](04-quest-editing.md)), linked from the inspector.
+  reward editing stays on the quest page ([Quest Editing](04-quest-editing.md)), linked from the inspector. A quest opens on its **Flow** tab ([Quest Flow Editor](10-quest-flow-editor.md)), which has a **Story map** button back here.
 - **Story line** is a select of the existing lines plus **New story line...**; a new line gets a slug key and a name, and the
   step defaults to the next free one in the lane. Writers never type quest or conversation keys; they are derived from names.
 - **Create conversation** adds a dialogue for the quest's giver, linked to the quest.
