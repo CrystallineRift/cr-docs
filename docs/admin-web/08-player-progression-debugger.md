@@ -39,3 +39,11 @@ seeds nothing.
 
 Documented in [Moderation](../backend/18-moderation.md#progression-debugger-routes): `GET /api/v1/admin/trainers/{id}/progression`
 and `/timeline`. Stat events come from [Stats](../backend/08-stats-system.md).
+
+## Story beats and quests on the dossier
+
+The trainer card on the player dossier shows **Story beats** (sorted chips) and **Quests** (active and completed keys). Support
+can **Grant** a beat (key and reason) or **Revoke** one (reason dialog per chip). `act1-done` has Revoke disabled with the
+tooltip "Restored automatically; cannot be revoked". Both actions are admin-only and write an `admin_action` row (kinds 21 and
+22). Fields are optional in the page's types, so an older server shows the sections empty. See
+[Moderation](../backend/18-moderation.md#story-beat-admin-routes-2026-10-18).

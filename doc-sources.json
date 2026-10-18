@@ -194,7 +194,12 @@
         "Quests/CR.Quests.Domain.Services/Implementation/ConditionEvaluator.cs",
         "Quests/CR.Quests.Data/Enums/QuestRequirementType.cs",
         "Convenience/CR.Api.IntegrationTests/OpeningChainHttpTests.cs",
-        "Convenience/CR.Data.Migrations.Test/OpeningChain*.cs"
+        "Convenience/CR.Data.Migrations.Test/OpeningChain*.cs",
+        "Quests/CR.Quests.Data.Migration/M17006AddGrantsBeatsToQuestTemplate.cs",
+        "Quests/CR.Quests.Data/Extensions/StoryBeatKeyExtensions.cs",
+        "Quests/CR.Quests.Data/Extensions/StoryBeatBackfillKeys.cs",
+        "Quests/CR.Quests.Domain.Services/Implementation/StoryBeatProjector.cs",
+        "Stats/**/StatKey*.cs"
       ],
       "cr-data": [
         "Assets/CR/Core/Data/Logic/QuestObjectiveValidation.cs",
@@ -1629,7 +1634,8 @@
         "Moderation/**/*.cs",
         "Moderation/**/*.csproj",
         "Quests/CR.Quests.Domain.Services/**/*.cs",
-        "Stats/**/*.cs"
+        "Stats/**/*.cs",
+        "Quests/CR.Quests.Data/Extensions/StoryBeatBackfillKeys.cs"
       ],
       "cr-data": [
         "Assets/CR/Core/Data/Editor/LiveOps/**",
@@ -2046,7 +2052,8 @@
     "docPath": "docs/unity/38-story-opening.md",
     "repos": {
       "cr-api": [
-        "Quests/CR.Quests.Data.Migration/M7020*.cs"
+        "Quests/CR.Quests.Data.Migration/M7020*.cs",
+        "Quests/CR.Quests.Domain.Services/Implementation/StoryBeatProjector.cs"
       ],
       "cr-data": [
         "Assets/CR/Game/Story/**",
@@ -2058,7 +2065,9 @@
         "Assets/CR/Game/OpenWorld/Editor/Corridor/Seeds/Act1AdjustmentsSeed.cs",
         "Assets/CR/Tests/Editor/OpeningLocation*.cs",
         "Assets/CR/Tests/Editor/DialoguePhilroeHubResolutionTests.cs",
-        "Assets/CR/Tests/Editor/StoryDialogueStagingSyncTests.cs"
+        "Assets/CR/Tests/Editor/StoryDialogueStagingSyncTests.cs",
+        "Assets/CR/Game/Story/**/*Beat*.cs",
+        "Assets/CR/Core/DI/StoryCameraBindingsExtensions.cs"
       ]
     },
     "description": "Opening story client systems: IStoryFlags, LoreReadable, WorldBark, NpcEscort/EscortPlan, OneShotWorldEvent, PrologueController + gate, place flavour, capture-lesson hints, StoryText, the cr_story_script_page review-page command, the beat map on the built corridor and the CorridorStoryPlacer hook in cr_story_build_scenes; the vista build now delegates to MirandaleVistaBuilder (see unity/42-pillar-cutscene)"
@@ -2221,7 +2230,9 @@
       "cr-data": [],
       "cr-admin-web": [
         "src/resources/quests/**",
-        "src/pages/quests/**"
+        "src/pages/quests/**",
+        "src/components/editors/KeyChipsEditor.tsx",
+        "src/components/quests/flow/**"
       ]
     },
     "description": "Studio web quest editing: which key family (item/creature/NPC/world-location content key vs quest/item/creature GUID vs free-typed trainer/talent key) each objective/requirement/reward target picker uses, the fix for objective types 21/22 (Activate key item / Used item) which used to point their picker at the item GUID instead of the content key `ItemUseDomainService` actually emits, and the `targetMetadata`/reward `metadata` `typedMeta` columns (wired up, currently empty specs — no objective or reward type parses metadata server-side yet)."
@@ -2531,7 +2542,9 @@
       "cr-admin-web": [
         "src/pages/live/**",
         "src/components/viewAs/**",
-        "src/lib/graph/playthrough/realWorld.ts"
+        "src/lib/graph/playthrough/realWorld.ts",
+        "src/pages/live/dialogs/GrantStoryBeatDialog.tsx",
+        "src/pages/live/dialogs/RevokeStoryBeatDialog.tsx"
       ]
     },
     "description": "Admin progression debugger and View as. cr-admin-web globs are not checked by check-stale."
