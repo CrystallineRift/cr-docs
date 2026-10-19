@@ -1306,7 +1306,7 @@
         "Assets/CR/UI/Resources/MainMenu.uxml",
         "Assets/main-menu.uss",
         "Assets/CR/UI/Logic/MainMenuAccountLine.cs",
-        "Assets/CR/Core/Data/Logic/LinkedEmailMemo.cs",
+        "Assets/CR/Core/Data/Logic/LinkedAccountMemo.cs",
         "Assets/CR/UI/Title/TitleBackdropController.cs",
         "Assets/CR/UI/Resources/TitleBackdrop.uxml",
         "Assets/CR/UI/Resources/TitleBackdrop.uss",
