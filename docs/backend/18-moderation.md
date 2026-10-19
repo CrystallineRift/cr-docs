@@ -373,3 +373,10 @@ The two `GET /trainers/{trainerId}/progression` and `/timeline` routes feed the 
 - **`timeline`** merges `stat_event` and `admin_action` rows. The cursor `before` is opaque (`<utc ticks>_<id>`); each source is read in `(occurred_at DESC, id DESC)` order and the merge uses the same order, so events with identical times are neither skipped nor repeated. `nextBefore` is set only when more exist.
 - **Player search** (`GET /players?q=`) ignores NPC trainers and matches by email prefix or trainer-name prefix; new Postgres indexes on `LOWER(trainers.name)` and `LOWER(accounts.email)` (with `text_pattern_ops`) back it.
 - **Indexes.** `admin_action (target_trainer_id, occurred_at DESC, id)` (M13003) and `stat_event (trainer_id, occurred_at DESC, id)` (Stats M9005, see [Stats](08-stats-system.md)).
+
+## Story beat admin routes (2026-10-18)
+
+`POST` / `DELETE /api/v1/admin/players/{accountId}/trainers/{trainerId}/story-beats/{key}` grant or revoke a story beat for
+support and debugging (body `{ reason }`, 204; 400 bad key or revoking `act1-done`; 404 trainer not on the account). Audit
+kinds `SetStoryBeat` (21) and `ClearStoryBeat` (22). `TrainerDossier` now also returns `StoryBeats`, `ActiveQuestKeys` and
+`CompletedQuestKeys`. Details: [Quest System](07-quest-system.md#story-beats-2026-10-18).

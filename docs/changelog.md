@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-18 — Story beats: server-set story flags, world gates
+
+cr-api `feature/story-beats`, cr-admin-web `feature/story-beats`, cr-api-unity `feature/story-beats`, cr-docs `docs/story-beats` (none deployed). Migration M17006 runs on deploy; rebuild the compat packages and rebake the floor before the Unity build; then Studio quest push.
+
+- **Beats.** Named flags in `trainer_stat` (`story_beat_<key>`), set by the server when a quest with `grants_beats` completes, or by an admin. The client never sets one. `TrainerProgress.StoryBeats` and `ProgressReport.NewStoryBeats` expose them; requirement type 7 gates quests on a beat; `act1-done` is backfilled for trainers who already finished Runaway Cargo. → [Quest System](?page=backend/07-quest-system#story-beats-2026-10-18)
+- **Studio.** Quest editor gets requirement options 6 and 7, a "Grants story beats" chips field and "Sets beats" on the Flow tab; the player dossier lists beats and quests with grant/revoke (not `act1-done`). → [Quest Editing](?page=admin-web/04-quest-editing#story-beats)
+- **Unity.** `IStoryBeatReader`, `BeatGatedBlocker`/`BeatGatedPass`, dialogue `story.beat`, and `IStoryBeatGate` renamed `ISkippableBeatGate`. → [Opening Story](?page=unity/38-story-opening#story-beats-on-the-client-2026-10-18)
 ## 2026-10-18 — v0.2.1 hotfix: offline floor rebaked, stale-floor guards, forced update
 
 cr-api `fix/min-client-0.2.1-floor-tool`, cr-api-unity `fix/floor-20006-guard`, cr-docs `docs/floor-schema-guard`. Deploy order: merge and deploy cr-api (migration 20006), pull cr-api main on the build Mac, then merge cr-api-unity and tag `v0.2.1`.
