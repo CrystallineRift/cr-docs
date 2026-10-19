@@ -2171,10 +2171,15 @@
         "Assets/CR/Game/Story/Smoke/StorySmokeRunner*.cs",
         "Assets/CR/Game/Story/Smoke/ActSmoke*.cs",
         "Assets/CR/Game/OpenWorld/Data/Corridor/Continent/regions/*.json",
-        "Assets/CR/Game/OpenWorld/Data/Npcs/npc-looks.json"
+        "Assets/CR/Game/OpenWorld/Data/Npcs/npc-looks.json",
+        "Assets/CR/Game/Story/Smoke/Side*.cs",
+        "Assets/CR/Game/OpenWorld/Travel/**",
+        "Assets/CR/Game/OpenWorld/Logic/Travel/**",
+        "Assets/CR/Content/Defs/ItemSpawners/**",
+        "Assets/CR/Content/Defs/Quests/**"
       ]
     },
-    "description": "Open world (P4: the Blight, Crow's Gate, Volcanic Town and tower, two-stage false king via StoryNpcRow.startDisabled and initialise-on-enable, credits/relight sequence, epilogue, Act 5 quest line, road-32 re-route, smoke act5; P3: the Coliseum and the Capital, Act 4 quest line, story rows inside interiors, gatehouse kit role, smoke runner sections; P2: the three Act 3 spokes, crystal set piece, roads, tent/awning kit roles, plot tint, healer leaf region key; P1b: Mirandale/Bridgeford, startDisabled, story pickups, arenaKey, cr_town_remove): streamed 256 m cells, region mask, Dormant/Active rings, region identity, world_mode switch, Editor tools and cr_world_* CLI, regions.json, tech-demo areas; the Act 1 corridor builder (layout asset, steps, containers, idempotency, overrides, revert, checks, edge guards), terrain proxies, sun override, vendor-LOD guard, resume ground lift, Deck budget"
+    "description": "Open world (P5: six side towns, wagon/boat vehicles, requiresQuestActive rides, line-side quests, side readables and barks, road spurs, smoke side; P4: the Blight, Crow's Gate, Volcanic Town and tower, two-stage false king via StoryNpcRow.startDisabled and initialise-on-enable, credits/relight sequence, epilogue, Act 5 quest line, road-32 re-route, smoke act5; P3: the Coliseum and the Capital, Act 4 quest line, story rows inside interiors, gatehouse kit role, smoke runner sections; P2: the three Act 3 spokes, crystal set piece, roads, tent/awning kit roles, plot tint, healer leaf region key; P1b: Mirandale/Bridgeford, startDisabled, story pickups, arenaKey, cr_town_remove): streamed 256 m cells, region mask, Dormant/Active rings, region identity, world_mode switch, Editor tools and cr_world_* CLI, regions.json, tech-demo areas; the Act 1 corridor builder (layout asset, steps, containers, idempotency, overrides, revert, checks, edge guards), terrain proxies, sun override, vendor-LOD guard, resume ground lift, Deck budget"
   },
   "content/01-ai-content-ledger": {
     "docPath": "docs/content/01-ai-content-ledger.md",
@@ -2194,7 +2199,9 @@
         "Assets/CR/Content/Defs/ItemSpawners/**",
         "Assets/CR/Resources/Story/credits*.json",
         "Assets/CR/Game/Story/Text/StoryText.cs",
-        "Assets/CR/Content/Defs/Trainers/**"
+        "Assets/CR/Content/Defs/Trainers/**",
+        "Assets/CR/Content/Defs/Quests/**",
+        "Assets/CR/Content/Defs/Dialogues/**"
       ]
     },
     "description": "AI content ledger: every AI-generated content item (text, layouts, looks, numbers), where it is used and where to replace it before launch"

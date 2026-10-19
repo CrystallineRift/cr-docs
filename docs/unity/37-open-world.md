@@ -582,6 +582,86 @@ Healers use leaf keys: `npc-volcanic-innkeeper` `23a`, `npc-erranume-elder-crows
 - **Credits data.** The six `credits-pillars.json` pixel positions were checked against the overlay world positions (y = 1476 minus z) and are correct; names stay placeholders.
 - **Open.** The credits view, the tower and crimson trigger layout and the Menothas shot framing are not eyeballed. `story-volcanic-town` and `story-tower-gate` can be entered before their quest is active if the player walks in (the town is gated by `blight-open`).
 
+## Side regions, the wagon network and the boat hop: P5 (2026-10-19)
+
+**Program close.** The world build-out ran in five phases, P0 to P5: P0 terrain, roads, profiles and the far field; P1 the Mirandale and Bridgeford towns, the town builder, wagon rides and the Act 2 story; P2 the Road (Act 3); P3 the Court (Act 4); P4 the Volcano (Act 5, credits and epilogue); P5 (this section) the side regions, the wagon network and the boat hop. They shipped as cr-api-unity PRs #106 to #111 plus the P5 PR #112, cr-api PRs #86 to #89 (story beats, server vocabulary) and cr-docs PRs #53 to #58 plus the P5 docs PR #112. All of the content is AI-drafted (see the [AI content ledger](?page=content/01-ai-content-ledger)). The owner still has to: run the Studio pushes for Acts 2-5 and the side content, play the smokes (`act2` to `act5` and `side`), take the renders (no town, interior, stop prop or region 3 camp has been eyeballed), rebuild the local cr-api package before the next game build, then tag and build.
+
+(Unity: cr-api-unity "World P5" #112; spec `CR/docs/specs/2026-10-19-world-p5-side-regions-fast-travel-design.md`, section 2 as overridden by section 6 B1-B6.) Every region now has a reason to be visited: six side towns with a healer and a merchant, a readable and barks at each remaining set piece, wagon stops in the towns, and a boat from Coastal City to Fathamore Island. Side lines are optional and never gate the main story. Registry rev 7: regions 3, 4, 5, 8, 9, 15, 16, 17, 22, 25, 26, 28, 29 and 30 are `built`.
+
+### The six side towns
+
+| Town | Pad (leaf) | Inn / lodge interior | Healer (`regionKey`) | Merchant (`regionKey`, shop) | Wagon stop |
+|---|---|---|---|---|---|
+| `village-2` | 4a (only x 342-393, z 1189-1215; the rest of the pad is 4b and mountain, so every plot is at z <= 1215) | `village-2-inn` (city house role, 10x8 room) | `npc-village-2-innkeeper` (4a) | `npc-village2-merchant` (4a), `shop-village-2` | `village-2` |
+| `the-teeth` | 9c (only x 633-682, z 590-609; plots at z >= 591) | `teeth-inn` (city inn role, 14x10) | `npc-teeth-innkeeper` (9c) | `npc-teeth-merchant` (9c), `shop-the-teeth` | `the-teeth` (9b, top level 9) |
+| `coastal-city` | 15a (plots up to local z 28; 15b lies above world z 250) | `coastal-inn` | `npc-coastal-innkeeper` (15a) | `npc-coastal-merchant` (15a), `shop-coastal-city` | `coastal-city` (wagon) and `coastal-quay` (boat) |
+| `scrub-village` | 25a (only for z <= 745.5) | `scrub-inn` (volcanic-inn layout, recoloured) | `npc-scrub-innkeeper` (25a) | `npc-village-25-merchant` (25a), `shop-village-25` | `scrub-village` |
+| `cold-lodge` | 29a (100 percent) | `cold-lodge` (city house role, cold tint) | `npc-lodge-keeper` (29a, inside) | `npc-lodge-trader` (29a, inside), `shop-cold-lodge` | `cold-lodge` |
+| `fathamore-port` | 30 (100 percent) | `admiral-hall` (16x12; the side line's stage) | `npc-fathamore-harbourmaster` (30, town healer, no plot) | `npc-fathamore-merchant` (30), `shop-fathamore` | `fathamore-quay` (boat) |
+
+Pads that straddle regions were probed against the region mask; every NPC row carries the leaf key from the probe (the writer's default keys were superseded). The Teeth keeps the gate and tower landmarks; Coastal City keeps `lighthouse_standin` and the plaza statue; the cold lodge merchant stands inside the interior (interiors host merchants through the same `TownNpcPlacer.Configure` path; not seen in Play). Greybox houses and landmarks the towns replace were removed from the region files (15, 25, 29, 30). `cr_town_check` reports ok for all six; `cr_interior_build <key>,dry` shows no findings for the NW three.
+
+### The wagon network (engine E1)
+
+The network already existed: `WagonTravelRule.Destinations` lists every other stop whose top-level region is discovered (and whose `requiredBeat` is met). P5 adds two rules and no server change (a ride is presentation: `WagonTravelService` relocates and the normal location save/enter intent follows; nothing is sent for a ride).
+
+- **Same vehicle.** A stop has `vehicle: "wagon" | "boat"` (default and unknown values read as wagon; `Check()` flags unknown values). The menu at a stop lists only destinations of the same vehicle (`WagonVehicle`, `WagonRideGate`). Cross-vehicle plain travel is refused (`NotDiscovered`).
+- **Authored rides at the stop.** A ride row may carry `requiresQuestActive` (a quest content key). While that quest is Active or Completed the ride's destination is also listed at the ride's `from` stop; `allowUndiscovered true` lets an undiscovered destination show, otherwise it must be discovered; the destination's `requiredBeat` still applies. The gate is a presentation read of quest state through `IQuestGateReader` (`QuestServiceGateReader` over `IQuestService`, bound in `OpenWorldBindingsExtensions`; unbound means gates closed; keys are read once per menu open). Ungated authored rides (`act1-to-mirandale`, `volcano-to-mirandale`, `bridgeford-to-*`) are story-started and are never added to the menu, otherwise the farm cart would list undiscovered Mirandale.
+- **Stops added in P5** (all wagon unless noted): `village-2` (382,1193), `the-teeth` (649,620), `cold-lodge` (962,1357), `coastal-city` (1076,208), `scrub-village` (1611,708), plus the boat stops below. They have no rides of their own; the network lists them. `wagon-stops.json` now holds 16 stops and 11 rides, and `cr_wagon_build` regenerates `Resources/OpenWorld/WagonStops.json`. The wagon-stops expectations in `TownDataFilesTests` need the new stops and the two boat rides.
+
+### The boat hop (engine E1/E2)
+
+Two boat stops: `coastal-quay` (region 15a, at the old `15:quay_boat` spot 1058,180, yaw 30) and `fathamore-quay` (region 30, at `30:quay_boat` 1880,26, yaw 90). Both landmarks were removed from the region files so the stop prop owns the spot. `cr_wagon_build` places the boat prop (`Assets/Fantastic Seaside Town/Prefabs/Props/P_PROP_boat_comp_town_01.prefab`, the one the overlays used) for boat stops and the cart otherwise (`WagonBuildTool.PropFor`; the build refuses if a boat stop exists and the prefab is missing). The cover line is keyed by the destination's vehicle: `ui.world.wagon.cover` "Half a day by wagon." and the new `ui.world.wagon.cover.boat` "Half a day by boat." (`WorldText.CoverFor`). Known follow-up: the stop's interact prompt still reads "Take the wagon" for boat stops.
+
+Rides: `coastal-quay-to-fathamore-quay` (`allowUndiscovered true`, `requiresQuestActive quest-the-admirals-port`, so the island is reachable by boat once the side quest is taken) and the return `fathamore-quay-to-coastal-quay` (`allowUndiscovered false`; the island is discovered on arrival). `npc-ferryman` (15a, 1067,183) is flavour only: his dialogue does not start the ride; the stop does. The Fathamore wild zone moved off the port pad to (1816,45) r12 and is pinned (62 m away).
+
+### The side lines (`line-side`, optional)
+
+| Step | Quest | Requirement | Objectives | Reward |
+|---|---|---|---|---|
+| 1 | `quest-the-admirals-port` | type 7 `coliseum-won` | Talk `npc-harbourmaster` (the letters); Visit `story-fathamore-landing` (arrive by boat); Talk `npc-admirals-wife` | 350 XP, 80 gold |
+| 2 | `quest-fathamore-crossing` | type 0 previous | DefeatTrainersFromList `npc-fleet-deserter-1/2` (L31, arena `fathamore-quay-arena`, trainers `trainer-fleet-deserter-1/2`); Talk `npc-admirals-wife` | 500 XP, 150 gold, 3 `capture_crystal_standard` |
+| - | `quest-the-pilgrims` | type 7 `road-open` | Talk `npc-pilgrim-mother`; Read `readable-3-waystone`; DefeatTrainer (type 43) `npc-bridge-toll` (L14, arena `fjord-bridge-arena`) | 300 XP, 60 gold |
+
+None grants a beat, so nothing in the main story waits on them. The Admiral's wife (`dialogue-admirals-wife`) branches in order: pending crossing talk plus `quest.objectiveCount` objective 0 min 2 (both deserters beaten) gives lines w4-w6, the waiting line while only the crossing is pending, the port talk w1-w3, then `finale-done` w8, `blight-open` w7, else w0. The harbourmaster, pilgrim mother and wife use `recordTalk`. `dialogue-bridge-toll` and `dialogue-fleet-deserter` fight only while their quest is Active (else a declined idle line). Everything is derived by the authority; the client reports no outcome.
+
+**Region 3 finding.** The 3b island (x 288-315, z 1102-1124) is cut off by 18-21 m of fjord water, the P0 bridge piece (2 x 6.8 m) cannot span it, and the original camp, waystone and dock sat on the water bed. The pilgrim camp, `npc-bridge-toll` and `fjord-bridge-arena` therefore stand on the reachable west bank (2b land, y 3-6, within 40 m of 3a): tent (262,1082), cart (268,1077), waystone (278,1088) with readable `readable-3-waystone` (275.5,1088.5), pilgrim mother (266,1084), toll trainer (270,1092), arena (264,1095), a bridge stub, dock and rowboat. A real crossing (three bridge pieces and a guard gap) is a follow-up. Not render-verified.
+
+### Readables and barks in every remaining region
+
+One readable at each set piece, with a radius estimated from prefab scale: `readable-3-waystone`, `-4-standing-stone` (696.5,1228.5), `-5-sunk-gate` (583,899.5), `-8-hound-statue` (166.5,736; readable and barks only, no quest), `-9-crystal-site` (846,556), `-16-scar` (1485,623), `-17-mine-head` (1031,538), `-22-elder-oak` (1590,900), `-25-scar-stone` (1520,799), `-26-crown-rock` (1755,517), `-28-mine-head` (1003,1223), `-29-frost-statue` (1076,1337). Each region also has bark rows (`ui.story.bark.side.<stem>.<1|2>` plus the first-draft keys the NW files name); regions 5, 8, 9, 28 and 29 name one bark each, the rest two. `SideContentTests` fails with the missing key if a region file names a bark that is not in `StoryText.cs`. New visit locations: `region-3`, `region-5`, `region-8`, `region-28`, `story-coastal-harbour` (1058,180) and `story-fathamore-landing` (1880,28), plus a `story-<town>` location per town. Wild zones were already placed in P0; only 30 moved.
+
+### Road spurs
+
+`roads.json` gains `road-side-coastal` (15a to 15a, 44.6 m, (1004,157) to (1015,200), from the end of road-11 into the west edge of the Coastal City pad) and `road-side-teeth` (9d to 9c, 40.8 m, (616,632) to (656,624), from `road-act3-southwest` into the Teeth pad at z >= 591). No bridges; Act 1 cells untouched. Rebuild the cells they cross: (col 3, rows 4-5) and (col 2, row 3). The spur ends sit at or inside the pads; nudge if a gate looks wrong. The region keys in the road report are a nearest-seed probe, not the mask.
+
+### Smoke
+
+`SideSmoke{Names,Step,StepKind,Plan}` (17 steps): `coliseum-won`, `quest-the-admirals-port` (harbourmaster, `story-fathamore-landing`, wife), `quest-fathamore-crossing` (deserters 1/2, wife), `road-open`, `quest-the-pilgrims` (pilgrim mother, `readable-3-waystone`, toll). `ActSmokeSections.Names` = act2..act5 and `side`. `plan:side` / `cr_story_smoke_plan --args side` lists the plan without Play; `cr_story_smoke_start --args side` runs it in Play. Every plan key is checked against registry rev 7. `SideContentTests`, `SideDialogueSyncTests`, `SideDialogueKeys` and `SideSmokePlanTests` cover the content; `Wagon|Travel|Smoke|Side` ran 307 passed, 0 failed (engine run), and the writer filter ran 225 of 225.
+
+### Body count after rebuilds
+
+After any rebuild of towns, interiors, the wagon build or the story build, count the bodies (NPC rows) against the registry: 19 side NPCs (6 healers, 6 merchants, harbourmaster, ferryman, Admiral's wife, pilgrim mother, toll-taker, 2 deserters) must each exist once, with the leaf `regionKey` from the probe table above. A rebuild that drops a model or rebuilds a town without its merchant leaves a registry key with no body, and its dialogue never opens. Check `cr_world_validate` (46 cells, 0 errors, 0 warnings at the last run), then a dry `cr_world_build_corridor` with story (expect 0 changes), then the `side` smoke plan.
+
+### Owner steps after merge
+
+`cr_content_push --args all`, `cr_world_locations_push` (new `story-*` VisitLocation targets), `cr_spawners_push` (the six side shops), NPC rows with `regionKey` = leaf area key and `lossAllowed`. Run the town builds for the six towns, `cr_interior_build` for the six interiors, `cr_wagon_build` and the story build. The server dialogue vocabulary (`story.beat`, `npc.trainerLost`, `battle.start`, `team.heal`, `npc.openShop`, `quest.objectiveCount`) must be live first. Healers in Act 2 needed the leaf-key fix (see [Healer region key](?page=unity/37-open-world#healer-region-key)); the P5 healers use leaf keys from the start.
+
+### Integration results
+
+- **Builds.** Town builds x6 (16/14/13/14/12/11 rows), interior builds x6, `cr_wagon_build` (16 stops, 11 rides), then the corridor build with story: 226 changes, 0 errors, 0 warnings (7 batches); a dry run reports 0 changes; `cr_world_validate`: 46 cells, 0 errors, 0 warnings. The first build failed with 9 errors (the pilgrim set sits in pinned Act 1 cell c1_r4, "Continent does not build"); see the pinned-cell rule below. `cr_world_locations_scan` added 7 locations and `areaKey`s were fixed to the parent region numbers (scrub-village 25, village-2 4, the-teeth 9, cold-lodge 29, coastal-city and harbour 15, fathamore-landing 30); a rescan adds 0. Full EditMode run: 1296 of 1296 pass.
+- **Body count.** `StylizedBody_FullBody` per World scene vs the pre-P5 base: 56 before, 68 after, none lower (c1_r4 1 to 4, c2_r2 0 to 1, c4_r0 0 to 3, c6_r2 5 to 6, c7_r0 0 to 4).
+- **Registry.** Rev 7 resolves with 0 missing keys; the NW bark keys were folded into the `ui.story.bark.side.<stem>.N` scheme and the first-draft duplicates deleted.
+
+### Review fixes
+
+- **Pinned Act 1 cells.** Story rows may stand in pinned cells, and landmarks too when the landmark entry opts in with `pinnedCellOk` (default false; opted: region 3 `erramoor_bridge`, `dock`, `waystone`, `pilgrim_tent`, `pilgrim_cart`, `rowboat`, `bank_crag`, region 4 `farmstead`, `hay_ricks`, `elder_tree`). `CorridorBuilder` runs a trailing Story + Landmarks-only batch for those cells (`PinnedStoryBatchPlan`, `CorridorPinnedStoryExtensions`): no terrain, no scatter, no content hashes; un-opted overlay landmarks in pinned cells are swept. The Act 1 TerrainData SHA-256 is unchanged for c0_r3, c0_r4, c1_r3 and c1_r4. Final build 23 changes, 0 errors, dry 0; `CorridorPinnedStoryTests` (8) cover the plan decision, the scene-bound dry-run is checked by hand.
+- **First Fathamore crossing.** The boat ride is offered while `quest-the-admirals-port` is Active, and the ferryman and the Admiral's wife now also need objective 0 (the harbourmaster talk) done; otherwise they answer "See the harbourmaster first; he holds the letters." (nodes `fh` and `wh`). The quest sits on `line-side-erramoor` step 1 (the pilgrims line).
+- **Boat stops.** A boat stop always lists its authored rides (destination beat still applies), same vehicle only (`WagonRideGate`, `WagonRideGateTests`). The gate reader reads the `ActiveQuests` snapshot. The interact prompt is vehicle-aware: "Take the boat" (`ui.world.wagon.prompt.boat`, `WorldText.PromptFor`; the stop carries `vehicle`).
+- **village-2 ground.** The town sits on sloped ground (accepted greybox, noted in `village-2.json` `_doc`). Follow-up: stamp the pad after an Act 1 re-pin.
+- **Rebuilds drop NPC bodies.** A cell rebuild can drop NPC models. After any town, interior or corridor rebuild run `cr_dress_cell_npcs` and compare the `StylizedBody_FullBody` count per scene against the table above (none may drop), then a dry build (0 changes).
+- **Open.** Region 3 camp on the west bank, the stop props, plot positions and the cold lodge interior merchant are not render-verified; `StoryShotScenesTests.arrival` fails before and after P5 (needs `cr_story_author_shots`).
+
 ## World map tab
 
 In open mode `OpenWorldMapLayoutSource` replaces the legacy node layout: every region (sub-regions included; not mountain, ocean or unassigned) is shown

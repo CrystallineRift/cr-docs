@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-10-19 — World P5: Side regions, the wagon network and the boat hop (closes the world build-out)
+
+cr-api-unity `feature/world-p5` (PR #112, not deployed), cr-docs `docs/world-p5` (PR #112). Needs the P1a/P1b server vocabulary (`story.beat`, `npc.trainerLost`, `battle.start`) plus `team.heal`, `npc.openShop` and `quest.objectiveCount` live before any Studio push. No server change.
+
+- **Six side towns.** `village-2` (4a), `the-teeth` (9c), `coastal-city` (15a), `scrub-village` (25a), `cold-lodge` (29a) and `fathamore-port` (30), each with an inn or lodge interior (`admiral-hall` on Fathamore), a healer, a merchant and shop, and a wagon stop. Healers and merchants use leaf `regionKey`s from the mask probe.
+- **Wagon network and boat hop.** Stops gain `vehicle` (`wagon` | `boat`); a stop's menu lists only destinations of the same vehicle. Rides gain `requiresQuestActive` and are also offered at their `from` stop while that quest is Active or Completed. Boat stops `coastal-quay` and `fathamore-quay` use the quay boat prop and the cover line "Half a day by boat." The first crossing needs `quest-the-admirals-port` active.
+- **Side lines.** `line-side`: `quest-the-admirals-port`, `quest-fathamore-crossing` (two L31 deserters), `quest-the-pilgrims` (L14 toll-taker). Optional; none grants a beat. Registry rev 7.
+- **Every remaining region.** 12 readables at the set pieces and bark rows in regions 3, 4, 5, 8, 9, 15, 16, 17, 22, 25, 26, 28, 29, 30. Region 3's pilgrim camp stands on the west bank because the fjord island is not reachable.
+- **Roads and smoke.** `road-side-coastal` and `road-side-teeth` spurs. `cr_story_smoke_start --args side` (17 steps; plan-only via `plan:side`).
+- **Review fixes and integration.** Build 226 changes, 0 errors, dry 0, validate 0, bodies 56 to 68. Story rows and opt-in landmarks (`pinnedCellOk`) may stand in pinned Act 1 cells via a trailing Story + Landmarks-only batch (no terrain, no hashes; Act 1 TerrainData SHA unchanged). The first Fathamore crossing needs the harbourmaster talk first (ferryman and wife redirect). Boat stops list their authored rides, same vehicle only, with a "Take the boat" prompt. village-2 sits on sloped ground (pad-stamp follow-up). Rebuilds can drop NPC bodies: re-dress and body-count check.
+- **Docs.** [Open world](?page=unity/37-open-world) P5 section (with the program-close summary), 93 AI content ledger rows, `doc-sources.json` globs.
+- **Owner Studio push list.** `cr_content_push --args all`, `cr_world_locations_push`, `cr_spawners_push` (the six side shops), NPC rows with `regionKey` = leaf area key and `lossAllowed`. Healers in Act 2 needed the leaf-key fix; the P5 healers use leaf keys from the start.
+- **Program close (P0-P5).** Delivered by cr-api-unity PRs #106-#111 plus the P5 PR, cr-api PRs #86-#89 and cr-docs PRs #53-#58 plus the P5 docs PR. Owner follow-ups: Studio pushes for Acts 2-5 and the side content, Play smokes act2-act5 and side, renders, a local cr-api package rebuild before the next game build, then tag and build.
+
 ## 2026-10-19 — World P4: The Volcano (Act 5: the Blight, Crow's Gate, the tower and the finale)
 
 cr-api-unity `feature/world-p4` (PR #111, not deployed), cr-docs `docs/world-p4`. Needs the P1a/P1b server vocabulary (`story.beat`, `npc.trainerLost`, `battle.start`) live before any Studio push. No server change.
