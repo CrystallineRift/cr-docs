@@ -139,7 +139,9 @@ notification.
 
 ## Wild Battle Turn Loop
 
-Wild battles drive a sequential turn loop entirely client-side. The server resolves each half-turn via a dedicated endpoint.
+> **Superseded.** Battles now run in simultaneous rounds; the diagram below is the pre-v0.2.0 half-turn loop. See [Battle Rounds (client)](#battle-rounds-client).
+
+Wild battles drove a sequential turn loop client-side, with the server resolving each half-turn via a dedicated endpoint.
 
 ```
 StartBattleAsync
@@ -170,6 +172,23 @@ Neither seam can alter how an action resolves. See [Battle Extensions](?page=uni
 `SubmitPlayerAction(string actionJson)` is called by the HUD (or any input handler) to unblock the `TaskCompletionSource` awaited in the loop. The action JSON matches the backend's action format, e.g. `[{"type":0,"abilityId":"...","targetCreatureId":"..."}]`.
 
 The wild trainer GUID is `00000000-0000-0000-0000-000000000001` (defined in `WildTrainerIds.WildTrainerId`).
+
+## Battle Rounds (client)
+
+The server resolves a whole round per intent (see [Battle Persistence → Battle Rounds](?page=backend/09-battle-persistence#battle-rounds)); the client sends one action and plays back every returned step in order. It never orders or resolves anything itself. Offline uses the same flow through `OnlineOfflineBattleDomainService`, which delegates `ResolveRoundAsync` to the local domain service (`BattleHttpDomainAdapter.ResolveRoundAsync` throws `NotSupported`: online resolves server-side in `BattleTurnDomainService`).
+
+- **Playback.** `BattleCoordinator.PlayStepsAsync` raises `StepTurnCue` (replaces `OpponentStepTurnCue`) for every step, both sides, so the cinematic attacker and defender anchors are right when the opponent goes first. The ending step is the last `BattleEnded` step (`RoundEndingStep`).
+- **Interrupted.** A step with `Interrupted` plays no cue and no damage, only turn end, and the HUD narrates "X fainted before it could act".
+- **ConditionTick.** A tick step is a status flash, an HP drop and, when `ActorFainted`, a faint plus recall (unless the battle ended). No turn cue.
+- **Swap-only round.** When the resolution has `NeedsSwap` (or the active creature is fainted) the loop opens the switch menu only: no attacks, bag or run, back is suppressed. Anything else is held back client-side without costing a server strike. Smoke runners handle this through `SmokeSwapExtensions`.
+- **Refusals.** A lone refusal step with the same round key re-opens the same menu with the reason; no round was spent.
+- **Optimistic switch.** The HUD keeps a `PendingSwap` and moves its tracked creature only when the server's Switch step plays; a refusal drops the request.
+- **Resync.** On a transport error, 5xx, `InvalidRoundKey`, `RoundIncomplete` (409 `round_incomplete`, error text `battle-round-incomplete`), `NotYourTurn` or `Conflict`, `ResyncAsync` reads the battle state: if the round advanced it replays `lastRoundSteps` (narrated), if the battle ended it ends, otherwise it re-reads the round key and re-prompts. It gives up on the 6th consecutive failed submit (after 5 resync attempts; `MaxResyncFailures` = 5, and any successful round resets the count). `NotFound` and `IllegalAbility` are handled separately. Against an old server (no `lastRoundSteps`) it only refreshes the key.
+- **Old-server tolerance.** Missing `NeedsSwap`, `Interrupted` or `lastRoundSteps` fall back to the old behaviour, and opening steps are still played if present.
+- **Draw.** `BattleLossRules.IsPlayerLoss` is true for `Draw` (whiteout and heal), and the HUD says "It's a draw!".
+- **HUD log.** `BattleLogQueue` shows 6 lines and releases new ones every 350 ms, flushing when the battle ends, so both sides' actions stay readable.
+- **DI.** `LocalDevGameInstaller` binds `IBattleCoinFlip` to `SeededBattleCoinFlip`; `BattleRoundServicesWiringTests` covers the turn and encounter services.
+- **Forced update.** The server's `min_client_version` is `0.2.0`; older builds are blocked from online play by `GameSessionManager`.
 
 ## Presentation Orchestrator
 
@@ -212,6 +231,8 @@ restored on `ExitBattle` — so the whole exchange reads without re-authoring pe
 Set it to 1 for the rig's exact authored lenses.
 
 ## Force-Swap on Faint
+
+> Under simultaneous rounds the replacement is a swap-only round after the round ends (see [Battle Rounds (client)](#battle-rounds-client)); the opponent does not act in it.
 
 When the player's active creature faints but the team still has an alive backup, the server keeps the battle Active and returns `ActionOutcome.NeedsSwap = true` (see [Battle Persistence — Force-Swap on Faint](?page=backend/09-battle-persistence)). The client turns this into a forced swap rather than ending the battle.
 
@@ -415,6 +436,8 @@ On `OnTriggerEnter` (Player tag), a coroutine `EncounterDelayRoutine` is started
 ## Wild Battle AI
 
 `IWildBattleAIDomainService` is a DLL interface, not something `BattleCoordinator` calls directly any more — the same `WildBattleAIDomainService` runs offline (bound locally) and server-side, but online the server now runs it inline inside `BattleTurnDomainService.SubmitTurnAsync` as part of resolving the player's own submitted action (server-authority C2), not through a separate endpoint. The old `/wild-turn` endpoint Unity used to call after every player turn is retired (410); see [Battle Persistence → Wild Turn Endpoint](?page=backend/09-battle-persistence#wild-turn-endpoint-retired).
+
+Under simultaneous rounds this brain picks at the start of each round, before it sees the player's pick.
 
 Decision priority:
 1. 20% random chance → use a Status-category ability if one exists

@@ -377,7 +377,7 @@ query string is accepted but ignored. Because `trainer_stat` rows are keyed by `
 to the token's account before reading; a trainer that doesn't (or doesn't exist) gets `404 Not Found`
 rather than another account's stats.
 
-This endpoint returns the full `Dictionary<string, long>` from `GetAllAsync`. It is a **debug endpoint** — not intended for production client use. Gating it behind an internal/admin role before shipping is recommended.
+This endpoint returns the full `Dictionary<string, long>` from `GetAllAsync`. It is a **debug endpoint** — not intended for production client use. Admins who need a player's flags or event history use the read-only admin routes (`GET /api/v1/admin/trainers/{id}/progression` and `/timeline`, see [Moderation](18-moderation.md#progression-debugger-routes)), not this one.
 
 The client-facing route group `StatEndpoints` maps at `/api/v1/stats` — `GET trainer/{trainerId}`,
 `GET trainer/{trainerId}/{statKey}`, `GET trainer/{trainerId}/{statKey}/history`, and
@@ -454,3 +454,9 @@ cr-api/Stats/
 - [Quest System](?page=backend/07-quest-system) — primary writer of stats via `RecordProgressEventAsync` and `ClaimRewardsAsync`
 - [Backend Architecture](?page=backend/01-architecture) — DI registration patterns, repository singleton vs scoped, dual-DB
 - [Auth and Accounts](?page=backend/06-auth-and-accounts) — `account_id` / `trainer_id` scoping used on all stat reads and writes
+
+## Admin timeline read and the `stat_event` index
+
+`IStatRepository.GetEventsForTrainerAsync(trainerId, beforeAt, beforeId, limit)` returns a trainer's events newest first in `(occurred_at DESC, id DESC)` order with a keyset cursor (limit clamped 1..200). The admin timeline uses it. M9005 adds `idx_stat_event_trainer_occurred` on `stat_event (trainer_id, occurred_at DESC, id)`; on production create it ahead of the deploy with `CONCURRENTLY` (see [Optimistic Concurrency, deploy notes](28-optimistic-concurrency.md#deploy-notes)).
+
+The key prefixes `readable_read_`, `npc_met_` and `quest_completed_` are server-owned and refused on every client-write route.
