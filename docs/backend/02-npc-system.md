@@ -792,7 +792,7 @@ cr-api/Npcs/
 - [World Behaviours](?page=unity/03-world-behaviours) — `IWorldInitializable` lifecycle and the composable sub-behaviour pattern
 - [Backend Architecture](?page=backend/01-architecture) — transaction patterns, soft deletes, module structure, keyed vs non-keyed DI
 
-## Healers and heal-at (P1a, 2026-10-18)
+## Healers and heal-at (P1a)
 
 `NpcType.Healer = 4`. Migration **M16101** (Npcs) adds `npcs.loss_allowed BOOLEAN NOT NULL DEFAULT false` and `npcs.region_key VARCHAR(128) NULL` (Down drops on Postgres only); `SeedNpcRegistry_HighWaterMark.txt` moved 16100 to 16101. `NpcBase.LossAllowed` / `RegionKey` flow through `BaseNpcRepository` (insert, update, registry list); the ensure-upsert never touches the two columns.
 
