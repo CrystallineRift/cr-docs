@@ -186,7 +186,8 @@ the scene; `cr_core_camera_cuts_install` points the Core Brain at the asset. Tes
 
 The order is a gate: `PrologueStep` is `Exploring=0, LetterRead=1, StoneUnlocked=2, PortalOpen=3,
 Completed=4`, and `PrologueProgress(letterKey, photoKey, stoneKey, letterSeen, photoSeen, stoneSeen)` moves letter to `LetterRead`,
-the photo (`prologue-photo`, only after the letter) to `StoneUnlocked`, and the stone to `PortalOpen`. The stone is interactable only
+the photo (`prologue-photo`, only after the letter) to `StoneUnlocked`, and the stone to `PortalOpen`. The readables appear in
+story order: the photo's readable (`photoInteraction`) is inactive until `LetterRead` (`PhotoInteractable`), the stone's only
 at `StoneUnlocked`, and a resume rebuilds the step from the `readable.seen.*` flags. These are presentation gates; the objectives
 they line up with are counted by the server.
 
@@ -195,6 +196,7 @@ they line up with are counted by the server.
 `stoneProp.GetComponent<AhksunCrystalGlow>()?.SetLit(step >= StoneUnlocked)`, so the shard is dark until the photo has been looked
 at, then glows to say "inspect the glowing shard". Default is lit, so the companion shard and the arrival crystal are unchanged. While lit the shard is alive: the crystal child bobs (6 cm over 2.6 s) and turns (24°/s) and the Glow light pulses (up to 1.6× over 1.5 s), fading in over a 1.2 s wake on dark → lit (`ShardPulse`, pure, in `CR.Game.Story.Logic`); dark puts it back to the authored pose and intensity exactly. The motion is on the crystal child, never the root, so `CrystalRise` and the companion's follow are untouched; the tunables are serialized and `Animate` switches it off. Tests: `ShardPulseTests`, `AhksunCrystalGlowTests`.
 
+at, then glows to say "inspect the glowing shard". Default is lit, so the companion shard and the arrival crystal are unchanged. When the stone wakes, `PrologueStoneShots` (`StoneRevealPlan`, pure) activates `Prologue Cam Reveal` (wide, the corner farthest from the stone, 1.2 s ease) for 2.5 s, then `Prologue Cam Stone` (a closer frame from across the room, 1.5 s ease) until the stone is taken; both sit at priority 30 over the room's zone cameras. `cr_prologue_stone_shots` adds only these two.
 `PrologueGateRule.Decide(hasEverBeenPlaced, startSpawnPlan)` is true only for a never-placed trainer on the start
 spawn. `OpenWorldBootstrap`, before placing the player, suspends streaming, loads the prologue additively alone,
 awaits `Completed`, unloads, resumes streaming and continues placement. `world.placed` is set after the first
