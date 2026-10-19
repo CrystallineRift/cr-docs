@@ -1395,3 +1395,46 @@ server-side accept heals on the next read.
   `{ "error": "requirements_not_met" }`. Re-accepting a quest already held returns it without a check.
 - **Server grants.** `IQuestDomainService.GrantQuestAsync(accountId, trainerId, templateKey, reason, ct)` creates (or returns)
   an instance without the requirement check. It has no route; server features (location discovery quests) call it.
+
+## Story beats (2026-10-18)
+
+A **story beat** is a named flag the server sets when the story reaches a point (for example `act1-done`, `mirandale-open`).
+The client reads beats to open roads, bridges and passes, to branch dialogue and to gate quests. The client never sets a
+beat: beats are granted by quest completion or by an admin. There is no intent route that sets a beat.
+
+- **Storage.** A beat is a `trainer_stat` row, key `story_beat_<key>` (`StatKey.StoryBeatKey(key)`, prefix
+  `StatKey.StoryBeatPrefix`), value 1, written with `MaxAsync`. The prefix is in `ServerOwnedStatKeys`, so a client stat
+  write cannot touch it. Beats are monotone (once set, set); the only carve-out is admin revoke (below).
+- **Keys.** Content strings, lower-case `^[a-z0-9][a-z0-9-]{0,62}$`. Nothing in code enumerates them
+  (`StoryBeatKeyExtensions`: regex, max 8 per quest, normalise).
+- **`grants_beats`.** Migration **M17006** adds `quest_template.grants_beats TEXT NULL` (comma-separated keys; Down drops it on
+  Postgres only). `QuestTemplate.GrantsBeats` is a `List<string>`, normalised (trim, lowercase, distinct, sorted) on read and
+  before compare/store. A template with the same normalised list adds no `row_version` bump of its own (the upsert still bumps
+  once, as before). `UpsertQuestTemplateRequest.GrantsBeats`: **omitted/null = keep, `[]` = clear**, an invalid key or more
+  than 8 keys answers 400 `invalid_grants_beats`. `QuestStatusView.GrantsBeats` and the pull/export DTOs carry it.
+- **`StoryBeatProjector`** (`IProgressOutcomeHandler`, Order 150, after `LifetimeStatProjector` at 100) handles
+  `QuestCompleted`: reads the template's `grants_beats`; for each key it does `GetAsync` then `MaxAsync`, and only when the
+  read was 0 it adds the key to the report (`ProgressReportBuilder.AddStoryBeat`, de-duplicated) and enqueues
+  `ProgressOutcomeKind.StoryBeatSet = 16` (SubjectKey = key, FirstTime = true). The outcome is enqueued after the write, so
+  achievements evaluated at the end of the dispatch see the beat. A double completion cannot happen (completion is a CAS).
+  Registered in `Program.cs`; offline registration is in the Unity `ProgressBindings` at Order 150.
+- **No objective row.** `ProgressOutcomeObjectiveMap` has **no row** for `StoryBeatSet` on purpose: a beat advances no
+  quest objective.
+- **Exposure.** `TrainerProgress.StoryBeats` (`List<string>`, sorted, never null) comes from one `GetAllAsync` filtered by
+  prefix in `TrainerProgressionService.GetProgressAsync`. `ProgressReport.NewStoryBeats` (`List<string>`, never null) rides on
+  every intent response; the builder and both merge extensions carry it. No `InvalidationScopes` change (TrainerProgress is
+  already dirtied). An old response without the field reads as empty.
+- **Requirement type 7 `StoryBeat`.** `QuestRequirementType.StoryBeat = 7`: `stat_key` is the beat key without the prefix;
+  the evaluator checks `story_beat_<key>` >= 1. Upsert validates and normalises the key. The Studio quest editor also offers
+  6 `QuestNotStarted`.
+- **Backfill of `act1-done`.** The first `GetProgressAsync` after deploy sets `story_beat_act1-done` when
+  `StatKey.QuestCompletedKey("quest-runaway-cargo")` >= 1 and the beat is unset: one stat read, `MaxAsync`, source
+  `story_beat_backfill`, no outcome, no report, no achievements. Idempotent, same offline. Only `act1-done` is backfilled
+  (`StoryBeatBackfillKeys`, in `Quests.Data` so Moderation can see it). A test pins that the projector's completed-quest key
+  equals the backfill's key.
+- **Admin grant/revoke.** `POST` and `DELETE /api/v1/admin/players/{accountId}/trainers/{trainerId}/story-beats/{key}` (admin
+  policy, `{ reason }` body, 204; 400 for a bad key; 404 when the trainer is not on that account). Grant is `MaxAsync`;
+  revoke is `SetAsync` 0 with source `admin` (the one carve-out of "monotone"). **Revoking `act1-done` is refused (400)**
+  because the backfill would restore it. Audit kinds `SetStoryBeat = 21`, `ClearStoryBeat = 22`. `TrainerDossier` gains
+  `StoryBeats`, `ActiveQuestKeys`, `CompletedQuestKeys`. See [Moderation](18-moderation.md).
+- **Offline.** The same domain DLL runs on local SQLite, so beats work offline without any sync.

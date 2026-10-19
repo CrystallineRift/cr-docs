@@ -164,7 +164,15 @@ The prologue is its own scene (`Prologue_Earth`): letter, photo, guitar, then Ah
 `Completed` and offers `Skip()`, which sends the skip intent (fire-and-forget, logged) before completing locally. **Players
 cannot skip the room**: the Skip pill and the Cancel / Start / Esc hold exist only while the controller's `allowSkip` is on
 (a serialized field, off in `Prologue_Earth`; `SetAllowSkip` is the seam for tests and the smoke's `hold` scenario), so
-`Skip()` is reached only by code (the smoke's `skip` mode, the trainer-switch teardown). The order is a gate: `PrologueStep` is `Exploring=0, LetterRead=1, StoneUnlocked=2, PortalOpen=3,
+`Skip()` is reached only by code (the smoke's `skip` mode, the trainer-switch teardown).
+
+**Camera indoors.** The overworld rig (6 m arm, no damping into collision) snaps into the bedroom's walls and ceiling, so
+`IndoorCameraProfile` on the `PrologueController` object pulls the arm to 3.2 m and damps the obstacle moves (0.3 s in,
+0.5 s out) while the scene is loaded, and gives the rig its exact previous values back when the scene goes. It writes both
+the rig's own `CameraDistance` and the follow's (`ThirdPersonFollowTarget.SetCameraDistance` touches neither until its Awake
+has found the follow). `StorySceneBuilder.BuildPrologue` adds it. Tests: `IndoorCameraProfileTests`.
+
+The order is a gate: `PrologueStep` is `Exploring=0, LetterRead=1, StoneUnlocked=2, PortalOpen=3,
 Completed=4`, and `PrologueProgress(letterKey, photoKey, stoneKey, letterSeen, photoSeen, stoneSeen)` moves letter to `LetterRead`,
 the photo (`prologue-photo`, only after the letter) to `StoneUnlocked`, and the stone to `PortalOpen`. The stone is interactable only
 at `StoneUnlocked`, and a resume rebuilds the step from the `readable.seen.*` flags. These are presentation gates; the objectives
@@ -173,7 +181,8 @@ they line up with are counted by the server.
 **Shard glow.** `AhksunCrystalGlow` (`CR.Game.Story`, on the shard prefab root, added by `AhksunShardPrefabBuilder`) has
 `SetLit(bool)`, which enables or disables every Light and ParticleSystem under it (emission stops or plays). `Apply()` calls
 `stoneProp.GetComponent<AhksunCrystalGlow>()?.SetLit(step >= StoneUnlocked)`, so the shard is dark until the photo has been looked
-at, then glows to say "inspect the glowing shard". Default is lit, so the companion shard and the arrival crystal are unchanged.
+at, then glows to say "inspect the glowing shard". Default is lit, so the companion shard and the arrival crystal are unchanged. While lit the shard is alive: the crystal child bobs (6 cm over 2.6 s) and turns (24°/s) and the Glow light pulses (up to 1.6× over 1.5 s), fading in over a 1.2 s wake on dark → lit (`ShardPulse`, pure, in `CR.Game.Story.Logic`); dark puts it back to the authored pose and intensity exactly. The motion is on the crystal child, never the root, so `CrystalRise` and the companion's follow are untouched; the tunables are serialized and `Animate` switches it off. Tests: `ShardPulseTests`, `AhksunCrystalGlowTests`.
+
 `PrologueGateRule.Decide(hasEverBeenPlaced, startSpawnPlan)` is true only for a never-placed trainer on the start
 spawn. `OpenWorldBootstrap`, before placing the player, suspends streaming, loads the prologue additively alone,
 awaits `Completed`, unloads, resumes streaming and continues placement. `world.placed` is set after the first
@@ -365,3 +374,26 @@ way the shop does, the stock ask first and then the read, because nothing stocks
 as soon as each battle closes, because standing in it re-arms the next encounter. A repeat-capture battle that the zone has
 already started is adopted rather than reset. Trainers are named `Smoke<MMddHHmmss>`. The runaway mode fails unless the barn
 reads `Sleep` after the claim, and every mode that reaches the barn fails unless the morning fires and reads back `Closed`.
+
+## Story beats on the client (2026-10-18)
+
+(Unity: lands with the feature/story-beats client PR.) A story beat is a server flag (see
+[Quest System](../backend/07-quest-system.md#story-beats-2026-10-18)); the client only reads it.
+
+- **`IStoryBeatReader`** / `StoryBeatReader`: `IReadOnlySet<string> Beats`, `event Action Changed`, `Task WhenReady`. Fed by
+  `ITrainerProgressReader`; refreshed on session ready and after `ApplyServerProgress` when `NewStoryBeats` is non-empty. A
+  cached progress blob without `StoryBeats` is stale and refetches once per session; a missing field reads as empty.
+- **`BeatGateRule.IsOpen(beats, required, blockedBy)`**: pure rule, open when `required` is empty or held and `blockedBy` is
+  empty or not held.
+- **`BeatGatedBlocker`**: collider, optional visual and optional bark (`requiredBeat`, `blockedByBeat`, `refusalBarkKey`).
+  `QuestGatedCollider` also takes optional `requiredBeat`/`blockedByBeat` with the same rule.
+- **`BeatGatedPass`**: a road/bridge/pass line. While closed it holds the player and plays the bark. The "inside" side is the
+  side the player was on the previous frame (`PassSideRule`, pure); the relocator places the player 2 m back on that side,
+  never a transform write. Several passes sharing `requiredBeat` with different `blockedByBeat` make a region choice point.
+- **Dialogue `story.beat`** condition (`beat=<key>`) over `IStoryBeatReader`. There is no dialogue action that sets a beat.
+- **Rename.** The presentation `IStoryBeatGate`/`StoryBeatGate` (skippable on-screen beats) is now `ISkippableBeatGate`/
+  `SkippableBeatGate` so "story beat" means the server flag everywhere.
+- **Studio.** `QuestDefinition.grantsBeats` (string list) round-trips through push/pull (`QuestEditorSyncHelper`,
+  `ContentCreatorSyncHelper`); `ContentAuditTool` validates the key regex. The offline floor is migrated forward (M17006) with
+  `--base` and rebaked with the package build; copy the new `.bytes`.
+- **Offline.** `ProgressBindings` registers `StoryBeatProjector` at Order 150 so the local domain services set beats.

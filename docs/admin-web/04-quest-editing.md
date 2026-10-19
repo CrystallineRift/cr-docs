@@ -82,3 +82,14 @@ Save and delete send the `rowVersion` loaded with the quest. A 409 opens the sam
 Reload, Overwrite theirs, Recreate; deleting a stale quest asks "Delete anyway" and then a second confirmation). A push that
 would create a prerequisite loop is refused with "That would make a loop: A → B → A". See
 [Optimistic Concurrency](../backend/28-optimistic-concurrency.md).
+
+## Story beats
+
+- **Requirement options.** The requirement type select now lists 6 **Quest not started** and 7 **Story beat**. Type 7 shows a
+  **Beat key** column (no operator or value); the key must match `^[a-z0-9][a-z0-9-]{0,62}$` (shared rules in
+  `resources/quests/storyBeats.ts`).
+- **Grants story beats.** A chips field on the quest form (`KeyChipsEditor`): keys are lower-cased on blur, checked against the
+  regex, de-duplicated, sorted, maximum 8. Save sends `grantsBeats`: omitted when the loaded quest lacked the field (keep),
+  `[]` to clear. The server grants them when the quest completes. See [Quest System](../backend/07-quest-system.md#story-beats-2026-10-18).
+- **Flow tab.** The turn-in card shows "Sets beats: ..." for the quest's beats.
+- **Dialogue editor.** Condition kinds include `StoryBeat` (the beat key goes in the stat argument, labelled "Stat key / beat key").

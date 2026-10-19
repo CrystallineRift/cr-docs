@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-18 — Story beats: server-set story flags, world gates
+
+cr-api `feature/story-beats`, cr-admin-web `feature/story-beats`, cr-api-unity `feature/story-beats`, cr-docs `docs/story-beats` (none deployed). Migration M17006 runs on deploy; rebuild the compat packages and rebake the floor before the Unity build; then Studio quest push.
+
+- **Beats.** Named flags in `trainer_stat` (`story_beat_<key>`), set by the server when a quest with `grants_beats` completes, or by an admin. The client never sets one. `TrainerProgress.StoryBeats` and `ProgressReport.NewStoryBeats` expose them; requirement type 7 gates quests on a beat; `act1-done` is backfilled for trainers who already finished Runaway Cargo. → [Quest System](?page=backend/07-quest-system#story-beats-2026-10-18)
+- **Studio.** Quest editor gets requirement options 6 and 7, a "Grants story beats" chips field and "Sets beats" on the Flow tab; the player dossier lists beats and quests with grant/revoke (not `act1-done`). → [Quest Editing](?page=admin-web/04-quest-editing#story-beats)
+- **Unity.** `IStoryBeatReader`, `BeatGatedBlocker`/`BeatGatedPass`, dialogue `story.beat`, and `IStoryBeatGate` renamed `ISkippableBeatGate`. → [Opening Story](?page=unity/38-story-opening#story-beats-on-the-client-2026-10-18)
 ## 2026-10-18 — Wagon opening: Philroe's call-out, one gaterbear, HUD notices
 
 cr-api-unity `feature/wagon-opening-cutscene`, cr-docs `docs/wagon-opening-cutscene` (not merged or deployed). **Studio push after merge:** `story-gaterbear-wagon`, `dialogue-merchant-area-1`, `dialogue-izzandra-farm`, `quest-runaway-cargo`.
