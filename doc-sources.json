@@ -2149,10 +2149,16 @@
         "Assets/CR/Game/OpenWorld/Editor/Interiors/**",
         "Assets/CR/Game/OpenWorld/Editor/Corridor/Story/**",
         "Assets/CR/Game/OpenWorld/Editor/Corridor/Data/Story/**",
-        "Assets/CR/Core/Data/Editor/Pickups/**"
+        "Assets/CR/Core/Data/Editor/Pickups/**",
+        "Assets/CR/Game/OpenWorld/Data/Map/roads.json",
+        "Assets/CR/Game/OpenWorld/Data/Towns/kits.json",
+        "Assets/CR/Game/OpenWorld/Data/Interiors/ravine-inn.json",
+        "Assets/CR/Game/OpenWorld/Data/Interiors/redwood-inn.json",
+        "Assets/CR/Game/Story/Smoke/Act3*.cs",
+        "Assets/CR/Content/Defs/Spawners/**"
       ]
     },
-    "description": "Open world (P1b: Mirandale/Bridgeford, startDisabled, story pickups, arenaKey, cr_town_remove): streamed 256 m cells, region mask, Dormant/Active rings, region identity, world_mode switch, Editor tools and cr_world_* CLI, regions.json, tech-demo areas; the Act 1 corridor builder (layout asset, steps, containers, idempotency, overrides, revert, checks, edge guards), terrain proxies, sun override, vendor-LOD guard, resume ground lift, Deck budget"
+    "description": "Open world (P2: the three Act 3 spokes, crystal set piece, roads, tent/awning kit roles, plot tint, healer leaf region key; P1b: Mirandale/Bridgeford, startDisabled, story pickups, arenaKey, cr_town_remove): streamed 256 m cells, region mask, Dormant/Active rings, region identity, world_mode switch, Editor tools and cr_world_* CLI, regions.json, tech-demo areas; the Act 1 corridor builder (layout asset, steps, containers, idempotency, overrides, revert, checks, edge guards), terrain proxies, sun override, vendor-LOD guard, resume ground lift, Deck budget"
   },
   "content/01-ai-content-ledger": {
     "docPath": "docs/content/01-ai-content-ledger.md",
@@ -2165,7 +2171,11 @@
         "Assets/CR/Game/OpenWorld/Data/Interiors/*.json",
         "Assets/CR/Game/OpenWorld/Logic/Towns/**",
         "Assets/CR/Game/OpenWorld/Data/Npcs/npc-looks.json",
-        "Assets/CR/Game/OpenWorld/Data/Corridor/Continent/regions/*.json"
+        "Assets/CR/Game/OpenWorld/Data/Corridor/Continent/regions/*.json",
+        "Assets/CR/Game/OpenWorld/Data/Map/roads.json",
+        "Assets/CR/Game/OpenWorld/Data/Towns/wagon-stops.json",
+        "Assets/CR/Content/Defs/Spawners/**",
+        "Assets/CR/Content/Defs/ItemSpawners/**"
       ]
     },
     "description": "AI content ledger: every AI-generated content item (text, layouts, looks, numbers), where it is used and where to replace it before launch"

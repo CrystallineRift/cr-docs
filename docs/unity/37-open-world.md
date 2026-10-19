@@ -347,6 +347,87 @@ An interior is a hosted scene far below its host cell, entered through a door.
 
 **Owner steps after merge:** `cr_content_push --args all`, `cr_world_locations_push`, `cr_spawners_push`, NPC rows with `regionKey` / `lossAllowed`, then `cr_pickup_placements_scan` / `_push`. The server still needs a `key_music_player` item and pickup definition.
 
+## The Road: Act 3 (P2, 2026-10-19)
+
+(Unity: cr-api-unity "World P2: The Road — Act 3"; spec `CR/docs/specs/2026-10-19-world-p2-the-road-act3-design.md`, §2 as amended by §6 B1-B9.) After `road-open` the player leaves Bridgeford by any of three roads and frees three corrupted crystals from three generals, in any order. Anton's closing quest then grants `road-done`, which opens `pass-18-east` (Act 4). The story registry is rev 4 (regions 7, 10, 11, 12, 13, 14, 19 are `built`).
+
+### The three spokes
+
+| Spoke | Regions | Towns and camps | General (band) | Wagon ride from Bridgeford |
+|---|---|---|---|---|
+| North, the Warden of the Mines | 19 Ravine (19b hold, 19c Cellblock 83), 7 North Mesa | `ravine-hold` (19b, inn `ravine-inn`, healer `npc-ravine-innkeeper`, merchant `shop-ravine-hold`); Covenant mesa camp (7, not a town: tents, fire, `npc-covenant-medic` Healer) | Warden L18 (spoke band L13-16) | `bridgeford-to-ravine-hold` |
+| South, the Marshal of the Sands | 11 Redwood, 10a Erranume camp, 13 Desert, 14 Coastal Scrubland | `redwood-village` (11a, inn `redwood-inn`, healer `npc-redwood-innkeeper`, merchant `shop-redwood-village`); `erranume-camp` (10a, healer `npc-erranume-elder`, no merchant); `sedran-hamlet` (13c, healer `npc-sedran-elder`, no merchant) | Marshal L20 (L15-18) | `bridgeford-to-redwood-village`, `bridgeford-to-sedran-hamlet` |
+| South-west, the Veiled General | 12 Jungle, 10b Inselberg | none; the Drowned Gate (12) and the grown crystal (10b); the captive `npc-erranume-sister` | Veiled General L22 (L17-20) | none |
+
+Bands are fixed per spoke (no scaling with generals freed). `Data/Towns/wagon-stops.json` now has six stops (farm, Mirandale south gate, Bridgeford inn, `ravine-hold`, `redwood-village`, `sedran-hamlet`); the new rides are `allowUndiscovered false`, so a town must be visited once first. The camp at 10a is reached on foot. Wild zones use the seven `*-wild-act3` spawners, retuned to the spoke bands (ravine/mesa L13-16, forest/desert/scrub L15-18, jungle/karst L17-20); the zones that sat on set pieces were moved and pinned (19a, 13c, 12g, and 13a at (456,200)).
+
+**Healers.** `npc-ravine-innkeeper`, `npc-redwood-innkeeper`, `npc-erranume-elder` and `npc-sedran-elder` are Healer NPCs; `npc-covenant-medic` heals at the mesa camp. Their dialogues offer `team.heal`; shops are `npc.openShop` options.
+
+### Quest lines (four steps per spoke)
+
+Each spoke is a `questLine line-act-3-<spoke>` (`questLine`/`lineStep` are Studio metadata only). Ordering is explicit: type 7 (`road-open`) on step 1 and a type 0 (QuestCompleted) row on the previous step for steps 2-4. A VisitLocation fires once per session and the server has no objective order, so the fight and the attune are separate quests.
+
+| Step | North | South | South-west |
+|---|---|---|---|
+| 1 | `quest-the-mines` (Cellblock 83: visit, read the ledger, beat the two guards) | `quest-sedran-hamlet` (Erranume camp, read the camp pillar, Sedran oasis, read the paint, Sedran elder) | `quest-jungle-passage` (Drowned Gate, beat the two poachers) |
+| 2 | `quest-the-covenant-camp` (Henrik, Nicolai; the Henrik choice is flavour, both options `quest.recordTalk`) | `quest-the-great-dune` (beat the two sand riders, visit the dune) | `quest-the-inselberg` (visit the crystal, talk to the sister) |
+| 3 | `quest-the-warden`: beat `npc-warden` (fight only, no beat) | `quest-the-marshal`: beat `npc-marshal` | `quest-the-veiled-general`: beat `npc-veiled-general` |
+| 4 | `quest-attune-cellblock-83` "The Red Pillar" | `quest-attune-great-dune` "The Dune Pillar" | `quest-attune-inselberg` "The Grown Crystal" |
+
+Step 3 is the general's fight (objectives are NPC keys, never trainer keys; a general beaten before step 3 is active does not count, `allowRematch true` covers it). Step 4 has one objective, ReadReadable `readable-<r>-pillar`, and carries `grantsBeats` for the general beat (`general-warden`, `general-marshal`, `general-veiled`); steps 1-3 grant none. Rewards are 400/600/900 XP plus 300 XP on step 4, gold 80/120/200/100, times 1.0 / 1.2 / 1.4 per spoke; step 4 also gives 3 `capture_crystal_standard`.
+
+**Closing quest.** `quest-izzys-trail-east` (`line-act-3`, region 18) requires all three general beats (three type-7 rows), auto-grants, completes on TalkToNpc `npc-anton-bridgeford`, and grants `road-done`. After any two beats Anton (`dialogue-anton-bridgeford`: `two`, `closing`, `c2`, `done`) and the signpost (`readable-18-signpost`: `s-two`, `s-done`) change their text via `story.beat`; no mechanics.
+
+### The reusable crystal set piece
+
+One shape, three sites (`crystal-cellblock-83` in 19c, `crystal-great-dune` in 13c, `crystal-inselberg` at `10:crystal` in 10b). Per site, in the region overlay `story` block:
+
+1. **Location** `story-<site>` (size 12) at the pillar (`story-red-pillar`, `story-great-dune`, `story-inselberg-crystal`).
+2. **Arena** `<site>-arena` about 10 m from the pillar (`cellblock-83-arena`, `great-dune-arena`, `inselberg-arena`). Guards, riders and poachers use an arena within about 150 m of where they stand: `jungle-gate-arena` (12), `sedran-arena` (13c), `waystop-arena` (14).
+3. **General NPC row**: NpcType Trainer, trainer key, arena key, with a `Data/Trainers/<trainer>.json` and a definition from `cr_author_trainer`. Teams: Warden ground/poison (gaterbear L18, poisonbomb L17, spike L18, snakelet L16); Marshal fire/ground (cindralis L20, cindrakar L19, spike L20, dragonfire L18); Veiled General wind/radiant/ice stand-ins for psychic (sunflowerfairy L22, sunflorapixie L21, snowbomb L21, dragonspark L20). All `lossAllowed false`, `allowRematch true`.
+4. **Attune event** `attune-<site>`: `waitForQuestActive` the step-4 quest, `requiredQuestObjective` 0 (the pillar readable). The pillar swap is in `stages[]` on node `attune` of `dialogue-attune-<site>` (nodes `a1, a2, attune, a4, a5, end`; Ahksun and Tobias), so the colours change mid-line; event-level `enableOnPlay`/`disableOnPlay` are not used. Shots: a Wide on the pillar (a1, 1.6 s, 15 m south, fov 60) and ReturnToPlayer (a5); a 2 s prelude on 19 and 13.
+5. **Blue cluster landmarks** `<r>:pillar_blue_a/_b` with `startDisabled`, placed beside the red or purple cluster that the stage disables. In 10b the stage also swaps the cage for `cage_open`. The beat comes from the step-4 quest (server); nothing client-side decides anything.
+
+Region 7's duplicate `red_pillar`, `cellblock_gate`, `cellblock_cage` and `mine_head` were removed; 19c owns Cellblock 83.
+
+### Roads
+
+`Data/Map/roads.json` (now 37 roads) gained `road-act3-north`, `road-act3-south` and `road-act3-southwest`. Rivers are not edited: `ContinentPathsSeeder` plus `RoadCrossingPlanner` derive bridges from road x river intersections at `section=paths`.
+
+| Road | From to | Length |
+|---|---|---|
+| `road-act3-north` | `pass-18-north` past the Covenant camp pass-by and the Cellblock yard to the hold pad (ends 570,1200) | 547 m |
+| `road-act3-south` | `pass-18-south` through 11a and 10a, joins `road-10` at (520,215.5), ends 280,182 | 1331 m |
+| `road-act3-southwest` | `pass-18-southwest` to the jungle edge, the 10b crystal spur, then west to the Drowned Gate pass-by | 984 m |
+
+Cell row is `floor(z/256)`, column `floor(x/256)`. Act 1 pinned cells are `x < 512` and `768 <= z < 1280`; no sampled point of the new roads falls there. The south road crosses the mountain for about 52 m between 11a and 10a (the only way into the 10a enclave); vet it in the height build. After a road change the controller rebuilds `steps=height+paint+trees+dressing+details+guards` for the touched cells.
+
+### Engine additions
+
+- **`LandmarkPlacement.startDisabled`.** A landmark builds inactive; `GameObject.ApplyStartDisabled` (`CorridorPlacementExtensions`, called from `CorridorDressingStep`) re-disables it on each rebuild, which counts as Updated only if someone switched it on. It never re-activates: turning the flag off needs a `SetActive` or a recreate.
+- **Kit roles `tent` and `awning`** (`Data/Towns/kits.json`, village kit, sizes from `cr_town_kits_measure`): `tent` 12.0 x 11.7 m (max over 5 prefabs, so camp plots should set `w`/`d` tighter), `awning` 4.5 x 4.6 m (4 Seaside cloth-frame prefabs). `awning` is a free role in `TownChecks`, so it may stand on the square.
+- **`TownPlot.tint`** (`"#RRGGBB[AA]"`): `TownTint.TryParse`, `TownPlanRow.Tint` (in the signature hash), `TownChecks` rejects bad hex, and `PlotTint` multiplies each material's `_BaseColor`/`_Color` through a `MaterialPropertyBlock` (no material writes; re-applied at `OnEnable`). Used for the red Covenant paint on `house_b` in `sedran-hamlet` (`#8E3B2F`). Not yet checked visually.
+- **Act 3 smoke plan.** `Game/Story/Smoke/Act3Smoke{Names,StepKind,Step,Plan}.cs`: 25 steps (Bridgeford, north spoke, back, south, back, south-west, back, Anton, `road-done`, `pass-18-east` opens). Plan only, like Act 2; runner wiring is a P3 item.
+- **New data files.** Towns `ravine-hold`, `redwood-village`, `sedran-hamlet`, `erranume-camp` (each 40-70 m pad; `square.arena false`, so the registry arena is a story arena row); interiors `ravine-inn` and `redwood-inn` (copies of `bridgeford-inn`, slotRow 0); run `cr_interior_build ravine-inn` and `redwood-inn` before the volume tests pass.
+
+### Healer region key
+
+The server (`TeamHealService.HealAtNpcAsync`) refuses a heal unless `trainer.LastAreaKey` equals `npc.RegionKey` (OrdinalIgnoreCase; empty refuses). `LastAreaKey` comes from `TrainerLocationTracker` via `RegionTracker.CurrentRegion` = `RegionMask.Sample(x,z)`, which is the **leaf** mask key (`6a`, `19b`), not the top-level parent. Interiors are not held, so inside an inn the region is the door's leaf. So an NPC's `regionKey` must be the leaf area key:
+
+| Healer | regionKey |
+|---|---|
+| `npc-mirandale-healer`, `npc-serpent-barkeep` | `6a` (Act 2, corrected) |
+| `npc-bridgeford-innkeeper` | `18a` (Act 2, was `18`) |
+| `npc-ravine-innkeeper` | `19b` |
+| `npc-redwood-innkeeper` | `11a` |
+| `npc-erranume-elder` | `10a` |
+| `npc-sedran-elder` | `13c` (the elder stands at x 381; the hamlet straddles 13c/13a near x 391) |
+| `npc-covenant-medic` | `7` (no sub-areas at the camp) |
+
+Probe a spot with `cr_world_probe_ground`. `lossAllowed` is not gated on region (`IsLossAllowedAsync` reads `npc.LossAllowed` only). The Act 2 healer dialogues `dialogue-mirandale-healer`, `dialogue-bridgeford-inn` and `dialogue-serpent-barkeep` now offer "Can you see to my team?" with `team.heal`; before, a Healer with a conversation could heal only through its document and had no such option.
+
+**Owner steps after merge:** `cr_content_push --args all`, `cr_world_locations_push` (seven new `story-*` VisitLocation targets), `cr_spawners_push` (seven retuned `*-wild-act3`, two new `shop-*`), NPC rows with `regionKey` = leaf area key and `lossAllowed`. The server dialogue vocabulary (`story.beat`, `npc.trainerLost`, `battle.start`) must be live first.
+
 ## World map tab
 
 In open mode `OpenWorldMapLayoutSource` replaces the legacy node layout: every region (sub-regions included; not mountain, ocean or unassigned) is shown
