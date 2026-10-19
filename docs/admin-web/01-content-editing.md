@@ -95,3 +95,7 @@ Resources whose server rows carry a `row_version` (dialogues and quests) send `e
 theirs, Recreate) and a `requirement_cycle` 400 into a loop message. A resource opts in by carrying `rowVersion` in its type
 and calling `withExpectedRowVersion` in its upsert (`src/api/rowVersion.ts`; the 409 parser is `src/api/conflicts.ts`).
 See [Optimistic Concurrency](../backend/28-optimistic-concurrency.md).
+
+## Trainers and NPCs: P1a fields (2026-10-18)
+
+The NPC/trainer editor gains the type option **Healer** (4), a **Loss allowed** toggle (group Trainer battle: a loss to this trainer is scripted and does not white out) and a **Region key** field (group Region: a Healer only heals in that region). Both also appear as list columns. Save sends `lossAllowed` and `regionKey`: null keeps the stored value, `""` clears the region. See [NPC System](../backend/02-npc-system.md#healers-and-heal-at-p1a).

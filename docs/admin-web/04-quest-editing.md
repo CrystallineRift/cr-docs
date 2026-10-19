@@ -22,6 +22,7 @@ requirement enums themselves, see [Quest System](../backend/07-quest-system.md).
 | 30 Complete quest | Quest | **quest content key** |
 | 40 Defeat trainer | Trainer (empty matches any) | a typed trainer-battle content key (no trainer-battle resource here yet, so it's text, not a picker) |
 | 42 Defeat trainers from a list | Trainers (comma-separated) | trainer-battle content keys |
+| 43 Fight trainer (win or allowed loss) | NPC, required | NPC content key; count fixed at 1 (zod and server both refuse otherwise). Counts a defeat or a loss to a `lossAllowed` trainer |
 | 50 Reach talent rank | Talent key (empty matches any) | a typed talent content key (talents are nested inside talent-trees, so there's no flat resource to pick from either) |
 
 An empty target on any of the "(empty matches any)" rows matches any instance of that type — a

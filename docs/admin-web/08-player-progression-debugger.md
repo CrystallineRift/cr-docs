@@ -47,3 +47,7 @@ can **Grant** a beat (key and reason) or **Revoke** one (reason dialog per chip)
 tooltip "Restored automatically; cannot be revoked". Both actions are admin-only and write an `admin_action` row (kinds 21 and
 22). Fields are optional in the page's types, so an older server shows the sections empty. See
 [Moderation](../backend/18-moderation.md#story-beat-admin-routes-2026-10-18).
+
+### Lost to (P1a)
+
+The Quests section also shows a **Lost to** row built from the trainer's `trainer_lost_<npcKey>` flags (set by the server when the trainer lost to a `lossAllowed` opponent). It shares the one progression query with the other sections. The list is raw NPC keys, and the progression flags are capped at 2000, so on a truncated list a `trainer_lost_` key could be missing.

@@ -205,6 +205,20 @@ Cosmetic and tooling copy composed by AI; none of it played yet. How the system 
 | Studio Game Config help copy: the "Roaming spawners (override)" popup tooltip ("Inherit follows the server (online) or the local app_config (offline); On/Off forces it on this machine. Not committed; player builds ignore it."), the reset-button tooltip and the status notes | Studio Configuration panel; cr-admin-web System, Game Config page | `cr-api-unity/Assets/CR/Core/Data/Editor/StudioConfigurationPanel.cs`; cr-admin-web `src/pages/system/GameConfigPage.tsx` | 2026-10-11 | 2026-10-11 | AI draft |
 | Roam tuning numbers: walk 1.2 m/s, pause 2 to 6 s, slope limit 35 degrees, contact sphere 1.2 m, 3 s post-battle grace, awareness roamRadius + 20 m, cull roamRadius + 60 m, cap 12 models, 60 s re-ask debounce, `roamRadius` 15 m | Roaming creature behaviour | `RoamWalker.cs`, `WildCreatureBehaviour.cs`, `RoamingSpawnerBehaviour.cs`, `RoamingBudget`/`RoamingAsks`; `roamRadius` on the `CR_EncounterZone` prefab | 2026-10-11 | 2026-10-11 | AI draft |
 
+## Town builder, wagon travel and gauntlet (cr-api-unity `feature/world-p1a`, 2026-10-18)
+
+Placeholder text and layouts from the P1a round. How they fit: [Open World](?page=unity/37-open-world), [Opening Story](?page=unity/38-story-opening).
+
+| Item (what was generated) | Where it's used | Where to update it | Created | Updated | Status |
+|---|---|---|---|---|---|
+| World text: `ui.world.door.enter` "Enter", `ui.world.door.leave` "Leave", `ui.world.wagon.prompt` "Take the wagon", `ui.world.wagon.title` "Where to?", `ui.world.wagon.nowhere` "You haven't been anywhere the wagon goes yet.", `ui.world.wagon.stay` "Stay here", `ui.world.wagon.cover` "Half a day by wagon.", `ui.world.wagon.unavailable` "The wagon isn't going anywhere right now." (unused yet) | Door captions, wagon prompt, list and cover card | `Assets/CR/Game/OpenWorld/Towns/WorldText.cs` and the localization packs | 2026-10-18 | 2026-10-18 | AI draft |
+| Wagon stop names and banners: "Philroe's farm", "Mirandale", "Bridgeford" | Wagon list and cover card | `Assets/CR/Data/Towns/wagon-stops.json` | 2026-10-18 | 2026-10-18 | AI draft |
+| Test town `town-test` layout and `interior-test-house` (layout only, no prose; sandbox, goes with P1b) | Bridgeford pad, cell World_c3_r3 | `Assets/CR/Data/Towns/town-test.json`, `Data/Interiors/interior-test-house.json` | 2026-10-18 | 2026-10-18 | AI draft |
+| Story beat names `ui.story.beat.<key>` (14 beats) | Beat text in the UI | `StoryBeatText` in cr-api-unity and the localization packs | 2026-10-18 | 2026-10-18 | AI draft |
+| Example gauntlet trainer `trainer-bridgeford-test` ("Warden Test", two level-28 creatures) and its example dialogue lines | Test town gauntlet and the `town` smoke | `Assets/CR/Content/Defs/Trainers/trainer-bridgeford-test.asset` and its dialogue | 2026-10-18 | 2026-10-18 | AI draft |
+| NPC look presets and per-key looks (`npc-looks.json`) and the PurePoly cart placeholder, interior blockout material and ceiling cube | Dressed NPCs, wagon stops, test interior | `npc-looks.json`, `TownPaths.CartPrefab` | 2026-10-18 | 2026-10-18 | AI draft |
+| Hard-coded "You lost." and "Heal first." lines (not localized yet) | Allowed-loss card, trainer bark | `PlayerWhiteoutHandler`, `TeamFaintedGate` | 2026-10-18 | 2026-10-18 | AI draft |
+
 ## Earlier content — provenance audit pending
 
 Content created before this ledger existed. Some of it was drafted by AI in earlier sessions; each item needs its origin confirmed and then a row above (or removal from this list if human-made).

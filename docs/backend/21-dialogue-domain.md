@@ -330,6 +330,10 @@ is rewritten to the final content set once every NPC and quest kind has been add
 verified (`CR/docs/2026-09-22-npc-quest-checklist.html`); see
 [Dialogue Authoring → Active And Parked](?page=unity/32-dialogue-authoring#the-shipped-dialogues-active-and-parked).
 
+## P1a vocabulary verbs (2026-10-18)
+
+The Unity client declares condition `npc.trainerLost {npc}` and actions `team.heal {npc}` and `battle.start {npc}` (plus `story.beat {beat}` from story beats). They go into `ServerDialogueVocabulary` in a follow-up cr-api change (branch `feature/world-p1a-vocab`); until it is live a pushed document using them is rejected by vocabulary validation. Do not push such content early.
+
 ## Related pages
 
 - [The CR Dialogue System](?page=unity/31-dialogue-system) — the client-side runner, service, UI and
