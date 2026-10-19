@@ -407,7 +407,7 @@ Cell row is `floor(z/256)`, column `floor(x/256)`. Act 1 pinned cells are `x < 5
 - **`LandmarkPlacement.startDisabled`.** A landmark builds inactive; `GameObject.ApplyStartDisabled` (`CorridorPlacementExtensions`, called from `CorridorDressingStep`) re-disables it on each rebuild, which counts as Updated only if someone switched it on. It never re-activates: turning the flag off needs a `SetActive` or a recreate.
 - **Kit roles `tent` and `awning`** (`Data/Towns/kits.json`, village kit, sizes from `cr_town_kits_measure`): `tent` 12.0 x 11.7 m (max over 5 prefabs, so camp plots should set `w`/`d` tighter), `awning` 4.5 x 4.6 m (4 Seaside cloth-frame prefabs). `awning` is a free role in `TownChecks`, so it may stand on the square.
 - **`TownPlot.tint`** (`"#RRGGBB[AA]"`): `TownTint.TryParse`, `TownPlanRow.Tint` (in the signature hash), `TownChecks` rejects bad hex, and `PlotTint` multiplies each material's `_BaseColor`/`_Color` through a `MaterialPropertyBlock` (no material writes; re-applied at `OnEnable`). Used for the red Covenant paint on `house_b` in `sedran-hamlet` (`#8E3B2F`). Not yet checked visually.
-- **Act 3 smoke plan.** `Game/Story/Smoke/Act3Smoke{Names,StepKind,Step,Plan}.cs`: 25 steps (Bridgeford, north spoke, back, south, back, south-west, back, Anton, `road-done`, `pass-18-east` opens). Plan only, like Act 2; runner wiring is a P3 item.
+- **Act 3 smoke plan.** `Game/Story/Smoke/Act3Smoke{Names,StepKind,Step,Plan}.cs`: 25 steps (Bridgeford, north spoke, back, south, back, south-west, back, Anton, `road-done`, `pass-18-east` opens). Plan only, like Act 2; the runner sections (`act2|act3|act4`) arrived in P3, see [The Court](?page=unity/37-open-world#the-court-act-4-p3-2026-10-19).
 - **New data files.** Towns `ravine-hold`, `redwood-village`, `sedran-hamlet`, `erranume-camp` (each 40-70 m pad; `square.arena false`, so the registry arena is a story arena row); interiors `ravine-inn` and `redwood-inn` (copies of `bridgeford-inn`, slotRow 0); run `cr_interior_build ravine-inn` and `redwood-inn` before the volume tests pass.
 
 ### Healer region key
@@ -427,6 +427,77 @@ The server (`TeamHealService.HealAtNpcAsync`) refuses a heal unless `trainer.Las
 Probe a spot with `cr_world_probe_ground`. `lossAllowed` is not gated on region (`IsLossAllowedAsync` reads `npc.LossAllowed` only). The Act 2 healer dialogues `dialogue-mirandale-healer`, `dialogue-bridgeford-inn` and `dialogue-serpent-barkeep` now offer "Can you see to my team?" with `team.heal`; before, a Healer with a conversation could heal only through its document and had no such option.
 
 **Owner steps after merge:** `cr_content_push --args all`, `cr_world_locations_push` (seven new `story-*` VisitLocation targets), `cr_spawners_push` (seven retuned `*-wild-act3`, two new `shop-*`), NPC rows with `regionKey` = leaf area key and `lossAllowed`. The server dialogue vocabulary (`story.beat`, `npc.trainerLost`, `battle.start`) must be live first.
+
+## The Court: Act 4 (P3, 2026-10-19)
+
+(Unity: cr-api-unity "World P3: The Court — Act 4"; spec `CR/docs/specs/2026-10-19-world-p3-the-court-act4-design.md`, §2 as amended by §6 B1-B10.) After `road-done` (`pass-18-east` open) the player enters the Pilgrimage Season bracket at the Coliseum, beats the Champion in the crypt and frees the fourth crystal (`coliseum-won`), then crosses `pass-20-east` to the Capital, where the Actuators' Court rules against them and Gaweyn loses the case in the Marble Tower (`court-done`). The story registry is rev 5 (regions 20 and 21 are `built`). Band L24-30.
+
+### Places
+
+| Place | Where | What |
+|---|---|---|
+| `coliseum-town` | 20b pad (only its SE quadrant, x 1380-1420, z 955-1000, is leaf `20b`) | City kit: inn (interior `coliseum-inn`, healer `npc-coliseum-innkeeper`, regionKey `20b`), merchant `npc-coliseum-merchant` (`shop-coliseum`), Pilgrimage stalls with awnings, the Champion banner (`champion_flag` landmark kept), wagon stop `coliseum-town`. `square.arena false`. |
+| `arena-ring` | 20a, ring rect 1240-1320 x 960-1040 | Tiny single-plot town file: one `gatehouse` plot, `crypt_door`, whose door is interior `arena-crypt` (stand point at the ring's south gate). The four towers stay landmarks; the arena row `coliseum-arena` is a story row at the ring centre (1280,1000). |
+| `arena-crypt` | interior, `arenaKey crypt-arena` | The Champion `npc-champion` (Trainer, `lossAllowed false`, `allowRematch true`) beside the fourth crystal, which is interior props, not the old `20:arena_crystal` landmark (deleted; `20_vista` passWhen rewritten). |
+| `capital` | 21a pad, 100 percent 21a | Walls own the ring (the P0 west/south gate and tower landmarks and the `court_hall` / `marble_tower` masses were removed), inn (`capital-inn`, healer `npc-capital-innkeeper`), merchant `npc-capital-merchant` (`shop-capital`), a `court_hall` plot whose door is `court-hall`, four houses, plinth, benches, wagon stop `capital`. Roland `npc-roland` (QuestGiver) stands inside the south gate. The Lower End (21b) is outside the pad and stays untinted landmarks. |
+| `marble-tower` | 21c pad 1705-1752 x 1235-1266 | Tiny single-plot town file: one scaled (2.4) `tower` plot, door `marble-tower`. |
+| `court-hall` | interior | Benches, dais stand-in, judge's table; `npc-court-clerk`, `npc-regent` (talk only). |
+| `marble-tower` | interior, one flat hall, `arenaKey tower-arena` | Guards `npc-court-guard-1/2` near the door, `npc-gaweyn` at the far end beside the dais. |
+
+Rides `bridgeford-to-coliseum` and `bridgeford-to-capital` (`allowUndiscovered false`). Interior doors come only from town plots inside a pad, which is why the ring and the tower get their own one-plot files. Integration fixes: the `coliseum-inn` plot moved and the `marble-tower` room shrank to a 12 x 12 hall (tower plot scale 2.0) so each door and its room sit in one region (the first builds were refused: the room reached 20c water / 21a and mountain). The dais in `court-hall` and `marble-tower` is a sunk `statue_base` plinth (id `dais`, top at floor level, so NPCs standing on the floor are not buried). The first `cr_interior_build` of `arena-crypt` and `court-hall` shows the `[Interior Story]` container; the second build reports 0 changes. Interior volumes are written by `cr_interior_build`; run it for `coliseum-inn`, `arena-crypt`, `capital-inn`, `court-hall`, `marble-tower` before the volume tests pass.
+
+### Quest line (`line-act-4`, five steps)
+
+Step 1 needs `road-done` (type 7); steps 2-5 need the previous step (type 0). A scripted loss cannot sit in a gauntlet (it would reopen the stage forever), so Izzy's final is not a gauntlet stage.
+
+| Step | Quest | Objectives |
+|---|---|---|
+| 1 | `quest-the-tournament` | VisitLocation `story-coliseum-gate`; TalkToNpc `npc-coliseum-master`; the bracket (DefeatTrainersFromList `npc-bracket-1/2/3`, run as `gauntlet-coliseum-bracket`); FightTrainer 43 `npc-izzandra-final` (win or lose) |
+| 2 | `quest-under-the-arena` | DefeatTrainer `npc-champion` only (the crypt door is open all along) |
+| 3 | `quest-attune-arena` | ReadReadable `readable-20-arena-pillar`; grants beat `coliseum-won` |
+| 4 | `quest-the-marble-tower` | Visit `story-capital-gate`; Talk `npc-roland`; Visit `story-marble-tower`; Talk `npc-court-clerk`, `npc-regent`, `npc-gaweyn` (the server has no order on the talks; each dialogue stands alone) |
+| 5 | `quest-the-verdict` | ReadReadable `readable-21-edict-of-daemamion`; DefeatTrainersFromList `npc-court-guard-1/2`; DefeatTrainer `npc-gaweyn`; grants beat `court-done` |
+
+- **Bracket then Izzy.** The gauntlet is host `npc-coliseum-master` (a story `npcs` row at the ring gate), healer `npc-coliseum-medic`, trainers bracket 1-3 (L24-26, two creatures each). After stage 3 the master says Izzy waits. `npc-izzandra-final` is a separate Trainer row (`trainer-izzandra-final`, L27 sunflowerfairy, wolfpup, crabby; `lossAllowed true`, `allowRematch true`, arena `coliseum-arena`); her dialogue has win, lose and challenge branches, and the story continues either way. The Edict's rule against a Hellcat touching a human is flavour text in the master's dialogue.
+- **Attune by reading.** As in P2: the step-3 pillar readable carries the beat. The pillar swap (red cluster off, blue cluster on) is a stage on node `attune` of `dialogue-attune-arena`; the event `attune-arena` lives in the crypt.
+- **Regent.** No event row (an event dialogue alone fails the content audit and would race the NPC's own `recordTalk`). `dialogue-regent-audience` is `npc-regent`'s dialogue: the pending-talk case is the audience, otherwise a one-line dismissal. `the-verdict` is an event row inside `court-hall` (`waitForQuestActive quest-the-verdict`) and has its own dialogue, `dialogue-the-verdict` (clerk, Regent, Gaweyn's aside); the clerk's `dialogue-court` is talk only.
+- **Fights.** Champion L29 (dragonfire, gaterbear, cindrakar, shell; challenge only while step 2 is Active); court guards L27; Gaweyn L30 (snowbomb, poisonbomb, dragonspark, cindralis; challenge only when step 5 is Active and both guards are beaten, via `quest.objectiveCount`). Champion and Gaweyn use objective type 43 (NPC key).
+- **Gates.** `pass-20-east` (BeatGatedPass, requires `coliseum-won`, bark `ui.story.bark.pass.coliseum-east`) sits on the last 20a point of road-25 at (1422,1057), yaw 90, so the Capital is unreachable until step 3 completes. `pass-21-east` (requires `court-done`, bark `ui.story.bark.pass.capital-east`) sits on road-32 at (1676,1030). The `flight-east` lineCue (Roland's `flight` node) fires at the Capital's south gate after `court-done`.
+- **Rewards (mine, spec silent).** XP 1500 / 1800 / 600 / 1600 / 2200, gold 300 / 350 / 200 / 320 / 400; 3 `capture_crystal_standard` on steps 3 and 5; 3 super potions on step 5.
+
+### Story rows inside interiors (engine E1)
+
+`StoryEventRow`, `StoryReadableRow` and `StoryLocationRow` gained `interiorKey` and `localPosition` (the pickups pattern, shared interface `IInteriorHosted`). `localPosition` is room-local: x,z from the room centre, y above the floor (events also lift by half their size, so the box sits on the floor); `yaw` applies. Rules:
+
+- `InteriorBuildTool.BuildStory` places them in a container `[Interior Story]` under the interior root (via `StoryRowPlacer.Build` with an `anchorOrigin`; shot points are room-local, y = floor + up) and hashes them (`InteriorBuildTool.Hash(file, pickups, gauntlets, story)`; an empty story hashes as before). Entry point is unchanged: `cr_interior_build --args <key>[,dry]`.
+- `StoryRows.InWorld()` drops every interior-hosted row, so `CorridorStoryStep` skips it and reports `hosted by interior <key> (the interior build places it)`. `StoryRowChecks` errors if the interior has no file and warns when `localPosition` is zero.
+- Toggle names in an event resolve inside the interior root (`InteriorToggleResolver.Find`: any descendant including inactive ones, `[Gauntlets]`, arena children), as written or as `Prop_<name>`.
+- `InteriorProp` gained `id` (object `Prop_<id>`, else the old `Prop_<index>_<prefab>`) and `startDisabled` (built inactive). The crypt uses `crystal_red` and `crystal_blue` with the blue one disabled; the attune stage swaps them. Checks reject duplicate ids and whitespace.
+- Used by: `readable-20-arena-pillar` and `attune-arena` (crypt), `readable-21-edict-of-daemamion`, `readable-21-court-notice` and `the-verdict` (court hall). The outdoor locations `story-arena-crypt` and `story-capital-court` stay as discovery text only.
+
+### Roads
+
+`roads.json` is now 39 roads. Existing roads already reach the 20b pad from `pass-18-east`; the two new pieces only fill gaps, and are separate ids because they are disjoint:
+
+| Road | From to | Length |
+|---|---|---|
+| `road-act4-east-spur` | pad west edge (1352,972) to the ring's east side (1322,966), 2 m outside the ring rect (the south-edge point is within 10 m of `arena_gate_s`) | 30.6 m |
+| `road-act4-east` | (1519.5,1128.5) to the Capital pad west edge (1640,1128), north of the Lower End | 133.5 m |
+
+No bridges (no river crossings) and no point in the pinned Act 1 cells. Rebuild `height+paint+trees+dressing+details+guards` for the touched cells.
+
+### Kit and smoke
+
+- **`gatehouse` kit role** (`kits.json`, city kit, `BLD_03_4x4_Ext_01`, frontYaw 90, 7.19 x 5.75 x 18.1 m): the 4x4 shell, smaller than `house`. A plot's `door` works on any role (the planner puts the door out along the role's frontYaw past the footprint); `KitRolesP3Tests` confirms it for `tower` and `gatehouse`. Verify the door side with a render (frontYaw assumed).
+- **Dais props.** No dais exists in the packs; use `P_PROP_statue_base_city_01` (a 4.2 m plinth) or the half stair run `P_MOD_Stairs_02_E_straight_01_half` (low step, under 2.6 m). The `P_MOD_Base_02_straight_large` is 6 m high.
+- **Act 4 smoke plan.** `Game/Story/Smoke/Act4Smoke{Names,StepKind,Step,Plan}.cs`: 31 steps in gate order (`pass-18-east`, tournament, crypt, attune, `coliseum-won`, `pass-20-east`, tower, verdict, `court-done`, `pass-21-east`). Kinds are Act 3's plus TalkToNpc, RunGauntlet, FightTrainer.
+- **Runner sections (engine E2).** `cr_story_smoke_start --args act2|act3|act4` (Play) lists the plan, then reads state back without driving the player: quests through the quest service, beats through `IStoryBeatReader`; walks, fights and reads print as `drive` lines. It fails only if state is not a clean prefix of the plan, and ends with `probed steps reached from the start: N of M`. `--args plan:act4` (or `cr_story_smoke_plan --args act4`) prints the listing without Play. Code: `ActSmokeSections`, `ActSmokeLine`, `ActSmokeProbe`, `ActSmokeProgress`, `StorySmokeRunner.Acts.cs`.
+
+### Healer keys and owner steps
+
+Healers use leaf keys again: `npc-coliseum-innkeeper` `20b`, `npc-coliseum-medic` `20a`, `npc-capital-innkeeper` `21a` (see [Healer region key](?page=unity/37-open-world#healer-region-key)). Other NPC keys: master, bracket 1-3, Izzy final, Champion `20a`; Roland, clerk, Regent, merchant `21a`; Gaweyn and the guards `21c`.
+
+**Owner steps after merge:** `cr_content_push --args all`, `cr_world_locations_push` (new `story-*` VisitLocation targets), `cr_spawners_push` (`shop-coliseum`, `shop-capital`), NPC rows with `regionKey` = leaf area key and `lossAllowed`. The server dialogue vocabulary (`story.beat`, `npc.trainerLost`, `battle.start`) must be live first.
 
 ## World map tab
 
