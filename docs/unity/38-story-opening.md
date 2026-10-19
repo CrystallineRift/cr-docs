@@ -65,6 +65,45 @@ beginning (the dark city and the torn sky show, nothing flashes or roars). A tra
 starts the prelude; a switch during the prelude puts the new trainer's view back; a cell unloaded mid-prelude ends the beat
 unplayed. `PillarCharge` drops its tint whenever it is switched off.
 
+## Wagon opening: Philroe's call-out and one gaterbear
+
+Branch `feature/wagon-opening-cutscene`. The wagon scene in `World_c0_r3` is staged, not just triggered. Presentation only:
+every flag it writes is an `event.*` presentation flag, and nothing here grants, counts or completes anything (First Battle
+still comes from the wagon location's trigger and the authority).
+
+- **Philroe's "Help!" bark.** `RepeatingBark` (pure `RepeatingBarkRule`) repeats one of three StoryText lines
+  (`ui.story.bark.philroe.help.1/2/3`) over Philroe while he is pinned. It stops when the call-out event has played.
+- **Call-out event** (`Event_wagon-callout`, a `OneShotWorldEvent`, box 10 x 12 x 10; 12 tall for the slope). Staged lead-in,
+  in order (`OneShotEventPlan` / `OneShotEventStep`): wait for First Battle to be Active (up to 3 s) -> take
+  `GameplayInputHolds` and `HudNoticeHold` -> call-out bark at Philroe ("You! Boy! Don't just stand there - RUN!", the follow
+  shot) -> `IScriptedPlayerMover` runs the player to `Mark_wagon_approach` -> the Philroe dialogue plays -> six
+  `Shot_wagon_*` story shots -> `PotionTossCue` (Philroe's hand arcs a potion to the player along `ArcPath`; icon from
+  `icons.items`, tinted-square fallback) -> input released, HUD hold released, flag written. Both holds are also released in
+  `EndRun` / `OnDestroy`.
+- **Skip.** Holding Cancel cancels the run, teleports the player to the approach mark (`IOpenWorldPlayer.Teleport`),
+  releases both holds and writes the event flag. It writes no "heard" flags.
+- **Scripted run.** `ScriptedPlayerMover` (`IScriptedPlayerMover`) feeds `ScriptedInputSource`, which `TrainerMovementController`
+  reads ahead of the input map while active (move and sprint). Steering is camera-relative (`ScriptedMoveSteering`). The map
+  stays off through the mover's own `GameplayInputHolds` claim. It never writes the character's transform; on timeout it
+  teleports to the mark and warns. Not yet proven on the real Malbers rig in Play.
+- **One stationary gaterbear.** The wagon spawner (`story-gaterbear-wagon`) has capacity 1. `SpawnerWorldBehaviour` carries
+  the zone fields (`stationaryPopulation`, `standMark` = `Mark_wagon_bear`, `chargeDelaySeconds`, `chargeTimeoutSeconds`,
+  `chargeOnceEventKey`, `hideWhenQuestCompletedKey`) because `RoamingSpawnerBehaviour` is added at runtime. The bear stands on
+  the mark (`WildCreatureBehaviour` Stand mode), the gate opens on **heard or event flag** (`IEncounterGate`,
+  `QuestGatedCollider.openedByEventKey`, composite `QuestGateRule.IsOpen`), then it charges **once** (`StationaryChargeRule`,
+  phases in `ChargePhase` / `ChargeStep`; arms on the gate's Opened edge) and returns to the mark on timeout. After First
+  Battle completes it is hidden (`WagonPopulationRule`). Contact goes through `ContactRule` plus the gate.
+- **Izzandra greets the shout.** `dialogue-izzandra-farm` gets `greet-heard` and `heard-ask` (greet and greet-barn route
+  through them before the topics): she heard Philroe shouting, the Mudcalves broke the rail, "Gaterbears, if you ask me".
+- **Mudcalf pen canon.** The pen rail is down and the three Mudcalves bolted, spooked all week. Philroe's `offer` and the
+  Runaway Cargo description say so; the old "tethered to the wagon" line is gone.
+- **Smoke.** `StorySmokeRunner` teleports to the approach, waits for First Battle, steps into `Event_wagon-callout`, attaches to
+  the conversation (`AttachToConversationAsync`, `WagonSmokeRule`), waits for the event to play (60 s, FAIL on timeout), then
+  expects the charge battle (FAIL-WORTHY if only the reflection fallback starts it).
+
+**Studio push list after merge:** `story-gaterbear-wagon`, `dialogue-merchant-area-1`, `dialogue-izzandra-farm`,
+`quest-runaway-cargo`. HUD side of the same branch: [Area Scenes](?page=unity/22-area-scenes#hud-notices).
+
 ## The opening quest chain
 
 A new trainer is handed **Gran's Letter** first, in the Earth prologue. It has three `ReadReadable` objectives, in order: "Read Gran's
