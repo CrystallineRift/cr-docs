@@ -65,6 +65,45 @@ beginning (the dark city and the torn sky show, nothing flashes or roars). A tra
 starts the prelude; a switch during the prelude puts the new trainer's view back; a cell unloaded mid-prelude ends the beat
 unplayed. `PillarCharge` drops its tint whenever it is switched off.
 
+## Wagon opening: Philroe's call-out and one gaterbear
+
+Branch `feature/wagon-opening-cutscene`. The wagon scene in `World_c0_r3` is staged, not just triggered. Presentation only:
+every flag it writes is an `event.*` presentation flag, and nothing here grants, counts or completes anything (First Battle
+still comes from the wagon location's trigger and the authority).
+
+- **Philroe's "Help!" bark.** `RepeatingBark` (pure `RepeatingBarkRule`) repeats one of three StoryText lines
+  (`ui.story.bark.philroe.help.1/2/3`) over Philroe while he is pinned. It stops when the call-out event has played.
+- **Call-out event** (`Event_wagon-callout`, a `OneShotWorldEvent`, box 10 x 12 x 10; 12 tall for the slope). Staged lead-in,
+  in order (`OneShotEventPlan` / `OneShotEventStep`): wait for First Battle to be Active (up to 3 s) -> take
+  `GameplayInputHolds` and `HudNoticeHold` -> call-out bark at Philroe ("You! Boy! Don't just stand there - RUN!", the follow
+  shot) -> `IScriptedPlayerMover` runs the player to `Mark_wagon_approach` -> the Philroe dialogue plays -> six
+  `Shot_wagon_*` story shots -> `PotionTossCue` (Philroe's hand arcs a potion to the player along `ArcPath`; icon from
+  `icons.items`, tinted-square fallback) -> input released, HUD hold released, flag written. Both holds are also released in
+  `EndRun` / `OnDestroy`.
+- **Skip.** Holding Cancel cancels the run, teleports the player to the approach mark (`IOpenWorldPlayer.Teleport`),
+  releases both holds and writes the event flag. It writes no "heard" flags.
+- **Scripted run.** `ScriptedPlayerMover` (`IScriptedPlayerMover`) feeds `ScriptedInputSource`, which `TrainerMovementController`
+  reads ahead of the input map while active (move and sprint). Steering is camera-relative (`ScriptedMoveSteering`). The map
+  stays off through the mover's own `GameplayInputHolds` claim. It never writes the character's transform; on timeout it
+  teleports to the mark and warns. Not yet proven on the real Malbers rig in Play.
+- **One stationary gaterbear.** The wagon spawner (`story-gaterbear-wagon`) has capacity 1. `SpawnerWorldBehaviour` carries
+  the zone fields (`stationaryPopulation`, `standMark` = `Mark_wagon_bear`, `chargeDelaySeconds`, `chargeTimeoutSeconds`,
+  `chargeOnceEventKey`, `hideWhenQuestCompletedKey`) because `RoamingSpawnerBehaviour` is added at runtime. The bear stands on
+  the mark (`WildCreatureBehaviour` Stand mode), the gate opens on **heard or event flag** (`IEncounterGate`,
+  `QuestGatedCollider.openedByEventKey`, composite `QuestGateRule.IsOpen`), then it charges **once** (`StationaryChargeRule`,
+  phases in `ChargePhase` / `ChargeStep`; arms on the gate's Opened edge) and returns to the mark on timeout. After First
+  Battle completes it is hidden (`WagonPopulationRule`). Contact goes through `ContactRule` plus the gate.
+- **Izzandra greets the shout.** `dialogue-izzandra-farm` gets `greet-heard` and `heard-ask` (greet and greet-barn route
+  through them before the topics): she heard Philroe shouting, the Mudcalves broke the rail, "Gaterbears, if you ask me".
+- **Mudcalf pen canon.** The pen rail is down and the three Mudcalves bolted, spooked all week. Philroe's `offer` and the
+  Runaway Cargo description say so; the old "tethered to the wagon" line is gone.
+- **Smoke.** `StorySmokeRunner` teleports to the approach, waits for First Battle, steps into `Event_wagon-callout`, attaches to
+  the conversation (`AttachToConversationAsync`, `WagonSmokeRule`), waits for the event to play (60 s, FAIL on timeout), then
+  expects the charge battle (FAIL-WORTHY if only the reflection fallback starts it).
+
+**Studio push list after merge:** `story-gaterbear-wagon`, `dialogue-merchant-area-1`, `dialogue-izzandra-farm`,
+`quest-runaway-cargo`. HUD side of the same branch: [Area Scenes](?page=unity/22-area-scenes#hud-notices).
+
 ## The opening quest chain
 
 A new trainer is handed **Gran's Letter** first, in the Earth prologue. It has three `ReadReadable` objectives, in order: "Read Gran's
@@ -125,16 +164,39 @@ The prologue is its own scene (`Prologue_Earth`): letter, photo, guitar, then Ah
 `Completed` and offers `Skip()`, which sends the skip intent (fire-and-forget, logged) before completing locally. **Players
 cannot skip the room**: the Skip pill and the Cancel / Start / Esc hold exist only while the controller's `allowSkip` is on
 (a serialized field, off in `Prologue_Earth`; `SetAllowSkip` is the seam for tests and the smoke's `hold` scenario), so
-`Skip()` is reached only by code (the smoke's `skip` mode, the trainer-switch teardown). The order is a gate: `PrologueStep` is `Exploring=0, LetterRead=1, StoneUnlocked=2, PortalOpen=3,
+`Skip()` is reached only by code (the smoke's `skip` mode, the trainer-switch teardown).
+
+**Camera indoors.** The overworld rig (6 m arm, no damping into collision) snaps into the bedroom's walls and ceiling, so
+`IndoorCameraProfile` on the `PrologueController` object pulls the arm to 3.2 m and damps the obstacle moves (0.3 s in,
+0.5 s out) while the scene is loaded, and gives the rig its exact previous values back when the scene goes. It writes both
+the rig's own `CameraDistance` and the follow's (`ThirdPersonFollowTarget.SetCameraDistance` touches neither until its Awake
+has found the follow). `StorySceneBuilder.BuildPrologue` adds it. Tests: `IndoorCameraProfileTests`.
+
+**Fixed cameras.** The room is shot from four fixed corner cameras instead of the follow rig, with Cinemachine's own
+pieces. `[Fixed Cameras]` holds, per quadrant of the room's interior, a plain `CinemachineCamera` (no body or aim; the
+transform is the shot, FOV 68, 2.35 m up in the corner diagonally opposite the quadrant looking back toward it, priority 20
+— above the rig's 10, below the story director's 50 and battle's 100) and a trigger box with a `CinemachineTriggerAction`
+(`WithTag` Player) whose enter action **Activates** the camera and whose exit action **Deactivates** it: zones overlap by
+0.75 m, so the camera of the zone entered last is live and the boundary never flickers. The spawn's camera starts active.
+`Assets/CR/Content/Camera/PrologueCameraCuts.asset` (`CinemachineBlenderSettings`, on the Core Brain's Custom Blends) gives
+every blend into or out of a `Prologue Cam …` a 0.6 s ease (`BlendSeconds`; the Brain's default 2 s reads as a drift). `cr_prologue_fixed_cameras` measures the interior by casting from
+`PlayerSpawn` to the nearest wall renderers (the floor tiles run under the walls and into an alcove), plans the shots
+(`FixedCameraLayout`, pure), slides a corner that lands inside a prop toward the centre, writes the cuts asset and saves
+the scene; `cr_core_camera_cuts_install` points the Core Brain at the asset. Tests: `FixedCameraLayoutTests`.
+
+The order is a gate: `PrologueStep` is `Exploring=0, LetterRead=1, StoneUnlocked=2, PortalOpen=3,
 Completed=4`, and `PrologueProgress(letterKey, photoKey, stoneKey, letterSeen, photoSeen, stoneSeen)` moves letter to `LetterRead`,
-the photo (`prologue-photo`, only after the letter) to `StoneUnlocked`, and the stone to `PortalOpen`. The stone is interactable only
+the photo (`prologue-photo`, only after the letter) to `StoneUnlocked`, and the stone to `PortalOpen`. The readables appear in
+story order: the photo's readable (`photoInteraction`) is inactive until `LetterRead` (`PhotoInteractable`), the stone's only
 at `StoneUnlocked`, and a resume rebuilds the step from the `readable.seen.*` flags. These are presentation gates; the objectives
 they line up with are counted by the server.
 
 **Shard glow.** `AhksunCrystalGlow` (`CR.Game.Story`, on the shard prefab root, added by `AhksunShardPrefabBuilder`) has
 `SetLit(bool)`, which enables or disables every Light and ParticleSystem under it (emission stops or plays). `Apply()` calls
 `stoneProp.GetComponent<AhksunCrystalGlow>()?.SetLit(step >= StoneUnlocked)`, so the shard is dark until the photo has been looked
-at, then glows to say "inspect the glowing shard". Default is lit, so the companion shard and the arrival crystal are unchanged.
+at, then glows to say "inspect the glowing shard". Default is lit, so the companion shard and the arrival crystal are unchanged. While lit the shard is alive: the crystal child bobs (6 cm over 2.6 s) and turns (24°/s) and the Glow light pulses (up to 1.6× over 1.5 s), fading in over a 1.2 s wake on dark → lit (`ShardPulse`, pure, in `CR.Game.Story.Logic`); dark puts it back to the authored pose and intensity exactly. The motion is on the crystal child, never the root, so `CrystalRise` and the companion's follow are untouched; the tunables are serialized and `Animate` switches it off. Tests: `ShardPulseTests`, `AhksunCrystalGlowTests`.
+
+at, then glows to say "inspect the glowing shard". Default is lit, so the companion shard and the arrival crystal are unchanged. When the stone wakes, `PrologueStoneShots` (`StoneRevealPlan`, pure) activates `Prologue Cam Reveal` (wide, the corner farthest from the stone, 1.2 s ease) for 2.5 s, then `Prologue Cam Stone` (a closer frame from across the room, 1.5 s ease) until the stone is taken; both sit at priority 30 over the room's zone cameras. `cr_prologue_stone_shots` adds only these two.
 `PrologueGateRule.Decide(hasEverBeenPlaced, startSpawnPlan)` is true only for a never-placed trainer on the start
 spawn. `OpenWorldBootstrap`, before placing the player, suspends streaming, loads the prologue additively alone,
 awaits `Completed`, unloads, resumes streaming and continues placement. `world.placed` is set after the first
