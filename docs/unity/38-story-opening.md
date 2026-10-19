@@ -172,6 +172,18 @@ cannot skip the room**: the Skip pill and the Cancel / Start / Esc hold exist on
 the rig's own `CameraDistance` and the follow's (`ThirdPersonFollowTarget.SetCameraDistance` touches neither until its Awake
 has found the follow). `StorySceneBuilder.BuildPrologue` adds it. Tests: `IndoorCameraProfileTests`.
 
+**Fixed cameras.** The room is shot from four fixed corner cameras instead of the follow rig, with Cinemachine's own
+pieces. `[Fixed Cameras]` holds, per quadrant of the room's interior, a plain `CinemachineCamera` (no body or aim; the
+transform is the shot, FOV 68, 2.35 m up in the corner diagonally opposite the quadrant looking back toward it, priority 20
+— above the rig's 10, below the story director's 50 and battle's 100) and a trigger box with a `CinemachineTriggerAction`
+(`WithTag` Player) whose enter action **Activates** the camera and whose exit action **Deactivates** it: zones overlap by
+0.75 m, so the camera of the zone entered last is live and the boundary never flickers. The spawn's camera starts active.
+`Assets/CR/Content/Camera/PrologueCameraCuts.asset` (`CinemachineBlenderSettings`, on the Core Brain's Custom Blends) gives
+every blend into or out of a `Prologue Cam …` a 0.6 s ease (`BlendSeconds`; the Brain's default 2 s reads as a drift). `cr_prologue_fixed_cameras` measures the interior by casting from
+`PlayerSpawn` to the nearest wall renderers (the floor tiles run under the walls and into an alcove), plans the shots
+(`FixedCameraLayout`, pure), slides a corner that lands inside a prop toward the centre, writes the cuts asset and saves
+the scene; `cr_core_camera_cuts_install` points the Core Brain at the asset. Tests: `FixedCameraLayoutTests`.
+
 The order is a gate: `PrologueStep` is `Exploring=0, LetterRead=1, StoneUnlocked=2, PortalOpen=3,
 Completed=4`, and `PrologueProgress(letterKey, photoKey, stoneKey, letterSeen, photoSeen, stoneSeen)` moves letter to `LetterRead`,
 the photo (`prologue-photo`, only after the letter) to `StoneUnlocked`, and the stone to `PortalOpen`. The stone is interactable only
