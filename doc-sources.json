@@ -51,7 +51,11 @@
         "Game/CR.Game.Model/Npcs/*.cs",
         "Npcs/CR.Npcs.Domain.Services/Implementation/NpcDomainService.cs",
         "Npcs/CR.Npcs.Data/Implementation/BaseNpcRepository.cs",
-        "Npcs/CR.Npcs.Service.REST/Endpoints/NpcEndpoints.cs"
+        "Npcs/CR.Npcs.Service.REST/Endpoints/NpcEndpoints.cs",
+        "Npcs/CR.Npcs.Data.Migration/M16101*.cs",
+        "Npcs/CR.Npcs.Data/**/SeedNpcRegistry_HighWaterMark.txt",
+        "Game/CR.Game.Domain.Services/**/TeamHealService.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/TeamEndpoints.cs"
       ],
       "cr-data": [
         "Assets/Scripts/Npcs/**/*NpcCreatureGrantBehaviour*.cs",
@@ -199,7 +203,9 @@
         "Quests/CR.Quests.Data/Extensions/StoryBeatKeyExtensions.cs",
         "Quests/CR.Quests.Data/Extensions/StoryBeatBackfillKeys.cs",
         "Quests/CR.Quests.Domain.Services/Implementation/StoryBeatProjector.cs",
-        "Stats/**/StatKey*.cs"
+        "Stats/**/StatKey*.cs",
+        "Quests/CR.Quests.Domain.Services/Implementation/ProgressOutcomeObjectiveMap.cs",
+        "Quests/CR.Quests.Domain.Services/Implementation/QuestObjectiveProjector.cs"
       ],
       "cr-data": [
         "Assets/CR/Core/Data/Logic/QuestObjectiveValidation.cs",
@@ -237,7 +243,9 @@
     "repos": {
       "cr-api": [
         "Stats/**/*.cs",
-        "Stats/**/*.csproj"
+        "Stats/**/*.csproj",
+        "Stats/**/StatKey.cs",
+        "Quests/CR.Quests.Domain.Services/Implementation/LifetimeStatProjector.cs"
       ],
       "cr-data": [
         "Assets/CR/Stats/**/*.cs"
@@ -1022,7 +1030,9 @@
         "Game/CR.Game.Domain.Services/Implementation/Battle/BattleSeedExtensions.cs",
         "Game/CR.Game.Domain.Services/Implementation/Battle/SeededBattleCoinFlip.cs",
         "Convenience/CR.Game.Compat/Battle/BattleConditionTick.cs",
-        "Npcs/CR.Npcs.Domain.Services/Implementation/Battle/BattleTurnDomainService.cs"
+        "Npcs/CR.Npcs.Domain.Services/Implementation/Battle/BattleTurnDomainService.cs",
+        "Game/CR.Game.Domain.Services/**/NoUsableCreatureException.cs",
+        "Game/CR.Game.Domain.Services/**/TeamHealService.cs"
       ],
       "cr-data": [
         "Assets/CR/Game/Battle/BattleHttpDomainAdapter.cs",
@@ -1876,7 +1886,8 @@
         "Dialogue/CR.Dialogue.Model/**/*.cs",
         "Dialogue/CR.Dialogue.Model.REST/**/*.cs",
         "Dialogue/CR.Dialogue.Service.REST/**/*.cs",
-        "Common/CR.Common.Data.Postgres/Server/PostgresGlobalErrorMiddleware.cs"
+        "Common/CR.Common.Data.Postgres/Server/PostgresGlobalErrorMiddleware.cs",
+        "Dialogue/**/ServerDialogueVocabulary.cs"
       ],
       "cr-data": []
     },
@@ -2070,7 +2081,12 @@
         "Assets/CR/Tests/Editor/DialoguePhilroeHubResolutionTests.cs",
         "Assets/CR/Tests/Editor/StoryDialogueStagingSyncTests.cs",
         "Assets/CR/Game/Story/**/*Beat*.cs",
-        "Assets/CR/Core/DI/StoryCameraBindingsExtensions.cs"
+        "Assets/CR/Core/DI/StoryCameraBindingsExtensions.cs",
+        "Assets/CR/Game/Story/Gauntlet/**",
+        "Assets/CR/Npcs/Heal/**",
+        "Assets/CR/Npcs/Dialogue/**",
+        "Assets/CR/Content/Defs/Trainers/trainer-bridgeford-test.asset",
+        "Assets/CR/Game/Story/StoryBeatText.cs"
       ]
     },
     "description": "Opening story client systems: IStoryFlags, LoreReadable, WorldBark, NpcEscort/EscortPlan, OneShotWorldEvent, PrologueController + gate, place flavour, capture-lesson hints, StoryText, the cr_story_script_page review-page command, the beat map on the built corridor and the CorridorStoryPlacer hook in cr_story_build_scenes; the vista build now delegates to MirandaleVistaBuilder (see unity/42-pillar-cutscene)"
@@ -2088,7 +2104,13 @@
         "Assets/CR/Art/Sky/**",
         "Assets/CR/Art/OpenWorld/**",
         "Assets/CR/Tests/Editor/ProxyBakerBattleOnlyTests.cs",
-        "Assets/CR/Tests/Editor/ProxyBakerLodTests.cs"
+        "Assets/CR/Tests/Editor/ProxyBakerLodTests.cs",
+        "Assets/CR/Data/Towns/**",
+        "Assets/CR/Data/Interiors/**",
+        "Assets/CR/UI/Travel/**",
+        "Assets/CR/Data/Corridor/**",
+        "Assets/CR/Game/Story/Content/story-registry.json",
+        "Assets/CR/Game/Story/Content/npc-looks.json"
       ]
     },
     "description": "Open world: streamed 256 m cells, region mask, Dormant/Active rings, region identity, world_mode switch, Editor tools and cr_world_* CLI, regions.json, tech-demo areas; the Act 1 corridor builder (layout asset, steps, containers, idempotency, overrides, revert, checks, edge guards), terrain proxies, sun override, vendor-LOD guard, resume ground lift, Deck budget"
@@ -2197,7 +2219,8 @@
         "src/components/resource/ResourceList.tsx",
         "src/components/resource/problems.ts",
         "src/components/resource/rowErrors.ts",
-        "src/pages/system/GameConfigPage.tsx"
+        "src/pages/system/GameConfigPage.tsx",
+        "src/resources/npcs/**"
       ]
     },
     "description": "Studio web (cr-admin-web) shared content-editing UI: the ResourceForm/ResourceDetail layout (sections, two-column grid, pinned save footer, ValidationSummary jump-to-problem, Advanced raw-JSON tab, per-field Raw JSON toggle, read-only ValueView mode), ResourceList (count pill, `/` filter, EmptyState), and the FieldMeta/RowColumn editor kinds (object, rows with reorder/duplicate/collapse, siblingRef, assetKey, map, flags, reference, typedParams, typedMeta, json fallback) a descriptor composes from. cr-admin-web is not watched for staleness by scripts/check-stale.js (REPO_PATHS only covers cr-api/cr-data) — the cr-admin-web globs here are for a human skimming this file, not the automated check."
@@ -2210,7 +2233,8 @@
       "cr-admin-web": [
         "src/resources/dialogues/**",
         "src/components/canvas/dialogue/**",
-        "src/lib/graph/**"
+        "src/lib/graph/**",
+        "src/resources/dialogues/document.ts"
       ]
     },
     "description": "Studio web dialogue editing: the structured `document` graph editor (speakers, nodes by type — line/choice/branch/action/end —, options, branch cases, conditions/actions with typed args, entry node) built on the shared `object`/`rows`/`siblingRef`/`map` kinds, and the legacy free-JSON document's round-trip-safe `.loose()` schema with the Advanced tab as escape hatch for anything unrecognised."
@@ -2235,7 +2259,8 @@
         "src/resources/quests/**",
         "src/pages/quests/**",
         "src/components/editors/KeyChipsEditor.tsx",
-        "src/components/quests/flow/**"
+        "src/components/quests/flow/**",
+        "src/resources/quests/types.ts"
       ]
     },
     "description": "Studio web quest editing: which key family (item/creature/NPC/world-location content key vs quest/item/creature GUID vs free-typed trainer/talent key) each objective/requirement/reward target picker uses, the fix for objective types 21/22 (Activate key item / Used item) which used to point their picker at the item GUID instead of the content key `ItemUseDomainService` actually emits, and the `targetMetadata`/reward `metadata` `typedMeta` columns (wired up, currently empty specs — no objective or reward type parses metadata server-side yet)."
@@ -2547,7 +2572,8 @@
         "src/components/viewAs/**",
         "src/lib/graph/playthrough/realWorld.ts",
         "src/pages/live/dialogs/GrantStoryBeatDialog.tsx",
-        "src/pages/live/dialogs/RevokeStoryBeatDialog.tsx"
+        "src/pages/live/dialogs/RevokeStoryBeatDialog.tsx",
+        "src/pages/live/PlayerDossier.tsx"
       ]
     },
     "description": "Admin progression debugger and View as. cr-admin-web globs are not checked by check-stale."

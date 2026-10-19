@@ -817,6 +817,7 @@ When `is_repeatable = true`, a trainer can accept the same template again after 
 | `DefeatTrainer` | 40 | Win against a specific trainer (`target_reference_id` = trainer battle content key; rematches count, a blank target means any trainer) |
 | `DefeatAnyTrainer` | 41 | Win any trainer battle |
 | `DefeatTrainersFromList` | 42 | Defeat N DISTINCT trainers from `target_reference_ids` |
+| `FightTrainer` | 43 | Fight a specific trainer: a defeat **or** a loss to a `lossAllowed` trainer counts (`target_reference_id` required, `target_count` 1). `ProgressOutcomeObjectiveMap` maps `TrainerDefeated`, and `BattleLost` with `lossAllowed`, to it (`ObjectivesFor(ProgressOutcome)`); the subject is the `opponentNpcKey` fact; distinct per NPC key, so a repeat is idempotent. A plain loss does not advance. Upsert refuses a missing target or a count other than 1 |
 | `ReachTalentRank` | 50 | Reach a rank in a talent (the "teach a talent" gate, [Talents §8.3](25-talents.md#quest-tie-in)); `target_reference_id` = talent content key, blank matches the highest rank on any talent |
 
 **List objectives (9, 42)** store their targets as a JSON array in `quest_objective_template.target_reference_ids`

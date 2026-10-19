@@ -849,6 +849,13 @@ A REST surface is exposed for the server path (`Game/CR.Game.Service.BFF/Endpoin
 
 The endpoint resolves the caller's account from the request context and requires it to own `trainerId` (else `404`), preventing one account from healing another's team (IDOR). The in-process Unity caller invokes the domain service directly as the owning session.
 
+## Allowed losses and no_usable_creature (P1a, 2026-10-18)
+
+- **Loss flag.** `BattleStateDto.LossAllowed` is read from the NPC registry row (`loss_allowed`) of `battle.OpponentContentKey` on every `GetBattleStateAsync`, ended battles included; trainer battles only; false on any miss or error (a Warning is logged).
+- **`BattleLost` facts.** The outcome now carries `opponentNpcKey` and `lossAllowed`, on a loss and on a draw against a loss-allowed opponent. `LifetimeStatProjector` then writes `trainer_lost_<key>` (see [Stats](?page=backend/08-stats-system)). A draw against a loss-allowed trainer also bumps `battles_lost`; ordinary opponents are unchanged. `QuestObjectiveProjector` also reads the facts for `FightTrainer` ([Quest System](?page=backend/07-quest-system)).
+- **No usable creature.** `StartBattleAsync` throws `NoUsableCreatureException` when the player side is empty or all fainted (it used to fall back to the first fainted creature). `StartEncounterAsync` pre-checks through `ICreatureInventoryService` before any wild spawn or trainer build and maps the race too: `EncounterStartStatus.NoUsableCreature` becomes 409 `no_usable_creature` (code `battle-no-usable-creature`). Test fixtures with an empty player team need a healthy creature.
+- **Heal-at.** The Healer NPC route is in [NPC System](?page=backend/02-npc-system#healers-and-heal-at-p1a); the whiteout heal above is unchanged.
+
 ## Trainer Battles
 
 `battle.battle_type` distinguishes `"Wild"` from `"Trainer"` — the string consts live in `CR.Game.Model.Battle.BattleTypes`. A trainer battle runs through the exact same `BattleDomainService` turn loop as a wild one; the differences are a handful of rules keyed off the battle type.

@@ -40,6 +40,8 @@ type — a quest or NPC or item reference picked by content key where the handle
 otherwise a plain select for things like `is` / `kind` / `op`. A composite type (`all`/`any`/`not`)
 shows a nested, recursive **children** list of the same condition shape instead of args.
 
+P1a adds the actions `team.heal` and `battle.start` and the condition `npc.trainerLost`, each with an `npc` argument picked by NPC content key. They are Unity-side handlers; the server vocabulary catches up in a separate cr-api change, so do not push a document using them before it is live ([Dialogue Domain](../backend/21-dialogue-domain.md#p1a-vocabulary-verbs-2026-10-18)).
+
 ## The legacy document field
 
 Before this rewrite, `document` was edited as one free JSON blob, and some dialogues were written

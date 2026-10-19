@@ -280,6 +280,8 @@ Defined in `CR.Stats.Data.Constants.StatKey`. Use these constants rather than in
 | `CreaturesCapturedTotal` | `"creatures_captured_total"` | Increment | `LifetimeStatProjector` on `CreatureCaptured` (the server's capture) |
 | `CreaturesDefeatedTotal` | `"creatures_defeated_total"` | Increment | `LifetimeStatProjector` on `CreatureDefeated` |
 | `TrainersDefeatedTotal` | `"trainers_defeated_total"` | Increment | `LifetimeStatProjector` on `TrainerDefeated` |
+| `StatKey.TrainerLostKey(npcKey)` (`TrainerLostPrefix`) | `"trainer_lost_{npcKey}"` | Max 1 | `LifetimeStatProjector` on `BattleLost` when both facts `opponentNpcKey` and `lossAllowed` are present; in `ServerOwnedStatKeys` (P1a) |
+| `StatKey.HealAtLastUtc` | `"heal_at_last_utc"` | Set (unix s) | `TeamHealService.HealAtNpcAsync` after a heal only; the 60 s cooldown; server-owned |
 | `ItemsCollectedTotal` | `"items_collected_total"` | Increment (+quantity) | `LifetimeStatProjector` on `ItemCollected` (pickups; loot from C2) |
 | `QuestsCompleted` | `"quests_completed"` | Increment | `LifetimeStatProjector` on `QuestCompleted` — at completion, not claim |
 | `QuestCompletedKey(key)` | `"quest_completed_{key}"` | Increment | `LifetimeStatProjector` on `QuestCompleted` (key trimmed, lower-case) |

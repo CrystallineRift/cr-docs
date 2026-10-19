@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-10-18 — World P1a: town builder, interiors, wagon travel, story rows, healer and gauntlet
+
+cr-api `feature/world-p1a`, cr-admin-web `feature/world-p1a`, cr-api-unity `feature/world-p1a`, cr-docs `docs/world-p1a` (none deployed). Migration M16101 runs on deploy; rebuild the compat packages, rebake the offline floor (it must be at the package head, see the v0.2.1 entry) and re-export the NPC registry seed before the Unity build. The server dialogue vocabulary change (`feature/world-p1a-vocab`) must be live before Studio pushes any document using the new verbs.
+
+- **Server.** `NpcType.Healer` (4), `npcs.loss_allowed` and `npcs.region_key`, and `POST /api/v1/trainers/{id}/team/heal-at/{npcKey}` (Healer, same region, not in battle, 60 s apart). `BattleLost` carries `opponentNpcKey` and `lossAllowed`, written as the `trainer_lost_<key>` stat; `BattleStateDto.LossAllowed`; quest objective `FightTrainer` (43); 409 `no_usable_creature` when the team is all fainted. → [NPC System](?page=backend/02-npc-system#healers-and-heal-at-p1a), [Battles](?page=backend/09-battle-persistence#allowed-losses-and-no-usable-creature-p1a-2026-10-18)
+- **Towns and interiors.** `TownLayout` data, kits and `cr_town_build` / `cr_town_check`; interiors as hosted scenes in 64 m slots below the host cell with `WorldDoor`. → [Open World](?page=unity/37-open-world#towns-p1a-2026-10-18)
+- **Wagon travel.** Stops, a travel list with cover card, scripted rides. → [Open World](?page=unity/37-open-world#wagon-travel-p1a)
+- **Story rows.** `CorridorLayout.story`, `CorridorStoryStep`, registry validation in `cr_world_validate`; `cr_content_push`, `cr_quests_import_staging`, `cr_author_trainer`, NPC looks. → [Open World](?page=unity/37-open-world#story-rows-p1a)
+- **Story client.** Beats reader, `BeatGatedPass`, `story.beat`, Healer, `battle.start`, `npc.trainerLost`, scripted loss and the gauntlet. → [Opening Story](?page=unity/38-story-opening#healer-battlestart-and-the-scripted-loss-p1a)
+- **Studio.** Healer type, Loss allowed and Region key on the NPC editor, objective type 43, the three dialogue verbs, and "Lost to" on the dossier. → [Content Editing](?page=admin-web/01-content-editing), [Dossier](?page=admin-web/08-player-progression-debugger)
+- **Open.** Playtest pending (door, wagon and UI were EditMode-tested only); `town-test` NPCs still lack definitions; trainer key split between `npc-bridgeford-test` and `trainer-*` is unresolved.
+
 ## 2026-10-18 — Story beats: server-set story flags, world gates
 
 cr-api `feature/story-beats`, cr-admin-web `feature/story-beats`, cr-api-unity `feature/story-beats`, cr-docs `docs/story-beats` (none deployed). Migration M17006 runs on deploy; rebuild the compat packages and rebake the floor before the Unity build; then Studio quest push.

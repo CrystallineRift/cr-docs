@@ -792,6 +792,23 @@ cr-api/Npcs/
 - [World Behaviours](?page=unity/03-world-behaviours) — `IWorldInitializable` lifecycle and the composable sub-behaviour pattern
 - [Backend Architecture](?page=backend/01-architecture) — transaction patterns, soft deletes, module structure, keyed vs non-keyed DI
 
+## Healers and heal-at (P1a, 2026-10-18)
+
+`NpcType.Healer = 4`. Migration **M16101** (Npcs) adds `npcs.loss_allowed BOOLEAN NOT NULL DEFAULT false` and `npcs.region_key VARCHAR(128) NULL` (Down drops on Postgres only); `SeedNpcRegistry_HighWaterMark.txt` moved 16100 to 16101. `NpcBase.LossAllowed` / `RegionKey` flow through `BaseNpcRepository` (insert, update, registry list); the ensure-upsert never touches the two columns.
+
+`PUT /api/v1/npc/content-registry` takes `lossAllowed` (bool?) and `regionKey` (string?): null keeps, `""` clears the region. GET and the PUT response carry both. The Unity registry seed exporter and the Studio push send both.
+
+`TeamHealService.HealAtNpcAsync(trainerId, npcKey, ct)` heals only when the NPC row is a Healer in the trainer's region, the trainer is not in battle and the last heal-at was 60 s or more ago. `POST /api/v1/trainers/{id}/team/heal-at/{npcKey}`:
+
+| Status | Code | Meaning |
+|---|---|---|
+| 200 | | Healed |
+| 404 | `unknown_npc` | No such NPC |
+| 403 | `not_a_healer` / `wrong_region` | Not a Healer, or the trainer's saved `last_area_key` is not the NPC's `region_key` (a Healer with a null region heals nobody) |
+| 409 | `in_battle` / `too_soon` | In a battle, or inside the 60 s window |
+
+Error code `team-heal-at-refused`. The window is the server-owned stat `heal_at_last_utc` (unix seconds, `StatKey.HealAtLastUtc`), written only after a heal. The read-then-set is not atomic; a heal is idempotent so a race is harmless. The caller's account is read from the token, never the body.
+
 ## Merchant NPC Service (`INpcMerchantService`)
 
 `INpcMerchantService` / `NpcMerchantService` handles all business logic for NPCs of type `Merchant` — inventory management, buy/sell price calculations, and fully transactional purchase and sell operations. It is a separate domain service from `INpcDomainService` and is registered as `AddScoped` because it depends on `IDbConnectionFactory`.

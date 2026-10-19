@@ -273,6 +273,45 @@ Levers if the Deck misses: treeDistance 150 → detail density 0.5 → `fir_slop
 See [Setting Up the World System → Tweak and rebuild the corridor](?page=guides/04-setup-world-system) and the single-page guide
 `CR/docs/2026-10-09-corridor-builder-guide.html`.
 
+## Towns (P1a, 2026-10-18)
+
+(Unity: lands with the `feature/world-p1a` client PR.) A town is data plus a builder, like the corridor.
+
+- **`TownLayout`** (`Assets/CR/Data/Towns/<key>.json`): points, walls, gates, plots, square, spawns, locations and NPCs on a pad. Pure logic and checks live in `Game/OpenWorld/Logic/Towns` (`TownChecks`, `TownWallPlanner`, `TownBuildPlanner`, `TownFoliageRule`, `TownOrientedRect`).
+- **Kits** (`Data/Towns/kits.json`): 49 roles in three kits (city 29, village 12, seaside 8), sizes measured from the prefabs by `cr_town_kits_measure`. City buildings are big (house 9.6 x 11.6 m); the door side of every City building is its +X.
+- **Commands.** `cr_town_check <key>` validates the layout; `cr_town_build <key>` builds the `[Town <key>]` container in the host cells (idempotent: owned container plus manifest, a repeat build reports `0 changes`; renaming an NPC key gives `created 1, removed 1`); `cr_town_render` writes review renders. Pad flattening and scatter exclusion come from the region overlay `pads` / `scatterExclusionRects`. Order: terrain, paint, scatter and trees, town build, story step, validate.
+- **NPCs.** Placed by registry key (`TownNpcPlacer`). A town NPC must be named `CR_NPC_*` for `cr_dress_cell_npcs` to dress it.
+- **Sandbox.** `town-test` on the Bridgeford pad (cell World_c3_r3) with `interior-test-house`. Its three NPCs have no `NpcDefinition`, so `cr_world_validate` reports 3 errors until P1b removes or defines them.
+
+## Interiors (P1a)
+
+An interior is a hosted scene far below its host cell, entered through a door.
+
+- **Slot.** x/z = the door's x/z snapped to a 64 m grid, y = -200 - 40 x slotRow (first free row per town). Volume = 64 x 30 x 64 m AABB, recorded in `Data/Interiors/<key>.json` and compiled by `cr_interior_build` into `Resources/OpenWorld/InteriorVolumes.asset`. `InteriorVolumeChecks` rejects overlap. The room stands under the door (clamped 4 m inside the slot) and the region check samples the room, not the whole slot, against the region at the door. No `RegionHold`: same x/z is the same region.
+- **Hosted scenes.** `HostedScene {sceneName, col, row, interiorKey}`; scene `Interior_<key>.unity` with its own `HostedSceneActivator` and `AreaWorldInitializer`. `HostedSceneGroup` is reconciled every streamer step from what is true (host ring, loaded, active): host and hosted scene load at Dormant, promote together and unload together. A load that fails 3 times faults the door's waiter and the bootstrap puts the player at the start spawn. `cr_interior_build` adds the scene to Build Settings and `hostedScenes`; `cr_interior_check` validates both.
+- **Doors.** `WorldDoor` (Interact) calls `IOpenWorldRelocator.RelocateToInteriorAsync(interiorKey, spawnId)`, which warms the host cell (`IWorldStreamer.WarmHostedAsync`) and ensures the scene is loaded before the teleport; the exit door reverses. Both are default interface methods so other packages' doubles still compile.
+- **Ground lift.** Every lift user (`LiftOntoTerrain`, `TrySampleTerrainHeight`, the smoke runner) is honoured centrally: inside a volume, `TrySampleTerrainHeight` returns null and `LiftOntoTerrain` returns the position unchanged (`InteriorVolumeRegistry.Current`).
+- **Resume inside an interior.** `WorldResumeSteps`: resolve the volume, warm the host cell, load the hosted scene, place the player.
+- `InteriorLighting` sets the interior's ambient; `cr_interior_render` writes renders.
+
+## Wagon travel (P1a)
+
+`WagonStop` (Interact) opens a UI Toolkit list (`UI/Travel`: `TravelListView`, `TravelCoverCard`, `TravelUiPanel`, `TravelList.uss`) over `IWagonTravel`/`WagonTravelService`. Stops come from `Resources/OpenWorld/WagonStops.json` (built from `Data/Towns/wagon-stops.json` by `cr_wagon_build`; three stops: farm, Mirandale south gate, Bridgeford inn). A stop is listed once its region is discovered (`DiscoveredRegions`, read only); the ride is a cover card plus the normal location save. No beat is set by a ride. `rides[]` plus `StartRideAsync(rideKey)` run a scripted ride: the barn-sleep morning waits 4 s, then rides `act1-to-mirandale`, only for the trainer who slept. Strings are in `WorldText` (see the [ledger](?page=content/01-ai-content-ledger)).
+
+## Story rows (P1a)
+
+`CorridorLayout.story` is a `StoryRows` object with a list per row kind (12 kinds, `GauntletRow` among them). `ContinentSeedLoader` has a `story` section; the overlay merge prefixes **row ids only**, registry keys (event, dialogue, npc, quest, beat, location, arena, trainer) stay raw. `CorridorStoryStep` (`cr_world_build_corridor ... steps=story`) owns `[Continent Story]` / `[Corridor Story]`, stamps each row (`StoryRowStamp` hash) and is idempotent (a rebuilt toggle target rebuilds its event). Act 1 cells belong to `Act1Corridor`, so their rows are in `Data/Corridor/Act1/story.json` (`cr_world_seed_corridor --args section=story`); the continent `story.json` is empty. A layout builds only its own cells, so an overlay story row in an Act 1 cell errors.
+
+**Registry validation.** `StoryRegistry` reads `Game/Story/Content/story-registry.json`; `StoryRowChecks` runs inside `cr_world_validate` and reports `story:<row>: unknown npc/dialogue/quest/beat/location/trainer key`. A zone's `arenaKey` is required. Registry NPCs placed by story rows need an `NpcDefinition`, or the existing unresolved-NPC rule errors.
+
+## NPC looks and content commands (P1a)
+
+- **Looks.** `npc-looks.json` (presets, defaults, per-key looks, tint materials) read by `NpcLookTable`; `RoleFor(name, npcType)` picks the role from the name segment, else the authored `_npcType`, else the legacy substring. `cr_dress_cell_npcs` dresses with BSMC 2.0 paths (`Prefabs/Catalog`, `Prefabs/Fantasy/Catalog/<Slot>`) and skips scenes without NPCs. Run it with `-executeMethod`; the pipeline CLI drops the long sweep.
+- **`cr_quests_import_staging`**: imports staged story quests into the quest assets (dry run reports `0 changes`).
+- **`cr_content_push`**: pushes quests, dialogue and NPC/trainer rows to the Studio server. The default server is production, so the user runs it. `ContentPushFilter` skips parked paths and any key with a `test` segment (for example `trainer-bridgeford-test`).
+- **`cr_author_trainer`**: creates a trainer definition plus its NPC row in one command.
+- `NpcDefinition.regionKey` round-trips through push, pull and the inspector.
+
 ## World map tab
 
 In open mode `OpenWorldMapLayoutSource` replaces the legacy node layout: every region (sub-regions included; not mountain, ocean or unassigned) is shown
@@ -292,4 +331,4 @@ Per-object LODs and per-cell proxies (fade 0.5 s on load/unload, terrain proxies
 
 ## See also
 
-[World Map](?page=unity/35-world-map) (the player menu Map tab), [World Behaviours](?page=unity/03-world-behaviours).
+[World Map](?page=unity/35-world-map) (the player menu Map tab), [World Behaviours](?page=unity/03-world-behaviours). Story beats, the gauntlet and the Healer: [Opening Story](?page=unity/38-story-opening#healer-battlestart-and-the-scripted-loss-p1a).
