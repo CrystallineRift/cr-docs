@@ -6,15 +6,58 @@ Creature **HP and status conditions are persistent across battles**: they live o
 
 ## Turn Model
 
-Battles use a **sequential turn model**: exactly one trainer acts per round, resolved immediately on submit. The current round carries an `active_trainer_id` field so the client always knows whose turn it is. The faster creature (by Speed stat) goes first; ties go to the player (trainer1).
+Battles use **simultaneous rounds**. Each round the player sends one intent, the server picks the opponent's action (blind to the player's pick), resolves both in order, and returns every step in resolution order. The creature's *current* Speed decides who attacks first, every round. See [Battle Rounds](#battle-rounds) for the full rules.
 
-This replaced the old simultaneous-submit model where both trainers had to submit before a round could resolve.
+This replaced the sequential model (one trainer per round, opponent acted in a second request) and, before that, the simultaneous-submit model. `battle_round.active_trainer_id` is now always the player; the old per-action `SubmitActionAsync` path is kept for tests and forfeit only.
 
 ## Why DB-Backed?
 
 - **Crash recovery** — `GET /api/v1/battle/{id}/state` returns the correct state after a restart.
 - **Horizontal scaling** — any API node can handle any request for a battle.
 - **Audit trail** — `battle_action_log` preserves the resolved outcomes of every round.
+
+## Battle Rounds
+
+`BattleTurnDomainService.SubmitTurnAsync` (Npcs layer) validates the player's intent, then calls `IBattleDomainService.ResolveRoundAsync(battleId, playerTrainerId, roundKey, actionsJson, aiDecider, npcItemSeam, ct)`. Wild, NPC trainer and offline battles all use the same code (offline runs the same domain services from the DLL against local SQLite).
+
+### Order of a round
+
+1. **Validate first.** Ownership, round key, ability legality, switch target (alive, benched), item owned and usable, run allowed (wild only). A refused action returns 200 with only the refusal step (`SwitchRejected`, `RunRefused` or `ItemRejected` plus `ItemErrorMessage`), **no AI step, and the same round key**. A refusal never costs a round.
+2. **Swap-only round.** If the player owes a replacement (`OwedSwapTrainerId` is the player), only a Switch is accepted. It resolves alone, the AI does not act, there is no attack phase and no tick, and the round advances.
+3. **AI picks** from the state at round start (wild brain or trainer brain; the trainer brain's `mustSwap` comes from state, never from the player's pick). The decider is a `BattleAiDecider` delegate; if it throws, the AI side forfeits.
+4. **Phase 1, non-attacks:** item use, capture throw, switch, run. Always before any attack, player first, then the opponent. A successful capture or run ends the battle at once and the opponent's remaining action is skipped. NPC item use goes through a `BattleNpcItemSeam` delegate (no circular reference). A failed run or capture is just a used action.
+5. **Phase 2, attacks.** Snapshots are built after phase 1, so a switched-in creature is the target or attacker. Order is by snapshot Speed (condition modifiers included; the player's side also gets the talent `CreatureSpeedMultiplier`), recomputed every round. A tie is decided by `IBattleCoinFlip` (default `SeededBattleCoinFlip`, seeded by battle id and round; tests inject a deterministic flip). If the faster attack knocks the defender out, the slower creature's move is **cancelled**: the step has `Interrupted = true`, `DamageDealt = 0`, `Missed = false`, `ActorFainted = true` and narrates "X fainted before it could act". If that faint ended the battle, no Interrupted step is emitted (the ending step stays last).
+6. **End of round, condition ticks.** Damage-over-time and duration decrement no longer run inside `BattleResolver.Resolve`. Only each side's **active** creature ticks, and only while it is still standing and carrying at least one condition; a benched creature keeps its conditions untouched until it is switched back in (as in Pokémon). Each tick is one `ActionType.ConditionTick` step (value `5`), in Speed order: `ActingCreatureId` is the ticked creature, `DamageDealt` is the tick damage, `ActorFainted` marks a tick KO. A step is emitted only when the tick dealt damage (`DamageDealt > 0`) or a condition ended; a tick that changes nothing produces no step, so the log is not padded with empty ticks. A tick KO credits the opposing side like any KO (XP and loot included). Ticks skip missions. The shared math is `BattleConditionTick.Apply` in `CR.Game.Compat`.
+7. **Replacements.** If the AI side's creature fell, the AI picks its replacement immediately (server-side) and it is emitted as a Switch step after the round. If the player's fell, the response carries `NeedsSwap = true` and the next round is a swap-only round. Only the player can owe a swap across a request, so the single `OwedSwapTrainerId` column is enough.
+8. **Battle end.** Win, lose, capture and fled are detected after every step and the ending step is always the last step. Rewards, XP and loot are paid only for steps that happened, never for a cancelled step.
+
+Per-step rules: the battle record is reloaded between steps; progress outcomes and missions apply per emitted step and are never double-counted (`TurnResolution.Progress` stays merged-only); RNG is salted per action (`BattleSeedExtensions.BattleSeed(battleId, round, actorTrainerId, purpose)`, so accuracy and escape rolls no longer share a seed), and the seed also mixes in a private per-battle salt that never leaves the server, so a client cannot predict a roll from the battle id and round number; one `battle_round` row per round; the round key is the player's key only.
+
+### Refusal strikes
+
+The 3-strike counters stay: a refused Run in a trainer battle, or a non-Switch submitted while a swap is owed, bumps the shared `battle.owed_swap_refusals` counter. Three strikes end the battle as that trainer's loss. A resolved round resets the counter. An illegal Switch does not strike.
+
+### Atomicity and resync
+
+Each round is claimed with a compare-and-swap (`TryBeginRoundAsync`): `battle_round.status` goes `open`, `resolving`, `resolved`, and the resolved steps are stored in `battle_round.steps_json`. After the claim, the whole round runs on `CancellationToken.None`. A crash mid-round is not transactional (it spans several domains): a resubmit for a round left `resolving` returns **409** `round_incomplete` (code `battle-round-incomplete`) and the staleness sweep or the AI forfeit closes the battle, logged at Error. Online duplicate submits are covered by the idempotency middleware.
+
+`GET /api/v1/battle/{id}/state` returns `lastRoundNumber`, `lastRoundSteps` and, once ended, `endReason` (`Won`, `Lost`, `Draw`, `Fled`, `Captured`, `Forfeit`). A client that lost the response replays the last round's steps (narrated) and continues.
+
+### Wire additions (additive only)
+
+- `ActionOutcome.Interrupted`, `ActionOutcome.RoundNumber`, `ActionOutcome.ActorFainted`; `BattleActionType.ConditionTick = 5`.
+- `TurnResolution.Steps` in resolution order; `ActiveTrainerId` is always the player; `NextRoundKey` is non-null while the battle is active (also for swap-only rounds); `NeedsSwap` marks a swap-only next round. New `TurnSubmitStatus.RoundIncomplete`.
+- `RunOpeningStepsAsync` is a no-op that returns no steps (kept for the interface). `BattleStartResult.ActiveTrainerId` is the player.
+- Migration 20003 (Game): `battle_action_log.trainer_id UUID NULL`, `battle_round.steps_json TEXT NULL`, `battle_round.status VARCHAR(16) NULL`. Migration 20004 raises `app_config.min_client_version` to `0.2.0` only when it is lower (see [Forced update](#forced-client-update)).
+- In-flight battles at deploy: an open round with `ActiveTrainerId` = player is adopted as a simultaneous round; a round stuck on the AI is left to the staleness sweep.
+
+### Draws
+
+Draws are effectively unreachable now (a tick KO ends the battle before the other side ticks, and only one actor acts per step); the branch is kept. Progress outcomes for a draw are unchanged (no `BattleWon`, no `TrainerDefeated`), and a drawn NPC trainer battle does not record a defeat, so the rematch stays available. The client treats a draw as a loss for whiteout and heal.
+
+### Forced client update
+
+Old clients can still parse the new wire (it is additive), but they would not play the new round order correctly, so they are forced to update. Migration 20004 sets `min_client_version = 0.2.0`, so builds older than v0.2.0 get `client_update_required` and cannot play online. Publish the v0.2.0 build first (or in the same window), then deploy cr-api via cr-ops. The Unity project's `bundleVersion` (Player Settings, version) must be **0.2.0 or higher** for the Editor and for any build to play online; it is still `0.1.0` until the release build bumps it, and an Editor left at `0.1.0` is blocked after the deploy. See [Asset Management](?page=backend/10-asset-management).
 
 ## Tables
 
@@ -50,7 +93,7 @@ off, and only after a capture actually commits.
 
 ### `battle_round`
 
-One row per round per battle. `active_trainer_id` identifies whose turn it is (added by M8006).
+One row per round per battle. `active_trainer_id` is always the player under simultaneous rounds (added by M8006). `status` and `steps_json` come from migration 20003.
 
 | Column | Type | Notes |
 |--------|------|-------|
@@ -60,6 +103,8 @@ One row per round per battle. `active_trainer_id` identifies whose turn it is (a
 | `active_trainer_id` | UUID NULL | Whose turn this round |
 | `trainer1_key` | VARCHAR(255) | Opaque submission token |
 | `trainer2_key` | VARCHAR(255) | |
+| `status` | VARCHAR(16) NULL | `open`, `resolving`, `resolved` |
+| `steps_json` | TEXT NULL | The resolved round's `ActionOutcome` steps, written when the round completes |
 | `created_at` | DATETIME | |
 
 Unique constraint: `(battle_id, round_number)`.
@@ -284,11 +329,13 @@ public interface IBattleDomainService
 0. Trainer battles only: load trainer 2's team; empty → `OpponentTeamEmptyException`, nothing written. Then abandon the starting trainer's stale `Active` battles.
 1. Insert `battle` row (`status = "Active"`, `battle_type`)
 2. For each trainer, load their team and set the first creature as active via `SetActiveCreatureAsync` (writes `trainer{1,2}_active_creature_id`). No per-battle creature rows are written.
-3. Determine first-turn trainer by comparing the two active creatures' Speed stats (ties → trainer1)
-4. Generate round 1 keys, insert `battle_round` row with `active_trainer_id`
+3. (Removed: there is no first-turn comparison; Speed is compared per round.)
+4. Generate round 1 keys, insert `battle_round` row with `active_trainer_id` = the player
 5. Return `BattleStartResult` (includes `BattleId`, `ActiveTrainerId`, round keys)
 
 ### `SubmitActionAsync`
+
+> **Legacy path.** Player turns go through `ResolveRoundAsync` (see [Battle Rounds](#battle-rounds)). `SubmitActionAsync` is kept for tests and forfeit, and the steps below describe the old one-trainer-per-request model.
 
 1. Validate battle exists + is Active
 2. Load current round; verify `round.ActiveTrainerId == trainerId`
@@ -432,6 +479,8 @@ After resolving an action, `SingleActionResult` exposes `AttackerRemainingCondit
 
 ## Run / Escape Mechanics
 
+> Under simultaneous rounds Run is a phase-1 action and the roll seed is `BattleSeed(battleId, round, actorTrainerId, Escape)`, not `battleId.GetHashCode() ^ roundNumber`. A failed Run no longer hands the turn to the opponent; the opponent already picked for the same round.
+
 When a trainer submits a `BattleActionType.Run` action, `BattleDomainService` resolves the attempt immediately using a deterministic escape formula rather than passing through to `BattleResolver`:
 
 ```
@@ -447,6 +496,8 @@ The RNG is seeded deterministically from `battleId.GetHashCode() ^ roundNumber`,
 
 ## Force-Swap on Faint
 
+> Under simultaneous rounds the replacement comes in after the round ends: the AI replaces immediately (a Switch step), and the player gets a swap-only round (`NeedsSwap = true`) with no opponent action. See [Battle Rounds](#battle-rounds).
+
 A battle no longer ends the instant a trainer's active creature faints. If the owner has **at least one alive backup creature** on their team, the battle stays Active and the trainer is required to swap in a replacement.
 
 `BattleDomainService` resolves this via a private check `HasAliveBackupAsync(trainerId, activeCreatureId, ct)` — it loads the trainer's team and returns `true` if any creature other than the now-fainted active one still has HP. When the faint occurs:
@@ -459,6 +510,8 @@ The wild-trainer sentinel `00000000-0000-0000-0000-000000000001` has no team, so
 > **Bug fix:** previously any active-creature faint was recorded as an instant Loss regardless of the remaining team. The backup-aware end check threads the **real** winner through to battle end.
 
 ## Switch Action
+
+> Switch is a phase-1 action. It resolves before any attack, so the opponent's attack that round hits the new creature. A switch no longer "passes the turn"; the opponent already picked for the round.
 
 `BattleActionType.Switch` (enum value `3`) swaps the acting trainer's active creature for a backup. JSON payload shape:
 
@@ -478,7 +531,7 @@ The client also rolls back its optimistic HUD update on rejection, and the swap 
 
 ## A creature that is already down does not act
 
-`BattleResolver` fires start-of-turn damage-over-time before resolving the action. If that takes the
+`BattleResolver` no longer ticks damage-over-time (it moved to the end-of-round `ConditionTick` step, see [Battle Rounds](#battle-rounds)); a creature already at 0 HP still does not act. If that takes the
 acting creature to 0 — or it was already at 0 when the action arrived — its action is **skipped
 entirely**: no damage, no conditions applied, no reaction. `SingleActionResult.AttackerFaintedBeforeActing`
 reports it. The turn still resolves; it just does nothing.
@@ -840,7 +893,7 @@ first; see [Capture Mechanic → Refused in trainer battles](?page=unity/14-capt
 2. **Low HP** (< 35% of the max HP seen for the active creature) with a heal in the bag → drink it.
 3. **Otherwise** → delegate to the injected `IWildBattleAIDomainService` for the attack decision.
 
-It never emits Run. Item turns call `NpcDomainService.UseNpcBattleItemAsync` directly
+It never emits Run (an AI Run in a trainer battle forfeits the AI side immediately). The decider is called once at round start from the pre-item state, and again to pick a replacement after a KO. Item turns call `NpcDomainService.UseNpcBattleItemAsync` directly
 (`RestoreHp`/`RestoreFullHp`, decrements the NPC's bag) from inside
 `BattleTurnDomainService.SubmitTurnAsync` — never over HTTP; the old two-step (a separate
 `use-battle-item` call, then submit) and its route are retired, see [Battle routes](#rest-endpoints)

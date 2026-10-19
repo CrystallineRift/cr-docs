@@ -190,8 +190,9 @@ uses. A `VisitLocation` objective's target is likewise picked from `ContentPicke
 `visit-location-target-uncatalogued` audit rule, since the authority advances nothing for a key it cannot
 resolve; see [Location Discoveries](?page=backend/24-location-discoveries).
 
-**Supersedes checklist step 0b's `quest_kind`.** Main Story means "main", and every other category is a side quest. Only
-`quest_line` / `line_step` remain planned.
+**Supersedes checklist step 0b's `quest_kind`.** Main Story means "main", and every other category is a side quest, so
+there is no separate `quest_kind` column. `quest_line` / `line_step` shipped with M17004; see
+[Studio concurrency and story lines](#studio-concurrency-and-story-lines).
 
 ## The shipped quest chain
 
@@ -1054,6 +1055,20 @@ rewards (see "Server authority hardening" below) can carry a genuinely new unloc
 `ApplyServerProgress` is what gets that unlock to the achievement toast. `ReportUnlocks`/
 `ReportTrainerProgress` now have exactly one call site each, inside `ApplyServerProgress`.
 
+### Studio concurrency and story lines
+
+M17004 adds three columns to `quest_template`: `row_version BIGINT NOT NULL DEFAULT 1`, `quest_line VARCHAR(64) NULL` and
+`line_step INTEGER NULL`. M17005 adds `quest_map_layout`. The Studio story map and the Unity Studio use them.
+
+- **Story line.** `questLine` is a slug (`^[a-z0-9][a-z0-9-]{0,63}$`, else 400 `invalid_quest_line`); `lineStep` is an order within the line (1 or more, else 400 `invalid_line_step`; a step with no line is also 400). On the bulk request, `questLine: ""` clears the line and step, `null` keeps the stored value, and a `null` `lineStep` keeps it. Both are presentation and grouping only: the authority does not use them to offer or gate a quest. Category (`Main Story` vs side) is unchanged.
+- **Row version.** Entities (list, `by-content-key`, bulk success `templates[]`) carry `rowVersion`. Bulk rows accept `expectedRowVersion` and `DELETE` accepts `?expectedRowVersion=`; the rules and the 409 body are in [Optimistic Concurrency](?page=backend/28-optimistic-concurrency). The up-front check runs before line, objective, requirement and cycle validation, so a stale push gets the 409 first; basic 400s (blank key, undefined enum, area length) are all raised before anything is written.
+- **Requirement keys.** `requirements[].referenceContentKey` (by-content-key and `includeChildren`) is the target quest's content key for `QuestCompleted` / `QuestNotStarted`, resolved by the server including deleted templates; `null` means the target is gone. Clients must use it and never map GUIDs to keys themselves.
+- **`GET /api/v1/quests/templates?includeChildren=true`** returns each template with objectives, rewards and requirements in one call (three table reads grouped in memory). It needs content-write (403 `forbidden` otherwise); the default list is unchanged and open.
+- **Loops are refused.** A bulk push that would create a `QuestCompleted` cycle returns 400 `{ error: "requirement_cycle", message, quests: [keys] }`. The check walks stored live requirements plus the batch and starts from the batch's own keys, so an old loop elsewhere does not block an unrelated push.
+- **Map layout.** `GET`/`PUT /api/v1/quests/map-layout/{scope}` (content-write) stores the story map's card positions and lane colours as one JSON document per scope, with the same `rowVersion` and 409 contract. It is presentation only and not in the game client. Validation: scope slug, document an object up to 256 KB, at most 2000 positions, colours `#rrggbb`; errors are 400 `invalid_scope`, `invalid_document`, `invalid_expected_row_version`.
+- **Rollout flag.** `Studio:RequireExpectedRowVersion` (default `false`); when `true`, a write without `expectedRowVersion` is 400 `expected_row_version_required`. Until then such a write logs a Warning with the caller.
+- **Revive.** An unconditional write onto a soft-deleted template now revives it. It used to hit the `content_key` unique constraint and return 500.
+
 ### Crystalline Rift Studio sync: `PUT /api/v1/quests/templates/bulk`
 
 Used by the Unity editor Crystalline Rift Studio to push `QuestDefinition` ScriptableObjects to the server. Each entry is matched by `content_key` and the template row plus all its objectives, rewards, and requirements are replaced atomically.
@@ -1063,6 +1078,9 @@ are the only two quest endpoints gated behind `AuthorizationPolicies.RequireCont
 other quest route (accept, progress, claim, abandon, the reads) stays on the ordinary player-token
 policy. This is the exact same content-write gate the dialogue endpoints use (see
 [Dialogue Server Domain](?page=backend/21-dialogue-domain)).
+
+Each request row also takes `expectedRowVersion`, `questLine` and `lineStep`; a stale version returns 409
+`row-version-conflict` (see [Studio concurrency and story lines](#studio-concurrency-and-story-lines)).
 
 ```json
 PUT /api/v1/quests/templates/bulk
@@ -1377,3 +1395,46 @@ server-side accept heals on the next read.
   `{ "error": "requirements_not_met" }`. Re-accepting a quest already held returns it without a check.
 - **Server grants.** `IQuestDomainService.GrantQuestAsync(accountId, trainerId, templateKey, reason, ct)` creates (or returns)
   an instance without the requirement check. It has no route; server features (location discovery quests) call it.
+
+## Story beats (2026-10-18)
+
+A **story beat** is a named flag the server sets when the story reaches a point (for example `act1-done`, `mirandale-open`).
+The client reads beats to open roads, bridges and passes, to branch dialogue and to gate quests. The client never sets a
+beat: beats are granted by quest completion or by an admin. There is no intent route that sets a beat.
+
+- **Storage.** A beat is a `trainer_stat` row, key `story_beat_<key>` (`StatKey.StoryBeatKey(key)`, prefix
+  `StatKey.StoryBeatPrefix`), value 1, written with `MaxAsync`. The prefix is in `ServerOwnedStatKeys`, so a client stat
+  write cannot touch it. Beats are monotone (once set, set); the only carve-out is admin revoke (below).
+- **Keys.** Content strings, lower-case `^[a-z0-9][a-z0-9-]{0,62}$`. Nothing in code enumerates them
+  (`StoryBeatKeyExtensions`: regex, max 8 per quest, normalise).
+- **`grants_beats`.** Migration **M17006** adds `quest_template.grants_beats TEXT NULL` (comma-separated keys; Down drops it on
+  Postgres only). `QuestTemplate.GrantsBeats` is a `List<string>`, normalised (trim, lowercase, distinct, sorted) on read and
+  before compare/store. A template with the same normalised list adds no `row_version` bump of its own (the upsert still bumps
+  once, as before). `UpsertQuestTemplateRequest.GrantsBeats`: **omitted/null = keep, `[]` = clear**, an invalid key or more
+  than 8 keys answers 400 `invalid_grants_beats`. `QuestStatusView.GrantsBeats` and the pull/export DTOs carry it.
+- **`StoryBeatProjector`** (`IProgressOutcomeHandler`, Order 150, after `LifetimeStatProjector` at 100) handles
+  `QuestCompleted`: reads the template's `grants_beats`; for each key it does `GetAsync` then `MaxAsync`, and only when the
+  read was 0 it adds the key to the report (`ProgressReportBuilder.AddStoryBeat`, de-duplicated) and enqueues
+  `ProgressOutcomeKind.StoryBeatSet = 16` (SubjectKey = key, FirstTime = true). The outcome is enqueued after the write, so
+  achievements evaluated at the end of the dispatch see the beat. A double completion cannot happen (completion is a CAS).
+  Registered in `Program.cs`; offline registration is in the Unity `ProgressBindings` at Order 150.
+- **No objective row.** `ProgressOutcomeObjectiveMap` has **no row** for `StoryBeatSet` on purpose: a beat advances no
+  quest objective.
+- **Exposure.** `TrainerProgress.StoryBeats` (`List<string>`, sorted, never null) comes from one `GetAllAsync` filtered by
+  prefix in `TrainerProgressionService.GetProgressAsync`. `ProgressReport.NewStoryBeats` (`List<string>`, never null) rides on
+  every intent response; the builder and both merge extensions carry it. No `InvalidationScopes` change (TrainerProgress is
+  already dirtied). An old response without the field reads as empty.
+- **Requirement type 7 `StoryBeat`.** `QuestRequirementType.StoryBeat = 7`: `stat_key` is the beat key without the prefix;
+  the evaluator checks `story_beat_<key>` >= 1. Upsert validates and normalises the key. The Studio quest editor also offers
+  6 `QuestNotStarted`.
+- **Backfill of `act1-done`.** The first `GetProgressAsync` after deploy sets `story_beat_act1-done` when
+  `StatKey.QuestCompletedKey("quest-runaway-cargo")` >= 1 and the beat is unset: one stat read, `MaxAsync`, source
+  `story_beat_backfill`, no outcome, no report, no achievements. Idempotent, same offline. Only `act1-done` is backfilled
+  (`StoryBeatBackfillKeys`, in `Quests.Data` so Moderation can see it). A test pins that the projector's completed-quest key
+  equals the backfill's key.
+- **Admin grant/revoke.** `POST` and `DELETE /api/v1/admin/players/{accountId}/trainers/{trainerId}/story-beats/{key}` (admin
+  policy, `{ reason }` body, 204; 400 for a bad key; 404 when the trainer is not on that account). Grant is `MaxAsync`;
+  revoke is `SetAsync` 0 with source `admin` (the one carve-out of "monotone"). **Revoking `act1-done` is refused (400)**
+  because the backfill would restore it. Audit kinds `SetStoryBeat = 21`, `ClearStoryBeat = 22`. `TrainerDossier` gains
+  `StoryBeats`, `ActiveQuestKeys`, `CompletedQuestKeys`. See [Moderation](18-moderation.md).
+- **Offline.** The same domain DLL runs on local SQLite, so beats work offline without any sync.

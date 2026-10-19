@@ -1,5 +1,58 @@
 # Changelog
 
+## 2026-10-18 — Story beats: server-set story flags, world gates
+
+cr-api `feature/story-beats`, cr-admin-web `feature/story-beats`, cr-api-unity `feature/story-beats`, cr-docs `docs/story-beats` (none deployed). Migration M17006 runs on deploy; rebuild the compat packages and rebake the floor before the Unity build; then Studio quest push.
+
+- **Beats.** Named flags in `trainer_stat` (`story_beat_<key>`), set by the server when a quest with `grants_beats` completes, or by an admin. The client never sets one. `TrainerProgress.StoryBeats` and `ProgressReport.NewStoryBeats` expose them; requirement type 7 gates quests on a beat; `act1-done` is backfilled for trainers who already finished Runaway Cargo. → [Quest System](?page=backend/07-quest-system#story-beats-2026-10-18)
+- **Studio.** Quest editor gets requirement options 6 and 7, a "Grants story beats" chips field and "Sets beats" on the Flow tab; the player dossier lists beats and quests with grant/revoke (not `act1-done`). → [Quest Editing](?page=admin-web/04-quest-editing#story-beats)
+- **Unity.** `IStoryBeatReader`, `BeatGatedBlocker`/`BeatGatedPass`, dialogue `story.beat`, and `IStoryBeatGate` renamed `ISkippableBeatGate`. → [Opening Story](?page=unity/38-story-opening#story-beats-on-the-client-2026-10-18)
+## 2026-10-18 — v0.2.1 hotfix: offline floor rebaked, stale-floor guards, forced update
+
+cr-api `fix/min-client-0.2.1-floor-tool`, cr-api-unity `fix/floor-20006-guard`, cr-docs `docs/floor-schema-guard`. Deploy order: merge and deploy cr-api (migration 20006), pull cr-api main on the build Mac, then merge cr-api-unity and tag `v0.2.1`.
+
+- **What broke.** v0.2.0 shipped the v0.1.9 offline floor (schema 20002) against a package at 20005. A player build never migrates `game-data.bytes`, so every quest and dialogue sync failed at boot with `no such column: quest_line` / `row_version` (40 errors on the start screen). → [Standalone Builds](?page=unity/21-standalone-builds#offline-data-floor)
+- **Floor migrated forward.** The committed floor now carries every migration through 20006, with the production overlay rows (the gaterbear and friends) kept, via the new Migrations.Tool `--base <floor>` option. → [Content Pipeline](?page=unity/17-content-pipeline#how-it-is-built)
+- **Guards.** `BundledFloorSchemaTests` (EditMode) and `ci/check-floor-schema.sh` (before every game build) fail when the committed floor lacks a migration the linked package runs or the version file disagrees with the package head.
+- **Forced update.** Migration 20006 raises `min_client_version` to `0.2.1`; `bundleVersion` is 0.2.1. 0.2.0 clients are blocked from online play until updated.
+
+## 2026-10-18 — Battle rounds: both sides choose, the server orders by Speed (build v0.2.0)
+
+cr-api `feature/battle-simultaneous-rounds`, cr-api-unity `feature/battle-simultaneous-rounds`, cr-docs `docs/battle-simultaneous-rounds` (none deployed). **Deploy order: publish the v0.2.0 build first (or in the same window), then merge and deploy cr-api via cr-ops.** Migrations 20003 and 20004 run on deploy; rebuild the compat packages (`build-packages.sh --clean` from merged main) before the Unity build, and copy the `.bytes` floor.
+
+- **One round, both sides.** The player picks, the server AI picks blind, the server resolves and returns every step in order. Item, capture, switch and run go first (player, then opponent); attacks go by current Speed, recomputed every round (condition modifiers and the talent Speed bonus included). Speed ties are a server coin flip. → [Battle Rounds](?page=backend/09-battle-persistence#battle-rounds)
+- **KO cancels the slower move.** The step is `Interrupted` and the HUD says "X fainted before it could act". Replacements arrive after the round: the AI swaps at once, the player gets a swap-only round with no opponent action.
+- **Condition ticks.** Damage-over-time now ticks once per round, after the attacks, as `ConditionTick` steps. Only each side's active creature ticks (a benched creature with a condition does not tick until it is switched back in, as in Pokémon), and a step is emitted only when the tick dealt damage or a condition ended. A tick KO pays XP and loot like any KO. Battle rolls use a private per-battle salt, so they cannot be predicted from the battle id and round.
+- **Refusals cost nothing.** An illegal switch, a Run in a trainer battle or a rejected item returns only the refusal step and the same round key. The 3-strike forfeit counters stay.
+- **Resync.** Battle state now returns `lastRoundNumber`, `lastRoundSteps` and `endReason`. A client that lost a response replays the last round and continues; a round left half-resolved returns 409 `round_incomplete`.
+- **Forced update.** Migration 20004 raises `min_client_version` to `0.2.0`. Old builds can still parse the wire (additive) but are blocked from online play until updated; the Unity Editor and every build need `bundleVersion` 0.2.0 or higher to play online. → [Asset Management](?page=backend/10-asset-management)
+- **Unity.** Per-step turn cues for both sides, Interrupted and tick playback, swap-only menu, optimistic switch committed only when the Switch step plays, resync instead of ending the battle on a network error, draw counted as a loss, six-line paced HUD log. → [Battle System](?page=unity/07-battle-system#battle-rounds-client)
+- **Playtest pending.** Scripted story fights (gaterbear at the wagon, the capture lesson, the three runaway captures) may need balance tweaks now that the opponent can act first; none were changed.
+
+## 2026-10-17 — Talent unlock rules, synergy effects, talent tree editor, quest flow editor
+
+cr-api `feature/talent-rules-and-editors`, cr-api-unity `feature/talent-rules-sync`, cr-admin-web `feature/talent-quest-editors`, cr-docs `docs/talent-quest-editors` (none deployed). Deploy order: cr-api first (migrations M15105, M15106; rebuild the compat packages), then the web build, then the Unity release. Then, in Studio, **Pull talent trees once** before any talent push (assets never pulled have version 0 and a push would 409), and rebake the offline floor with the package build.
+
+- **Unlock rules.** A talent can require another talent at a rank (any tree), points spent in a tree, or a finished quest. The server enforces them on spend (`talent-rule-locked`), refuses rule loops across trees, and evaluates the build as a fixpoint, so the order of stored rows no longer matters. A content edit that breaks a spent talent shows as "Respec required". → [Talents](?page=backend/25-talents#unlock-rules)
+- **Talent states from the server.** `TrainerProgress.TalentStates` gives each talent a state, every unmet reason and resolved current/next values. The game and the debugger render it and never recompute rules; `QuestLockedTalentIds` is deprecated. → [Talents](?page=backend/25-talents#talent-states-for-clients)
+- **Synergy effects.** An effect can be a percent of another effect's total. New `CreatureSpeedPercent` (35, cap 0 to 50%) scales player-side creature Speed from the move speed bonus, which affects first turn, escape chance and battle snapshots. → [Talents](?page=backend/25-talents#synergy-effects)
+- **Talent tree editor (web).** Grid per tree with tiers, cards, rule chips, inspector, live checks, Try it, All trees and View as player. → [Talent Tree Editor](?page=admin-web/09-talent-tree-editor)
+- **Quest flow editor (web).** One quest as How it starts, Goals, Turn in, Rewards, with neighbours (including talents it unlocks). Saved goals cannot be reordered. → [Quest Flow Editor](?page=admin-web/10-quest-flow-editor)
+- **Talent row versions.** `talent_tree.row_version` (M15105) with per-tree 409s; identical trees never bump. → [Optimistic Concurrency](?page=backend/28-optimistic-concurrency#talent-trees)
+- **Unity.** Studio edits rules and synergy, pushes one tree at a time with conflict rows, and gains **Pull talent trees**; the seed export refuses stale trees. The Talents tab reads trees from the server (floor offline) and shows every lock reason. → [Talents UI (Unity)](?page=unity/36-talents-ui)
+- **Content move.** In-game talent content is now server/local DB content, not the baked SOs, so web edits reach players.
+
+## 2026-10-17 — Studio node editors: dialogue canvas, quest story map, progression debugger, row-version conflicts
+
+cr-api `feature/studio-quests`, `feature/studio-dialogues`, `feature/studio-debugger`, cr-api-unity `feature/studio-sync-row-version`, cr-admin-web `feature/studio-node-editors`, cr-docs `docs/studio-node-editors` (none deployed). Deploy order: cr-api first (migrations M17004, M17005, M14003, M9005, M13003, M4015, Auth 19), then the web build, then the Unity release. Deploy notes: [Optimistic Concurrency](?page=backend/28-optimistic-concurrency#deploy-notes).
+
+- **Dialogue canvas.** The web Studio edits a dialogue as cards and arrows, with a server-driven rule builder, live checks, a quest list and a Play preview. New server routes: `vocabulary`, `validate`, `quest-links`, `includeDocument`. → [Dialogue Canvas](?page=admin-web/06-dialogue-canvas), [Dialogue Server Domain](?page=backend/21-dialogue-domain)
+- **Quest story map.** Quests are cards, prerequisites are arrows, story lines are lanes. Quests gain `quest_line` and `line_step` (there is no separate quest kind), and the server refuses prerequisite loops. Card positions are stored in `quest_map_layout`. → [Quest Story Map](?page=admin-web/07-quest-story-map), [Quest System](?page=backend/07-quest-system#studio-concurrency-and-story-lines)
+- **Conflicts instead of overwrites.** Dialogues, quest templates and the map layout use `row_version`: a Studio push or web save with a stale version gets a 409 and a conflict dialog (web) or conflict box with Pull / Recreate (Unity). Layout moves never conflict. Old callers still work; flip `Studio:RequireExpectedRowVersion` after the Unity release. → [Optimistic Concurrency](?page=backend/28-optimistic-concurrency), [Dialogue Authoring](?page=unity/32-dialogue-authoring)
+- **Player progression debugger.** Admins see a player's quest states, flags and timeline (read-only) and can view the map and the canvas as that player. → [Player Progression Debugger](?page=admin-web/08-player-progression-debugger), [Moderation](?page=backend/18-moderation#progression-debugger-routes)
+- **Server-owned stat keys.** `readable_read_`, `npc_met_` and `quest_completed_` joined the deny-list; an audit query is in the deploy notes. → [Stats System](?page=backend/08-stats-system)
+- **One-time step.** In Unity, Pull once before the first push of assets that were never pulled (a create-only push onto an existing key is a 409).
+
 ## 2026-10-14 — Prologue quest: Gran's Letter comes first, the shard glows only after the photo
 
 cr-api `feature/prologue-quest`, cr-api-unity `feature/prologue-quest`, cr-admin-web, cr-docs `docs/prologue-quest` (not deployed). Offline works on merge; online needs a cr-api deploy and a Studio quest push (Gran's Letter and Find Ahksun's new requirement).

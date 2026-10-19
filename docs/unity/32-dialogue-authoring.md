@@ -221,6 +221,18 @@ from that same asset land as an update instead of a second row. An unreadable or
 never shown as "Valid" — it gets a real finding and full diagnostics in its chip, not a green
 checkmark that hides the problem.
 
+**Row versions and conflicts.** Every `DialogueDefinition` and `QuestDefinition` keeps a hidden `serverRowVersion`
+(0 means never pulled). Pull stores the server's `rowVersion`, but only when the whole row applied: a quest whose
+prerequisite could not be resolved (a deleted target) is marked "Pull incomplete", its version does not advance, and Push
+refuses it until it is fixed on the server or re-pulled. Push sends the stored version as `expectedRowVersion`. A 409 does not
+count as a failure: the row shows a conflict box ("Pull this row"; on a row deleted on the server also "Recreate row" and "Delete
+local"), the push summary reads "N conflict(s) — pull those rows, then push again.", and the tab is not stamped as pushed.
+A background check (at most once a minute) shows **Pull N Edits** in the header when the server moved ahead. Pulling dialogues
+needs a content-write key (it pages `includeDocument=true`, 50 at a time). Layout-only changes made in the web canvas do not
+move the version, so they never show as pending. The contract is in [Optimistic Concurrency](?page=backend/28-optimistic-concurrency).
+
+The quest Inspector also has **Story Line** and **Line Step** fields, pushed as `questLine` / `lineStep`.
+
 **Review** — the tab's per-row Diff/Push/Revert flow used by every other content type ([Content
 Registry → Review window](?page=unity/08-content-registry)) applies to dialogues the same way.
 

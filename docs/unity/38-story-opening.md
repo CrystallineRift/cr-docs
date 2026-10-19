@@ -327,3 +327,26 @@ way the shop does, the stock ask first and then the read, because nothing stocks
 as soon as each battle closes, because standing in it re-arms the next encounter. A repeat-capture battle that the zone has
 already started is adopted rather than reset. Trainers are named `Smoke<MMddHHmmss>`. The runaway mode fails unless the barn
 reads `Sleep` after the claim, and every mode that reaches the barn fails unless the morning fires and reads back `Closed`.
+
+## Story beats on the client (2026-10-18)
+
+(Unity: lands with the feature/story-beats client PR.) A story beat is a server flag (see
+[Quest System](../backend/07-quest-system.md#story-beats-2026-10-18)); the client only reads it.
+
+- **`IStoryBeatReader`** / `StoryBeatReader`: `IReadOnlySet<string> Beats`, `event Action Changed`, `Task WhenReady`. Fed by
+  `ITrainerProgressReader`; refreshed on session ready and after `ApplyServerProgress` when `NewStoryBeats` is non-empty. A
+  cached progress blob without `StoryBeats` is stale and refetches once per session; a missing field reads as empty.
+- **`BeatGateRule.IsOpen(beats, required, blockedBy)`**: pure rule, open when `required` is empty or held and `blockedBy` is
+  empty or not held.
+- **`BeatGatedBlocker`**: collider, optional visual and optional bark (`requiredBeat`, `blockedByBeat`, `refusalBarkKey`).
+  `QuestGatedCollider` also takes optional `requiredBeat`/`blockedByBeat` with the same rule.
+- **`BeatGatedPass`**: a road/bridge/pass line. While closed it holds the player and plays the bark. The "inside" side is the
+  side the player was on the previous frame (`PassSideRule`, pure); the relocator places the player 2 m back on that side,
+  never a transform write. Several passes sharing `requiredBeat` with different `blockedByBeat` make a region choice point.
+- **Dialogue `story.beat`** condition (`beat=<key>`) over `IStoryBeatReader`. There is no dialogue action that sets a beat.
+- **Rename.** The presentation `IStoryBeatGate`/`StoryBeatGate` (skippable on-screen beats) is now `ISkippableBeatGate`/
+  `SkippableBeatGate` so "story beat" means the server flag everywhere.
+- **Studio.** `QuestDefinition.grantsBeats` (string list) round-trips through push/pull (`QuestEditorSyncHelper`,
+  `ContentCreatorSyncHelper`); `ContentAuditTool` validates the key regex. The offline floor is migrated forward (M17006) with
+  `--base` and rebaked with the package build; copy the new `.bytes`.
+- **Offline.** `ProgressBindings` registers `StoryBeatProjector` at Order 150 so the local domain services set beats.
