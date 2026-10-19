@@ -39,6 +39,38 @@ every registered screen (including the menu) and shows the target — so the men
 select; no manual hide is needed. (A separate `StartMenuController` prototype was removed in favor of reusing
 `MainMenuController`.)
 
+### Title screen look
+
+The menu is laid out like the hero of [crystallinerift.com](https://www.crystallinerift.com/): a "Counterspell
+Games presents" line (`menu-studio`, `loc-skip` — brand text is never translated), the **Crystalline Rift**
+lockup (`title-lockup`, `Assets/CR/UI/Title/Art/title_lockup.png`, rendered from the site's own typography:
+Josefin Sans + Nanum Brush Script with the ember gradient), then the actions as cream pills that turn ember
+when focused or pressed. Every colour is a `--cr-brand-*` token (see [UI theme](33-ui-theme.md)); the layout
+carries no inline styles (`MainMenuTitleStyleTests`). `btnOptions` is kept for its localization key but hidden —
+nothing wires it yet.
+
+Under every PreGame screen sits the **painted backdrop**: `TitleBackdropController`
+(`Assets/CR/UI/Title/TitleBackdropController.cs`), created by `MainMenuController.Awake` as a child UIDocument on
+the same PanelSettings with sorting order **-10** (MainMenu 0, LinkAccount 10, CharacterSelect 20). It registers
+with `IUICoordinator` and follows the `UIContext`: shown in PreGame, hidden the moment the player enters the
+world, shown again on "Quit to Main Menu". It renders `Assets/CR/UI/Resources/TitleBackdrop.uxml` — the site's
+fourteen parallax layers (`Assets/CR/UI/Title/Art/title_*.png`, 2880×1620 from the 5760×3240 KickstarterWeb
+sources) listed back to front in `CR.UI.Logic.TitleBackdropLayers` with the site's depths and idle loops:
+
+| Piece | Where | What |
+|---|---|---|
+| `TitleBackdropLayers` | `Assets/CR/UI/Logic/` | The 14 layers: element/texture name, depth (0 sky … 3.3 soulstone), idle loop + delay |
+| `ParallaxDrift` | `Assets/CR/UI/Logic/` | Pointer → per-layer pixel offset (away from the pointer, × depth, half vertically; 16 px at depth 1), frame-rate-independent lerp |
+| `ParallaxFloat` | `Assets/CR/UI/Logic/` | The site's `drift` (40 s, ±1.2 % x), `bob` (8 s, ±1 % y) and `pulse` (7 s, opacity .94→1, scale 1.08→1.092) loops; art is drawn at scale 1.08 so the drift never shows an edge |
+| `ParallaxIdleSway` | `Assets/CR/UI/Logic/` | Where the "pointer" wanders after 2.5 s without mouse or stick input (a Deck has no cursor) |
+| `TitleBackdropController` | `Assets/CR/UI/Title/` | Reads `Gamepad.current` sticks, then `Mouse.current`, then the sway; writes `translate`/`scale`/`opacity` per layer each frame |
+
+Presentation only: nothing in the backdrop or the menu styling reads or writes game state. The world still
+loads behind it as before (`AreaLoader` "menu backdrop" path) so streaming is warm when the player enters.
+Tests: `ParallaxDriftTests`, `ParallaxFloatTests`, `TitleBackdropLayersTests` (pure), `TitleBackdropLayoutTests`
+and `MainMenuTitleStyleTests` (real laid-out panel: every layer resolves its texture, fills the panel, stack order,
+nothing picks the pointer; lockup above centred pills).
+
 | Button | Behavior |
 |---|---|
 | **Play Offline** | `AccountBootstrapper.PlayOfflineAsync()` (sets `IsPlayingOnline=false`, resolves local account) → navigate to character select. No network. |

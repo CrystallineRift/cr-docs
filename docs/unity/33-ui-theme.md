@@ -45,6 +45,7 @@ touching a screen.
 | **accent** | Sky blue | Paper-screen highlights, buttons | `--cr-accent`, `-strong`, `-bright`, `-soft`, `-softer`, `-tint`, `-deep`; `--cr-focus` (navy fill on a focused/selected control); `--cr-text-on-accent` |
 | **glass** | Dark translucent overlays | Market, Shop, battle Bag, target picker, evolution | `--cr-glass-scrim`, `-bg`, `-surface`, `-surface-raised`, `-surface-hover`, `-surface-active`, `-selected`, `-border`, `-border-mid`, `-border-soft`, `-focus`, `-accent`, `-text`, `-text-soft`, `-text-muted`, `-text-dim`; `--cr-currency` |
 | **hud** | Warm dark in-world notices | Toasts, quest tracker | `--cr-hud-surface`, `-text`, `-text-muted`, `-accent`; `--cr-reward`, `--cr-dialogue-accent` |
+| **brand** | The palette of crystallinerift.com | Title screen (main menu + backdrop) | `--cr-brand-night`, `-cream`, `-ember`, `-ember-deep`, `-pill`, `-pill-border`, `-shadow` — see [Account mode & startup → Title screen look](19-account-mode-startup.md#title-screen-look) |
 | **status** | Semantic | Any family | `--cr-danger`, `--cr-warning`, `--cr-success`, `--cr-success-bright` |
 | **lore** | Pastel-on-dark / deep-on-light keyword colours in story text | Dialogue, barks, banner, tracker, journal (via `LorePalette`) | `--cr-lore-{relic,creature,person,place,order,event}-on-dark` / `-on-light`, `--cr-lore-emphasis-on-dark` / `-on-light` |
 
