@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-10-19 — World P2: The Road (Act 3: the Warden, the Marshal, the Veiled General)
+
+cr-api-unity `feature/world-p2` (PR #109, not deployed), cr-docs `docs/world-p2`. Needs the P1a/P1b server vocabulary (`story.beat`, `npc.trainerLost`, `battle.start`) live before any Studio push. No server change.
+
+- **Spokes.** North (19 Ravine + 7 North Mesa), south (11 Redwood, 10a Erranume camp, 13 Desert, 14 Coastal Scrubland) and south-west (12 Jungle + 10b Inselberg) open after `road-open`, in any order, with fixed bands (L13-16, L15-18, L17-20). Towns `ravine-hold`, `redwood-village`, `sedran-hamlet`, camp `erranume-camp`, Covenant mesa camp; interiors `ravine-inn`, `redwood-inn`; three new wagon stops (six in all) with rides from Bridgeford. → [Open World](?page=unity/37-open-world#the-road-act-3-p2-2026-10-19)
+- **Story.** 13 quests (four per spoke: sites and escorts, the fight, then attune by READING the pillar, which carries the general beat; plus `quest-izzys-trail-east`, which grants `road-done` and opens `pass-18-east`), 27 dialogue and readable documents, 22 barks, 20 NPCs, 9 trainers (Warden, Marshal, Veiled General and six guards, riders and poachers), 2 shops, 7 wild spawners retuned. Registry rev 4.
+- **Crystal set piece.** Location, arena, general NPC row and an attune event whose pillar swap is a stage on dialogue node `attune`; blue cluster landmarks with `startDisabled`.
+- **Roads.** `road-act3-north`, `-south`, `-southwest` in `roads.json` (37 roads); bridges derive from road x river crossings at `section=paths`. No sampled point in the pinned Act 1 cells.
+- **Engine.** `LandmarkPlacement.startDisabled`, kit roles `tent` and `awning`, `TownPlot.tint` (`PlotTint`), Act 3 smoke plan (25 steps, plan only).
+- **Healer fix.** The server compares `trainer.LastAreaKey`, the LEAF mask key, to `npc.RegionKey`, so Act 2 healers needed correcting (Bridgeford innkeeper `18` to `18a`; Mirandale healer and Serpent barkeep `6a`) and all Act 3 healers use leaf keys (`19b`, `11a`, `10a`, `13c`, `7`). The Act 2 healer dialogues now offer `team.heal`. Re-push those NPC rows.
+- **Ledger.** 105 AI rows added. → [AI Content Ledger](?page=content/01-ai-content-ledger)
+- **Owner steps (Studio pushes).** `cr_content_push --args all`; `cr_world_locations_push` (seven new `story-*` VisitLocation targets); `cr_spawners_push` (`shop-ravine-hold`, `shop-redwood-village`, retuned `*-wild-act3`); push NPC rows with `regionKey` = leaf area key and `lossAllowed`. Before the build: `cr_interior_build ravine-inn` and `redwood-inn`, town builds, `cr_dress_cell_npcs`, rebake the floor.
+- **Open.** Playtest pending; `PlotTint` and the tent/house fit unchecked visually; the south road crosses 52 m of mountain between 11a and 10a; `OpeningChain` visit-target test fails until the locations scan/push; the jungle general fights are far from `inselberg-arena` (poachers use `jungle-gate-arena`).
+
 ## 2026-10-19 — World P1b: Mirandale, Bridgeford and the Act 2 main story
 
 cr-api-unity `feature/world-p1b` ([PR #108](https://github.com/efranford/cr-api-unity/pull/108), not deployed). Needs the P1a server vocabulary (`story.beat`, `npc.trainerLost`, `battle.start`) live before any Studio push.
