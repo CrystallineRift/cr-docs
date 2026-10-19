@@ -649,7 +649,18 @@ After any rebuild of towns, interiors, the wagon build or the story build, count
 
 ### Integration results
 
-The integration report (`reports/p5-integration-report.md`) did not exist when this page was written. Until it lands: the region agents ran `cr_town_check` ok for all six towns, `cr_world_validate` 46 cells with 0 errors and 0 warnings, and dry `cr_wagon_build` (16 stops, 11 rides, region check clean). The real town, interior, wagon and story builds, the arena and deserter placements, and renders of the stop props, the cold lodge merchant and the region 3 camp are still to be run and eyeballed.
+- **Builds.** Town builds x6 (16/14/13/14/12/11 rows), interior builds x6, `cr_wagon_build` (16 stops, 11 rides), then the corridor build with story: 226 changes, 0 errors, 0 warnings (7 batches); a dry run reports 0 changes; `cr_world_validate`: 46 cells, 0 errors, 0 warnings. The first build failed with 9 errors (the pilgrim set sits in pinned Act 1 cell c1_r4, "Continent does not build"); see the pinned-cell rule below. `cr_world_locations_scan` added 7 locations and `areaKey`s were fixed to the parent region numbers (scrub-village 25, village-2 4, the-teeth 9, cold-lodge 29, coastal-city and harbour 15, fathamore-landing 30); a rescan adds 0. Full EditMode run: 1296 of 1296 pass.
+- **Body count.** `StylizedBody_FullBody` per World scene vs the pre-P5 base: 56 before, 68 after, none lower (c1_r4 1 to 4, c2_r2 0 to 1, c4_r0 0 to 3, c6_r2 5 to 6, c7_r0 0 to 4).
+- **Registry.** Rev 7 resolves with 0 missing keys; the NW bark keys were folded into the `ui.story.bark.side.<stem>.N` scheme and the first-draft duplicates deleted.
+
+### Review fixes
+
+- **Pinned Act 1 cells.** Story rows may stand in pinned cells, and landmarks too when the landmark entry opts in with `pinnedCellOk` (default false; opted: region 3 `erramoor_bridge`, `dock`, `waystone`, `pilgrim_tent`, `pilgrim_cart`, `rowboat`, `bank_crag`, region 4 `farmstead`, `hay_ricks`, `elder_tree`). `CorridorBuilder` runs a trailing Story + Landmarks-only batch for those cells (`PinnedStoryBatchPlan`, `CorridorPinnedStoryExtensions`): no terrain, no scatter, no content hashes; un-opted overlay landmarks in pinned cells are swept. The Act 1 TerrainData SHA-256 is unchanged for c0_r3, c0_r4, c1_r3 and c1_r4. Final build 23 changes, 0 errors, dry 0; `CorridorPinnedStoryTests` (8) cover the plan decision, the scene-bound dry-run is checked by hand.
+- **First Fathamore crossing.** The boat ride is offered while `quest-the-admirals-port` is Active, and the ferryman and the Admiral's wife now also need objective 0 (the harbourmaster talk) done; otherwise they answer "See the harbourmaster first; he holds the letters." (nodes `fh` and `wh`). The quest sits on `line-side-erramoor` step 1 (the pilgrims line).
+- **Boat stops.** A boat stop always lists its authored rides (destination beat still applies), same vehicle only (`WagonRideGate`, `WagonRideGateTests`). The gate reader reads the `ActiveQuests` snapshot. The interact prompt is vehicle-aware: "Take the boat" (`ui.world.wagon.prompt.boat`, `WorldText.PromptFor`; the stop carries `vehicle`).
+- **village-2 ground.** The town sits on sloped ground (accepted greybox, noted in `village-2.json` `_doc`). Follow-up: stamp the pad after an Act 1 re-pin.
+- **Rebuilds drop NPC bodies.** A cell rebuild can drop NPC models. After any town, interior or corridor rebuild run `cr_dress_cell_npcs` and compare the `StylizedBody_FullBody` count per scene against the table above (none may drop), then a dry build (0 changes).
+- **Open.** Region 3 camp on the west bank, the stop props, plot positions and the cold lodge interior merchant are not render-verified; `StoryShotScenesTests.arrival` fails before and after P5 (needs `cr_story_author_shots`).
 
 ## World map tab
 
