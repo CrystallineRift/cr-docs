@@ -58,3 +58,20 @@ Saving always goes through the server's own validator (`DialogueValidator`): a s
 with warnings (an unreachable node, a node with no way in) that are shown as toasts after the
 "Saved" confirmation, or fail with field-level errors that land on the exact node, option, or
 condition they're about.
+
+## Canvas editor
+
+Opening a dialogue now lands on the **Canvas** tab, a node-and-arrow view of the same document (cards for line, choice, branch,
+action and end; arrows for next, option, case and else; an entry marker). The row lists described above are the **Form** tab,
+and **Advanced** holds the raw JSON. All three edit one document, so what you change on one is there on the others. The canvas
+page, its rule builder, checks and Play preview are described in [Dialogue Canvas](06-dialogue-canvas.md); the Unity node
+editor is in [Dialogue Authoring](../unity/32-dialogue-authoring.md). The canvas stores node positions in the document's
+`layout`, which the server treats as presentation (it never bumps the row version).
+
+## Saving: conflicts
+
+Save sends the `rowVersion` you loaded. If the dialogue changed meanwhile (for instance a push from the Unity Studio) the
+server answers 409 and a dialog offers **Compare**, **Reload** (take theirs), **Overwrite theirs** (a second, confirmed step
+after Compare) and, if the dialogue was deleted, **Recreate**. After a save the editor stays open on the new version. The
+contract is in [Optimistic Concurrency](../backend/28-optimistic-concurrency.md). The key of a new dialogue is derived from its name
+and hidden unless debug mode is on.

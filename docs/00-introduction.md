@@ -92,7 +92,7 @@ No table in Crystalline Rift ever has rows physically removed. Every `DELETE` op
 
 ### row_version for Concurrency
 
-High-contention tables (notably `spawner`) carry a `row_version INT` column. This prepares the schema for optimistic concurrency patterns where two processes might attempt to update the same spawner simultaneously. Currently `row_version` is incremented on update but not yet used to reject stale writes — that enforcement is planned once multiplayer spawner contention becomes a real concern.
+Some tables carry a `row_version` column. On `dialogue`, `quest_template` and `quest_map_layout` it is enforced: a Studio write that carries a stale `expectedRowVersion` is rejected with a 409 instead of overwriting someone else's edit (see [Optimistic Concurrency](?page=backend/28-optimistic-concurrency)). On `spawner` it is still incremented on update but not used to reject stale writes.
 
 ## Serving the Docs
 

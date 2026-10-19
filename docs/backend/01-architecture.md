@@ -461,7 +461,7 @@ Key tables and relationships — see `../cr-api/Docs/database_diagram_erd.md` fo
 All tables include:
 - `deleted BOOLEAN` — logical delete flag; queries always filter `WHERE deleted = 0/false`
 - `created_at`, `updated_at` — full audit trail on every row
-- `row_version INT` — optimistic concurrency on high-contention tables (spawner)
+- `row_version` — a counter bumped on every update. Enforced as optimistic concurrency (409 on a stale write) on `dialogue`, `quest_template` and `quest_map_layout`, see [Optimistic Concurrency](?page=backend/28-optimistic-concurrency); on `spawner` it is only incremented
 
 The `deleted` flag is the only safe way to remove data. No `DELETE FROM` statements exist in production code paths. This policy ensures:
 

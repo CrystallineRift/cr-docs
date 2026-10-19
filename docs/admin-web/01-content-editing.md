@@ -87,3 +87,11 @@ See `cr-admin-web/src/components/editors/README.md` for the field-by-field API (
 ## System -> Game Config
 
 Admin-only page with the global **Roaming spawners** switch (flips every spawner between Ambush and Roaming). It is not a content resource: it reads and writes `app_config` through `/api/v1/admin/app-config`. Details in [Roaming Encounters](?page=unity/43-roaming-encounters).
+
+## Conflicts (409)
+
+Resources whose server rows carry a `row_version` (dialogues and quests) send `expectedRowVersion` on save and delete.
+`ResourceDetail` turns a `row-version-conflict` 409 into the conflict dialog (`ConflictDialog`: Compare, Reload, Overwrite
+theirs, Recreate) and a `requirement_cycle` 400 into a loop message. A resource opts in by carrying `rowVersion` in its type
+and calling `withExpectedRowVersion` in its upsert (`src/api/rowVersion.ts`; the 409 parser is `src/api/conflicts.ts`).
+See [Optimistic Concurrency](../backend/28-optimistic-concurrency.md).
