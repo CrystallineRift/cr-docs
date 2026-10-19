@@ -2139,10 +2139,36 @@
         "Assets/CR/UI/Travel/**",
         "Assets/CR/Data/Corridor/**",
         "Assets/CR/Game/Story/Content/story-registry.json",
-        "Assets/CR/Game/Story/Content/npc-looks.json"
+        "Assets/CR/Game/Story/Content/npc-looks.json",
+        "Assets/CR/Game/OpenWorld/Data/Towns/*.json",
+        "Assets/CR/Game/OpenWorld/Data/Interiors/*.json",
+        "Assets/CR/Game/Story/Content/**",
+        "Assets/CR/Game/OpenWorld/Logic/Towns/**",
+        "Assets/CR/Game/OpenWorld/Logic/Interiors/**",
+        "Assets/CR/Game/OpenWorld/Editor/Towns/**",
+        "Assets/CR/Game/OpenWorld/Editor/Interiors/**",
+        "Assets/CR/Game/OpenWorld/Editor/Corridor/Story/**",
+        "Assets/CR/Game/OpenWorld/Editor/Corridor/Data/Story/**",
+        "Assets/CR/Core/Data/Editor/Pickups/**"
       ]
     },
-    "description": "Open world: streamed 256 m cells, region mask, Dormant/Active rings, region identity, world_mode switch, Editor tools and cr_world_* CLI, regions.json, tech-demo areas; the Act 1 corridor builder (layout asset, steps, containers, idempotency, overrides, revert, checks, edge guards), terrain proxies, sun override, vendor-LOD guard, resume ground lift, Deck budget"
+    "description": "Open world (P1b: Mirandale/Bridgeford, startDisabled, story pickups, arenaKey, cr_town_remove): streamed 256 m cells, region mask, Dormant/Active rings, region identity, world_mode switch, Editor tools and cr_world_* CLI, regions.json, tech-demo areas; the Act 1 corridor builder (layout asset, steps, containers, idempotency, overrides, revert, checks, edge guards), terrain proxies, sun override, vendor-LOD guard, resume ground lift, Deck budget"
+  },
+  "content/01-ai-content-ledger": {
+    "docPath": "docs/content/01-ai-content-ledger.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [
+        "Assets/CR/Game/Story/Content/Text/ledger-rows.md",
+        "Assets/CR/Game/Story/Content/**",
+        "Assets/CR/Game/OpenWorld/Data/Towns/*.json",
+        "Assets/CR/Game/OpenWorld/Data/Interiors/*.json",
+        "Assets/CR/Game/OpenWorld/Logic/Towns/**",
+        "Assets/CR/Game/OpenWorld/Data/Npcs/npc-looks.json",
+        "Assets/CR/Game/OpenWorld/Data/Corridor/Continent/regions/*.json"
+      ]
+    },
+    "description": "AI content ledger: every AI-generated content item (text, layouts, looks, numbers), where it is used and where to replace it before launch"
   },
   "backend/25-talents": {
     "docPath": "docs/backend/25-talents.md",

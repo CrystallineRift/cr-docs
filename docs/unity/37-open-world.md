@@ -281,7 +281,7 @@ See [Setting Up the World System → Tweak and rebuild the corridor](?page=guide
 - **Kits** (`Data/Towns/kits.json`): 49 roles in three kits (city 29, village 12, seaside 8), sizes measured from the prefabs by `cr_town_kits_measure`. City buildings are big (house 9.6 x 11.6 m); the door side of every City building is its +X.
 - **Commands.** `cr_town_check <key>` validates the layout; `cr_town_build <key>` builds the `[Town <key>]` container in the host cells (idempotent: owned container plus manifest, a repeat build reports `0 changes`; renaming an NPC key gives `created 1, removed 1`); `cr_town_render` writes review renders. Pad flattening and scatter exclusion come from the region overlay `pads` / `scatterExclusionRects`. Order: terrain, paint, scatter and trees, town build, story step, validate.
 - **NPCs.** Placed by registry key (`TownNpcPlacer`). A town NPC must be named `CR_NPC_*` for `cr_dress_cell_npcs` to dress it.
-- **Sandbox.** `town-test` on the Bridgeford pad (cell World_c3_r3) with `interior-test-house`. Its three NPCs have no `NpcDefinition`, so `cr_world_validate` reports 3 errors until P1b removes or defines them.
+- **Sandbox.** `town-test` on the Bridgeford pad (cell World_c3_r3) with `interior-test-house`. P1b removed it (see below).
 
 ## Interiors (P1a)
 
@@ -311,6 +311,41 @@ An interior is a hosted scene far below its host cell, entered through a door.
 - **`cr_content_push`**: pushes quests, dialogue and NPC/trainer rows to the Studio server. The default server is production, so the user runs it. `ContentPushFilter` skips parked paths and any key with a `test` segment (for example `trainer-bridgeford-test`).
 - **`cr_author_trainer`**: creates a trainer definition plus its NPC row in one command.
 - `NpcDefinition.regionKey` round-trips through push, pull and the inspector.
+
+## Mirandale and Bridgeford (P1b, 2026-10-19)
+
+(Unity: cr-api-unity PR #108.) Two real towns replace the `town-test` sandbox, which `cr_town_remove` deleted (data, interior, scene, volume, trainer asset).
+
+- **Mirandale** (`Data/Towns/mirandale.json`, region 6a, `city` kit, pad 310-400 x 705-795). Walled, four gates; 29 plots; square r 11.5 m with the Governor's stage, bell and `mirandale-arena`; Merchant Row, the Lower End with the open pit yard (`serpent-pit-arena`), Watchtower, Helena's school, the Damisel manor and the healer's house. 7 registry NPCs (Philroe, Mackio, Helena, Damisel, Roric, Mauricio, Merchant Row merchant), 9 locations. Interiors (`Data/Interiors/`): `serpent-tavern`, `helena-school`, `damisel-manor`, `watchtower`, `mirandale-healer`.
+- **Bridgeford** (`Data/Towns/bridgeford.json`, region 18a, pad 925-1005 x 826-906). No wall; three bridges, crossroads square (r 11 m, `bridgeford-arena`), signpost, merchant stall, 11 plots, 2 NPCs, 3 locations. One interior: `bridgeford-inn` (Healer innkeeper). Its four `BeatGatedPass` rows live in `regions/18.json` `story`.
+- **Wagon.** `Data/Towns/wagon-stops.json` keeps three stops (farm, Mirandale south gate, Bridgeford inn, moved beside the inn). The ride `act1-to-mirandale` (barn-sleep morning) ends at the Mirandale south gate; no beat is set by a ride.
+
+### Engine additions
+
+- **`TownPlot.startDisabled`.** The plot and its door build inactive (`TownPlanRow.StartDisabled`, `TownDesiredChild.Active`); a rebuild restores the start state and the hash covers it. Swap partners share one footprint: `School_intact` / `School_burnt` sit at the same local spot, and `TownChecks` skips the plot-overlap test when either plot is `startDisabled`. A story event toggles the pair (`school-burns`).
+- **Cross-cell rule.** Town plots must stay inside the town's cell. The Mirandale pad crosses the c1_r2 / c1_r3 line at z 768, and c1_r3 is an Act 1 cell the Continent layout does not build, so the school pair lives at local (-14, 7). A row in the wrong cell is not built and its toggle is not found (`cr_world_build_corridor` warns).
+- **`StoryRows.pickups`.** `StoryPickupRow {id, itemKey, quantity 1, oncePerTrainer true, position | interiorKey + localPosition {x,y,z}}`. World rows are placed by the story step (`StorySceneBuilder.Pickup`, `CR_Pickup` prefab, instance id `story-pickup-<id>`); interior rows are placed by `cr_interior_build` in `[Interior Story Pickups]` inside the hosted scene. Checks: item in registry `items`, quantity 1, `oncePerTrainer` true, interior file exists. The one P1b pickup is `key_music_player` in the Damisel manor.
+- **Pickup scan.** `cr_pickup_placements_scan` / `_push` read `Scenes/Areas`, `Scenes/World/Cells` and `Scenes/World/Interiors` (`PickupSceneFiles`). A legacy area scene that holds a migrated copy of the same instance is skipped (`FirstPerInstance`), the repeat is reported.
+- **`InteriorFile.arenaKey`.** Puts a `BattleArena` at the room centre and gives interior NPC slots that arena. The check needs a registry arena and a room of at least 8 x 8 m. `serpent-tavern` should carry `serpent-pit-arena`.
+- **`cr_town_remove <key>[,dry]`.** Removes the town containers and manifest, each interior (scene, `hostedScenes` row, volume, Build Settings, manifest), the town's own wagon stops and rides, and its `-test` NPC/trainer definitions (compacting null provider slots). Town and interior data files stay.
+- **NPC dressing.** `cr_dress_cell_npcs` also dresses `npc_<key>` / `NpcWorldBehaviour` objects and scans `Interiors` scenes.
+
+### Act 2 story flow
+
+`Game/Story/Content/story-registry.json` (rev 3) lists regions 6 and 18 as built. Quests run in order (line-act-2, then line-act-3 step 1); each grants beats on completion:
+
+| # | Quest | Beat granted |
+|---|---|---|
+| 1 | The Lockdown | (none) |
+| 2 | The First Duel (`shard-for-hellcat`) | (none) |
+| 3 | The Crowned Serpent (gauntlet `gauntlet-serpent-pit`) | `serpent-pit-won` |
+| 4 | Festival of Souls | `festival-done` |
+| 5 | The Night the School Burned | `school-burned`, `mirandale-open` |
+| 6 | The Trail Splits | `road-open` |
+
+**Gates** (`BeatGatedPass`): `pass-6a-south-gate` needs `act1-done`; `pass-6b-bridgeford-road` needs `mirandale-open`; `pass-18-north`, `-south`, `-southwest` need `road-open`; `pass-18-east` needs `road-done` (Act 3 end). Turn-back barks are `ui.story.bark.pass.*`. Dialogues use `story.beat`, `npc.trainerLost` and `battle.start`, so the server dialogue vocabulary must be live before Studio pushes them.
+
+**Owner steps after merge:** `cr_content_push --args all`, `cr_world_locations_push`, `cr_spawners_push`, NPC rows with `regionKey` / `lossAllowed`, then `cr_pickup_placements_scan` / `_push`. The server still needs a `key_music_player` item and pickup definition.
 
 ## World map tab
 
