@@ -45,7 +45,7 @@ The menu is laid out like the hero of [crystallinerift.com](https://www.crystall
 Games presents" line (`menu-studio`, `loc-skip` — brand text is never translated), the **Crystalline Rift**
 lockup (`title-lockup`, `Assets/CR/UI/Title/Art/title_lockup.png`, rendered from the site's own typography:
 Josefin Sans + Nanum Brush Script with the ember gradient), then the actions as cream pills that turn ember
-when focused or pressed; the bottom-left corner holds Link Email (or the linked address + account id, see
+when focused or pressed; the bottom-left corner holds Link Email (or the account id once linked — never the address, see
 [Link Email](#link-email)) and the bottom-right the build stamp. Every colour is a `--cr-brand-*` token (see [UI theme](33-ui-theme.md)); the layout
 carries no inline styles (`MainMenuTitleStyleTests`). `btnOptions` is kept for its localization key but hidden —
 nothing wires it yet.
@@ -126,9 +126,10 @@ cannot sign the player's own device out.
 A **Link Email** button in the main menu's bottom-left corner (`menu-account`), shown under the same
 connectivity rule as Play Online (server unreachable: it explains and does nothing), performs the entry
 login and only then opens the `LinkAccount` screen. Once the server has said the account is linked, the
-corner shows the linked address and the account id instead of the button: `LinkAccountController` caches
-the `/me` identity in the `linked_email` game-data key (`GameConfigurationKeys.LinkedEmail`, written only
-on a settled "linked to X" or "not linked" answer — `LinkedEmailMemo`), and `MainMenuController.Show`
+corner shows a "Linked account" caption and the **account id** instead of the button — never the address:
+the title screen is what streamers broadcast, and a visible email invites spam. `LinkAccountController`
+caches only the fact in the `account_linked` game-data key (`GameConfigurationKeys.AccountLinked`, "1"/"0",
+written only on a settled "linked" or "not linked" answer — `LinkedAccountMemo`), and `MainMenuController.Show`
 re-reads it with the server-named `account_id` through the pure `MainMenuAccountLine` (`CR.UI.Logic`).
 A cache of the server's answer, never the authority: the Link Email screen rewrites it on every `/me`. The screens (`LinkAccount`, `SignedOutDialog`) live in the boot scene
 `Assets/CR/Scenes/Core.unity`. The state logic is
