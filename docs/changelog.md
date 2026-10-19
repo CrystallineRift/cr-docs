@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-10-19 — World P1b: Mirandale, Bridgeford and the Act 2 main story
+
+cr-api-unity `feature/world-p1b` ([PR #108](https://github.com/efranford/cr-api-unity/pull/108), not deployed). Needs the P1a server vocabulary (`story.beat`, `npc.trainerLost`, `battle.start`) live before any Studio push.
+
+- **Towns.** `Data/Towns/mirandale.json` (region 6a, 29 plots, 5 interiors) and `bridgeford.json` (18a, 11 plots, `bridgeford-inn`); `town-test` removed. → [Open World](?page=unity/37-open-world#mirandale-and-bridgeford-p1b-2026-10-19)
+- **Engine.** `TownPlot.startDisabled` swap partners, `StoryRows.pickups` (world and interior), `InteriorFile.arenaKey`, `cr_town_remove`, pickup scan over cell and interior scenes, wider NPC dressing. Town plots must stay inside the town's cell (z 768 line).
+- **Story.** Six quests (Lockdown to The Trail Splits), 20 dialogues, 5 readables, barks, 6 trainers, 3 shops; beats `serpent-pit-won`, `festival-done`, `school-burned`, `mirandale-open`, `road-open`; passes gated by `act1-done`, `mirandale-open`, `road-open`, `road-done`.
+- **Ledger.** 77 AI rows added. → [AI Content Ledger](?page=content/01-ai-content-ledger)
+- **Owner steps (Studio pushes).** `cr_content_push --args all`; `cr_world_locations_push` (five new VisitLocation targets); `cr_spawners_push` (three `shop-*` spawners); push NPC rows with `regionKey` and `lossAllowed`; `cr_pickup_placements_scan` then `_push`. Server: add the `key_music_player` item and pickup definition.
+- **Open.** School swap toggles warn (cross-cell); Playtest pending; two unrelated lane test failures (Ahksun shard prefab, story shot arrival).
+
 ## 2026-10-18 — World P1a: town builder, interiors, wagon travel, story rows, healer and gauntlet
 
 cr-api `feature/world-p1a`, cr-admin-web `feature/world-p1a`, cr-api-unity `feature/world-p1a`, cr-docs `docs/world-p1a` (none deployed). Migration M16101 runs on deploy (M17006 from story-beats is already pending); rebuild the compat packages, rebake the offline floor (it must be at the package head, see the v0.2.1 entry) and re-export the NPC registry seed before the Unity build. The server dialogue vocabulary change (`feature/world-p1a-vocab`) must be live before Studio pushes any document using the new verbs.
