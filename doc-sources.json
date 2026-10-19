@@ -2155,10 +2155,16 @@
         "Assets/CR/Game/OpenWorld/Data/Interiors/ravine-inn.json",
         "Assets/CR/Game/OpenWorld/Data/Interiors/redwood-inn.json",
         "Assets/CR/Game/Story/Smoke/Act3*.cs",
-        "Assets/CR/Content/Defs/Spawners/**"
+        "Assets/CR/Content/Defs/Spawners/**",
+        "Assets/CR/Game/OpenWorld/Data/Towns/wagon-stops.json",
+        "Assets/CR/Game/Story/Smoke/Act4*.cs",
+        "Assets/CR/Game/Story/Smoke/StorySmokeRunner*.cs",
+        "Assets/CR/Game/Story/Smoke/ActSmoke*.cs",
+        "Assets/CR/Game/OpenWorld/Data/Corridor/Continent/regions/*.json",
+        "Assets/CR/Game/OpenWorld/Data/Npcs/npc-looks.json"
       ]
     },
-    "description": "Open world (P2: the three Act 3 spokes, crystal set piece, roads, tent/awning kit roles, plot tint, healer leaf region key; P1b: Mirandale/Bridgeford, startDisabled, story pickups, arenaKey, cr_town_remove): streamed 256 m cells, region mask, Dormant/Active rings, region identity, world_mode switch, Editor tools and cr_world_* CLI, regions.json, tech-demo areas; the Act 1 corridor builder (layout asset, steps, containers, idempotency, overrides, revert, checks, edge guards), terrain proxies, sun override, vendor-LOD guard, resume ground lift, Deck budget"
+    "description": "Open world (P3: the Coliseum and the Capital, Act 4 quest line, story rows inside interiors, gatehouse kit role, smoke runner sections; P2: the three Act 3 spokes, crystal set piece, roads, tent/awning kit roles, plot tint, healer leaf region key; P1b: Mirandale/Bridgeford, startDisabled, story pickups, arenaKey, cr_town_remove): streamed 256 m cells, region mask, Dormant/Active rings, region identity, world_mode switch, Editor tools and cr_world_* CLI, regions.json, tech-demo areas; the Act 1 corridor builder (layout asset, steps, containers, idempotency, overrides, revert, checks, edge guards), terrain proxies, sun override, vendor-LOD guard, resume ground lift, Deck budget"
   },
   "content/01-ai-content-ledger": {
     "docPath": "docs/content/01-ai-content-ledger.md",

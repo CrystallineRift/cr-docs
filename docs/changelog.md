@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-10-19 — World P3: The Court (Act 4: the Coliseum, the Capital and the Regent)
+
+cr-api-unity `feature/world-p3` (PR #110, not deployed), cr-docs `docs/world-p3`. Needs the P1a/P1b server vocabulary (`story.beat`, `npc.trainerLost`, `battle.start`) live before any Studio push. No server change.
+
+- **Coliseum.** Town `coliseum-town` on the 20b pad, the arena ring (`arena-ring`, 20a) with the bracket gauntlet (`gauntlet-coliseum-bracket`: host `npc-coliseum-master`, healer `npc-coliseum-medic`, three duelists L24-26), then Izzy's final as a separate `lossAllowed` fight (`npc-izzandra-final`), and the crypt interior `arena-crypt` with the Champion (L29) and the fourth crystal as interior props. `pass-20-east` (needs `coliseum-won`) keeps the Capital unreachable until the crystal is freed.
+- **Capital.** Town `capital` (walls, inn, merchant, `court_hall` plot), interiors `capital-inn`, `court-hall` and `marble-tower` (via the one-plot `marble-tower` town file), Roland at the gate, the Regent audience as `npc-regent`'s dialogue, the Edict of Daemamion as a readable, Gaweyn's fight with two court guards first, and `pass-21-east` (needs `court-done`) with the `flight-east` lineCue.
+- **Story.** Quest line `line-act-4`, five steps (`quest-the-tournament`, `quest-under-the-arena`, `quest-attune-arena` grants `coliseum-won`, `quest-the-marble-tower`, `quest-the-verdict` grants `court-done`), 19 dialogue and readable documents, 13 barks, 17 NPCs, 8 trainers, 2 shops. Registry rev 5.
+- **Roads.** `road-act4-east-spur` and `road-act4-east` (39 roads); existing roads already reach the pad from `pass-18-east`.
+- **Engine.** Story event, readable and location rows can sit inside an interior (`interiorKey` + `localPosition`, `[Interior Story]` container, hashed); `InteriorProp.id` / `startDisabled`; city kit role `gatehouse`; Act 4 smoke plan (31 steps) and the runner sections `cr_story_smoke_start --args act2|act3|act4` plus `plan:act4` (plan listing without Play).
+- **Healer keys.** Healers use leaf keys again (`20b`, `20a`, `21a`). The Act 2 healers needed the same leaf-key fix in P2 (Bridgeford `18a`, Mirandale and the Serpent barkeep `6a`), otherwise `TeamHealService` refuses the heal.
+- **Verdict dialogue.** The `the-verdict` event has its own dialogue `dialogue-the-verdict`; the clerk's `dialogue-court` is talk only.
+- **Interiors.** `coliseum-inn` moved and the `marble-tower` room shrank to 12 x 12 so door and room share a region; the dais is a sunk statue-base plinth; the first interior build shows `[Interior Story]`, the second 0 changes.
+- **Ledger.** 65 AI rows added. → [AI Content Ledger](?page=content/01-ai-content-ledger)
+- **Owner steps (Studio pushes).** `cr_content_push --args all`; `cr_world_locations_push` (new `story-*` VisitLocation targets); `cr_spawners_push` (`shop-coliseum`, `shop-capital`); push NPC rows with `regionKey` = leaf area key and `lossAllowed`. Run `cr_interior_build` for the five new interiors and rebuild the touched road cells.
+- **Open.** Playtest pending; interior story rows have not run through a real `cr_interior_build` yet; the `gatehouse` door side and the dais stand-ins are unchecked visually; the `marble_tower` mass was removed in favour of the scaled tower plot; the Regent and Gaweyn dialogue verbs need the server vocabulary before a content push.
+
 ## 2026-10-19 — World P2: The Road (Act 3: the Warden, the Marshal, the Veiled General)
 
 cr-api-unity `feature/world-p2` (PR #109, not deployed), cr-docs `docs/world-p2`. Needs the P1a/P1b server vocabulary (`story.beat`, `npc.trainerLost`, `battle.start`) live before any Studio push. No server change.
