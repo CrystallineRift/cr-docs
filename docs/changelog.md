@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-10-19 — World P4: The Volcano (Act 5: the Blight, Crow's Gate, the tower and the finale)
+
+cr-api-unity `feature/world-p4` (PR #111, not deployed), cr-docs `docs/world-p4`. Needs the P1a/P1b server vocabulary (`story.beat`, `npc.trainerLost`, `battle.start`) live before any Studio push. No server change.
+
+- **Blight and fleet.** Region 27: husk mound, two marines, the Dead Spire (fifth crystal; attune by reading grants `blight-open`, blue pair `startDisabled`). The Admiral fights at the beached fleet in 23b (her rows sit in `regions/27.json`).
+- **Crow's Gate.** `pass-24-gate` and the back door `pass-33-blight` (both need `blight-open`), the allies' camp (Henrik, the Erranume elder as healer, Nicolai's `shop-crows-camp`) and the last ambush.
+- **Volcanic Town and tower.** Town `volcanic-town` (inn `volcanic-inn`, healer, merchant `shop-volcanic-town`), rides `capital-to-volcanic-town`, `bridgeford-to-volcanic-town`, `volcano-to-mirandale`. Two-stage false king: `npc-false-king` (L34), then `npc-false-king-ascended` (L36, five creatures) appears through the `ascension` event. Menothas speaks in `menothas-voice`; Ahksun's choice lives inside `dialogue-attune-crimson` (flavour, same outcome); attuning the crimson crystal grants `finale-done`.
+- **Story.** Quest line `line-act-5`, eight steps (`quest-into-the-blight` to `quest-epilogue`), 20 dialogue and readable documents, Helena's epilogue case, 12 barks, 14 NPCs, 7 trainers, 2 shops. Registry rev 6.
+- **Credits and epilogue.** `StoryCreditsDirector` plays the pillar relight and credits roll on `finale-done` (once per trainer via `IStoryFlags`, replay under Settings → Credits, data `credits.json` and `credits-pillars.json` with Resources copies), then the `volcano-to-mirandale` ride. Mirandale epilogue: Helena's first case, Izzy and Philroe epilogue bodies enabled by `epilogue-gathering`.
+- **Roads.** `road-32` re-routed through Crow's Gate to the town gate (same id), `road-act5-blight` and `road-act5-spire` (41 roads).
+- **Engine.** `StoryNpcRow.startDisabled` plus initialise-on-enable for `NpcWorldBehaviour` (`WorldReadiness`, `LateInitGate`); Act 5 smoke plan (43 steps) and `cr_story_smoke_start --args act5`.
+- **Healer keys.** Healers keep leaf keys (`23a`, `24`). The Act 2 healers needed the same fix in P2 (Bridgeford `18a`; Mirandale healer and Serpent barkeep `6a`) so `TeamHealService` stops refusing the heal; re-push those NPC rows if not yet pushed.
+- **Ledger.** 73 AI rows added. → [AI Content Ledger](?page=content/01-ai-content-ledger)
+- **Owner steps (Studio pushes).** `cr_content_push --args all`; `cr_world_locations_push` (new `story-*` VisitLocation targets); `cr_spawners_push` (`shop-crows-camp`, `shop-volcanic-town`, `*-wild-act45`); push NPC rows with `regionKey` = leaf area key and `lossAllowed`. Run `cr_interior_build volcanic-inn`, the town and wagon builds, and rebuild cells x5 z2, x4 z3, x7 z2, x7 z3, x6 z2 and c1_r2.
+- **Integration build.** Registry rev 6 complete (0 missing keys); town, interior and wagon builds ok (9 stops, 9 rides); corridor build with story 180 changes, 0 errors, dry run 0; `cr_world_validate` 0 errors, 0 warnings; `story-husk-mound` areaKey fixed to 27 by hand (a re-scan may revert it); `ascension` and `epilogue-gathering` have no shots because they carry no dialogue.
+- **Open.** Playtest pending; credits visuals not eyeballed in Play; tower and crystal clearances unrendered; the far-proxy baker still bakes one state of `startDisabled` pairs; the Menothas voice, Ahksun's choice and the Regent's regency are inventions beyond the novel; the dialogue verbs need the server vocabulary before a content push; two Act 4 sync tests were stale after unrelated Act 4 dialogue edits.
+
 ## 2026-10-19 — World P3: The Court (Act 4: the Coliseum, the Capital and the Regent)
 
 cr-api-unity `feature/world-p3` (PR #110, not deployed), cr-docs `docs/world-p3`. Needs the P1a/P1b server vocabulary (`story.beat`, `npc.trainerLost`, `battle.start`) live before any Studio push. No server change.

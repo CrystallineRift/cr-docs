@@ -499,6 +499,89 @@ Healers use leaf keys again: `npc-coliseum-innkeeper` `20b`, `npc-coliseum-medic
 
 **Owner steps after merge:** `cr_content_push --args all`, `cr_world_locations_push` (new `story-*` VisitLocation targets), `cr_spawners_push` (`shop-coliseum`, `shop-capital`), NPC rows with `regionKey` = leaf area key and `lossAllowed`. The server dialogue vocabulary (`story.beat`, `npc.trainerLost`, `battle.start`) must be live first.
 
+## The Volcano: Act 5 (P4, 2026-10-19)
+
+(Unity: cr-api-unity "World P4: The Volcano — Act 5" #111; spec `CR/docs/specs/2026-10-19-world-p4-the-volcano-act5-design.md`, §2 as amended by §6 B1-B8.) After `court-done` the player crosses the Blight, frees the fifth crystal (`blight-open`), passes Crow's Gate, climbs the tower above the Volcanic Town, beats the false king in two stages, attunes the crimson crystal (`finale-done`), watches the credits and the pillar relight, and wakes in Mirandale for the epilogue. Registry rev 6 (regions 27, 24 and 23 are `built`). Band L30-36. The Act 5 content is AI-drafted (see the [AI content ledger](?page=content/01-ai-content-ledger)).
+
+### The Blight (region 27) and the beached fleet (23b)
+
+No town. The husk mound is the `27:husk_statue` plus husk stones (there is no `husk_cave` landmark): locations `story-husk-mound`, `story-dead-spire`, readable `readable-27-husk-mound`, the two marines `npc-blight-marine-1/2` (L30, arena `blight-arena`). The Dead Spire (`27:spire_main` + `spire_hex`, key `crystal-outwash` kept) is the fifth crystal. Attune is the P2/P3 pattern: event `attune-spire` (trigger on readable `readable-27-spire-pillar`, `waitForQuestActive quest-attune-spire`, `playIfQuestCompleted true`) stages on node `attune` of `dialogue-attune-spire` (disable the red pair, enable the `startDisabled` blue pair `spire_blue_a/_b`); reading the pillar grants `blight-open`. Region 27a is a small block (x 1270-1374, z 686-790); the wild zone is pinned there, 52 m from the spire.
+
+The Admiral (`npc-admiral`, L33, arena `fleet-arena`, `lossAllowed false`, `allowRematch true`) stands at the beached fleet in 23b (1867,916; location `story-beached-fleet`). Her rows live in `regions/27.json` at 23b world positions (the cell step places them; the validator does not check story rows against regions).
+
+### Crow's Gate (region 24)
+
+`pass-24-gate` (BeatGatedPass, requires `blight-open`, bark `ui.story.bark.pass.crows-gate`) sits at (1703,648), 8 m before road-32 crosses the gate (1700,641). The back door `pass-33-blight` (bark `ui.story.bark.pass.crows-back`) sits on road-33 at (1740,553.5) and needs the same beat, so the Capital-side detour cannot skip the Blight. West of the gate is the allies' camp (location `story-crows-camp`): `npc-henrik-crows` (QuestGiver, branches on the general beats), `npc-erranume-elder-crows` (Healer; her "sky" case needs both ambushers beaten via `quest.objectiveCount`), `npc-nicolai-crows` (merchant, `shop-crows-camp`). The last ambush at the wrecked cart is `npc-crow-ambusher-1/2` (L31, arena `crows-arena`). Readable `readable-24-crows-gate-notice`.
+
+### Volcanic Town and the tower (region 23)
+
+| Place | Where | What |
+|---|---|---|
+| `volcanic-town` | pad 1798-1858 x 578-682 (about 80 percent 23a, 19 percent 23b east of x 1850 and z > 678) | Village kit with a city wall ring and one west gate at (1806,631), where road-32 ends (the `town_gate` landmark was removed). Inn plot (door `volcanic-inn`), merchant stall (`npc-volcanic-merchant`, `shop-volcanic-town`), four dark-tinted houses, well, lamps. `cr_town_check` ok. Inn and stall sit in the 23a part. |
+| `volcanic-inn` | interior, copy of `capital-inn` with warmer ambient, door (1820,600) | Healer `npc-volcanic-innkeeper` (regionKey `23a`, `team.heal`). |
+| tower foot | (1858,790), west face of the tower | `story-tower-gate`, arena `tower-foot-arena`, `npc-false-king` (L34), event `menothas-voice`. Moved west from the spec's 1880 because the tower mesh collider is solid. |
+| crimson crystal | (1912,790), footprint about +-10 m | Readable `readable-23-crimson-crystal` and event `attune-crimson` on its south face (1912,775), arena `crimson-arena`, `npc-false-king-ascended` (L36) on the north side, blue twin `crimson_blue` (`startDisabled`). |
+
+Wagon stop `volcanic-town`; rides `capital-to-volcanic-town` and `bridgeford-to-volcanic-town` (`allowUndiscovered false`) and `volcano-to-mirandale` (`allowUndiscovered true`, to `mirandale-south`; the credits start it).
+
+**Two-stage false king (engine E3).** `StoryNpcRow.startDisabled` builds the NPC inactive (it is in the row hash; `StoryRowPlacer.ApplyStartDisabled`, also on the interior path). `npc-false-king-ascended` is `startDisabled true` and the event `ascension` (`waitForQuestActive quest-the-ascension`, `requiredQuestObjective` index 0 pending, so stage 2 appears only after stage 1 is beaten) enables `CR_NPC_npc-false-king-ascended` through `enableOnPlay`. `NpcWorldBehaviour.OnEnable` runs `LateInitAsync`: it initialises itself once with the pass's context when the world pass for its visit is done and it was not already initialised (`WorldReadiness`, `LateInitGate`, `WorldReadinessExtensions.ReadinessOf`; `AreaWorldInitializer.Context/Generation/Readiness`, `GameInitializer.Readiness`). Limit: an object enabled in the middle of a running pass is not reached until the next pass. `OneShotWorldEvent` restore keeps working (another trainer's restore builds the NPC inactive again). `ascension` and `epilogue-gathering` have no shots (shots are cued by dialogue lines, and these events have no dialogue).
+
+**Menothas and Ahksun's choice.** `menothas-voice` (trigger 12x6x12 at (1859,788), `waitForQuestActive quest-the-tower-by-the-volcano`, requiredQuestObjective = the stage-1 DefeatTrainer pending, dialogue `dialogue-menothas`, five lines, speaker "Menothas") plays before the fight; the false king stands 14 m north. Ahksun's choice is inside `dialogue-attune-crimson` (two options, same continuation to node `attune`, recorded nowhere, flavour only). There is no `ahksun-choice` event (two events on one pending readable would race). Attune event `attune-crimson` swaps `23:crimson_crystal` for `23:crimson_blue`; reading the crystal grants `finale-done`. Same-cell rule: `ascension`, the ascended NPC, `attune-crimson`, its readable, `crimson-arena` and `23:crimson_blue` are all at z >= 768 (cell x7 z3); `attune-spire` and the blue spire pair are at z < 768, x >= 1280 (cell x5 z2).
+
+### Credits and relight (engine E1)
+
+`StoryCreditsDirector` (runtime, `IProgressionNotifier.StoryBeatsSet`) watches for `finale-done` for the current trainer only. Live run: present the sequence, set `IStoryFlags` key `credits.seen` (`StoryFlagKeys.CreditsSeen`), then `IWagonTravel.StartRideAsync("volcano-to-mirandale")`. Once per trainer (the flag), also on a presenter or content failure (it still flags and rides). Replay from Settings → Game card → "Credits / Watch" (`credits-row` in `PlayerMenuWindow.uxml`, `IStoryCredits.ReplayAsync()`) presents only: no flag, no ride; the row is hidden when `IStoryCredits` is unbound (legacy world mode). No server call and no write path: it is presentation of a server outcome.
+
+- **Logic** (`Game/Story/Logic`, no Unity): `CreditsSequencePlan` orders pillars (order then file order), `PhaseAt` (Relight, Roll, Done), `LitCountAt`, `RollProgressAt`, `CanSkipAt` (only from the end of the relight), `RollSeconds` = lines x 1.1 s; hold <= 0 falls back to 1.2 s. `CreditsRun` Live/Replay, `CreditsKeys`.
+- **UI** (`UI/Credits`): `CreditsPresenter` (sorting 70) and `CreditsView` (UI Toolkit; `world-map.png` silhouette fit by aspect, pillar dots at percent positions, `credits-pillar--lit` as each lights, map dims, scrolling roll, skip hint). Skip = Esc, Enter, Submit or NavigationCancel, ignored before the relight. `StoryCredits.uss` uses CrTheme tokens only.
+- **Data.** `Game/Story/Content/credits-pillars.json` (`sites[]`: `siteKey`, `mapPx`, `order`, `holdSeconds`; six sites, 1.2 s each, pixels on `world-map.png` 1956 x 1476 with y = 1476 minus world z: cellblock-83, great-dune, inselberg, arena, outwash, crimson) and `credits.json` (`sections[]`: `title`, `names[]`; seven placeholder sections "Crystalline Rift — <role>"). The runtime reads identical copies in `Assets/CR/Resources/Story/` (`ResourcesCreditsContentSource`); `CreditsContentFilesTests` fails if they differ. After editing: `cp Assets/CR/Game/Story/Content/credits*.json Assets/CR/Resources/Story/`.
+- **DI.** `BindOpenWorld` binds the content source, presenter and `StoryCreditsDirector` (`AsSingle().NonLazy()`).
+- Not eyeballed in Play yet. Out of scope: the far-proxy baker still bakes one state of `startDisabled` pairs (red pillars from afar).
+
+### Epilogue (Mirandale, region 6)
+
+`quest-epilogue` (VisitLocation `story-mirandale-square` then TalkToNpc `npc-helena`) is granted on `finale-done`; the credits run first, then the ride. Helena's epilogue is a new first case `ep1`-`ep6` (+ `ep-rec` recordTalk) in `dialogue-helena-school`, on `quest.objectivePending quest-epilogue npc-helena`, before `school-burned`. Izzy and Philroe appear as extra bodies `npc-izzandra-epilogue` and `npc-philroe-epilogue` (rows appended to `regions/6.json`, `startDisabled true`, 6a, at (349,754) and (361,754); the old `izzandra` row stays 9 m west). The event `epilogue-gathering` (`waitForQuestActive quest-epilogue`, objective 0 pending, `playIfQuestCompleted true`, no dialogue, 20x6x20 at (355,754)) enables the two `CR_NPC_*`. Their dialogues `dialogue-izzandra-epilogue` and `dialogue-philroe-epilogue` are four lines each. `finale-done` is the game's "main story complete" state. No New Game+.
+
+### Quest line (`line-act-5`, eight steps)
+
+Step 1 needs `court-done` (type 7); steps 2-8 need the previous step (type 0).
+
+| Step | Quest | Objectives |
+|---|---|---|
+| 1 | `quest-into-the-blight` | Visit `story-husk-mound`; Read `readable-27-husk-mound`; DefeatTrainersFromList `npc-blight-marine-1/2` |
+| 2 | `quest-the-beached-fleet` | Visit `story-beached-fleet`; DefeatTrainer (type 43) `npc-admiral` |
+| 3 | `quest-attune-spire` | Read `readable-27-spire-pillar`; grants `blight-open` |
+| 4 | `quest-crows-road` | Visit `story-crows-camp`; Talk `npc-henrik-crows`; DefeatTrainersFromList ambushers 1/2; Talk `npc-erranume-elder-crows` |
+| 5 | `quest-the-tower-by-the-volcano` | Visit `story-volcanic-town`; Visit `story-tower-gate`; DefeatTrainer `npc-false-king` |
+| 6 | `quest-the-ascension` | DefeatTrainer `npc-false-king-ascended` |
+| 7 | `quest-attune-crimson` | Read `readable-23-crimson-crystal`; grants `finale-done` |
+| 8 | `quest-epilogue` | Visit `story-mirandale-square`; Talk `npc-helena` |
+
+Fights use type 43 (NPC key) like Acts 3 and 4. Fight dialogues challenge only while their quest is Active. Rewards are the writer's (spec silent): XP 2200 / 2800 / 800 / 2400 / 3000 / 3600 / 1200 / 1500, gold 420 / 500 / 250 / 450 / 520 / 600 / 400 / 300; 3 and 5 `capture_crystal_standard` on steps 3 and 7; hyper/max potions and max revives on 2, 5, 6, 7. Teams: marines L30 x2 creatures, Admiral L33 x4, ambushers L31 x2, false king L34 x4, ascended L36 x5 (the only five-creature team, asserted by a test). `quest-epilogue` reuses `story-mirandale-square` (also Act 2's `quest-festival-of-souls`); unique within Act 5, confirm in play.
+
+### Roads and gates
+
+`roads.json` now has 41 roads. `road-32` keeps its id; points up to (1738.5,693.5) are unchanged and the last leg now runs through the gate (1700,641) to the town gate (1806,631), length 655 (was 573). `road-act5-blight` leaves road-32 at (1738.5,805), runs west (z 790-826, clear of the 25a pad z <= 760) and ends (1290,790), 25.3 m from `27:husk_statue` (460 m). `road-act5-spire` is a 42.5 m spur from (1314,808) to (1320,766), 25 m from `27:spire_main`. No bridges. Rebuild cells x5 z2, x4 z3, x7 z2, x7 z3, x6 z2 (roads and rows) and c1_r2 (epilogue rows). Region keys in the road report are a nearest-seed probe, not the real mask; the builder recomputes them.
+
+### Smoke
+
+`Act5Smoke{Names,StepKind,Step,Plan}` (43 steps; kinds are Act 4's minus RunGauntlet plus `PlayEvent`): court-done beat, the eight quests in order, `blight-open`, `pass-24-gate`, `menothas-voice`, `ascension`, `finale-done`, `epilogue-gathering`. `cr_story_smoke_start --args act5` (Play), `plan:act5` / `cr_story_smoke_plan --args act5` (no Play). `ActSmokeSections.Names` = act2..act5. `Act5SmokePlanTests` checks every key against registry rev 6.
+
+### Healer keys and owner steps
+
+Healers use leaf keys: `npc-volcanic-innkeeper` `23a`, `npc-erranume-elder-crows` `24` (see [Healer region key](?page=unity/37-open-world#healer-region-key)). Other keys: marines `27a`; Admiral, false king, ascended `23b`; Henrik, Nicolai, ambushers `24`; Volcanic merchant `23a`; epilogue bodies `6a`.
+
+**Owner steps after merge:** `cr_content_push --args all`, `cr_world_locations_push` (new `story-*` VisitLocation targets), `cr_spawners_push` (`shop-crows-camp`, `shop-volcanic-town`, retuned `*-wild-act45`), NPC rows with `regionKey` = leaf area key and `lossAllowed`. Run `cr_interior_build volcanic-inn`, the town build for `volcanic-town`, the wagon build, and the story build. The server dialogue vocabulary (`story.beat`, `npc.trainerLost`, `battle.start`, `team.heal`, `npc.openShop`, `quest.objectiveCount`) must be live first. The wagon-stops test list (`TownDataFilesTests`) needs the new stop and three rides.
+
+### Integration results
+
+- **Registry rev 6 complete.** A script check of every location, dialogue, NPC, trainer, arena, event, shop, beat and quest key plus every bark text key in the story blocks of regions 27, 24, 23 and 6 found 0 missing; both registry copies are identical and all 12 writer barks are referenced by rows.
+- **Builds (all exit 0).** `cr_town_build volcanic-town` (63 rows, `cr_town_check` ok); `cr_interior_build volcanic-inn` (slot 0, no region finding); `cr_wagon_build` (9 stops, 9 rides, regenerates `Resources/OpenWorld/WagonStops.json`); `cr_world_build_corridor` with story: 180 changes, 0 errors, 0 warnings (163 story rows: 17 event, 43 bark, 21 readable, 10 pass, 34 npc, 15 arena, 16 location), then a dry run of 0 changes; `cr_world_validate`: 46 cells, 0 errors, 0 warnings. `TownDataFilesTests` now expects the stop `volcanic-town` and the three new rides.
+- **Trigger audit.** `attune-spire` and its toggles sit in cell x5 z2; `attune-crimson`, the crystal, `crimson_blue`, the ascended king and `crimson-arena` in cell x7 z3; `menothas-voice` uses objective index 2 of `quest-the-tower-by-the-volcano` (Visit, Visit, Defeat) and its trigger lies inside `story-tower-gate`; `epilogue-gathering` is in cell c1_r2. `ascension` and `epilogue-gathering` carry no dialogue, so they have no shots.
+- **Fix.** `cr_world_locations_scan` gave `story-husk-mound` areaKey 20; it was set to 27 by hand in `WorldLocations.asset`. A later re-scan may revert it.
+- **Credits data.** The six `credits-pillars.json` pixel positions were checked against the overlay world positions (y = 1476 minus z) and are correct; names stay placeholders.
+- **Open.** The credits view, the tower and crimson trigger layout and the Menothas shot framing are not eyeballed. `story-volcanic-town` and `story-tower-gate` can be entered before their quest is active if the player walks in (the town is gated by `blight-open`).
+
 ## World map tab
 
 In open mode `OpenWorldMapLayoutSource` replaces the legacy node layout: every region (sub-regions included; not mountain, ocean or unassigned) is shown
