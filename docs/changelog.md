@@ -7,6 +7,14 @@ cr-api `feature/story-beats`, cr-admin-web `feature/story-beats`, cr-api-unity `
 - **Beats.** Named flags in `trainer_stat` (`story_beat_<key>`), set by the server when a quest with `grants_beats` completes, or by an admin. The client never sets one. `TrainerProgress.StoryBeats` and `ProgressReport.NewStoryBeats` expose them; requirement type 7 gates quests on a beat; `act1-done` is backfilled for trainers who already finished Runaway Cargo. → [Quest System](?page=backend/07-quest-system#story-beats-2026-10-18)
 - **Studio.** Quest editor gets requirement options 6 and 7, a "Grants story beats" chips field and "Sets beats" on the Flow tab; the player dossier lists beats and quests with grant/revoke (not `act1-done`). → [Quest Editing](?page=admin-web/04-quest-editing#story-beats)
 - **Unity.** `IStoryBeatReader`, `BeatGatedBlocker`/`BeatGatedPass`, dialogue `story.beat`, and `IStoryBeatGate` renamed `ISkippableBeatGate`. → [Opening Story](?page=unity/38-story-opening#story-beats-on-the-client-2026-10-18)
+## 2026-10-18 — v0.2.1 hotfix: offline floor rebaked, stale-floor guards, forced update
+
+cr-api `fix/min-client-0.2.1-floor-tool`, cr-api-unity `fix/floor-20006-guard`, cr-docs `docs/floor-schema-guard`. Deploy order: merge and deploy cr-api (migration 20006), pull cr-api main on the build Mac, then merge cr-api-unity and tag `v0.2.1`.
+
+- **What broke.** v0.2.0 shipped the v0.1.9 offline floor (schema 20002) against a package at 20005. A player build never migrates `game-data.bytes`, so every quest and dialogue sync failed at boot with `no such column: quest_line` / `row_version` (40 errors on the start screen). → [Standalone Builds](?page=unity/21-standalone-builds#offline-data-floor)
+- **Floor migrated forward.** The committed floor now carries every migration through 20006, with the production overlay rows (the gaterbear and friends) kept, via the new Migrations.Tool `--base <floor>` option. → [Content Pipeline](?page=unity/17-content-pipeline#how-it-is-built)
+- **Guards.** `BundledFloorSchemaTests` (EditMode) and `ci/check-floor-schema.sh` (before every game build) fail when the committed floor lacks a migration the linked package runs or the version file disagrees with the package head.
+- **Forced update.** Migration 20006 raises `min_client_version` to `0.2.1`; `bundleVersion` is 0.2.1. 0.2.0 clients are blocked from online play until updated.
 
 ## 2026-10-18 — Battle rounds: both sides choose, the server orders by Speed (build v0.2.0)
 
