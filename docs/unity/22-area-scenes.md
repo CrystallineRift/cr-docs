@@ -388,6 +388,13 @@ The top of the screen is shared by the arrival banner, the quest and discovery t
 - **Tracker reveal.** `QuestTrackerReveal`: cards that first appear while the banner shows wait for it to clear plus 0.3 s
   before the tracker fades in. Hide rules (hold, not Overworld, menu open, the player's setting) always win. The tracker
   polls `HudNoticeHold.Active`. Width is x14 of the layout unit (`QuestTrackerLayout`).
+- **One Main Story guide, local beats nearby.** The main-story quest's own tracker card is the single guide and leads the
+  stack (`QuestTrackerSelector`, amber `quest-tracker--main` accent). The pinned "Main Story" header line shows only in the
+  gap, when no main quest is active (`MainStoryHudRule.ShowPinnedLine`). A place-bound step (visit a location, e.g. "Go to
+  Philroe's Wagon") is a `MainStoryBeat` on the hint and surfaces as a lighter secondary prompt (`quest-tracker-nearby`)
+  only within 30 m of the trigger volume, hidden past 38 m (`NearbyBeatProximity`, hysteresis), with a 0.35 s USS fade.
+  `StoryBeatTargetLocator` reads the scene's `LocationTriggerBehaviour` by key; it only measures distance, so it never
+  changes quest state.
 
 ## The battle camera across scenes
 
