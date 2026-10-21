@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-10-20 — Player admin: quest board, operator Complete, sticky achievement revoke
+
+cr-api `feature/player-admin-quests-achievements`, cr-admin-web PR #37. Not deployed.
+
+- **Quests tab and Complete.** `GET /admin/trainers/{id}/quests`, `POST .../quests/{key}/complete` (audit kind 23). Complete grants a never-started quest, runs normal completion (beats, stats, chain) and pays rewards. One-shot is idempotent; a repeatable pays again. A partial payout is not auto-retried: the response and audit list paid/unpaid and the operator tops up with the Grant dialogs.
+- **Achievements tab.** `GET /admin/trainers/{id}/achievements`. Revoke now sticks (M18011 `achievement_unlocked.revoked`); only Grant restores. Revoke takes back unique items from the backpack only (shortfall recorded, never negative).
+- **Unique items.** M6025 `item.is_unique`; writes bind `ItemWrite` (omitted keeps stored). Unique checkbox in the Studio item editor.
+- **Offline fix.** SQLite `TryMarkUnlockedAsync` always returned false, so offline unlocks never paid rewards or points XP. Fixed; offline players now receive them (playtest wanted).
+- **Docs.** Moderation, Achievements, Quest System, Item Effects, Player Progression Debugger, Item Editing.
+
 ## 2026-10-19 — World P5: Side regions, the wagon network and the boat hop (closes the world build-out)
 
 cr-api-unity `feature/world-p5` (PR #112, not deployed), cr-docs `docs/world-p5` (PR #112). Needs the P1a/P1b server vocabulary (`story.beat`, `npc.trainerLost`, `battle.start`) plus `team.heal`, `npc.openShop` and `quest.objectiveCount` live before any Studio push. No server change.

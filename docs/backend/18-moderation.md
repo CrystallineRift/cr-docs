@@ -23,7 +23,8 @@ ever ships inside `game-data.bytes`.
 
 `AdminActionKind`: `ShadowBan`, `LiftShadowBan`, `RemoveListing`, `AdjustCurrency`, `GrantItem`,
 `RemoveItem`, `Note` (unused in v1), `GrantExperience`, `GrantCreature`, … `GrantTrainerXp` (16),
-`SetTalentRank` (17), `RespecTalents` (18), `GrantAchievement` (19), `RevokeAchievement` (20).
+`SetTalentRank` (17), `RespecTalents` (18), `GrantAchievement` (19), `RevokeAchievement` (20), `SetStoryBeat` (21),
+`ClearStoryBeat` (22), `QuestCompleted` (23).
 Members are appended, never renumbered — the integer is persisted in `admin_action.kind`, so
 reordering rewrites history.
 
@@ -192,6 +193,9 @@ sets it (and `AdminActorName`) through its environment or secret store, never in
 | POST | `/trainers/{trainerId}/creatures/from-spawner` | `GrantCreatureFromSpawnerRequest { spawnerContentKey, poolName?, level?, reason }` | `GrantCreatureFromSpawnerResponse` (below) | 400 `InvalidReason`/`InvalidQuantity`, 404, 409 `NoSpawnCandidate`/`StorageFull` |
 | PUT | `/trainers/{trainerId}/talents/{talentId}` | `SetTalentRankRequest { rank, reason }` — see [Talents](25-talents.md#admin) | `TrainerProgress` | 400 `InvalidReason`, 404; audit `SetTalentRank` (17); 409 `{ error: TalentSpendError, progress }` — **not** the flat `{error, reason}` shape every other route here uses |
 | POST | `/trainers/{trainerId}/talents/respec` | `ReasonRequest` | `TrainerProgress` | 400 `InvalidReason`, 404; audit `RespecTalents` (18) |
+| GET | `/trainers/{trainerId}/quests` | | `AdminQuestBoard { instances[], available[] }` (see [below](#quest-and-achievement-admin-2026-10-20)) | 404 |
+| POST | `/trainers/{trainerId}/quests/{contentKey}/complete` | `ReasonRequest` | `QuestAdminCompleteResult { contentKey, instanceId, granted, completed, rewardsPaid, alreadyDone, reason }` | 400 `InvalidReason`, 404 (trainer or quest key); audit `QuestCompleted` (23) |
+| GET | `/trainers/{trainerId}/achievements` | | `AdminAchievementBoard` (see [Achievements](15-achievements.md#admin-achievement-board)) | 404 |
 | GET | `/market/listings?state=&sellerAccountId=&offset=&limit=` | | `MarketListingView[]` — hidden rows **included**, `sellerShadowBanned` set | |
 | DELETE | `/market/listings/{id}` | `ReasonRequest` | `MarketListingView` (post-removal, `state = Cancelled`) | 400, 404, 409 `AlreadySold`/`StorageFull` |
 | GET | `/actions?accountId=&trainerId=&listingId=&offset=&limit=` | | `AdminAction[]`, newest first | |
@@ -380,3 +384,36 @@ The two `GET /trainers/{trainerId}/progression` and `/timeline` routes feed the 
 support and debugging (body `{ reason }`, 204; 400 bad key or revoking `act1-done`; 404 trainer not on the account). Audit
 kinds `SetStoryBeat` (21) and `ClearStoryBeat` (22). `TrainerDossier` now also returns `StoryBeats`, `ActiveQuestKeys` and
 `CompletedQuestKeys`. Details: [Quest System](07-quest-system.md#story-beats-2026-10-18).
+
+## Quest and achievement admin (2026-10-20)
+
+Support can see every quest and achievement a trainer has, and finish a quest for them. All three routes are `RequireAdmin`;
+the trainer comes from the route, never the body. The two reads write no audit row.
+
+- **`GET .../quests`** returns `instances[]` (every instance in any status, including Abandoned and Failed: `instanceId`,
+  `contentKey`, `title`, `questLine`, `lineStep`, `status` as the `QuestStatus` integer, `repeatNumber`, `isRepeatable`,
+  `acceptedAt`, `completedAt`, `rewardsClaimed`, `objectives[] { id, description, current, required, completed }`) and
+  `available[]`: live templates the trainer has **no instance of in any status**, each with `unmetRequirements[]` (the
+  existing `QuestStatusRequirement` shape, `met == false` only).
+- **`POST .../quests/{contentKey}/complete`** is the operator Complete. Rulings:
+  - **It goes through normal completion.** Objectives are raised to their target, then the usual `TryCompleteInstanceAsync`
+    runs and, if it wins, `QuestCompleted` is recorded to the progress sink. So story beats (`grants_beats`), lifetime stats
+    (`quests_completed`) and chain follow-ups happen exactly as if the player had finished it. It is not a flag write.
+  - **It pays the rewards**, whatever the quest's claim mode (`ClaimRewardsAsync`).
+  - **Which instance.** The latest completed instance with unclaimed rewards (claim only); else the oldest in-progress
+    instance; else, for a one-shot quest, its completed instance (`alreadyDone`); else the quest is granted first
+    (`granted: true`: never started, or abandoned/failed and restarted) and then completed.
+  - **One-shot is idempotent.** Pressing Complete twice pays once; five concurrent calls pay once. **A repeatable quest pays
+    again**: if the latest repeat is completed and claimed, Complete starts a new repeat and pays it. The web dialog warns.
+  - **Partial payout is not retried.** If the reward grant fails partway, the completion and beats stay, the response is
+    `completed: true, rewardsPaid: false` with `reason` set, and the audit row records it. The existing claim marks the
+    instance claimed before it grants, so a second Complete answers `alreadyDone` and does not retry the payout. The response and
+    the audit metadata list what was paid and what was not; the operator tops up with the Grant currency / Grant item /
+    Grant XP dialogs.
+  - An unknown or soft-deleted quest key is 404 and writes nothing. No-ops (`alreadyDone`) and failed claims are audited too.
+  - Metadata: `{contentKey, instanceId, granted, completed, rewardsPaid, alreadyDone, reason}`; actor from `AdminActor.From`.
+- **Known gaps.** Two concurrent first Completes on a never-started one-shot quest can each create an instance (accept has no
+  unique guard); rewards, beats and stats still fire once, but a stray in-progress duplicate may remain. A new repeat always gets
+  `RepeatNumber = 1` (pre-existing accept behaviour).
+- **Achievement revoke** now sticks and claws back unique items; see [Achievements](15-achievements.md#revoke-sticks-m18011). The
+  revoke HTTP response does not carry the clawback list; it is in the `admin_action` metadata, and the web UI reads it from there.

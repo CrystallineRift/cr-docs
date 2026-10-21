@@ -557,6 +557,7 @@
         "Creatures/CR.Creatures.Data.Migration/M10021PartialUniqueStatusConditionName.cs",
         "Trainers/CR.Trainers.Data/Implementation/BaseTrainerInventoryRepository.cs",
         "Items/CR.Items.Data.Migration/M6021AddIconAssetKeyToItem.cs",
+        "Items/CR.Items.Data.Migration/M6025AddIsUniqueToItem.cs",
         "Creatures/CR.Creatures.Data.Migration/M12012AddIconAssetKeyToContent.cs",
         "Game/CR.Game.Model/Content/ContentManifestResponse.cs",
         "Creatures/CR.Creatures.Service.REST/Endpoints/AbilityEndpoints.cs",
