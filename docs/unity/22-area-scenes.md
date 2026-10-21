@@ -389,12 +389,16 @@ The top of the screen is shared by the arrival banner, the quest and discovery t
   before the tracker fades in. Hide rules (hold, not Overworld, menu open, the player's setting) always win. The tracker
   polls `HudNoticeHold.Active`. Width is x14 of the layout unit (`QuestTrackerLayout`).
 - **One Main Story guide, local beats nearby.** The main-story quest's own tracker card is the single guide and leads the
-  stack (`QuestTrackerSelector`, amber `quest-tracker--main` accent). The pinned "Main Story" header line shows only in the
-  gap, when no main quest is active (`MainStoryHudRule.ShowPinnedLine`). A place-bound step (visit a location, e.g. "Go to
-  Philroe's Wagon") is a `MainStoryBeat` on the hint and surfaces as a lighter secondary prompt (`quest-tracker-nearby`)
-  only within 30 m of the trigger volume, hidden past 38 m (`NearbyBeatProximity`, hysteresis), with a 0.35 s USS fade.
-  `StoryBeatTargetLocator` reads the scene's `LocationTriggerBehaviour` by key; it only measures distance, so it never
-  changes quest state.
+  stack (amber `quest-tracker--main` accent). "The main quest" is one rule, `MainQuestRule`, shared by the guide and
+  `QuestTrackerSelector`: the live quest in the main-story category or on a `line-act-N` line with the lowest (act, step).
+  The pinned "Main Story" header line shows only in the gap, when no main quest is active (`MainStoryHudRule.ShowPinnedLine`).
+  A place-bound step (visit a location, e.g. "Go to Philroe's Wagon") is a `MainStoryBeat` on the hint. Its text appears
+  only in the lighter secondary prompt (`quest-tracker-nearby`), never on the card: for such a step the card keeps the
+  broader guidance (the objective's own authored text, else the quest summary, else the title). The prompt shows within 30 m
+  of the nearest trigger volume carrying the key and hides past 38 m (`NearbyBeatProximity`, hysteresis). It fades over
+  0.35 s and is `display:none` otherwise, so it takes no space. `StoryBeatTargetLocator` reads the scene's
+  `LocationTriggerBehaviour` volumes by key (throttled to once a second); it only measures distance and never changes
+  quest state.
 
 ## The battle camera across scenes
 
