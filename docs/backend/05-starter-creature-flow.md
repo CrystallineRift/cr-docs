@@ -250,12 +250,16 @@ Known window, accepted: a process that dies during step 6 leaves some items miss
 
 ### The Starter Is Granted at the Wagon
 
-`StarterGrantProjector` (`CR.Game.Domain.Services.Implementation.Trainer`, progress handler order 160, after `StoryBeatProjector` and before the objective projector) gives the starter. It reacts to the `LocationEntered` outcome the authority itself produced from a validated `POST /api/v1/trainers/{id}/world-locations/enter`; the client reports no outcome.
+`StarterGrantProjector` (`CR.Game.Domain.Services.Implementation.Trainer`, progress handler order 160, after `StoryBeatProjector` and before the objective projector) gives the starter. It reacts to the `LocationEntered` outcome the authority itself produced from a validated `POST /api/v1/trainers/{id}/world-locations/enter`; the client reports no outcome. The work is `IStarterGrantService` (`StarterGrantService`), shared with the battle-start safety net below.
 
 - **Trigger:** `LocationEntered` for `story-philroes-wagon` (the same location that grants First Battle), or any key in the comma-separated config `starter_grant_location_keys` when set.
 - **Guard:** only when the team is empty (`GetTeamSizeAsync == 0`). Idempotent by state: a revisit, a trainer who already owns a team creature (every trainer created before this change) and a trainer who captured first all get nothing.
-- **Action:** `IStarterCreatureService.GenerateStarterAsync` (`starter_creature_1_id` at `starter_creature_level`) placed on team slot 1. If placement fails the orphaned creature is soft-deleted through `IGeneratedCreatureRepository.DeleteCreature` and the error is rethrown (the dispatcher logs and skips a failing handler); the next entry of the wagon retries because the team is still empty.
-- **Offline:** the same handler from the same DLLs, wired in the Unity `ProgressBindings` next to `StoryBeatProjector`.
+- **Action:** `IStarterCreatureService.GenerateStarterAsync` (`starter_creature_1_id` at `starter_creature_level`) placed on team slot 1. If placement fails the orphaned creature is soft-deleted through `IGeneratedCreatureRepository.DeleteCreature` and the error is rethrown (the dispatcher logs and skips a failing handler, which is why the safety net exists).
+- **Response:** the new creature id is returned in `progress.grantedCreatureIds` of the enter response (`ProgressReport.GrantedCreatureIds`, empty from an older server). The client invalidates its team caches (`GameChange.LocationEntered` clears `CreatureSlots`, `Creature` and `InventoryList`) and re-reads the team from the server; it never infers the grant.
+- **Safety net:** `BattleEncounterDomainService.StartEncounterAsync` finds an empty team, asks `IStarterGrantService.GrantIfDueAsync` (empty team AND the trainer's own `location_discovered_<key>` stat shows they have entered a starter location), grants idempotently and carries on. A trainer still before the wagon is not given anything.
+- **Refusals:** an empty team that cannot be filled is refused with 409 `battle-no-creatures` (`no_creatures`, "You have no creatures yet."), distinct from the fainted-team 409 `battle-no-usable-creature` ("Heal first.").
+- **Client world:** `TeamFaintedGate` is also closed while the team is empty (`NoCreatures`), so no wild contact or trainer battle is offered before the starter; `TeamSync` and `TeamFaintedGateDriver` re-read on `IProgressionNotifier.CreaturesGranted`.
+- **Offline:** the same handler and service from the same DLLs, wired in the Unity `ProgressBindings` and installer.
 
 The `CreatePlayerAsync` integration fixture gives its trainers a creature through the audited admin spawn-pool grant, because the story's grant also hands out First Battle and moves location counters those fixtures pin.
 
