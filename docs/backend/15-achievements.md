@@ -202,8 +202,49 @@ through the same audited-transaction shape every other admin mutation does — s
 normal unlock) if not already earned, then calls `SafeEvaluateAsync` so a meta achievement this grant now
 satisfies unlocks in the same admin call; an **already-unlocked retry still writes one audit row**
 (`alreadyUnlocked`/`pointsAwarded` in its metadata) rather than silently no-op'ing, so an operator retry
-leaves a trail. A revoke soft-deletes the trainer's unlock row — **no reward or points clawback**. Both
-refuse an unknown content key or trainer, and a blank reason, writing nothing.
+leaves a trail. A revoke soft-deletes the trainer's unlock row and marks it `revoked` (see below), and claws back
+**unique items only** (see below); currency, XP, creature and non-unique item rewards and the points XP are never taken
+back. Both refuse an unknown content key or trainer, and a blank reason, writing nothing.
+
+### Revoke sticks (M18011)
+
+`achievement_unlocked.revoked BOOLEAN NOT NULL DEFAULT false` (migration `M18011AddRevokedToAchievementUnlocked`). A revoke
+sets `deleted = true, revoked = true`. Organic evaluation (`TryMarkUnlockedAsync`, the SQLite revive and the Postgres
+upsert) carries an `AND revoked = false` guard, so a revoked achievement whose criteria are still met **stays revoked** and
+pays nothing; before this, the next evaluation revived the row and paid the rewards a second time. Only an operator
+**Grant** restores it: `TryGrantUnlockedAsync` revives any soft-deleted row, clears `revoked`, and pays once.
+`GetRevokedAchievementIdsAsync` feeds the admin board so Revoked reads differently from Locked.
+
+### Unique-item clawback on revoke
+
+Rewards of type `Item` whose item has `is_unique = true` (see [Item Effects](19-item-effects.md)) are taken back when the
+achievement is revoked, so a revoke-and-regrant cannot hand out a second copy of a one-off item.
+
+- **Backpack only.** Rewards are paid into the backpack, so only the backpack is searched. A unique item the player moved
+  elsewhere (for example a creature's held-item slot) counts as a shortfall and is not removed.
+- **Never negative.** Per item the server removes `min(held, granted)`. An item that is not held is a success with
+  `removed = 0`, not an error.
+- **Recorded.** The `admin_action` metadata is `{achievementContentKey, clawback:[{itemContentKey, granted, removed}]}`
+  (`RevokeClawbackEntry`); the web toast shows "Taken back" and "Shortfall" from it. The reward list is read from the
+  definition's *current* rows, so a reward edited after the player unlocked is judged by what the definition says now.
+- **Same transaction as the audit row** for the removal. The domain revoke itself uses its own connection (as it always
+  did), so a failure after the revoke commits leaves the revoke without an audit row.
+
+### Admin achievement board
+
+`GET /api/v1/admin/trainers/{trainerId}/achievements` (`RequireAdmin`, 404 for an unknown trainer) returns
+`AdminAchievementBoard { trainerId, totalPoints, entries[] }`. Each `AdminAchievementEntry` is a definition, not only the earned
+ones: `contentKey`, `name`, `categoryContentKey`/`categoryName`, `points`, `hidden`, `unlocked`, `unlockedAt`, `revoked`,
+per-criterion `current`/`required`, and `rewards[] { rewardType, referenceKey, quantity, isUnique }`. It is a read and writes
+no audit row. `AdminActionKind` is unchanged for achievements (19 and 20).
+
+### Offline unlock payout fix
+
+`TryMarkUnlockedAsync` on SQLite always returned false: Dapper closes and reopens the connection between statements, so the
+following `SELECT changes()` read 0. On the offline host an organic unlock was therefore never counted as won, and its
+rewards and points XP were never paid. The repository now opens the connection explicitly. **Offline players now receive
+achievement rewards and points XP**; this changes balance for offline play and wants a playtest. Online (Postgres) was not
+affected.
 
 The admin dossier (`GET /api/v1/admin/trainers/{trainerId}` → `TrainerDossier`) carries a nullable
 `Achievements { TotalPoints, List<EarnedAchievementSummary { ContentKey, DisplayName, Points, UnlockedAt }> }`
@@ -221,7 +262,9 @@ world-location picker for `LocationDiscovered`, quest picker for `QuestCompleted
 `RewardGrantService` and is restricted to the four reward types an achievement can actually pay
 (`Experience`/`Currency`/`Item`/`Creature`). The **Player Dossier** page shows a trainer's total points and
 earned list, and has "Grant achievement" / "Revoke" buttons (`ReasonDialog`, both idempotent-safe — a
-repeat grant still succeeds, a revoke never claws back rewards) against the admin grant/revoke routes above.
+repeat grant still succeeds, a revoke claws back unique items only) against the admin grant/revoke routes above. Since
+2026-10-20 the dossier also has an **Achievements** tab that shows the full board (Unlocked / Locked / Revoked chips);
+see [Player Progression Debugger](../admin-web/08-player-progression-debugger.md#quests-and-achievements-tabs).
 
 ## Unity client
 
@@ -266,6 +309,7 @@ repeat grant still succeeds, a revoke never claws back rewards) against the admi
 - `M7300` `achievement_definition`, `M7301` `achievement_reward`, `M7302` `achievement_unlocked`, `M7303`
   seed (v1).
 - `M9993` content-schema bump (no-op; global max version, v1).
+- `M18011` `achievement_unlocked.revoked` (revoke sticks).
 - `M18001` `achievement_category`. `M18002` v2 columns on `achievement_definition`
   (`category_id`, `points`, `sort_order`, `required_criteria_count`; the legacy trigger columns stay,
   inert). `M18003` `achievement_criterion`. `M18004` copies each definition's legacy trigger into one

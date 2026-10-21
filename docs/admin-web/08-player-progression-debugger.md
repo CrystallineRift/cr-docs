@@ -51,3 +51,24 @@ tooltip "Restored automatically; cannot be revoked". Both actions are admin-only
 ### Lost to (P1a)
 
 The Quests section also shows a **Lost to** row built from the trainer's `trainer_lost_<npcKey>` flags (set by the server when the trainer lost to a `lossAllowed` opponent). It shares the one progression query with the other sections. The list is raw NPC keys, and the progression flags are capped at 2000, so on a truncated list a `trainer_lost_` key could be missing.
+
+## Quests and Achievements tabs
+
+Since 2026-10-20 each trainer on the dossier has three tabs: **Overview** (the existing cards above), **Quests** and
+**Achievements**. Unlike the debugger sections these tabs can change state; every action asks for a reason and writes an
+`admin_action` row. Server rules: [Moderation](../backend/18-moderation.md#quest-and-achievement-admin-2026-10-20).
+
+- **Quests.** A table of the trainer's instances with a status chip, objectives (current / required), dates and whether the rewards
+  were claimed, and a **Complete** button. Complete runs the quest through normal completion and pays its rewards, so beats, stats
+  and follow-up quests happen too. The button is hidden only for a one-shot quest that is completed and claimed; a repeatable
+  quest always offers it and the dialog warns that it **pays again**. The dialog also lists unmet requirements. Below the table, a
+  searchable **Never started** list shows quests the trainer has no instance of, with what they still need; Complete works on
+  those too (the quest is granted first).
+- **Partial payout.** If rewards were only partly paid, the result stays on the page as a note listing what was paid and what was
+  not. There is no retry button: a second Complete would answer "already done". Top up the missing rewards with **Grant currency**,
+  **Grant items** or **Grant XP**.
+- **Achievements.** The full board with Unlocked, Locked and Revoked chips (Revoked is distinct from Locked), criteria progress
+  and rewards, with unique-item rewards marked. **Grant** is offered on anything not unlocked (the key is prefilled) and
+  **Revoke** on unlocked entries. Revoke now sticks: the achievement stays revoked even if the player still meets the criteria,
+  until an operator grants it. Revoke also takes back **unique** item rewards from the backpack; the toast lists "Taken back: key x n"
+  and "Shortfall: key k not held" for any that were not there. Currency, XP and other rewards are not taken back.

@@ -56,3 +56,10 @@ dropped or rewritten:
 This is the same escape hatch described generally in
 [Content Editing](01-content-editing.md#the-detail-edit-form) — items are simply the resource
 where a typed field, rather than a whole record, is the thing that can fall back to raw JSON.
+
+## Unique items
+
+The Catalogue group has a **Unique** checkbox (`isUnique`, default off). A unique item is taken back out of the backpack when an
+achievement that rewards it is revoked (see [Achievements](../backend/15-achievements.md#unique-item-clawback-on-revoke)).
+Save always sends an explicit `isUnique: true/false`; the server treats an omitted value as "keep", so a push from a client that
+does not know the field leaves the flag alone. See [Item Effects](../backend/19-item-effects.md).

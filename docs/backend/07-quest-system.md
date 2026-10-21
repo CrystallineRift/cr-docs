@@ -1439,3 +1439,14 @@ beat: beats are granted by quest completion or by an admin. There is no intent r
   because the backfill would restore it. Audit kinds `SetStoryBeat = 21`, `ClearStoryBeat = 22`. `TrainerDossier` gains
   `StoryBeats`, `ActiveQuestKeys`, `CompletedQuestKeys`. See [Moderation](18-moderation.md).
 - **Offline.** The same domain DLL runs on local SQLite, so beats work offline without any sync.
+
+## Operator complete and the admin quest board (2026-10-20)
+
+`IQuestDomainService` gains `GetAdminQuestBoardAsync(trainerId)` and `AdminCompleteAsync(trainerId, contentKey)`, used by
+`ModerationService` for `GET /api/v1/admin/trainers/{id}/quests` and `POST .../quests/{contentKey}/complete`. Complete is
+not a shortcut around the quest machinery: it grants the quest if the trainer never had it (or restarts an abandoned or failed
+one), raises each incomplete objective to its target, completes the instance through the normal compare-and-set, records
+`QuestCompleted` to the progress sink (so `StoryBeatProjector`, `LifetimeStatProjector` and chain follow-ups run) and claims the
+rewards. One-shot quests are idempotent (the second call answers `alreadyDone`); a repeatable quest starts and pays a new repeat.
+A reward failure after the claim marker is set is reported (`rewardsPaid: false`, `reason`) and **not auto-retried**. Full
+rulings, response shape and audit kind: [Moderation](18-moderation.md#quest-and-achievement-admin-2026-10-20).

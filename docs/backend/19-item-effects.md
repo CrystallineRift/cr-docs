@@ -35,7 +35,15 @@ is trusted with the answer.
 | `is_consumable` | INTEGER / BOOLEAN | `NOT NULL`, default false — decides whether one unit is deducted on a successful use |
 | `capture_modifier` | NUMERIC | Summoning Shard odds multiplier |
 | `prevents_evolution` | INTEGER / BOOLEAN | `NOT NULL`, default false |
+| `is_unique` | INTEGER / BOOLEAN | **M6025**, `NOT NULL`, default false. Marks a one-off item: an achievement revoke takes it back out of the backpack (see [Achievements](15-achievements.md#unique-item-clawback-on-revoke)) |
 | `icon_asset_key` | TEXT | **M6021** adds it, **M6022** backfills it. Addressables address of the 2D icon, `icons/items/<content_key>` |
+
+`is_unique` rides on `BaseItem.IsUnique` (the read model). Writes bind `ItemWrite`, a `BaseItem` subclass whose `IsUnique`
+is `bool?`: **omitted/null keeps the stored value**, an explicit true/false sets it. `PUT /items/{id}` and `PUT /items/bulk`
+use it, so a client that does not know the field (an older Unity push) never resets it. Insert uses `COALESCE(@isUnique, false)`;
+update and the bulk upsert use `is_unique = COALESCE(@isUnique, item.is_unique)`, with the column qualified because Postgres
+calls a bare name ambiguous in `ON CONFLICT`. No content-schema bump. Unity's item definition and sync helper do not carry the
+flag yet, so for now it is set in Studio web only.
 
 `asset_key` and `icon_asset_key` are two different address spaces on purpose: the first points at a
 GameObject, the second at a `Sprite`. Passing the prefab key to a sprite loader can only ever return
