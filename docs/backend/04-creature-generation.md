@@ -224,7 +224,6 @@ The template fallback above only covers `creature_spawner_template`. `generated_
 | `Id` | `Guid` | Internal UUID primary key |
 | `ContentKey` | `string` | Designer-facing identifier (e.g. `"cindris"`) — NOT NULL, UNIQUE (enforced by M1015) |
 | `AssetKey` | `string?` | Addressables address or Resources path for the primary art asset (e.g. `"creatures/cindris"`). Replaced `AssetId: Guid?` in migration M1016. |
-| `AbilityProgressionSetId` | `Guid?` | Legacy column added by M1017; superseded by `DefaultAbilityProgressionSetId`. |
 | `DefaultAbilityProgressionSetId` | `Guid?` | FK to `ability_progression_set.id`; the default learn list for this species, added by `M21001`. Wire-only `DefaultAbilityProgressionSetName` is how `PUT /api/v1/creatures/by-content-key/{key}` sets it (409 `unresolved_reference` for an unknown name). Null means no default set. |
 | `GrowthProfileId` | `Guid?` | FK to `growth_profile`; the default growth profile for this species. Added by M1018. Null means no growth profile is pinned to the template (spawner template overrides still apply). |
 | `BaseHitPoints` | `int` | Base stat used by the generation formula |
@@ -236,7 +235,7 @@ The template fallback above only covers `creature_spawner_template`. `generated_
 
 > **Migration notes:**
 > - `M1016ReplaceAssetIdWithAssetKeyOnCreature` dropped the `asset_id UUID` column and added `asset_key TEXT`.
-> - `M1017AddAbilityProgressionSetIdToBaseCreature` added `ability_progression_set_id UUID NULL`.
+> - `M1017AddAbilityProgressionSetIdToBaseCreature` added `ability_progression_set_id UUID NULL` (later dropped by `M1023RemoveProgressionFieldsFromCreature`; `BaseCreature` no longer has it).
 > - `M1018AddGrowthProfileIdToBaseCreature` added `growth_profile_id UUID NULL`, linking a species template to its default growth curve.
 > - `M1019NormalizeCreatureIdsToLowercase` normalises existing `id` values in the `creature` table to lowercase hyphenated format. Required because Dapper's `GuidTypeHandler` always writes lowercase UUIDs; migration seed data used uppercase literals, causing `WHERE id = @id` mismatches on SQLite's case-sensitive TEXT comparison.
 > - `M1020NormalizeGrowthProfileIdsToLowercase` applies the same lowercase normalisation to `growth_profile.id`.

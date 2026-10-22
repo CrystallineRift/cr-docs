@@ -45,7 +45,7 @@ Every ability carries all four numbers.
 |---|---|---|
 | `max_pp` (the old `cost`, renamed by `M21006AbilityCostColumns`, values kept) | PowerPoints: uses before the move runs dry | 35 / 20 / 10 / 5 |
 | `energy_cost` (new) | Energy spent per use | 0 (generics) or 5 (element basics) / 15 / 30 / 40 |
-| `charge_delta` (new, signed) | BuilderSpender: positive builds, negative spends | +1 (Growl, Harden; Focus +2) / -3 / -6 / -9 |
+| `charge_delta` (new, signed) | BuilderSpender: positive builds, negative spends | +2 (Growl, Harden, Focus; `M21006AbilityCostColumns.DoubleChargeKeys`) or +1 (other basics) / -3 / -6 / -9 |
 | `pool_cost` (new) | TurnPool: Surge needed this round | 1 / 3 / 5 / 8 |
 
 Tiers: basic (Scratch, Tackle, Growl, Harden, Focus, Bite, element basics), mid (Slash, Body Slam, element mids), big (Fire Blast, Hydro Pump, Thunderbolt, Blizzard, Quake, Cyclone, Dawnbreak, Energy Ball, Miasma, Mega Burn), ultimate (Hyper Beam). Plumbing in cr-api: `BaseAbility` (`MaxPp`, `EnergyCost`, `ChargeDelta`, `PoolCost`), `M21006` (rename `cost` to `max_pp`, add `energy_cost`, `charge_delta`, `pool_cost`, seed by the tiers above in `M21006AbilityCostColumns.Tiers`; abilities no list matched are tiered by `max_pp`), `BaseAbilityRepository` upserts, the `GET /api/v1/abilities` projection and `AbilityEndpoints.cs`. A `maxPp` in a payload wins over the legacy `cost` key. Still to land in Unity (slice 3): `AbilityConfig` and `ContentSyncWriter` (must not clamp the signed `charge_delta`), cr-admin-web abilities form.
