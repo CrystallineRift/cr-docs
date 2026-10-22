@@ -74,7 +74,7 @@ The server side wraps it in `BattleResourceLedger` (internal, `Implementation/Ba
 
 - **Submit:** `BattleTurnDomainService.IsAbilityLegalAsync` also runs the policy. Failure is `TurnSubmitStatus.Unaffordable`, HTTP 400 with code `battle-unaffordable-ability` (message `unaffordable_ability`, the detail is the `AbilityAffordability` reason; `BattleActionsEndpoints.cs`); the round is not consumed (same as `illegal_ability`).
 - **Resolution:** pay on use, hit or miss. An attacker interrupted before acting pays nothing. BuilderSpender builders add Charge after their action resolves (capped). Energy regen applies in the tick phase for both living creatures. TurnPool spends nothing (the pool is a gate), so `Apply` is a no-op except for bonuses. PowerPoints spends one PP per use (a missing PP row counts as full); no regen in battle; 0 PP is unaffordable.
-- **AI:** the AI brain (`WildBattleAIDomainService`) filters known moves to affordable ones first, then the existing heuristic. Nothing affordable means `Rest` (`WildBattleAIDomainService`). The wild brain reads the creature's four slots, not the progression set.
+- **AI:** the AI brain (`WildBattleAIDomainService`) filters known moves to affordable ones first, then the existing heuristic. Nothing affordable means `Rest` (`WildBattleAIDomainService`). The wild brain reads the creature's four slots; only when all four are empty does it fall back to the progression set (and paginated abilities).
 - **Whiteout and Healer NPC:** `CreatureInventoryService.HealTeamAsync` also clears `current_energy` (full) and PP rows. Charge rows are deleted when a battle ends or is abandoned (`IBattleRepository.DeleteChargesAsync`).
 
 ## Rest
