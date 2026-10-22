@@ -75,7 +75,7 @@ The implementation in `CreatureGenerationService` follows these steps:
 3. **Fetch growth profile** — `IGrowthProfileRepository.Get(GrowthProfileId)`; throws if not found
 4. **Build `GeneratedCreature`** — assigns all fields, calls `CalculateExperienceForLevel(level)`, calls `GenerateSigningKeyId(trainerId, baseCreatureId)`
 5. **Calculate stats** — `CalculateBaseStats(creature, baseCreature, growthProfile, level)`
-6. **Apply ability progression** — if `AbilityProgressionSetId` is set, calls `ApplyAbilityProgressionAsync`; this step does NOT throw on failure (errors are logged only) because missing abilities should not block creature creation
+6. **Apply ability progression** — if a set resolves (request set, else the species default), calls `ApplyAbilityProgressionAsync`; this step does NOT throw on failure (errors are logged only) because missing abilities should not block creature creation
 7. **Set held items** — assigns up to 2 held item IDs to `FirstHeldItemId` / `SecondHeldItemId`
 8. **Persist** — `IGeneratedCreatureRepository.CreateCreatureForCapture(creature, "generated")`
 
@@ -224,7 +224,8 @@ The template fallback above only covers `creature_spawner_template`. `generated_
 | `Id` | `Guid` | Internal UUID primary key |
 | `ContentKey` | `string` | Designer-facing identifier (e.g. `"cindris"`) — NOT NULL, UNIQUE (enforced by M1015) |
 | `AssetKey` | `string?` | Addressables address or Resources path for the primary art asset (e.g. `"creatures/cindris"`). Replaced `AssetId: Guid?` in migration M1016. |
-| `AbilityProgressionSetId` | `Guid?` | FK to `ability_progression_set_entry.ability_progression_set_id`; the default progression set for this species. Added by M1017. Null means no default set assigned. |
+| `AbilityProgressionSetId` | `Guid?` | Legacy column added by M1017; superseded by `DefaultAbilityProgressionSetId`. |
+| `DefaultAbilityProgressionSetId` | `Guid?` | FK to `ability_progression_set.id`; the default learn list for this species, added by `M21001`. Wire-only `DefaultAbilityProgressionSetName` is how `PUT /api/v1/creatures/by-content-key/{key}` sets it (409 `unresolved_reference` for an unknown name). Null means no default set. |
 | `GrowthProfileId` | `Guid?` | FK to `growth_profile`; the default growth profile for this species. Added by M1018. Null means no growth profile is pinned to the template (spawner template overrides still apply). |
 | `BaseHitPoints` | `int` | Base stat used by the generation formula |
 | `BaseAttack` | `int` | — |
@@ -332,40 +333,15 @@ Push it to the server with Crystalline Rift Studio (**⬆ Push All**); see [Cont
 
 ## Ability Progression
 
-`ability_progress` records what abilities a creature can learn at each level for a given `set_name`. The generation service:
+A learn list is an `ability_progression_set` (named `line_<base species>`) with `ability_progression_set_entry` rows `(level, ability_slot, ability_id, unlock_quest_content_key?)`; see [Ability Learning](?page=backend/30-ability-learning). Generation resolves the set, then `ApplyAbilityProgressionAsync` fills the slots:
 
-1. Calls `GetAbilityProgressAtLevelAsync(baseCreatureId, level)` to get all progression entries up to the target level
-2. Filters by `ap.SetName == abilityProgressionSetId.ToString()`
-3. Sorts by level ascending
-4. Takes the first 4 entries and assigns them to `FirstAbilityId` through `FourthAbilityId`
+1. Set id = `request.AbilityProgressionSetId ?? baseCreature.DefaultAbilityProgressionSetId ?? none`. The species default is `creature.default_ability_progression_set_id` (migration `M21001`, `BaseCreature.DefaultAbilityProgressionSetId`); spawner templates and trainer slots may still override it.
+2. Reads the set's entries with `GetAbilityProgressionSetEntriesAsync`, keeps active, non-deleted entries with `level <= creature level` and no quest gate (generation never opens a gate).
+3. Orders by `(level, ability_slot)` and keeps the **last four**, assigned in order to `FirstAbilityId` through `FourthAbilityId`. That is the moveset the creature would have had if it learned every move and always forgot the oldest.
 
-### How Ability Progression Is Set Up at Generation Time
+`GetAvailableAbilityProgressionSetsAsync(baseCreatureId)` returns just the species default (a one-item list) or an empty list. NPC gifts, NPC teams and starters (`StarterCreatureService`) use it; the old `starter_creature_ability_progression_set_id` config key is gone.
 
-The creature generation call picks the first available ability progression set for the base creature. From `EnsureNpcCreatureTeamAsync` in the actual implementation:
-
-```csharp
-var abilitySets = await _creatureGenerationService.GetAvailableAbilityProgressionSetsAsync(
-    slot.CreatureBaseId, ct);
-var abilitySetId = abilitySets.Count > 0 ? abilitySets[0] : (Guid?)null;
-
-var creature = await _creatureGenerationService.CreateAsync(new CreateCreatureRequest
-{
-    BaseCreatureId = slot.CreatureBaseId,
-    Level = 1,
-    GrowthProfileId = growthProfiles[0],
-    AbilityProgressionSetId = abilitySetId,   // ← null if no sets exist
-    TrainerId = trainerId,
-    FirstNature = Nature.Hardy,
-    Gender = Gender.Unknown,
-    Seed = Guid.NewGuid().GetHashCode(),
-}, ct);
-```
-
-If `abilitySetId` is null (no progression sets configured), the creature is created with all four ability slots null. This is not an error — it means the creature simply has no moves at generation time.
-
-If `abilitySetId` is set but no `ability_progress` rows exist for that set at the requested level, the creature is created with null abilities (the failure is logged but does not throw).
-
-**Edge case:** If `GetAvailableAbilityProgressionSetsAsync` is called for a base creature, it returns set IDs extracted from `ability_progress.set_name` where the set_name parses as a GUID. If designers use non-GUID set names (e.g. `"starter_set"`), they will not appear in this list. Use UUID-formatted set names stored in the progression entries.
+If no set resolves, the creature is created with all four slots null (not an error). A failure while reading entries is logged and does not throw, so missing abilities never block creature creation.
 
 ## Quest-gated abilities
 
@@ -425,9 +401,10 @@ it handles a `RewardType.Ability` grant (see
 For every creature the trainer owns (team and storage; paged 200 at a time, capped at 25 pages), it
 teaches each active entry gated on `questContentKey` where `entry.Level <= creature.Level` and the
 ability is not already known. `onlyAbilityContentKey`, when supplied, restricts the grant to entries
-whose ability has that content key. Slot assignment and replacement use exactly the same path as
-level-up (`ApplyAbilityToCreatureAsync`), and each creature is written **once** regardless of how
-many abilities it learned. Returns the ids of the creatures that changed.
+whose ability has that content key. A free slot is filled; a creature with all four slots full is **never overwritten** and instead gets an
+`AbilityOffer` (Source `quest`). Every slot write goes through `WriteAbilitySlotAsync`, and each creature is written **once**
+regardless of how many abilities it learned. Returns a `QuestUnlockResult { Learned, Offers, PendingOutcomes }`;
+see [Ability Learning](?page=backend/30-ability-learning).
 
 Entries are read once per distinct progression set, not once per creature — a full team commonly
 shares one set.
