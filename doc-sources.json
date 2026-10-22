@@ -2750,5 +2750,86 @@
       ]
     },
     "description": "Web single-quest flow editor: four columns, neighbours, fixed goal order, save and conflicts. cr-admin-web globs are not checked by check-stale."
+  },
+  "backend/27-ability-economy": {
+    "docPath": "docs/backend/27-ability-economy.md",
+    "repos": {
+      "cr-api": [
+        "Game/CR.Game.Model/Config/AbilityCostMode.cs",
+        "Game/**/*AppConfig*.cs",
+        "Game/CR.Game.Compat/**/AbilityCost*.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Battle/BattleDomainService.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Battle/BattleTurnDomainService.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Battle/WildBattleAIDomainService.cs",
+        "Game/CR.Game.Model/Battle/BattleAbilityOption.cs",
+        "Game/CR.Game.Model/Battle/BattleActionType.cs",
+        "Game/CR.Game.Domain.Services/Interfaces/Battle/*.cs",
+        "Creatures/**/M2100[678]*.cs",
+        "Game/**/M2120*.cs",
+        "Items/**/M21104*.cs",
+        "Items/**/RestoreEnergy*.cs",
+        "Items/**/BoostSurge*.cs",
+        "Items/CR.Items.Domain.Services/Interfaces/IItemEffectHandler.cs",
+        "Convenience/CR.REST.AIO/Program.cs"
+      ],
+      "cr-data": [
+        "Assets/CR/Core/Configuration/AbilityCostMode*.cs",
+        "Assets/CR/Game/Battle/**/*Cost*.cs",
+        "Assets/CR/Core/Data/Registry/Definitions/AbilityConfig.cs",
+        "Assets/CR/Game/World/Editor/AbilityEditorSyncHelper.cs"
+      ]
+    },
+    "description": "Ability economy: app_config.ability_cost_mode flag (five modes, admin PUT, version-check, offline overlay, Studio Game Config), ability cost columns (max_pp, energy_cost, charge_delta, pool_cost), resource tables, AbilityCostPolicy/AbilityCostTuning, submit/resolve/AI affordability, Rest, Tonic/Super/Full Tonic/Surge Shard items, wire shapes"
+  },
+  "backend/28-ability-learning": {
+    "docPath": "docs/backend/28-ability-learning.md",
+    "repos": {
+      "cr-api": [
+        "Game/CR.Game.Domain.Services/Implementation/Creature/CreatureProgressionService.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Creature/CreatureGenerationService.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Creature/CreatureLearnService.cs",
+        "Game/CR.Game.Domain.Services/Interfaces/Creature/ICreature*Service.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Creature/StarterCreatureService.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Reward/RewardGrantService.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/CreatureLearnEndpoints.cs",
+        "Game/CR.Game.Model/Creatures/AbilityOffer.cs",
+        "Game/CR.Game.Model/Creatures/BaseCreature.cs",
+        "Game/CR.Game.Compat/**/ToneResonance*.cs",
+        "Creatures/**/M2100[1-5]*.cs",
+        "Items/**/M2110[1-3]*.cs",
+        "Items/**/TeachAbility*.cs",
+        "Creatures/CR.Creatures.Service.REST/Endpoints/CreatureEndpoints.cs",
+        "Spawner/**/SpawnerConfigSyncService.cs",
+        "Convenience/CR.REST.AIO/appsettings.json"
+      ],
+      "cr-data": [
+        "Assets/CR/Core/Data/Registry/Definitions/CreatureDefinition.cs",
+        "Assets/CR/Core/Data/Editor/Progression/LineSetAuthoring.cs",
+        "Assets/CR/Content/Defs/ProgressionSets/**"
+      ]
+    },
+    "description": "Ability learning: line_<species> learn lists, species default set, last-four generation rule, learn/offer rules, learnable query, WriteAbilitySlotAsync, learn intent and error codes, TeachAbility tones, ToneResonance, seeded tones and sources"
+  },
+  "unity/44-ability-learning-ui": {
+    "docPath": "docs/unity/44-ability-learning-ui.md",
+    "repos": {
+      "cr-api": [
+        "Game/CR.Game.Model/Creatures/AbilityOffer.cs",
+        "Game/CR.Game.Model/Battle/BattleAbilityOption.cs"
+      ],
+      "cr-data": [
+        "Assets/CR/UI/Common/ChoiceDialog*.cs",
+        "Assets/CR/UI/Logic/ChoiceDialogRows.cs",
+        "Assets/CR/Game/Battle/Logic/AbilityLearnPrompt.cs",
+        "Assets/CR/Game/Battle/Presentation/AbilityLearnPrompter.cs",
+        "Assets/CR/Game/Battle/Presentation/BattleCoordinator.cs",
+        "Assets/CR/Game/**/AbilityRosterBuilder.cs",
+        "Assets/CR/Game/**/CreatureLearn*.cs",
+        "Assets/CR/Game/**/ItemTargetRule.cs",
+        "Assets/CR/Game/**/ItemUseResultText.cs",
+        "Assets/CR/Core/Configuration/AbilityCostModeSetting*.cs"
+      ]
+    },
+    "description": "Ability learning client: ChoiceDialog, AbilityLearnPrompter flow and PlayStepsAsync hook, HUD ability list from the server, HUD per cost mode, cost badges and Rest row, AbilityCostModeSetting and overlay repository, bag tone flow, Storage Learnable"
   }
 }

@@ -186,8 +186,18 @@
   },
   {
     "section": "Backend",
+    "title": "Ability Economy",
+    "path": "backend/27-ability-economy"
+  },
+  {
+    "section": "Backend",
     "title": "Idempotency Keys",
     "path": "backend/27-idempotency-keys"
+  },
+  {
+    "section": "Backend",
+    "title": "Ability Learning",
+    "path": "backend/28-ability-learning"
   },
   {
     "section": "Backend",
@@ -438,6 +448,11 @@
     "section": "Unity",
     "title": "Roaming Encounters (API + Unity)",
     "path": "unity/43-roaming-encounters"
+  },
+  {
+    "section": "Unity",
+    "title": "Ability Learning UI",
+    "path": "unity/44-ability-learning-ui"
   },
   {
     "section": "Unity",
