@@ -2,7 +2,7 @@
 
 How the Unity client presents learning, forgetting, tones and the ability economy. The client only presents: it shows the server's offers and costs, and sends intents (learn this move, forget that one, use this tone, submit this action). Learned moves, resources spent and resources gained come back from the server (offline: the same cr-api DLLs on local SQLite). No client code infers learning or computes an outcome.
 
-> Status: design draft. Code sentences are marked "(lands with slice N)" until merged. Spec: `docs/superpowers/specs/2026-10-22-ability-progression-and-economy-design.md` in cr-api-unity. Server side: [Ability Learning](?page=backend/28-ability-learning) and [Ability Economy](?page=backend/27-ability-economy).
+> Status: design draft. Code sentences are marked "(lands with slice N)" until merged. Spec: `docs/superpowers/specs/2026-10-22-ability-progression-and-economy-design.md` in cr-api-unity. Server side: [Ability Learning](?page=backend/30-ability-learning) and [Ability Economy](?page=backend/29-ability-economy).
 
 ## The prompt (lands with slice 1)
 

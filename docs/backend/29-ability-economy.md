@@ -2,7 +2,7 @@
 
 One server flag, `app_config.ability_cost_mode`, picks how abilities are paid for in battle: not at all (`Free`, today's behaviour), with a Charge that builders fill and big moves spend (`BuilderSpender`), with a persistent per-creature Energy pool (`Energy`), with a per-round Surge pool shared by the team (`TurnPool`), or with per-move power points (`PowerPoints`). Every ability carries all four cost numbers, so one content set serves every mode, and the mode is switched online from the Studio Game Config page. The flag ships as `Free`, so nothing changes until it is flipped.
 
-> Status: design draft. Sentences about code are marked "(lands with slice N)" until the code is merged (slice 3 = economy; see delivery order in the spec). Spec: `docs/superpowers/specs/2026-10-22-ability-progression-and-economy-design.md` in cr-api-unity. Plan: `docs/superpowers/plans/2026-10-22-ability-economy.md`. Learn lists, tones and the learn intent are on [Ability Learning](?page=backend/28-ability-learning); the client side is [Ability Learning UI](?page=unity/44-ability-learning-ui).
+> Status: design draft. Sentences about code are marked "(lands with slice N)" until the code is merged (slice 3 = economy; see delivery order in the spec). Spec: `docs/superpowers/specs/2026-10-22-ability-progression-and-economy-design.md` in cr-api-unity. Plan: `docs/superpowers/plans/2026-10-22-ability-economy.md`. Learn lists, tones and the learn intent are on [Ability Learning](?page=backend/30-ability-learning); the client side is [Ability Learning UI](?page=unity/45-ability-learning-ui).
 
 ## Server-authoritative
 

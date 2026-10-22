@@ -4,8 +4,8 @@
 
 cr-docs `feature/ability-economy`. Drafts written ahead of the code; sentences about unmerged code are marked "(lands with slice N)" and are trimmed when each slice merges.
 
-- **New pages.** [Ability Economy](?page=backend/27-ability-economy) (the `ability_cost_mode` flag, five modes, cost columns, resource tables, policy, Rest, Tonics and Surge Shard, Studio switch), [Ability Learning](?page=backend/28-ability-learning) (line sets, species default, last-four generation rule, learn rules, learn intent, tones and resonance) and [Ability Learning UI](?page=unity/44-ability-learning-ui) (prompt flow, HUD per mode, bag tone flow, Storage Learnable, client setting).
-- **Ledger.** AI content ledger rows for the four new abilities, the 11 learn lists, 25 tones, the Tonic items and Surge Shard, the energy cost tiers, mode names and HUD strings.
+- **New pages.** [Ability Economy](?page=backend/29-ability-economy) (the `ability_cost_mode` flag, five modes, cost columns, resource tables, policy, Rest, Tonics and Surge Shard, Studio switch), [Ability Learning](?page=backend/30-ability-learning) (line sets, species default, last-four generation rule, learn rules, learn intent, tones and resonance) and [Ability Learning UI](?page=unity/45-ability-learning-ui) (prompt flow, HUD per mode, bag tone flow, Storage Learnable, client setting).
+- **Ledger.** AI content ledger rows for the four new abilities, the 11 learn lists, 24 tones, the Tonic items and Surge Shard, the energy cost tiers, mode names and HUD strings.
 
 ## 2026-10-22 — Studio Push All from the CLI, and encounter diagnostics
 

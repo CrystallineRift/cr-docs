@@ -2751,8 +2751,8 @@
     },
     "description": "Web single-quest flow editor: four columns, neighbours, fixed goal order, save and conflicts. cr-admin-web globs are not checked by check-stale."
   },
-  "backend/27-ability-economy": {
-    "docPath": "docs/backend/27-ability-economy.md",
+  "backend/29-ability-economy": {
+    "docPath": "docs/backend/29-ability-economy.md",
     "repos": {
       "cr-api": [
         "Game/CR.Game.Model/Config/AbilityCostMode.cs",
@@ -2781,8 +2781,8 @@
     },
     "description": "Ability economy: app_config.ability_cost_mode flag (five modes, admin PUT, version-check, offline overlay, Studio Game Config), ability cost columns (max_pp, energy_cost, charge_delta, pool_cost), resource tables, AbilityCostPolicy/AbilityCostTuning, submit/resolve/AI affordability, Rest, Tonic/Super/Full Tonic/Surge Shard items, wire shapes"
   },
-  "backend/28-ability-learning": {
-    "docPath": "docs/backend/28-ability-learning.md",
+  "backend/30-ability-learning": {
+    "docPath": "docs/backend/30-ability-learning.md",
     "repos": {
       "cr-api": [
         "Game/CR.Game.Domain.Services/Implementation/Creature/CreatureProgressionService.cs",
@@ -2810,8 +2810,8 @@
     },
     "description": "Ability learning: line_<species> learn lists, species default set, last-four generation rule, learn/offer rules, learnable query, WriteAbilitySlotAsync, learn intent and error codes, TeachAbility tones, ToneResonance, seeded tones and sources"
   },
-  "unity/44-ability-learning-ui": {
-    "docPath": "docs/unity/44-ability-learning-ui.md",
+  "unity/45-ability-learning-ui": {
+    "docPath": "docs/unity/45-ability-learning-ui.md",
     "repos": {
       "cr-api": [
         "Game/CR.Game.Model/Creatures/AbilityOffer.cs",

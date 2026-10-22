@@ -186,23 +186,23 @@
   },
   {
     "section": "Backend",
-    "title": "Ability Economy",
-    "path": "backend/27-ability-economy"
-  },
-  {
-    "section": "Backend",
     "title": "Idempotency Keys",
     "path": "backend/27-idempotency-keys"
   },
   {
     "section": "Backend",
-    "title": "Ability Learning",
-    "path": "backend/28-ability-learning"
+    "title": "Optimistic Concurrency (row_version)",
+    "path": "backend/28-optimistic-concurrency"
   },
   {
     "section": "Backend",
-    "title": "Optimistic Concurrency (row_version)",
-    "path": "backend/28-optimistic-concurrency"
+    "title": "Ability Economy",
+    "path": "backend/29-ability-economy"
+  },
+  {
+    "section": "Backend",
+    "title": "Ability Learning",
+    "path": "backend/30-ability-learning"
   },
   {
     "section": "Introduction",
@@ -451,12 +451,12 @@
   },
   {
     "section": "Unity",
-    "title": "Ability Learning UI",
-    "path": "unity/44-ability-learning-ui"
+    "title": "Ahksun Companion Shard (Unity)",
+    "path": "unity/44-ahksun-companion"
   },
   {
     "section": "Unity",
-    "title": "Ahksun Companion Shard (Unity)",
-    "path": "unity/44-ahksun-companion"
+    "title": "Ability Learning UI",
+    "path": "unity/45-ability-learning-ui"
   }
 ]

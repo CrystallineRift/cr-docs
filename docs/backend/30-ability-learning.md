@@ -2,7 +2,7 @@
 
 Every evolution line owns one learn list. Creatures learn a move every four to six levels, a fifth move triggers a server-driven learn or forget offer, and crystal tones teach moves that are on no level list. The server decides every learn, forget and teach; the client names the move it wants and the move it will forget, never a slot. Generation above level 1 keeps the last four moves of the line.
 
-> Status: design draft. Code sentences are marked "(lands with slice N)" until merged (slice 1 = learning core, slice 2 = tones). Spec: `docs/superpowers/specs/2026-10-22-ability-progression-and-economy-design.md` in cr-api-unity. Costs and modes: [Ability Economy](?page=backend/27-ability-economy). Client: [Ability Learning UI](?page=unity/44-ability-learning-ui).
+> Status: design draft. Code sentences are marked "(lands with slice N)" until merged (slice 1 = learning core, slice 2 = tones). Spec: `docs/superpowers/specs/2026-10-22-ability-progression-and-economy-design.md` in cr-api-unity. Costs and modes: [Ability Economy](?page=backend/29-ability-economy). Client: [Ability Learning UI](?page=unity/45-ability-learning-ui).
 
 ## Line sets
 
