@@ -21,6 +21,8 @@ The client sends intents only: "trainer T is at spawner S" and "trainer T touche
 | Offline | Read from the local `app_config` row (`IAppConfigRepository`, 30 s ration, refreshed when a spawner area initialises). The row is in the floor bake, so a bundled build carries prod's value at bake time. An unreadable row means off |
 | Editor | `RoamingSpawnersOverride` (`Inherit`, `On`, `Off`) in the EditorPrefs overrides (`IGameSettingsOverrides.RoamingSpawners`), set from the Studio Configuration panel (`StudioConfigurationPanel`). It is **not** a `GameSettings` field, so the committed asset never ships it. Editor only, wins over the other sources |
 
+The second server flag riding the same version-check answer is `ability_cost_mode` (see [Ability Learning UI](?page=unity/45-ability-learning-ui)): `AbilityCostModeSetting` merges the Editor override (`AbilityCostModeOverride`, same Studio Configuration panel), the server value, the remembered value and the floor row, and `OverlayAppConfigRepository` hands the offline services the floor `app_config` row with the effective mode. The overlay replaces only `ability_cost_mode`; every other field, `roaming_spawners` included, passes through from the floor row.
+
 Client side, `IRoamingSpawnersFlag` merges those sources and raises `Changed`. The admin UI is in [Studio: System Game Config](#studio-system-game-config) below.
 
 ## Population: deterministic, nothing stored

@@ -131,6 +131,9 @@ only when the item carries `HeldByCreature` **and neither** `UsableInBattle` **n
 | 10 | `TriggerEvolution` | `TriggerEvolutionHandler` | Begins an evolution through `IEvolutionService` with the item as `usedItemId` — this handler is the only path that supplies one, after `ItemUseDomainService` has verified ownership; no parameters — the species' rules pick the target. Consumed at Commit and only when the winning group's `HeldItem` requirement names it with `consume_on_evolve`, so a stone used on a creature evolving on level alone is not spent |
 | 11 | `CaptureCreature` | `CaptureCreatureHandler` | See [Capture Mechanic](../unity/14-capture-mechanic.md) |
 | 12 | `IncreaseExpShare` | `IncreaseExpShareHandler` | |
+| 13 | `TeachAbility` | `TeachAbilityHandler` | A tone. `TeachAbilityParams { abilityId, elements[], speciesKeys[], minLevel? }`. Free slot: learns now. Full: `Deferred` + `Offers`, nothing consumed until the learn intent finishes it. See [Ability Learning](?page=backend/30-ability-learning) |
+| 14 | `RestoreEnergy` | `RestoreEnergyHandler` | `RestoreEnergyParams { amount, percent }`. Energy mode restores Energy; PowerPoints mode restores PP on every known move; other modes `item-wrong-mode`. See [Ability Economy](?page=backend/29-ability-economy) |
+| 15 | `BoostSurge` | `BoostSurgeHandler` | No parameters. Battle only, TurnPool mode only; +1 Surge bonus for the battle |
 | 20–25 | `HeldStatBoost`, `HeldDamageReduce`, `HeldTypeBoost`, `HeldRegenHp`, `HeldStatusImmune`, `HeldReviveOnce` | *(none)* | Held-item passives, evaluated by `IHeldItemTriggerEvaluator`, never by a use handler |
 
 ## `ItemUseDomainService.UseItemAsync`
@@ -222,28 +225,19 @@ creature are looked up, never the whole catalogue. Name is the only identity the
 is why `item_ice_melt` still cures `Frozen` even though `Frozen` was seeded by a different migration
 under a different id than the consumables batch expected.
 
-## Offline mirror and its divergences
+## Offline: the same service
 
-`cr-api-unity/Assets/CR/Game/Battle/Offline/OfflineItemUseService.cs` implements the same
-`IItemUseDomainService` interface against local SQLite, and `OnlineOfflineItemDomainService` picks
-between it and `ItemHttpDomainAdapter` on connectivity. The HP, revive and cure arithmetic is
-copied line for line, including the refusal sentences.
+There is no separate offline mirror any more. `cr-api-unity/Assets/CR/Core/DI/ItemUseOfflineBindings.cs` binds the **same** `ItemUseDomainService` the server runs (binding id `item_offline`) over the player's local SQLite, with an explicit handler list, and `OnlineOfflineItemDomainService` picks between it and `ItemHttpDomainAdapter` on connectivity. The old hand-rolled `OfflineItemUseService` is deleted, so ownership, usage flags, held-only checks, the refusal sentences, the `items_used_total` / `items_used_<key>` stats and the `ItemUsed` / `KeyItemActivated` progress outcomes (through the shared `IProgressOutcomeSink`) are identical offline and online. Offline state still never syncs to the server.
 
-Where the two do **not** agree:
+The handler list in `ItemUseOfflineBindings` is written out by hand, so a new `ItemEffectType` is not available offline until its handler is added there. The three handlers added by the ability economy and learning work (`TeachAbilityHandler`, `RestoreEnergyHandler`, `BoostSurgeHandler`) are registered on the server in `Program.cs`; adding them to the offline list lands with the Unity slice.
 
-| Effect | Server | Offline |
-|---|---|---|
-| Ownership, usage flags, held-only | Checked (steps 2–5 above) | **Not checked.** `ValidateItemUseAsync` returns `Valid()` unconditionally |
-| `CureAllStatus` on a healthy creature | Succeeds, cures nothing, consumes the item | **Fails** with `None of the target conditions are active on this creature.` (`CureConditionsAsync` shares one code path with `CureStatus`) |
-| `BoostStatTemp` | Battle-only; enforces the stage limit; writes a modifier | Returns `Success = true` and **persists nothing** — a reported boost that does not exist |
-| `TriggerEvolution` | Begins an offer; consumes at Commit | Same — `OfflineItemUseService` calls the same `IEvolutionService` over the baked rules |
-| `items_used_total` / `items_used_<key>` stats | Written | **Not written** |
-| `UsedItem` / `ActivateKeyItem` quest events | Raised | **Not raised** |
-| `IncreaseExpShare` | Handler writes the stat | Same — the one stat the offline path does write |
+### Deferred use and the new result fields
 
-The first row is by design: offline there is no adversary to guard against, and the bag it reads is
-the same database it writes. The rest are gaps, and `BoostStatTemp` is the one worth fixing — a
-reported boost that does not exist.
+`ItemUseResult` gained `AbilitiesLearned`, `Offers`, `Deferred`, `EnergyRestored`, `PpRestored`, `SurgeBonusGained` and `ItemName` (set by the service on success). A `Deferred` result (a tone with no free slot) is a success that consumes nothing, writes no stats and records no outcome; the learn intent later calls `IItemUseDomainService.RecordDeferredUseAsync(trainerId, accountId, itemId, consume, ct)`, which takes one unit (when consumable), writes the use stats and records `ItemUsed` once. Only `TeachAbility` items owned by the trainer can be recorded that way.
+
+### New refusal codes
+
+`ItemErrorCodes`: `item-tone-not-resonant`, `item-ability-already-known`, `item-creature-energy-full`, `item-creature-pp-full`, `item-wrong-mode`, `item-battle-only`, `item-surge-maxed`, `item-own-creature-only`.
 
 ## Seeded items
 

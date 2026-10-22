@@ -506,7 +506,14 @@
         "Assets/CR/Tests/Editor/BattleCoordinatorArenaTests.cs",
         "Assets/CR/Tests/Editor/BattleArenaBattleOnlyTests.cs",
         "Assets/CR/Game/Battle/BattleLossRules.cs",
-        "Assets/CR/Game/Battle/Logic/*.cs"
+        "Assets/CR/Game/Battle/Logic/*.cs",
+        "Assets/CR/Game/Battle/Logic/AbilityListBuilder.cs",
+        "Assets/CR/Game/Battle/Logic/AbilityLearnPrompt.cs",
+        "Assets/CR/Game/Battle/Presentation/AbilityLearnPrompter.cs",
+        "Assets/CR/Game/Battle/Logic/BattleBeatPlan.cs",
+        "Assets/CR/Game/Battle/Logic/BattleResource*.cs",
+        "Assets/CR/UI/Logic/BattleResource*.cs",
+        "Assets/CR/UI/Battle/BattleCardResources.cs"
       ]
     },
     "description": "BattleCoordinator simultaneous-round loop (one intent per round, server-ordered steps played back in order) with battle-scoped CancellationToken, BattleHttpDomainAdapter + OnlineOfflineBattleDomainService stack, BattleEvents static events (incl. StagingFailed), Arena system with IBattleStager returning BattleStagingResult (player teleport + creature visual spawn at PlayerCreaturePosition/OpponentCreaturePosition), self-registering BattleArenaRegistry, reactive Cinemachine 3 cinematic camera (BattleCinematicDirector conductor driven by CameraCue*/TurnStarted, editor-authored BattleCameraRig role vCams + BattleCameraProfile feel SO + decoupled BattleCameraShakeResponder via BattleCameraRigContext, BattleFormation slot model for 1v1->NvN, one-click rig builder + beat simulator), per-creature CreatureBattlePresenter (added to creature prefabs; the stager resolves the creature's shared CreatureReactionProfile from its CreatureDefinition by content key, flattens any base→variant inheritance via Resolve(), and hands the result to Bind; subscribes to BattleEvents and plays the creature's own body — animation+cry+feedback — per beat, with a standard Animator state-name convention in CreatureReactionDefaults and HasState-guarded fallbacks), ability VFX/SFX sourced from AbilityConfig keys on the outcome and played positionally by BattleAbilityFxResponder via a single positioned AbilityFxCue + BattleVisualRegistry (id→transform), BattleHUD with Guid-typed creature IDs and HP cache replay, BattleSync SOAP bridge, StartNpcBattle/StartWildBattle, NpcBattleRequest.BattleArenaKey, SpawnerEncounterBehaviour with encounter delay; trainer battles: bark-then-challenge flow (TrainerChallenged banner, Run hidden, RunRefused log, OpponentItemUsed), shared RunTurnLoopAsync with trainer AI decider + NPC item turns, TrainerBattleDefinition SO + Trainer Battle Author window (spawner plumbing hidden, deterministic md5 ids, bark conversation + scene stamp); Trainer Battle Author rebuilt as the project's first UXML/USS editor window (roster rail + dossier, readiness meter, checklist cards, plain-language copy); dev-only BattleDebugStatsOverlay (F3, Editor/DEVELOPMENT_BUILD only) rendering per-creature stat/status/ability/held-item/stat-modifier panels beside BattleHUD's cards, sourced from the same BattleEvents bus + TeamSync; Simultaneous rounds client side: StepTurnCue per step for both sides, Interrupted and ConditionTick playback, swap-only round, PendingSwap, ResyncAsync with lastRoundSteps, draw as loss, BattleLogQueue, IBattleCoinFlip binding"
@@ -758,7 +765,10 @@
         "Assets/CR/Tests/Editor/EditorPrefsGameSettingsOverridesTests.cs",
         "Assets/CR/Resources/configuration/GameSettings.asset",
         "Assets/CR/Resources/configuration/BackendEnvironments.asset",
-        "Assets/CR/Core/Data/Logic/Tests/QuestRegistryOrderTests.cs"
+        "Assets/CR/Core/Data/Logic/Tests/QuestRegistryOrderTests.cs",
+        "Assets/CR/Core/Data/Editor/Abilities/AbilityCost*.cs",
+        "Assets/CR/Core/Data/Editor/Progression/LineSetAuthoring.cs",
+        "Assets/CR/Core/Data/Logic/LineSet*.cs"
       ]
     },
     "description": "IGameContentRegistry, ScriptableObjectContentRegistry, ServerContentRegistry, MutableContentRegistry, ContentRegistryInitializer, ContentManifestClientUnityHttp, ContentDefinitionProvider, ContentKeys constants, CreatureDefinition/ItemDefinition/NpcDefinition/SpawnerDefinition ScriptableObjects, CreatureContentDef/ItemContentDef/NpcContentDef/SpawnerContentDef POCOs, IGameAssetLoader.LoadAssetByKeyAsync, ContentStudioTool unified EditorWindow (7 tabs replacing ContentCreatorTool and AbilityLibraryTool), custom Inspectors for all definition types, AddressablesCatalogUpdater, LocalizationEditorWindow, ContentAuditTool, ContentPublishTool, AbilityConfig/AbilityProgressionSetConfig/GrowthProfileConfig SOs, AbilityEditorSyncHelper, ability sync clients (HTTP/local/online-offline); Crystalline Rift Studio chrome rebuilt in UI Toolkit (CRStudio.uss shared editor design system, grouped navigation rail with live counts, header count chips + server field + connection pill, status bar; tab bodies remain IMGUI in an IMGUIContainer); ContentDisplayName single naming rule + ContentPicker dropdowns (human names stored as keys, dangling references warned, options from project incl. arenas unioned from spawners/trainers/open scenes); header rebuilt around one StudioWorkSummary pill (the single ranked answer to \"what needs doing\", with the button that resolves it) plus Guide and Advanced switches — Advanced (same pref as the old Debug toggle) holds the server field, raw keys/ids, the all-content sync bar and the recovery actions; ContentSectionCatalog is the one source of the rail's labels, groups and per-section guide sentences; project scans (registry sweep, orphan scan, Addressables lookups, push-state file stats) cached through EditorMemo/EditorMemoPolicy on the IMGUI layout pass instead of running every repaint; Trainer Battles tab; spawner/pool/creature/item reference fields all ContentPicker dropdowns (Fetch-button flows deleted); NpcAuthorChecklist readiness panel on NpcDefinitionEditor; Crystalline Rift Studio's slow work moved off the draw thread into a job system (StudioJobTracker/StudioJobQueue pure logic + StudioJob/StudioIteratorJob/StudioJobRunner stepping on EditorApplication.update within an 8ms budget, yield-a-Task for non-Unity work, StudioProgressBar cr-jobbar strip above the status bar, [Studio]-prefixed console lines on every status transition): per-definition content pushes (plan built without network, one send per tick, cancellable, tab not stamped on a partial run), per-type pulls, and the registry sweep + push comparison (published into a pending slot and adopted only on a Layout pass); NPC placements now scanned across EVERY scene in the project rather than the open ones — NpcSceneScanJob reads scene/prefab YAML on a worker thread (NpcScanFileReader buffered single-pass pre-filter, NpcScenePlacementParser for Component/PrefabInstance/PrefabReference shapes, NpcPrefabClosure fixed point over m_SourcePrefab so variants and nested NPC prefabs count), results cached per file in Library/CRStudioNpcScenes.json under NpcScanCachePolicy with prefab-state and resolved-prefab fingerprints; NpcPlacementIndex/NpcSceneGroup drive a scan strip, per-row 'in Village (2), Meadow' summaries and per-scene grouped placements with Open scene/Select via NpcPlacementNavigator; NpcDefinitionEditor's checklist reads placement from the scan or the open scene and memoises BuildSnapshot; COMBAT → Battle Reactions tab (CreatureReactionProfile rows with ReactionProfileRow digest, Variant button, inline CreatureReactionProfileEditor; local-only, no sync); SYSTEM → Configuration section (StudioConfigurationPanel + BackendEnvironmentsConfig asset: Local/Production environments applied to the editor's server pref, every *_server_http_address in game_config.yaml via GameConfigRewrite, and the Addressables Remote.LoadPath; BackendUrl/BackendEnvironmentMatch/BackendTargetsSummary pure logic; one Key row per environment (personal API key) stored in EditorPrefs via BackendKeyVault, masked with a 15s auto-hiding reveal, activated for both service and admin auth by Use for editor); LIVE OPS group (Players tab 18 + Marketplace tab 19 in Editor/LiveOps/, EditorAdminAuth admin token, StudioJob-backed admin reads/writes, ModerationReasonDialog) — see backend/18-moderation; Review window (ContentReviewWindow, Review button beside Push All): every unpushed asset grouped by type with per-row Diff (FieldDiff over EditorJsonUtility of local vs server-applied clone), Push (PushOne, single-asset job, tab not stamped) and Revert (RevertOne, same apply as Pull All, confirm-gated, not for Trainer Battles); ContentPushLog per-asset stamps (LastPushUtcTicks_asset_<guid>) so ContentPushStatus counts an asset pushed when newer than the later of tab/asset stamps; ReviewRow/ReviewGroup/ContentReviewRows pure logic; Dialogues tab (22) with its audit panel"
@@ -1112,7 +1122,11 @@
         "Assets/CR/UI/Common/TargetCandidateBuilder.cs",
         "Assets/CR/UI/Battle/BattleTargetOption.cs",
         "Assets/CR/UI/Logic/BattleItemTargeting.cs",
-        "Assets/CR/Core/Data/Logic/ServerErrorMessage.cs"
+        "Assets/CR/Core/Data/Logic/ServerErrorMessage.cs",
+        "Assets/CR/UI/Logic/ItemTarget*.cs",
+        "Assets/CR/UI/Logic/ItemUseResultText.cs",
+        "Assets/CR/UI/Logic/Text/ItemUseText.cs",
+        "Assets/CR/Core/DI/ItemUseOfflineBindings.cs"
       ]
     },
     "description": "BattleBagPanelHandler item display logic, item row rendering, capture crystal visual indicators, BattleHUD integration, ItemUsageFlags/CaptureCrystal flag, USS styles for capture items"
@@ -1585,7 +1599,8 @@
         "Assets/CR/Tests/Editor/SpawnerDefinitionSyncBehaviourTests.cs",
         "Assets/CR/Tests/Editor/SpawnerRecoveryServiceTests.cs",
         "Assets/CR/Core/Sync/Logic/Tests/ContentDomainResultTests.cs",
-        "Assets/CR/Tests/Editor/AuthoredTextExtensionsTests.cs"
+        "Assets/CR/Tests/Editor/AuthoredTextExtensionsTests.cs",
+        "Assets/CR/Game/World/Editor/ContentCreatorSyncHelper.cs"
       ]
     },
     "description": "Runtime content pull-through cache: ServerContentSyncService fetch+paging, ContentSyncWriter SQL rules (no id rewrites, lowercase GUIDs, named-column upserts, derived junction ids, per-domain transactions), ContentSyncReport version-recording rule, deletion safety, and the dotnet round-trip tests; Bake Floor From Server (GameDataFloorFromServerTool) authenticating the sync with the Studio service token (EditorServiceTokenManager)."
@@ -2610,7 +2625,9 @@
         "Assets/CR/**/SpawnerPopulationClient*.cs",
         "Assets/CR/**/ISpawnerPopulationClient.cs",
         "Assets/CR/**/CreatureWorldAnimat*.cs",
-        "Assets/CR/Tests/Editor/Roam*Tests.cs"
+        "Assets/CR/Tests/Editor/Roam*Tests.cs",
+        "Assets/CR/Core/Configuration/AbilityCostMode*.cs",
+        "Assets/CR/Core/Configuration/OverlayAppConfigRepository.cs"
       ],
       "cr-admin-web": [
         "src/pages/system/GameConfigPage.tsx",
@@ -2750,5 +2767,127 @@
       ]
     },
     "description": "Web single-quest flow editor: four columns, neighbours, fixed goal order, save and conflicts. cr-admin-web globs are not checked by check-stale."
+  },
+  "backend/29-ability-economy": {
+    "docPath": "docs/backend/29-ability-economy.md",
+    "repos": {
+      "cr-api": [
+        "Game/CR.Game.Model/Config/AbilityCostMode.cs",
+        "Game/**/*AppConfig*.cs",
+        "Convenience/CR.Game.Compat/Economy/*.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/AppConfig*.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/SetAbilityCostModeRequest.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/VersionCheckEndpoints.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Battle/BattleDomainService.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Battle/BattleDomainService.*.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Battle/BattleResourceLedger.cs",
+        "Npcs/CR.Npcs.Domain.Services/Implementation/Battle/BattleTurnDomainService.cs",
+        "Npcs/CR.Npcs.Service.REST/Endpoints/BattleActionsEndpoints.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Battle/WildBattleAIDomainService.cs",
+        "Game/CR.Game.Model/Battle/BattleAbilityOption.cs",
+        "Game/CR.Game.Model/Battle/BattleActionType.cs",
+        "Game/CR.Game.Domain.Services/Interfaces/Battle/*.cs",
+        "Creatures/**/M2100[678]*.cs",
+        "Game/**/M2120*.cs",
+        "Items/**/M21104*.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Item/Handlers/RestoreEnergyHandler.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Item/Handlers/BoostSurgeHandler.cs",
+        "Game/CR.Game.Model/Items/EffectParameters/RestoreEnergyParams.cs",
+        "Creatures/CR.Creatures.Data/Implementation/BaseAbilityRepository.cs",
+        "Items/CR.Items.Domain.Services/Interfaces/IItemEffectHandler.cs",
+        "Convenience/CR.REST.AIO/Program.cs"
+      ],
+      "cr-data": [
+        "Assets/CR/Core/Configuration/AbilityCostMode*.cs",
+        "Assets/CR/Core/Data/Registry/Definitions/AbilityConfig.cs",
+        "Assets/CR/Game/World/Editor/AbilityEditorSyncHelper.cs"
+      ]
+    },
+    "description": "Ability economy: app_config.ability_cost_mode flag (five modes, admin PUT, version-check, offline overlay, Studio Game Config), ability cost columns (max_pp, energy_cost, charge_delta, pool_cost), resource tables, AbilityCostPolicy/AbilityCostTuning, submit/resolve/AI affordability, Rest, Tonic/Super/Full Tonic/Surge Shard items, wire shapes"
+  },
+  "backend/30-ability-learning": {
+    "docPath": "docs/backend/30-ability-learning.md",
+    "repos": {
+      "cr-api": [
+        "Game/CR.Game.Domain.Services/Implementation/Creature/CreatureProgressionService.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Creature/CreatureGenerationService.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Creature/CreatureLearnService.cs",
+        "Game/CR.Game.Domain.Services/Interfaces/Creature/ICreature*Service.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Creature/StarterCreatureService.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Reward/RewardGrantService.cs",
+        "Game/CR.Game.Service.BFF/Endpoints/CreatureLearnEndpoints.cs",
+        "Game/CR.Game.Model/Creatures/AbilityOffer.cs",
+        "Game/CR.Game.Model/Creatures/BaseCreature.cs",
+        "Convenience/CR.Game.Compat/Items/ToneResonance.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Item/ToneTeachGate.cs",
+        "Game/CR.Game.Domain.Services/Interfaces/Items/IToneTeachGate.cs",
+        "Game/CR.Game.Domain.Services/Models/CreatureLearn*.cs",
+        "Quests/CR.Quests.Domain.Services/Implementation/QuestDomainService.cs",
+        "Creatures/**/M2100[1-5]*.cs",
+        "Items/**/M2110[1-3]*.cs",
+        "Game/CR.Game.Domain.Services/Implementation/Item/Handlers/TeachAbilityHandler.cs",
+        "Game/CR.Game.Model/Items/EffectParameters/TeachAbilityParams.cs",
+        "Creatures/CR.Creatures.Service.REST/Endpoints/CreatureEndpoints.cs",
+        "Spawner/CR.Spawner.Domain/Services/ISpawnerConfigSyncService.cs",
+        "Convenience/CR.REST.AIO/appsettings.json"
+      ],
+      "cr-data": [
+        "Assets/CR/Core/Data/Registry/Definitions/CreatureDefinition.cs",
+        "Assets/CR/Core/Data/Editor/Progression/LineSetAuthoring.cs",
+        "Assets/CR/Content/Defs/ProgressionSets/**"
+      ]
+    },
+    "description": "Ability learning: line_<species> learn lists, species default set, last-four generation rule, learn/offer rules, learnable query, WriteAbilitySlotAsync, learn intent and error codes, TeachAbility tones, ToneResonance, seeded tones and sources"
+  },
+  "unity/45-ability-learning-ui": {
+    "docPath": "docs/unity/45-ability-learning-ui.md",
+    "repos": {
+      "cr-api": [
+        "Game/CR.Game.Model/Creatures/AbilityOffer.cs",
+        "Game/CR.Game.Model/Battle/BattleAbilityOption.cs"
+      ],
+      "cr-data": [
+        "Assets/CR/UI/Logic/ChoiceDialogRows.cs",
+        "Assets/CR/Game/Battle/Logic/AbilityLearnPrompt.cs",
+        "Assets/CR/Game/Battle/Presentation/AbilityLearnPrompter.cs",
+        "Assets/CR/UI/Common/ChoiceDialog.cs",
+        "Assets/CR/UI/Logic/Choice*.cs",
+        "Assets/CR/Game/Battle/Logic/AbilityLearn*.cs",
+        "Assets/CR/Game/Battle/Logic/AbilityOfferQueue.cs",
+        "Assets/CR/Game/Battle/Logic/AbilityListBuilder.cs",
+        "Assets/CR/Game/Battle/Logic/BattleResource*.cs",
+        "Assets/CR/Game/Battle/Presentation/IAbilityLearnPrompter.cs",
+        "Assets/CR/Game/Creatures/Learn/*.cs",
+        "Assets/CR/Game/Battle/BattleCoordinator.cs",
+        "Assets/CR/Core/Sync/Logic/GameChange.cs",
+        "Assets/CR/UI/Battle/BattleHUD.cs",
+        "Assets/CR/UI/Battle/BattleCardResources.cs",
+        "Assets/CR/UI/Logic/BattleResource*.cs",
+        "Assets/CR/UI/Logic/ItemTarget*.cs",
+        "Assets/CR/UI/Logic/ItemUseResultText.cs",
+        "Assets/CR/UI/Logic/Text/ItemUseText.cs",
+        "Assets/CR/UI/Storage/Logic/*.cs",
+        "Assets/CR/UI/PlayerStorageView.cs",
+        "Assets/CR/UI/BagScreenHandler.cs",
+        "Assets/CR/Quests/Manager/QuestManager.cs",
+        "Assets/CR/Core/Configuration/AbilityCostMode*.cs",
+        "Assets/CR/Core/Configuration/IAbilityCostModeSetting.cs",
+        "Assets/CR/Core/Configuration/OverlayAppConfigRepository.cs",
+        "Assets/CR/Core/Data/Repository/Implementation/Config/VersionCheckResponse*.cs",
+        "Assets/CR/Core/Data/Editor/StudioConfigurationPanel.cs",
+        "Assets/CR/Core/DI/ItemUseOfflineBindings.cs",
+        "Assets/CR/Core/Data/Editor/Abilities/AbilityCost*.cs",
+        "Assets/CR/Core/Data/Editor/Progression/LineSetAuthoring.cs",
+        "Assets/CR/Core/Data/Logic/LineSet*.cs",
+        "Assets/CR/Core/Data/Editor/Items/ToneItemAuthoring.cs",
+        "Assets/CR/Core/Data/Editor/Items/EnergyItemAuthoring.cs",
+        "Assets/CR/Content/Defs/ProgressionSets/line-sets.json",
+        "Assets/CR/Content/Defs/Items/tones.json",
+        "Assets/CR/Content/Defs/Items/energy_items.json",
+        "Assets/CR/Core/Configuration/AbilityCostModeSetting*.cs",
+        "Assets/CR/UI/Common/ChoiceDialog*.cs"
+      ]
+    },
+    "description": "Ability learning client: ChoiceDialog, AbilityLearnPrompter flow and PlayStepsAsync hook, HUD ability list from the server, HUD per cost mode, cost badges and Rest row, AbilityCostModeSetting and overlay repository, bag tone flow, Storage Learnable"
   }
 }

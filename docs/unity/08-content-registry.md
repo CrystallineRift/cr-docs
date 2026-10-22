@@ -1344,13 +1344,18 @@ Created via `Assets > Create > CR > Content > Ability Config`. Fields:
 | `elementType` | `"Normal"` | One of: Normal, Fire, Water, Flora, Ice, Ground, Wind, Lightning, Poison, Radiant |
 | `power` | 0 | Base damage value |
 | `accuracy` | 100 | Hit chance (0–100) |
-| `cost` | 20 | PP cost per use |
+| `maxPp` | 20 | PP pool in PowerPoints mode (replaces the old `cost` field; the old name still deserialises) |
+| `energyCost` | 0 | Energy spent per use (Energy mode) |
+| `chargeDelta` | 0 | Signed Charge change: positive builds, negative spends (BuilderSpender mode). Never clamped |
+| `poolCost` | 1 | Surge spent per use (TurnPool mode) |
 | `priority` | 0 | Turn order modifier |
 | `targetType` | `"Single"` | Target selection type |
 | `category` | `"Physical"` | Physical, Special, or Status |
 | `animationKey` | — | Links to a battle animation asset |
 
 The Inspector warns if `power > 0` and `category == "Status"`.
+
+The four cost fields mirror the committed floor: **CR / Content / Abilities / Apply Floor Costs** (`AbilityCostAuthoring.ApplyFromFloor`, also callable headless with `-executeMethod`) copies `max_pp`, `energy_cost`, `charge_delta` and `pool_cost` from `game-data.bytes` into every `AbilityConfig` by name, so a Push All is a no-op. Tiers and the mode flag are on [Ability Economy](?page=backend/29-ability-economy). `AbilityConfigEditor` shows the four fields; `SyncAbilityDto` and `ContentSyncWriter` carry them.
 
 Pushed by Crystalline Rift Studio → Abilities → ⬆ Push All → `PUT {game_server_http_address}/api/v1/abilities/{id}`, immediately followed by `POST /api/v1/abilities/{id}/sync-conditions` for the ability's status conditions (see *One way to reach the server*).
 
@@ -1369,6 +1374,8 @@ Created via `Assets > Create > CR > Content > Ability Progression Set Config`. F
 The Inspector shows a per-entry foldout sorted by level and warns on duplicate `(level, slot)` pairs. Entries with a null or ID-less `AbilityConfig` are skipped on sync.
 
 `unlockQuestContentKey` is the entry's **quest gate** (`ability_progression_set_entry.unlock_quest_content_key`, M5019): empty means the ordinary "learn it at `level`" entry, a value means the owning trainer must also have completed that quest. It is drawn as a `ContentPicker.Quests()` dropdown of authored `QuestDefinition` content keys rather than a text box, and it rides the push payload — `/sets/sync` reconciles by `(level, slot)` and rewrites the row from the payload, so an *omitted* gate is an *erased* gate. See [Creature Storage → Authoring a gate](26-creature-storage.md#authoring-a-gate-and-keeping-it-through-sync).
+
+**Line sets.** Learn lists per species line are `line_*` progression-set assets in `Assets/CR/Content/Defs/ProgressionSets/`, authored from `line-sets.json` by `LineSetAuthoring` (Editor; `LineSetManifest` reads it). Tone-only moves appear as entries the level-up path ignores. **Species default:** `CreatureDefinition.defaultProgressionSet` names the line set a generated creature of that species uses when its template names none (pushed as `defaultAbilityProgressionSetName`). Details on [Ability Learning](?page=backend/30-ability-learning) and [Ability Learning UI](?page=unity/45-ability-learning-ui).
 
 Pushed by Crystalline Rift Studio → Progression → ⬆ Push All → `POST {game_server_http_address}/api/v1/ability-progression/sets/sync`
 

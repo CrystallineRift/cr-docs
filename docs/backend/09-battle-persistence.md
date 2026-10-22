@@ -22,12 +22,12 @@ This replaced the sequential model (one trainer per round, opponent acted in a s
 
 ### Order of a round
 
-1. **Validate first.** Ownership, round key, ability legality, switch target (alive, benched), item owned and usable, run allowed (wild only). A refused action returns 200 with only the refusal step (`SwitchRejected`, `RunRefused` or `ItemRejected` plus `ItemErrorMessage`), **no AI step, and the same round key**. A refusal never costs a round.
+1. **Validate first.** Ownership, round key, ability legality, **affordability** (ability economy: `TurnSubmitStatus.Unaffordable`, 400 `battle-unaffordable-ability`, the round is not consumed), Rest availability (refused in `Free`: 400 `battle-rest-not-available`), switch target (alive, benched), item owned and usable, run allowed (wild only). A refused action returns 200 with only the refusal step (`SwitchRejected`, `RunRefused` or `ItemRejected` plus `ItemErrorMessage`), **no AI step, and the same round key**. A refusal never costs a round.
 2. **Swap-only round.** If the player owes a replacement (`OwedSwapTrainerId` is the player), only a Switch is accepted. It resolves alone, the AI does not act, there is no attack phase and no tick, and the round advances.
 3. **AI picks** from the state at round start (wild brain or trainer brain; the trainer brain's `mustSwap` comes from state, never from the player's pick). The decider is a `BattleAiDecider` delegate; if it throws, the AI side forfeits.
 4. **Phase 1, non-attacks:** item use, capture throw, switch, run. Always before any attack, player first, then the opponent. A successful capture or run ends the battle at once and the opponent's remaining action is skipped. NPC item use goes through a `BattleNpcItemSeam` delegate (no circular reference). A failed run or capture is just a used action.
 5. **Phase 2, attacks.** Snapshots are built after phase 1, so a switched-in creature is the target or attacker. Order is by snapshot Speed (condition modifiers included; the player's side also gets the talent `CreatureSpeedMultiplier`), recomputed every round. A tie is decided by `IBattleCoinFlip` (default `SeededBattleCoinFlip`, seeded by battle id and round; tests inject a deterministic flip). If the faster attack knocks the defender out, the slower creature's move is **cancelled**: the step has `Interrupted = true`, `DamageDealt = 0`, `Missed = false`, `ActorFainted = true` and narrates "X fainted before it could act". If that faint ended the battle, no Interrupted step is emitted (the ending step stays last).
-6. **End of round, condition ticks.** Damage-over-time and duration decrement no longer run inside `BattleResolver.Resolve`. Only each side's **active** creature ticks, and only while it is still standing and carrying at least one condition; a benched creature keeps its conditions untouched until it is switched back in (as in Pokémon). Each tick is one `ActionType.ConditionTick` step (value `5`), in Speed order: `ActingCreatureId` is the ticked creature, `DamageDealt` is the tick damage, `ActorFainted` marks a tick KO. A step is emitted only when the tick dealt damage (`DamageDealt > 0`) or a condition ended; a tick that changes nothing produces no step, so the log is not padded with empty ticks. A tick KO credits the opposing side like any KO (XP and loot included). Ticks skip missions. The shared math is `BattleConditionTick.Apply` in `CR.Game.Compat`.
+6. **End of round, ability economy and condition ticks.** *Economy:* In `Energy` mode both living active creatures regain `AbilityCostTuning.EnergyRegenPerRound` Energy (`BattleDomainService.Economy.cs`, `ApplyEnergyRegenAsync`). Paying for an ability happens when the attack step resolves (hit or miss; an interrupted attacker pays nothing); a **Rest** (`BattleActionType.Rest = 6`) is a non-attack action that recovers the mode's resource. Every emitted step is stamped with `ActionOutcome.AbilityCostMode`, `ResourceKind`, `AttackerResourceBefore/After`, `EnergyRestored`, `PpRestored`, `SurgeBonusGained`. See [Ability Economy](?page=backend/29-ability-economy). *Condition ticks:* Damage-over-time and duration decrement no longer run inside `BattleResolver.Resolve`. Only each side's **active** creature ticks, and only while it is still standing and carrying at least one condition; a benched creature keeps its conditions untouched until it is switched back in (as in Pokémon). Each tick is one `ActionType.ConditionTick` step (value `5`), in Speed order: `ActingCreatureId` is the ticked creature, `DamageDealt` is the tick damage, `ActorFainted` marks a tick KO. A step is emitted only when the tick dealt damage (`DamageDealt > 0`) or a condition ended; a tick that changes nothing produces no step, so the log is not padded with empty ticks. A tick KO credits the opposing side like any KO (XP and loot included). Ticks skip missions. The shared math is `BattleConditionTick.Apply` in `CR.Game.Compat`.
 7. **Replacements.** If the AI side's creature fell, the AI picks its replacement immediately (server-side) and it is emitted as a Switch step after the round. If the player's fell, the response carries `NeedsSwap = true` and the next round is a swap-only round. Only the player can owe a swap across a request, so the single `OwedSwapTrainerId` column is enough.
 8. **Battle end.** Win, lose, capture and fled are detected after every step and the ending step is always the last step. Rewards, XP and loot are paid only for steps that happened, never for a cancelled step.
 
@@ -47,6 +47,7 @@ Each round is claimed with a compare-and-swap (`TryBeginRoundAsync`): `battle_ro
 
 - `ActionOutcome.Interrupted`, `ActionOutcome.RoundNumber`, `ActionOutcome.ActorFainted`; `BattleActionType.ConditionTick = 5`.
 - `TurnResolution.Steps` in resolution order; `ActiveTrainerId` is always the player; `NextRoundKey` is non-null while the battle is active (also for swap-only rounds); `NeedsSwap` marks a swap-only next round. New `TurnSubmitStatus.RoundIncomplete`.
+- Ability economy (additive, see [Ability Economy](?page=backend/29-ability-economy)): `BattleActionType.Rest = 6`; `BattleStateDto.AbilityCostMode`, `PlayerSurge`, `PlayerSurgeCap`, `OpponentSurge`, `ActiveCreatureAbilities[]` (`BattleAbilityOption`); `BattleCreatureSnapshot` resource fields; the `ActionOutcome` stamps; migrations `M21201` (flag), `M21202`, `M21203`. Older clients ignore the new fields, so `min_client_version` is raised in the release that turns a mode on.
 - `RunOpeningStepsAsync` is a no-op that returns no steps (kept for the interface). `BattleStartResult.ActiveTrainerId` is the player.
 - Migration 20003 (Game): `battle_action_log.trainer_id UUID NULL`, `battle_round.steps_json TEXT NULL`, `battle_round.status VARCHAR(16) NULL`. Migration 20004 raises `app_config.min_client_version` to `0.2.0` only when it is lower (see [Forced update](#forced-client-update)).
 - In-flight battles at deploy: an open round with `ActiveTrainerId` = player is adopted as a simultaneous round; a round stuck on the AI is left to the staleness sweep.
@@ -78,6 +79,8 @@ Tracks the overall battle session.
 | `started_at` | DATETIME | |
 | `ended_at` | DATETIME NULL | |
 | `mission_state` | TEXT NULL | JSON snapshot of the active `BattleMissionTracker` (M16006). `NULL` means no missions for this battle (assignment failed, or the fight has none) |
+| `trainer1_surge_bonus` | INT NOT NULL DEFAULT 0 | `M21203`. TurnPool mode: one-battle bonus to trainer 1's Surge pool (Rest, Surge Shard). `BattleRecord.Trainer1SurgeBonus` |
+| `trainer2_surge_bonus` | INT NOT NULL DEFAULT 0 | `M21203`. Same for trainer 2 |
 | `guaranteed_capture_ready` | BOOLEAN NOT NULL DEFAULT false | M20001 (Game domain). Sticky once a `GuaranteedCapture` mission (Bond Trial) completes; cleared only by a committed capture — see [Capture Missions](?page=backend/capture-missions) |
 | `deleted` | BOOLEAN | Soft delete |
 
@@ -132,8 +135,34 @@ Persistent current HP per creature, **not** scoped to a battle. Written live dur
 |--------|------|-------|
 | `generated_creature_id` | UUID PK | `generated_creature.id` |
 | `current_hp` | INT | Current HP between/within battles |
+| `current_energy` | INT NULL | `M21007`. Energy mode: current Energy, persists between battles like HP. **Null means full Energy.** `GeneratedCreature.CurrentEnergy` (`int?`) is filled by the same LEFT JOIN |
 
 `GeneratedCreature.CurrentHitPoints` (`int?`) is populated via a LEFT JOIN on this table in every `generated_creature` SELECT. `null` → use `HitPoints` (max HP).
+
+### `generated_creature_ability_pp`
+
+PowerPoints mode: remaining PP per move, persistent like HP. **No row means full PP.** Created by `M21008` (Creatures domain).
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `generated_creature_id` | UUID | `generated_creature.id` |
+| `ability_id` | UUID | `abilities.id` |
+| `current_pp` | INT | Remaining uses; capped at the ability's `max_pp` on read |
+
+A newly learned move starts at full PP (no row); forgetting drops its row. Healing a team (`HealTeamAsync`, whiteout) clears the Energy and PP rows.
+
+### `battle_creature_charge`
+
+BuilderSpender mode: a creature's Charge for one battle. Created by `M21202` (Game domain). Battle-scoped: rows are deleted when the battle ends or is abandoned (`IBattleRepository.DeleteChargesAsync`). Charge starts at 0 each battle and is kept across switch-out.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | UUID PK | |
+| `battle_id` | UUID | Unique with `creature_id` |
+| `creature_id` | UUID | |
+| `charge` | INT NOT NULL DEFAULT 0 | Capped at `AbilityCostTuning.ChargeCap` (10) |
+| `updated_at` | DATETIME | |
+| `deleted` | BOOLEAN | Soft delete |
 
 ### `generated_creature_status_conditions`
 
@@ -273,6 +302,13 @@ Task<IReadOnlyList<BattleActionLogRecord>> GetActionLogAsync(Guid battleId);
 // Standalone (in-battle, not condition-linked) stat changes, keyed by (battle, creature)
 Task<IReadOnlyList<BattleStateStatChange>> GetStandaloneStatChangesByBattleCreatureAsync(Guid battleId, Guid creatureId);
 Task UpsertStandaloneStatChangesByBattleCreatureAsync(Guid battleId, Guid creatureId, IEnumerable<BattleStateStatChange> statChanges);
+
+// Ability economy (BuilderSpender charge, TurnPool surge bonus)
+Task<int> GetChargeAsync(Guid battleId, Guid creatureId, CancellationToken ct = default);
+Task UpsertChargeAsync(Guid battleId, Guid creatureId, int charge, CancellationToken ct = default);
+Task DeleteChargesAsync(Guid battleId, CancellationToken ct = default);
+Task<int> GetSurgeBonusAsync(Guid battleId, Guid trainerId, CancellationToken ct = default);
+Task SetSurgeBonusAsync(Guid battleId, Guid trainerId, int bonus, CancellationToken ct = default);
 ```
 
 Persistent HP and conditions are written through `IGeneratedCreatureRepository`:
@@ -284,6 +320,12 @@ Task ApplyStatusConditionAsync(Guid creatureId, Guid statusConditionId, int? tur
 Task RemoveStatusConditionAsync(Guid creatureId, Guid statusConditionId);
 Task<IReadOnlyList<GeneratedCreatureStatusCondition>> GetStatusConditionsAsync(Guid creatureId);
 Task RemoveAllStatusConditionsAsync(Guid creatureId);
+
+// Ability economy
+Task UpsertCurrentEnergyAsync(Guid creatureId, int? energy, CancellationToken ct = default);   // null = full
+Task<IReadOnlyDictionary<Guid, int>> GetAbilityPpAsync(Guid creatureId, CancellationToken ct = default);
+Task UpsertAbilityPpAsync(Guid creatureId, Guid abilityId, int currentPp, CancellationToken ct = default);
+Task DeleteAbilityPpAsync(Guid creatureId, Guid? abilityId, CancellationToken ct = default);   // null = every row
 ```
 
 ### Implementation
@@ -298,13 +340,13 @@ Task RemoveAllStatusConditionsAsync(Guid creatureId);
 
 Plain POCOs in `Game/CR.Game.Model/Battle/` — one file per table:
 
-- `BattleRecord` — maps to `battle` (includes `Trainer1ActiveCreatureId` / `Trainer2ActiveCreatureId`)
+- `BattleRecord` — maps to `battle` (includes `Trainer1ActiveCreatureId` / `Trainer2ActiveCreatureId`, `Trainer1SurgeBonus` / `Trainer2SurgeBonus`)
 - `BattleRoundRecord` — maps to `battle_round` (includes `ActiveTrainerId`)
 - `BattleRoundInputRecord` — maps to `battle_round_input`
-- `BattleCreatureSnapshot` — in-battle view of a creature (`TrainerId`, `CreatureId`, `CurrentHp`, `IsActive`), built from persistent creature tables; replaces `BattleCreatureStateRecord` in `BattleStateDto`
+- `BattleCreatureSnapshot` — in-battle view of a creature (`TrainerId`, `CreatureId`, `CurrentHp`, `MaxHp`, `IsActive`, plus `Energy`/`MaxEnergy` and `Charge`/`MaxCharge` in their mode), built from persistent creature tables; replaces `BattleCreatureStateRecord` in `BattleStateDto`
 - `BattleActionLogRecord` — maps to `battle_action_log`
 - `BattleAction` — represents a single submitted action (type, abilityId, itemId, etc.)
-- `ActionOutcome` — full resolution result returned from `SubmitActionAsync` (includes `AbilityKey`, `ConditionsApplied`, `AttackerConditionsApplied`, `NeedsSwap`)
+- `ActionOutcome` — full resolution result returned from `SubmitActionAsync` (includes `AbilityKey`, `ConditionsApplied`, `AttackerConditionsApplied`, `NeedsSwap`, and the economy stamps `AbilityCostMode`, `ResourceKind`, `AttackerResourceBefore`, `AttackerResourceAfter`, `EnergyRestored`, `PpRestored`, `SurgeBonusGained`)
 - `ActiveBattleCondition` / `ActiveStatChange` — live conditions used by the resolver and in `ActionOutcome`
 - `ResolvedConditionDefinition` — pre-loaded condition + stat changes passed into the resolver (lives in `CR.Game.Model/Battle/`)
 
