@@ -68,7 +68,7 @@ Pure static `AbilityCostPolicy` in `CR.Game.Compat.Economy`, over the records `A
 - `Evaluate(mode, costs, state, roundNumber)` returns `AbilityAffordability(Affordable, Cost, Reason)`; reasons `not-enough-energy`, `not-enough-charge`, `not-enough-surge`, `no-pp`.
 - `Pay(mode, costs, state)`, `Regen(mode, state)`, `Rest(mode, state)`, `RestPp(maxPp, currentPp)` and `SurgePool(round, bonus)` return the new state / value.
 
-It is used by submit legality, round resolution, the wild AI, and the HUD list in `BattleStateDto`. The Unity bag and HUD use it for display only (lands with slice 3, Unity).
+It is used by submit legality, round resolution, the wild AI, and the HUD list in `BattleStateDto`. The Unity bag and HUD use it for display only.
 
 The server side wraps it in `BattleResourceLedger` (internal, `Implementation/Battle/`): reads the mode once per (battle, round) from `IAppConfigRepository` (any read failure means Free), loads and saves each mode's resource (`current_energy`, `battle_creature_charge`, surge bonus columns, PP rows) and names the unit (`energy`, `charge`, `surge`, `pp`). The battle rules are in `BattleDomainService.Economy.cs` (partial class): `GetUnaffordableReasonAsync`, `IsRestAvailableAsync`, pay, Rest, Energy regen, state snapshot fields and active ability options.
 

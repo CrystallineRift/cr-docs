@@ -2799,7 +2799,6 @@
       ],
       "cr-data": [
         "Assets/CR/Core/Configuration/AbilityCostMode*.cs",
-        "Assets/CR/Game/Battle/**/*Cost*.cs",
         "Assets/CR/Core/Data/Registry/Definitions/AbilityConfig.cs",
         "Assets/CR/Game/World/Editor/AbilityEditorSyncHelper.cs"
       ]
