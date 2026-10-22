@@ -19,6 +19,15 @@ method had been unreachable dead code with only its own unit tests exercising it
 `receive-gift` equivalent.
 :::
 
+## The Story Starter (Cindris) Is Granted By The Philroe Encounter
+
+A new trainer is created with an **empty team**. The story's starter (`starter_creature_1_id`, the Cindris) is granted by `StarterGrantService` when the trainer starts the **Philroe scripted encounter**: a `Wild` battle intent whose spawner key is in `starter_grant_spawner_keys` (default `story-gaterbear-wagon`), from a trainer who has already entered the wagon location (`starter_grant_location_keys`, default `story-philroes-wagon`, read from the server's own `location_discovered_*` stat).
+
+- Entering the wagon, talking to Philroe and walking anywhere grant nothing. The old wagon-entry handler (`StarterGrantProjector`) and the any-location recovery are removed.
+- Any other battle intent with an empty team is refused with 409 `battle-no-creatures`, and nothing is granted.
+- A failed grant refuses the fight; the retry is the same scripted encounter. The response carries `grantedCreatureIds` so the client refreshes its team from server data.
+- Offline runs the same `BattleEncounterDomainService` and `StarterGrantService` against local SQLite.
+
 ## Why This Flow?
 
 The starter creature flow encapsulates two important design decisions:
