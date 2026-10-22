@@ -158,6 +158,8 @@ at most 254 characters, exactly one `@`, a dot in the domain, no whitespace, and
 never stored and never logged outside Development. A new request supersedes the caller's earlier
 unconsumed code. Rows older than 24 hours are hard-deleted by a throttled sweep on the request path.
 
+**Email look.** Both emails (code, new-device notice) render through `EmailLayout` (`Services/Email/EmailLayout.cs`): an email-safe 600px table with inline CSS in the crystallinerift.com brand (outer `#1f212c`, "Crystalline" cream + "Rift" `#ff9d49` script wordmark, Google Fonts link with Arial/cursive fallbacks, code in a letter-spaced `#ff9d49` pill, hidden preheader, `color-scheme` meta). Every dynamic value is HTML-encoded; the account id and address never appear. The plain-text body is unchanged.
+
 **Limits** (counted from `account_email_code` rows; over any limit is `429` + `Retry-After`):
 
 | Scope | Limit |
