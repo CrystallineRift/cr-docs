@@ -73,7 +73,7 @@ from its name and hidden unless debug mode is on.
 
 ## Story map
 
-**Content → Story map** draws every quest and its prerequisites on one canvas and edits lines, steps and prerequisites in place.
+**Content → Story → Story map** draws every quest and its prerequisites on one canvas and edits lines, steps and prerequisites in place.
 See [Quest Story Map](07-quest-story-map.md). A prerequisite shown here as a requirement row is read-only on the form:
 `referenceContentKey` is the target quest's key, resolved by the server.
 

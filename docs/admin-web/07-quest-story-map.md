@@ -1,6 +1,6 @@
 # Quest Story Map
 
-The story map (**Content → Story map**, `/content/quest-map`, content-write scope) shows every quest as a card and every
+The story map (sidebar **Content → Story → Story map**, `/content/quest-map`, content-write scope) shows every quest as a card and every
 prerequisite as an arrow, so a writer can see the whole story and rewire it without opening each quest. It is built on
 React Flow with ELK auto-layout (the same setup as the [Dialogue Canvas](06-dialogue-canvas.md)).
 
@@ -12,7 +12,10 @@ React Flow with ELK auto-layout (the same setup as the [Dialogue Canvas](06-dial
   requirement whose target was deleted shows as a "broken prerequisite" check.
 - **Conversation chips** on a card show the dialogues that offer, pay out or count a talk for the quest (from quest-links).
   A quest that starts automatically (`AutoWhenAvailable`) gets a "Starts automatically" badge and skips the offer check.
-- A legend explains the arrows and the card states; filters narrow by area, line or "has checks".
+- A legend explains the arrows and the card states. The filters sit on one row under the toolbar — area, giver, main/side,
+  story line — with the quest search filling the rest of the row; the toolbar "checks" button narrows to cards with findings.
+- The **minimap** (bottom right) draws each lane as a faint tint of its colour and each card solid in its lane colour (or its
+  player state colour in **View as a player**), with the selected card outlined, so it reads as an overview of the map.
 
 - A talent that is gated by a quest (`unlockQuestKey`) links here from the [Talent Tree Editor](09-talent-tree-editor.md) (its gold quest chip opens the map focused on that quest).
 
@@ -30,13 +33,16 @@ refused by the server (`400 requirement_cycle`), and the map answers with "That 
 - **Story line** is a select of the existing lines plus **New story line...**; a new line gets a slug key and a name, and the
   step defaults to the next free one in the lane. Writers never type quest or conversation keys; they are derived from names.
 - **Create conversation** adds a dialogue for the quest's giver, linked to the quest.
+- **Resize a lane:** hover a story-line band to show its handles and drag an edge or corner. A band can grow past its cards
+  but never shrinks smaller than them. The size is part of the layout (**Save layout**); **Tidy** resets every band to hug
+  its cards.
 
 Every save from the map re-reads the quest first (`by-content-key`), patches it, and saves with that fresh `rowVersion`, so
 the children it did not touch are not overwritten. A 409 opens the same conflict dialog as the dialogue editor.
 
 ## Layout document
 
-Card positions, lane colours and line names are stored server-side as a **layout document** per scope
+Card positions, lane colours, line names and hand-sized lane boxes (`lines[key].box`, `{x, y, width, height}`) are stored server-side as a **layout document** per scope
 (`GET`/`PUT /api/v1/quests/map-layout/{scope}`, table `quest_map_layout`, content-write policy). It is presentation only: it has
 no effect on gameplay, is not sent to the game client, and has no Unity counterpart. Limits: at most 2000 positions, 256 KB,
 lane colours as `#rrggbb`. It uses `row_version` like quests; if a save conflicts, the map merges the server's copy with your
