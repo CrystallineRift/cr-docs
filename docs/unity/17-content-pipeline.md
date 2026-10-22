@@ -215,6 +215,23 @@ success, writes nothing, and the pool silently stays as it was. Always read the 
 after a seed migration rather than trusting that it ran.
 :::
 
+## Pushing Studio content from the CLI
+
+Studio's **Push All Content** button has a headless twin for the open Editor, so a push no longer needs the window or a modal. Both call the same method (`ContentStudioTool.QueueAllContentPush`), so the order (creatures first, trainer battles last, then the achievements catalog), the per-asset saves and the `ContentPushLog` stamps are identical. The stamps are what clear the **Push N Edits** pill.
+
+```
+unity cmd --project-path <cr-api-unity> cr_studio_push_all --args dry   # pending edits per tab + destructive-push warning
+unity cmd --project-path <cr-api-unity> cr_studio_push_all --args go    # queue the push; returns at once
+unity cmd --project-path <cr-api-unity> cr_studio_push_status           # progress, then one line per type
+unity cmd --project-path <cr-api-unity> cr_studio_push_status --args cancel
+```
+
+- **`dry`** prints the server the Studio points at (the Local/Production switch), then `N of M edited since last push` for every tab, the total, and the same "these types remove server rows the assets do not list" text the dialog shows. It reloads the asset lists first, so a long-open window's stale lists cannot hide edits. A bare call does the same as `dry`; only `go` pushes, standing in for the dialog's confirm.
+- **`go`** queues one `StudioJob` per type plus one for achievements. `StudioJobRunner` steps them on `EditorApplication.update`, one request per tick, so the command returns before anything is sent. It refuses while the runner is already busy.
+- **`cr_studio_push_status`** reads `PushRunLedger` (shared with the window's own Push All): `RUNNING`, `DONE`, `DONE WITH FAILURES` or `STOPPED`, the job in progress, and `OK` / `FAILED` per type. A type stopped part-way is listed as never answered and is not stamped.
+
+A push writes live content to that server, so the user runs `go`. The ledger and the queue are lost on a domain reload (a script compile); a push interrupted that way shows as `STOPPED`, and the unstamped types stay pending.
+
 ## Related Pages
 
 - [Project Setup](?page=unity/01-project-setup) — database path config keys, startup migration flow

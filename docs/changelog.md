@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-10-22 — Studio Push All from the CLI, and encounter diagnostics
+
+cr-api-unity `fix/v023-encounters-push`. Client only; no server change.
+
+- **`cr_studio_push_all` / `cr_studio_push_status`.** Push All Content without the modal, sharing one queue method with the toolbar button. `dry` lists pending edits per tab and the destructive-push warning; `go` queues the jobs and returns at once. See [Content Pipeline](?page=unity/17-content-pipeline).
+- **Achievements are now a queued job** in Push All instead of a blocking call at queue time.
+- **Fresh team read for the encounter gate.** `TeamFaintedGateDriver` drops the cached team before every read, so an online cache read that raced the battle-closed invalidation cannot leave the gate closed on a stale empty team. It also logs each open/close with its reason.
+- **`[EncounterReadiness]` line at world init** (roaming flag, spawner zones, team size, gate) with a warning per blocker, and a named error when a zone's spawner cannot be resolved. See [Project Setup](?page=unity/01-project-setup).
+
 ## 2026-10-22 — Account-link emails match crystallinerift.com
 
 cr-api `fix/email-brand-layout`. Not deployed. New `EmailLayout` renders the sign-in code and new-device notice HTML in the site brand; text bodies unchanged. Docs: Auth and Accounts.

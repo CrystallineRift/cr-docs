@@ -272,6 +272,8 @@
         "Assets/CR/Core/Data/Repository/DatabaseMigration.cs",
         "Assets/CR/Core/Configuration/**/*.cs",
         "Assets/CR/Core/Data/Logic/StudioGameOverrides*.cs",
+        "Assets/CR/Game/World/GameInitializer.cs",
+        "Assets/CR/Game/World/Logic/EncounterReadiness.cs",
         "Assets/CR/Resources/configuration/GameSettings.asset"
       ]
     },
@@ -1175,6 +1177,9 @@
         "Assets/CR/Core/Data/Registry/AddressablesCatalogUpdater.cs",
         "Assets/CR/Core/DI/LocalDevGameInstaller.cs",
         "Assets/CR/Content/Editor/GaterbearPlaceholderCommand.cs",
+        "Assets/CR/Content/Editor/CrStudioPushCommand.cs",
+        "Assets/CR/Core/Data/Editor/ContentStudioTool.PushAll.cs",
+        "Assets/CR/Core/Data/Logic/PushRunLedger.cs",
         "Assets/CR/Tests/Editor/CreatureContentAddressTests.cs",
         "Assets/CR/Tests/Editor/GaterbearPlaceholderTests.cs"
       ]
