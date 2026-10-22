@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-22 — Account-link emails match crystallinerift.com
+
+cr-api `fix/email-brand-layout`. Not deployed. New `EmailLayout` renders the sign-in code and new-device notice HTML in the site brand; text bodies unchanged. Docs: Auth and Accounts.
+
 ## 2026-10-20 — Player admin: quest board, operator Complete, sticky achievement revoke
 
 cr-api `feature/player-admin-quests-achievements`, cr-admin-web PR #37. Not deployed.
