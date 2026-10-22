@@ -263,9 +263,13 @@ Because WAL parks committed pages in `-wal`/`-shm` sidecars, `GameDataAdopter` n
 alongside the database when it adopts a new floor. A fresh database must never inherit the previous
 one's write-ahead log.
 
+## Ability economy and learning fields
+
+`Abilities` rows carry `maxPp`, `energyCost`, `chargeDelta` (signed) and `poolCost` (default 1), plus `cost` as a wire alias of `maxPp` for older servers (`maxPp` wins). `ContentSyncWriter` writes all four columns into the local `ability` table and must not clamp `chargeDelta`. `Creatures` rows carry `defaultAbilityProgressionSetName`: on Pull `ResolveProgressionSetByName` maps it back to the local set and keeps the existing species default when the server omits the column; on push it is sent from `CreatureDefinition.defaultProgressionSet`. `ProgressionSets` now include the `line_*` sets. The version-check answer also carries `ability_cost_mode` (see [Ability Learning UI](?page=unity/45-ability-learning-ui)); it is not content and is never written to the floor.
+
 ## What a base creature does *not* carry
 
-`creature` has no `growth_profile_id` and no `ability_progression_set_id` — M1023 removed both
+`creature` has no `growth_profile_id` and no `ability_progression_set_id` — M1023 removed both (the later nullable `default_ability_progression_set_id`, M21001, is the species default, not a per-spawn choice; it is synced as `defaultAbilityProgressionSetName`)
 deliberately. The **spawner template** decides which growth profile and move set a spawn receives
 (`creature_spawner_template`), and the **generated creature** records what it got. A review asked
 for these to be synced onto the base creature; a schema test now pins the fact that they do not

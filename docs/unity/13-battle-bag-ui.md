@@ -183,6 +183,16 @@ Each `ItemEffectType` with runtime data has a corresponding typed params class. 
 
 **`ItemDefinitionEditor`** uses structured fields for each `EffectType` — no raw JSON TextArea. Enum dropdowns are generated from `Enum.GetNames(typeof(Stat))` etc. Condition names for `CureStatus`/`HeldStatusImmune` are fetched from `GET /ability/status_conditions`.
 
+## Tones, Tonics and the Surge Shard
+
+Three item families from the ability economy use the same target picker (see [Ability Learning UI](?page=unity/45-ability-learning-ui)):
+
+- **Tones** (24 `tone_*` items, `ItemEffectType.TeachAbility`) map to `ItemTargetKind.Teach`. `ItemTargetRule` greys a creature with "Does not resonate", "Needs level N" or "Already knows this move", using the server's `ToneResonance` rule (resonance, level, known). When all four slots are full the result carries `Offers` with `Deferred`: the bag suppresses the "Used X" toast, runs the learn prompt (`IAbilityOfferPresenter`), and the learn intent with `toneItemId` consumes the tone. Result lines: "Cindris learned Flame Wheel from the Ember Tone." then "The tone shattered." or "The ... Tone still hums." (Echoing tones are kept).
+- **Tonics** (Tonic, Super Tonic, Full Tonic, `RestoreEnergy`) map to `RestoreEnergy`: a creature is a valid target unless its Energy is full ("Energy already full"). Energy is read from `BattleStateDto.CreatureStates`, not the creature row. Result "Cindris recovered N Energy.".
+- **Surge Shard** (`BoostSurge`) targets no creature and is battle only; result "Surge +N.". A PP restore reads "Cindris restored N PP.".
+
+Offline, `ItemUseOfflineBindings` binds the `TeachAbilityHandler`, `RestoreEnergyHandler`, `BoostSurgeHandler` and (`InstallToneGate`) the `ToneTeachGate`.
+
 ## User Interactions
 
 ### Selecting a Summoning Shard
