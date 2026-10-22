@@ -168,7 +168,7 @@ Open the main scene (typically `Assets/Scenes/Game.unity`) and press **Play**. O
 3. If no session exists, the login/auth flow starts.
 4. Once a trainer is selected, `GameInitializer` fires `RunAsync` and all `IWorldInitializable` behaviours in the scene initialize.
 
-Watch the Unity Console for `[GameInitializer] === World init complete ===` to confirm the bootstrap succeeded.
+Watch the Unity Console for `[GameInitializer] === World init complete ===` to confirm the bootstrap succeeded. Straight after it, one `[EncounterReadiness]` line says whether wild encounters can happen: `roaming_spawners=on|off`, the number of spawner zones (and how many stand creatures instead of ambushing), the team size and the `TeamFaintedGate` state. A warning follows for each blocker: no zone registered, roaming on but no zone switched over, an empty team (the story's starter has not been granted yet) or an all-fainted team. A zone whose spawner cannot be resolved logs an error naming its spawner key and stays inert; the `TeamFaintedGate` logs each time it opens or closes.
 
 ## Configuration (`GameSettings.asset`)
 
