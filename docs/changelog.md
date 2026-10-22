@@ -9,6 +9,10 @@ cr-api-unity `fix/v023-encounters-push`. Client only; no server change.
 - **Fresh team read for the encounter gate.** `TeamFaintedGateDriver` drops the cached team before every read, so an online cache read that raced the battle-closed invalidation cannot leave the gate closed on a stale empty team. It also logs each open/close with its reason.
 - **`[EncounterReadiness]` line at world init** (roaming flag, spawner zones, team size, gate) with a warning per blocker, and a named error when a zone's spawner cannot be resolved. See [Project Setup](?page=unity/01-project-setup).
 
+## 2026-10-22 — Account-link emails match crystallinerift.com
+
+cr-api `fix/email-brand-layout`. Not deployed. New `EmailLayout` renders the sign-in code and new-device notice HTML in the site brand; text bodies unchanged. Docs: Auth and Accounts.
+
 ## 2026-10-20 — Player admin: quest board, operator Complete, sticky achievement revoke
 
 cr-api `feature/player-admin-quests-achievements`, cr-admin-web PR #37. Not deployed.
