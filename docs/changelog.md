@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-22 — World fill tooling
+
+cr-docs `feature/world-fill`. Documents the cr-api-unity world-fill tooling (client and editor only; no server change).
+
+- **New pages.** [Side Content Packets](?page=unity/46-side-content-packets) (`cr_side_lint` / `cr_side_author`, packet schema, lint rules, side ledger, hand-written dialogue) and [Dungeon Scaffold](?page=unity/47-dungeon-scaffold) (`cr_dungeon_check|scaffold|build`, spec, derived files, prop-swap convention).
+- **Open World.** New act1 spawner band (L1-6, regions 1 and 2), the gated hand spawners `act1-ruins-wild` / `act1-foothill-wild`, region 22 on `forest-wild-act45`, the generated act3/act45 defs, and the World content lint guards with the species windows table.
+
 ## 2026-10-22 — Ability learning and ability economy (server merged)
 
 cr-docs `feature/ability-economy`. The cr-api server code and the cr-api-unity client are both merged on `feature/ability-economy` (not deployed); the pages describe the real names on both sides.
