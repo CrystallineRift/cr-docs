@@ -215,6 +215,11 @@
     "path": "content/01-ai-content-ledger"
   },
   {
+    "section": "Content",
+    "title": "World Fill Content",
+    "path": "content/02-world-fill"
+  },
+  {
     "section": "Guides",
     "title": "Scene Setup Overview",
     "path": "guides/01-scene-setup-overview"
