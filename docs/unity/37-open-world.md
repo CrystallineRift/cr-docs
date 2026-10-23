@@ -662,6 +662,56 @@ After any rebuild of towns, interiors, the wagon build or the story build, count
 - **Rebuilds drop NPC bodies.** A cell rebuild can drop NPC models. After any town, interior or corridor rebuild run `cr_dress_cell_npcs` and compare the `StylizedBody_FullBody` count per scene against the table above (none may drop), then a dry build (0 changes).
 - **Open.** Region 3 camp on the west bank, the stop props, plot positions and the cold lodge interior merchant are not render-verified; `StoryShotScenesTests.arrival` fails before and after P5 (needs `cr_story_author_shots`).
 
+## Wild zone bands and world content lint (world fill, 2026-10-22)
+
+`Data/Map/region-bands.json` maps each top parent region to an act (`parentAct`), each act to a spawner band (`actBand`) and each band to a level range.
+
+| Band | Levels | Acts / regions |
+|---|---|---|
+| `act1` | 1-6 | act 1: regions 1 and 2 (new) |
+| `act2` | 6-12 | act 2 |
+| `act3` | 12-24 | act 3 |
+| `act45` | 24-36 | acts 4 and 5 |
+
+**Act 1 is authored.** `RegionBands.AuthoredAct = 1`: `GeneratesWildZones` is false for it, so `ContinentWildZoneSeeder` (`section=wildZones`) and `WildSpawnerSeeder` (`cr_spawners_seed_wild`) never generate zones there, even though the band exists. Act 1 has two hand spawners (`Content/Defs/Spawners`):
+
+| Spawner | Region / position | Pool |
+|---|---|---|
+| `act1-ruins-wild` | region 1, (240, 1080), r 12 | spike, wolfpup, sunflowerfairy, mudcalf; L4-6 |
+| `act1-foothill-wild` | region 2, (318, 945), r 12 | gaterbear, spike; L3-5 |
+
+Both are placed as **gated `StoryZoneRow`s** in the region file's `story.zones` with `requiredBeat: "act1-done"` (`arenaKey meadow-arena`). `story.zones` is the **only** path for wild zones in pinned Act 1 cells and town-family leaves (the `wildZone` section is for generated zones); the zone appears only once the beat is set, so the early walk stays encounter-free.
+
+Other band changes: region 22's zone now uses `forest-wild-act45` (was an act-3 spawner). The seeder generated the defs the remaining regions needed: `grassland-wild-act3`, `wetland-wild-act3`, `island-wild-act3`, and `coast-wild-act45` (`island-wild-act45` too). Spawner names are `<family>-wild-<band>`; `cr_spawners_push` publishes them.
+
+### World content lint
+
+`Assets/CR/Tests/Editor/WorldContentLintTests.cs` fails the build when parallel authors clash, instead of in a playtest.
+
+| Guard | Fails when |
+|---|---|
+| Key uniqueness | A quest, dialogue, npc or trainer key repeats across Defs; a key is used by two kinds of Def; the story registry allocates a key to two regions (known legacy exceptions listed in the test; do not add); the staging `quests.json` or readable files hold a key twice or clash with a Def. |
+| Species windows (pools) | A spawner pool template's level range leaves its species' window. |
+| Species windows (teams) | A trainer team slot leaves its species' window. |
+| Window table | The hand table disagrees with the creature Defs' `MinLevel` evolution rules (windows are also derived from the rules; the hand entries win). |
+| Slot ids | A trainer slot template id is not the deterministic slot id. |
+| Zone spawners | An overlay wild zone or story zone names a spawner not registered in `ContentDefinitionProvider`. |
+| Pickup definitions | A story pickup item has no `pickup_definition` on the committed floor (a shrinking known-missing list; the test fails when an entry is fixed, delete it then). |
+| Pickup ids | Two pickup instances share an id (collection is tracked per instance id). |
+
+Species windows (inclusive levels; unlisted species are unconstrained):
+
+| Species | Window |
+|---|---|
+| `creature_cindris` / `cindralis` / `cindrakar` | 1-7 / 8-19 / 20+ |
+| `creature_dragonspark` / `dragonfire` | 1-23 / 24+ |
+| `creature_crabby` / `shell` | 1-15 / 16+ |
+| `creature_bud` / `blossom` | 1-11 / 12+ |
+| `creature_sunflowerfairy` / `sunflorapixie` | 1-13 / 14+ |
+| `creature_snakelet` / `poisonbomb` | 1-17 / 18+ |
+
+Side packets lint trainer teams against the same windows ([Side Content Packets](?page=unity/46-side-content-packets)); dungeons are covered by [Dungeon Scaffold](?page=unity/47-dungeon-scaffold).
+
 ## World map tab
 
 In open mode `OpenWorldMapLayoutSource` replaces the legacy node layout: every region (sub-regions included; not mountain, ocean or unassigned) is shown

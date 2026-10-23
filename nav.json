@@ -215,6 +215,11 @@
     "path": "content/01-ai-content-ledger"
   },
   {
+    "section": "Content",
+    "title": "World Fill Content",
+    "path": "content/02-world-fill"
+  },
+  {
     "section": "Guides",
     "title": "Scene Setup Overview",
     "path": "guides/01-scene-setup-overview"
@@ -458,5 +463,15 @@
     "section": "Unity",
     "title": "Ability Learning UI",
     "path": "unity/45-ability-learning-ui"
+  },
+  {
+    "section": "Unity",
+    "title": "Side Content Packets",
+    "path": "unity/46-side-content-packets"
+  },
+  {
+    "section": "Unity",
+    "title": "Dungeon Scaffold",
+    "path": "unity/47-dungeon-scaffold"
   }
 ]
