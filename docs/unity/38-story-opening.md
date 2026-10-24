@@ -97,6 +97,24 @@ still comes from the wagon location's trigger and the authority).
   through them before the topics): she heard Philroe shouting, the Mudcalves broke the rail, "Gaterbears, if you ask me".
 - **Mudcalf pen canon.** The pen rail is down and the three Mudcalves bolted, spooked all week. Philroe's `offer` and the
   Runaway Cargo description say so; the old "tethered to the wagon" line is gone.
+- **Hellcat leap.** On Philroe's `help-leap` line ("Something black drops from the rocks above the wagon...") the
+  presentation Cindris (the `[Bond Cue]` model) leaps in while the rocks-top to wagon-low camera pan runs. Presentation
+  only: the Hellcat is granted by the authority at the wagon on its own terms; the cue grants, counts and reports nothing.
+  - `HellcatLeapCue` subscribes to `IDialogueLineFeed` like `PotionTossCue`. On `help-leap` of `dialogue-merchant-area-1`
+    it waits 0.3 s, activates the model at `Mark_wagon_leap_start` and arcs it to `Mark_wagon_leap_land` (between the
+    player and the gaterbear). It never blocks the dialogue card and needs no input.
+  - **Timeline** (`HellcatLeapTimeline`, unscaled time): crouch 0.30 s, air 0.85 s, land 0.15 s, then settled. Path
+    (`LeapArc`): straight x/z, parabolic height peaking 1.6 m above the higher endpoint. Both are pure logic with tests.
+  - **Animator.** `HellcatLeap.controller` (`Assets/CR/Content/Animation/Story`; Idle / Jump / Land, Dragon Spark clips),
+    driven by the `Jump` and `Land` triggers. After landing the model holds facing the bear (`Mark_wagon_bear`).
+  - **Feel.** Landing plays `feel/hit-heavy` (intensity 0.6) through `IFeelMomentPlayer`; Reduced Motion is honoured.
+  - **Skip / Ended.** `Ended` mid-flight (the player skipped) settles the model at the landing mark at once.
+    `DialogueLineCue` still hides it when the conversation ends and places it beside the player on `help-bond`.
+  - **Rebuild.** The marks and the controller come from `StorySceneBuilder.AddWagonOpening`; the controller is built or
+    repaired in place, so `cr_story_build_scenes --args wagon` reproduces both (re-dress NPC bodies after: the cell
+    rebuild strips them). Tests: `LeapArcTests`, `HellcatLeapTimelineTests`, `HellcatLeapCueTests`, `WagonSceneTests`.
+  - Not yet checked in Play: `help-bond` framing (the Hellcat now starts at the landing mark, about 3.7 m from the
+    approach mark). Ledger row: [AI Content Ledger](?page=content/01-ai-content-ledger).
 - **Smoke.** `StorySmokeRunner` teleports to the approach, waits for First Battle, steps into `Event_wagon-callout`, attaches to
   the conversation (`AttachToConversationAsync`, `WagonSmokeRule`), waits for the event to play (60 s, FAIL on timeout), then
   expects the charge battle (FAIL-WORTHY if only the reflection fallback starts it).

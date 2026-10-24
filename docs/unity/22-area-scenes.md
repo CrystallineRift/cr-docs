@@ -197,6 +197,21 @@ and leaves it standing in the world, which reads as a wild creature the player c
 never fight. It is no longer placed in the areas; the prefab stays in the project as a dev tool for
 looking at a creature in a scene.
 
+**Quest-hide key (2026-10-23 fix).** `SpawnerWorldBehaviour.hideWhenQuestCompletedKey` now defaults to
+empty (never hidden). It used to default to `quest-first-battle`, meant only for the stationary wagon
+gaterbear zone, so every builder-stamped zone inherited it (161 serialized zones, 160 of them plain roaming
+zones) and `RoamingSpawnerBehaviour` despawned the creatures once First Battle was complete: they appeared,
+then vanished, with no log line. Now:
+
+- Only `StorySceneBuilder` sets the key, on the stationary wagon zone (`story-gaterbear-wagon`).
+- `cr_world_clear_quest_hide` (args `dry` = text scan only, no scenes opened) empties the key on every
+  non-stationary zone in the cell scenes. It is dialog-free and refuses to run while an open scene has unsaved
+  changes. `CR_EncounterZone.prefab` stores the field explicitly, empty.
+- `WorldQuestHideLintTests` scans scene YAML and prefabs: only stationary zones may carry a non-empty key.
+- The quest-hidden check re-runs when `IQuestService.OnSessionReady` fires, so a zone that read quest state before
+  the session was set (it logs at debug and keeps its state) is corrected as soon as the session is ready.
+  `LatestOnlyTicket` makes a newer read supersede an older, slower one.
+
 ### Meadow art sets
 
 The `style` option picks which set dresses the Meadow; the Cave set is fixed. Switching style

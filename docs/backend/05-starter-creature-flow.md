@@ -205,6 +205,66 @@ that inserts only the trainer row, leaves every inventory id column NULL, and th
 grant (e.g. the starter) throws `InvalidOperationException("Trainer ... has no team inventory
 configured")` inside `CreatureInventoryService.GetTeamInventoryIdAsync`.
 
+## Character cap and delete
+
+Each account may hold a limited number of **live player characters** online, and a player can delete one.
+
+**Cap.** `TrainerDomainOptions.MaxPlayerTrainersPerAccount` (`int?`, null = unlimited). The AIO host reads config key
+`Trainers:MaxPlayerTrainersPerAccount` (appsettings default `3`, missing key also 3; `0` or negative = unlimited via
+`NormalizeMax`). Offline binds `TrainerDomainOptions.Offline` (no cap). In `CreateTrainerAsync` the check runs inside
+the create transaction: `LockAccountForTrainerCreateAsync` (Postgres `pg_advisory_xact_lock(hashtext('trainer-create'),
+hashtext(accountId))`, a namespaced key so it never collides with other advisory locks; SQLite is a no-op because its
+single writer already serialises) then `CountPlayerTrainersInAccountAsync` (live, not `is_npc`, no NPC battle-trainer
+identity). `used >= max` throws `TrainerLimitReachedException` and the transaction rolls back.
+
+`POST /trainer` forces `IsNpc = false` and `NpcContentKey = null` on the body, so a client can neither mint an NPC identity
+to dodge the cap nor hide a character from the list.
+
+**Delete.** `ITrainerDomainService.DeleteOwnedTrainerAsync(accountId, trainerId)` returns a `TrainerDeleteOutcome`:
+
+| Outcome | When |
+|---|---|
+| `Deleted` | owned live player character removed |
+| `NotFound` | no such live row for this account, another account's row, an NPC identity, or a repeat delete |
+| `Blocked(code, message)` | an `ITrainerDeletionGuard` refused |
+
+Ordering: read the trainer (before the transaction; SQLite cannot read on a second connection mid-write), then in one
+transaction (1) soft-delete the trainer row (`DeleteTrainerInTransactionAsync`: ownership, `not deleted`, `not is_npc`,
+not an NPC identity; zero rows = `NotFound`; the UPDATE also takes the row lock), (2) run every registered guard,
+(3) soft-delete the four inventories, (4) commit. A block rolls everything back. All deletes are soft.
+
+**Guards.** `ITrainerDeletionGuard.CheckAsync(accountId, trainerId)` returns a `TrainerDeletionBlock` (stable kebab-case
+code plus player text) or null. `MarketListingsTrainerDeletionGuard` refuses with `trainer-has-open-listings` when the
+character has an **open** listing, meaning state Active and not expired (`CountOpenListingsBySellerTrainerAsync`),
+because the listed creatures sit in escrow and must go back to a live character. The reverse race is closed in the Market
+repository: the listing insert is conditional on the seller trainer being live in the same statement (SQLite
+`INSERT ... SELECT ... WHERE EXISTS`, Postgres adds `FOR SHARE` on the trainer row so a concurrent delete waits);
+`MarketService` rolls back with `NotFound` when nothing was inserted.
+
+**Routes.**
+
+| Route | Result |
+|---|---|
+| `POST /trainer` | `409 trainer-limit-reached` at the cap |
+| `DELETE /trainer/{trainerId}` | `204`, `404`, or `409 trainer-has-open-listings` (any guard code) |
+| `GET /trainer/slots` | `{ used, max }`; `max` null = unlimited |
+
+409 bodies use `ApiError.Body(code, "requirements_not_met", message)`; the codes are `ApiErrorCodes.TrainerLimitReached`
+and `ApiErrorCodes.TrainerHasOpenListings` (pinned by `TrainerErrorCodePinTests`). Identity comes from the token only.
+
+**Known and intentional.**
+
+- **Orphaned rows.** Delete soft-deletes the trainer and its four inventories only. Rows keyed by `trainer_id` in quests,
+  stats, achievements, battles, pickups, talents and location discoveries stay behind the soft-deleted character,
+  unread. The one player-visible reader that was fixed is the Market seller view (`GetListingViewsBySellerAsync` now
+  excludes deleted seller characters on both engines).
+- **Restore** is a later admin feature; nothing undeletes today.
+- **Active battles are not checked** by delete.
+- **The cap limits live characters, not creations.** Create then delete again re-grants the starting kit each time. If
+  that is abused, add a per-account create rate limit; not built.
+- A guard runs on its own connection before commit, so the guard check is advisory by itself; the Market insert condition
+  above is what makes the listing race safe.
+
 ## The Starting Kit at Trainer Creation
 
 :::note Pending deploy (cr-api PR #70, feature/retire-welcome)

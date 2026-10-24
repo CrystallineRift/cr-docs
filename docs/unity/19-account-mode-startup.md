@@ -197,6 +197,51 @@ online live on the server with `IsOnlineTrainer = true`. Each character-select s
 mode's set — enforced naturally by which repository/DB is queried under `IsPlayingOnline`. No extra cross-mode
 guard is needed; an offline character is structurally never offered in online mode, and vice versa.
 
+## Deleting a character and online slots
+
+Character Select (`CharacterSelectController`) puts a **Delete** button on every character card and, online, shows
+a slots label above the list.
+
+**Delete flow.**
+
+1. Delete disables the card's buttons and opens a `ChoiceDialog` titled "Delete {name}?" with one Delete option
+   ("Their creatures, items and progress are gone for good.") and Cancel. Initial focus is on **Cancel**
+   (`ChoiceDialog.ShowAsync(..., focusCancel: true)`), so a stray Enter or A press never deletes.
+2. Confirm calls `ITrainerDeletionService.DeleteOwnedTrainerAsync(trainerId)`. The client names the character;
+   the authority decides (account comes from the session, never from the UI).
+3. `TrainerDeletionOnlineOfflineService` routes it:
+   - **Online:** `ITrainerRepository.DeleteTrainer` = one HTTP `DELETE /trainer/{id}`. `TrainerOnlineRepository`
+     evicts the `TrainerList` and `Trainer` cache entries **even when the server answers 404** (stale local
+     copy), then rethrows. `TrainerDeletionServerErrors` maps 404 to `NotFound` and 409 to `Blocked` (code from
+     the response, fallback `trainer-delete-refused`); anything else rethrows.
+   - **Offline:** cr-api's own `ITrainerDomainService.DeleteOwnedTrainerAsync` over local SQLite. Same rules, no cap
+     (`TrainerDomainOptions.Offline`, no deletion guards bound in `LocalDevGameInstaller`).
+4. If the deleted character is the session's current trainer (and the outcome is not `Blocked`), the session is
+   cleared (`IGameSessionService.ClearTrainerAsync`).
+5. `TrainerDeleteUiRule.For(kind)`: `Deleted` and `NotFound` both mean "gone", so the list reloads and focus lands on
+   the first card (or Create New). `Blocked` shows the reason in the status label (`cs-status--error`):
+   `ErrorText.TryGetServer(code)` first (`trainer-has-open-listings`, `trainer-limit-reached` are keyed in
+   `ErrorText`), else the server message. Thrown errors show `PlayerErrorText.For(ex)`.
+
+:::note Online router stays out of the transaction members
+`TrainerOnlineRepository` throws `NotSupportedException` for `CountPlayerTrainersInAccountAsync`,
+`LockAccountForTrainerCreateAsync` and `DeleteTrainerInTransactionAsync`, by design: the cap and the delete run on
+the server, and online there is one HTTP call. `TrainerOnlineOfflineRepository` forwards them to the online or
+offline repository by `IsPlayingOnline`, so reaching the online ones is a wiring bug. Only offline
+`TrainerDomainService` touches them.
+:::
+
+**Slots label.** `ITrainerSlotsService.GetSlotsAsync()` (`TrainerSlotsOnlineOfflineService`): offline returns `null`
+(label hidden, no cap); online `GET /trainer/slots` returns `{ used, max }` (`max` null = unlimited). Any failure is a
+warning and `null`, and Character Select falls back to the listed count with no max. That is **fail-open**: the
+client only decorates, the server still refuses the 4th create. `TrainerSlotPolicy` holds the pure rules
+(`ShowsSlots`, `IsFull`, `CanCreate`; `max` null or `<= 0` is unlimited). The label reads "{used} of {max}
+characters", or "... delete one to make room." (`cs-slots--full`) when full, and Create New is disabled while full.
+
+**Dev tools.** Raw `ITrainerRepository.DeleteTrainerAsync` is unchanged and stays for GameDataManager and smoke
+tests. It skips the domain rule (ownership, guards, inventories). Player UI must go through
+`ITrainerDeletionService`.
+
 ## Wiring summary
 
 - `IConnectivityProbe` → `ConnectivityProbe` bound `AsSingle()` in `LocalDevGameInstaller`.
