@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-10-23 — Character delete and the 3-character online cap
+
+cr-api branch `feature/trainer-delete-and-cap` and cr-api-unity lane `uA` (not yet merged or deployed).
+
+- **What:** Players can delete a character from Character Select (Delete button, confirm dialog focused on Cancel). Online accounts are capped at 3 live characters (`Trainers:MaxPlayerTrainersPerAccount`, `0` = unlimited); `POST /trainer` answers `409 trainer-limit-reached` at the cap, `DELETE /trainer/{id}` answers `409 trainer-has-open-listings` while the character has open market listings, and `GET /trainer/slots` feeds an "N of 3 characters" label. Offline has no cap and uses the same delete rule over local SQLite.
+- **Why:** There was no player-facing delete, and nothing stopped an account from piling up characters. Known gap: the cap limits live characters, not creations, so create/delete churn re-grants starter kits; a per-account create rate limit is the follow-up if abused. Related rows (quests, stats, achievements, battles, pickups, talents, location discoveries) stay orphaned behind the soft-deleted character, intentionally.
+- **cr-api:** `TrainerDomainOptions`, `ITrainerDeletionGuard`, `TrainerDomainService.DeleteOwnedTrainerAsync` (ownership, row lock, guards, then inventories, all soft deletes), namespaced advisory lock on create, `POST /trainer` forces `IsNpc=false`, `MarketListingsTrainerDeletionGuard`, live-seller conditional listing insert, Market seller view hides deleted characters, `ApiErrorCodes` entries, `TrainerSlotsResponse`.
+- **Unity:** `ITrainerDeletionService` / `TrainerDeletionOnlineOfflineService`, `ITrainerSlotsService` (fail-open), `TrainerSlotPolicy`, `TrainerDeleteUiRule`, `CharacterSelectController`, `ChoiceDialog` focus-cancel, `ErrorText` entries; the online trainer repository throws `NotSupported` for the new transaction members by design.
+- **Docs:** [Account Mode & Startup](?page=unity/19-account-mode-startup) gains "Deleting a character and online slots"; [Starter Creature Flow](?page=backend/05-starter-creature-flow) gains "Character cap and delete"; `doc-sources.json` globs for the new files.
+
 ## 2026-10-23 — Cindris leap cue on the wagon opening
 
 cr-api-unity PR #149 (merged to main). Client only; no server change.

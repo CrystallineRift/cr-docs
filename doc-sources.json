@@ -147,6 +147,8 @@
         "Game/CR.Game.Domain.Services.Test/Trainer/TrainerCreationService*.cs",
         "Game/CR.Game.Domain.Services/Implementation/Creature/StarterCreatureService.cs",
         "Trainers/CR.Trainers.Service.REST/Endpoints/TrainerEndpoints.cs",
+        "Market/CR.Market.Domain.Services/Implementation/MarketListingsTrainerDeletionGuard.cs",
+        "Common/CR.Common.REST.Server/ApiErrorCodes.cs",
         "Convenience/CR.Api.IntegrationTests/TrainerCreationHttpTests.cs"
       ],
       "cr-data": [
@@ -1344,6 +1346,12 @@
         "Assets/CR/UI/Logic/**",
         "Assets/CR/Core/Data/Logic/OnlineSessionIdentity.cs",
         "Assets/CR/UI/CharacterSelectController.cs",
+        "Assets/CR/UI/Resources/CharacterSelect.uxml",
+        "Assets/CR/UI/Resources/CharacterSelect.uss",
+        "Assets/CR/Trainers/Deletion/*.cs",
+        "Assets/CR/Trainers/Slots/*.cs",
+        "Assets/CR/UI/Logic/TrainerSlotPolicy.cs",
+        "Assets/CR/UI/Logic/TrainerDeleteUiRule.cs",
         "Assets/CR/Core/Data/Logic/LinkAccountFlow.cs",
         "Assets/CR/Core/Data/Logic/OnlineSessionGate.cs",
         "Assets/CR/Core/Data/Logic/AuthTokenLadder.cs",
