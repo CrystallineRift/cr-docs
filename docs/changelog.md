@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-10-24 — Cindris breathes fire at the wagon
+
+cr-api-unity lane `uC` (`feature/cindris-fire`). Client only; no cr-api change.
+
+- **What:** On Philroe's `help-fire` line the presentation Cindris casts, a fireball flies from her mouth to the stationary gaterbear's snout, the bear recoils and swipes back, and she flinches (`HellcatFireCue` on `Cue_wagon-fire`; windup 0.35 s, travel 0.45 s, bear recoil 0.45 s, swipe 0.35 s, cat recoil 0.30 s; Feel `feel/hit-heavy` 0.5 on impact, `feel/hit-normal` 0.35 on the swipe). Reuses `HCFX_Fire_01`, `fire_hit`, `ClawSlash_Fire`. Skip, `Ended`, another line or Reduced Motion settle it at once.
+- **Why:** The `help-fire` card played over a still scene.
+- **Unity:** `HellcatFireCue`, `FireTimeline` / `FirePhase`, `FireArc`, `BearReaction` / `BearPose`, `HellcatLeap.controller` (`Cast` + `Hit` states, unscaled Animator), `Mouth` anchor and cue wiring in `StorySceneBuilder.AddWagonOpening`, scene `World_c0_r3` rebuilt. The bear's visual child moves, never its root.
+- **Docs:** [Opening Story](?page=unity/38-story-opening) gets "Fire on help-fire"; one [AI Content Ledger](?page=content/01-ai-content-ledger) row; `doc-sources.json` globs for the new files.
+
 ## 2026-10-23 — Character delete and the 3-character online cap
 
 cr-api branch `feature/trainer-delete-and-cap` and cr-api-unity lane `uA` (not yet merged or deployed).

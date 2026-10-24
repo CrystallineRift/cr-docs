@@ -115,6 +115,33 @@ still comes from the wagon location's trigger and the authority).
     rebuild strips them). Tests: `LeapArcTests`, `HellcatLeapTimelineTests`, `HellcatLeapCueTests`, `WagonSceneTests`.
   - Not yet checked in Play: `help-bond` framing (the Hellcat now starts at the landing mark, about 3.7 m from the
     approach mark). Ledger row: [AI Content Ledger](?page=content/01-ai-content-ledger).
+- **Fire on help-fire.** On Philroe's `help-fire` line of `dialogue-merchant-area-1` the presentation Cindris breathes a
+  fireball at the stationary gaterbear; the bear recoils and swipes back and she flinches. Presentation only: it grants,
+  counts and reports nothing, and the bear's root never moves, so the charge rule is untouched.
+  - `HellcatFireCue` lives on the `Cue_wagon-fire` object in `World_c0_r3`. Like the leap cue it subscribes to
+    `IDialogueLineFeed` (line shown) and `IDialogueService.Ended`, and needs no input. Serialized: dialogue key, node
+    (`help-fire`), model (the shared Hellcat; re-placed at the landing mark if not showing), `Mouth` anchor (a child of the
+    model, 0.45 m forward / 0.35 m up), `Mark_wagon_bear`, the camera mark, three FX prefabs, two Feel moments.
+  - **Timeline** (`FireTimeline`, unscaled time, phases in `FirePhase`): windup 0.35 s, travel 0.45 s, bear recoil
+    0.45 s, swipe 0.35 s, cat recoil 0.30 s (1.90 s total), then settled. Impact is the travel to recoil edge. Pure logic with
+    tests (`FireTimelineTests`, `FireArcTests`, `BearReactionTests`).
+  - **FX (reused, none new).** Fireball `HCFX_Fire_01` flies from the mouth to the snout (bear visual + 0.9 m) on `FireArc`
+    (straight line plus a 0.25 m hump); impact `fire_hit` at the snout; `ClawSlash_Fire` at the Hellcat (0.5 m up), facing the
+    camera mark. Spawned FX are destroyed on settle (3 s safety lifetime).
+  - **Feel.** Impact plays `feel/hit-heavy` at intensity 0.5; the swipe plays `feel/hit-normal` at 0.35.
+  - **Bear.** The cue finds the stationary `WildCreatureBehaviour` within 2.5 m (planar) of `Mark_wagon_bear` and moves only its
+    animator child, never the root. `BearReaction`: recoil 0.30 m away from the cat with an 8 degree yaw wobble, then a 0.25 m
+    lunge toward her on the swipe; every phase starts and ends at rest and the rest pose is restored on settle. No bear found
+    (or no visual child): the fire still plays, nothing reacts.
+  - **Animator.** `HellcatLeap.controller` gains `Cast` (Dragon Spark `Cast Spell`) and `Hit` (`Take Damage`) states on
+    triggers of the same names: `Cast` at the start, `Hit` at cat recoil. The model Animator uses Unscaled update mode, since the
+    arc and cue run on unscaled time.
+  - **Interrupts.** Any other line of the conversation, `Ended`, or the component disabling settles at once (FX destroyed, bear
+    back at rest, triggers cleared). Reduced Motion: cast, impact and claw FX appear together with no flight, recoil or Feel
+    shakes. A missing model, `Mouth` or bear mark logs a warning and plays nothing.
+  - **Rebuild.** `StorySceneBuilder.AddWagonOpening` creates the `Mouth` anchor, adds and wires the cue and repairs the
+    controller, so `cr_story_build_scenes --args wagon` reproduces it (re-dress NPC bodies after). Tests: `HellcatFireCueTests`,
+    `WagonSceneTests`. Ledger row: [AI Content Ledger](?page=content/01-ai-content-ledger).
 - **Smoke.** `StorySmokeRunner` teleports to the approach, waits for First Battle, steps into `Event_wagon-callout`, attaches to
   the conversation (`AttachToConversationAsync`, `WagonSmokeRule`), waits for the event to play (60 s, FAIL on timeout), then
   expects the charge battle (FAIL-WORTHY if only the reflection fallback starts it).
