@@ -2127,6 +2127,12 @@
       ],
       "cr-data": [
         "Assets/CR/Game/Story/HellcatLeapCue.cs",
+        "Assets/CR/Game/Story/HellcatFireCue.cs",
+        "Assets/CR/Game/Story/Logic/FireTimeline.cs",
+        "Assets/CR/Game/Story/Logic/FireArc.cs",
+        "Assets/CR/Game/Story/Logic/BearReaction.cs",
+        "Assets/CR/Game/Story/Logic/BearPose.cs",
+        "Assets/CR/Game/Story/Logic/FirePhase.cs",
         "Assets/CR/Game/Story/Logic/LeapArc.cs",
         "Assets/CR/Game/Story/Logic/HellcatLeapTimeline.cs",
         "Assets/CR/Game/Story/Logic/HellcatLeapPhase.cs",
