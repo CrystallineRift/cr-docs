@@ -1422,6 +1422,8 @@
         "Talents/CR.Talents.Data.Migration/M15013SeedLegacyAreaWorldRegions.cs"
       ],
       "cr-data": [
+        "Assets/CR/Game/World/Editor/WorldQuestHideCommands.cs",
+        "Assets/CR/Tests/Editor/WorldQuestHideLintTests.cs",
         "Assets/CR/Game/Areas/**",
         "Assets/CR/Scenes/**",
         "Assets/CR/Game/Areas/Editor/CrAreaDressingCommand.cs",
@@ -2116,6 +2118,11 @@
         "Quests/CR.Quests.Domain.Services/Implementation/StoryBeatProjector.cs"
       ],
       "cr-data": [
+        "Assets/CR/Game/Story/HellcatLeapCue.cs",
+        "Assets/CR/Game/Story/Logic/LeapArc.cs",
+        "Assets/CR/Game/Story/Logic/HellcatLeapTimeline.cs",
+        "Assets/CR/Game/Story/Logic/HellcatLeapPhase.cs",
+        "Assets/CR/Content/Animation/Story/HellcatLeap.controller",
         "Assets/CR/Game/Story/**",
         "Assets/CR/Resources/Story/**",
         "Assets/CR/Game/OpenWorld/Editor/Corridor/CorridorStoryPlacer.cs",
@@ -2618,6 +2625,9 @@
         "Npcs/**/EncounterIntent.cs"
       ],
       "cr-data": [
+        "Assets/CR/Game/World/Editor/WorldQuestHideCommands.cs",
+        "Assets/CR/Tests/Editor/WorldQuestHideLintTests.cs",
+        "Assets/CR/Game/World/Logic/LatestOnlyTicket.cs",
         "Assets/CR/Game/World/Behaviours/RoamingSpawnerBehaviour.cs",
         "Assets/CR/Game/World/Behaviours/WildCreatureBehaviour.cs",
         "Assets/CR/Game/World/Behaviours/SpawnerEncounterBehaviour.cs",

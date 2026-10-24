@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-10-23 — Cindris leap cue on the wagon opening
+
+cr-api-unity PR #149 (merged to main). Client only; no server change.
+
+- **What:** On Philroe's `help-leap` line the presentation Cindris leaps from the rocks above the wagon and lands between the player and the gaterbear (`HellcatLeapCue`, marks `Mark_wagon_leap_start` / `Mark_wagon_leap_land`, `HellcatLeap.controller`, crouch 0.30 s / air 0.85 s / land 0.15 s, Feel `feel/hit-heavy` on landing, settles at the landing on skip).
+- **Why:** The "something black drops from the rocks" card played over an empty scene.
+- **Unity:** `HellcatLeapCue`, `LeapArc`, `HellcatLeapTimeline` / `HellcatLeapPhase`, `StorySceneBuilder` (marks, controller, geometry asserts), scene `World_c0_r3` rebuilt (NPC bodies unchanged, 10). Play-check of `help-bond` framing pending.
+- **Docs:** [Opening Story](?page=unity/38-story-opening) gets "Hellcat leap" under the wagon opening; one [AI Content Ledger](?page=content/01-ai-content-ledger) row; `doc-sources.json` globs for the new files.
+
+## 2026-10-23 — Roaming creatures no longer vanish after First Battle
+
+cr-api-unity PR #148 (merged to main). Client only; no server change.
+
+- **What:** `hideWhenQuestCompletedKey` defaulted to `quest-first-battle`, so 160 roaming zones despawned their creatures once First Battle completed (they appeared, then vanished). The default is now empty; only the stationary wagon zone sets it. `cr_world_clear_quest_hide` swept the 160 scene keys; `WorldQuestHideLintTests` guards scenes and the prefab; roaming zones re-check on `IQuestService.OnSessionReady`.
+- **Why:** Online trainers past First Battle saw no wild creatures.
+- **Unity:** `SpawnerWorldBehaviour` default, `RoamingSpawnerBehaviour` session-ready re-check, `LatestOnlyTicket`, `WorldQuestHideCommands`, `CR_EncounterZone.prefab`, cell scenes.
+- **Docs:** [Area Scenes](?page=unity/22-area-scenes) roaming section gains the quest-hide key note; `doc-sources.json` globs for the command and lint test.
+
 ## 2026-10-22 — World fill content
 
 cr-docs `feature/world-fill`. World fill content: 154 side quests, 15 optional dungeons (specs under `Data/Dungeons`), zones and pickups. Client content only; no server change.
