@@ -39,27 +39,6 @@ every registered screen (including the menu) and shows the target — so the men
 select; no manual hide is needed. (A separate `StartMenuController` prototype was removed in favor of reusing
 `MainMenuController`.)
 
-## Character select (`CharacterSelectController`)
-
-Rebuilt 2026-10-25 after the Stitch "Character Select Menu" (project `6481024048933492445`, light variant —
-its sky/slate palette is CrTheme's paper palette). `Assets/CR/UI/Resources/CharacterSelect.uxml` + `.uss`:
-
-- **Top bar**: brand eyebrow, "Character Select", and an Online/Offline pill (`IsPlayingOnline`).
-- **Headline**: "Save slots / Choose your hero" and a capacity pill — "2 of 3 characters" with a dot per slot
-  when the online cap is known, else a plain count (`CharacterSelectLayout`, pure and tested).
-- **Card row** (`FocusScrollView`, horizontal, so the focused card stays in view): one `.cs-card` Button per
-  trainer — a dark art panel with the trainer's monogram (no per-trainer portraits are baked yet), the lead
-  creature's badge ("Cindris Lv.5", from `ICreatureInventoryService.GetTeamAsync` + the species name), and a
-  plate with the name, "Seeker · Level N" (`ITrainerProgressReader`) and a SELECTED / READY pill. The selected
-  card also shows an **A** keycap. Then ONE "Create character" card (`btn-create-new`) for the next free slot;
-  it stays visible but disabled, with the reason, when the cap is reached.
-- **Bottom bar**: "Ready to play as {name}", **Delete** (ghost; opens the destructive `ChoiceDialog`) and
-  **Play** (primary, A keycap), and an A / B legend.
-
-Interaction: focus or hover on a card selects it (the bottom bar acts on the selected card); A or a click on a
-card plays it; **B / Escape returns to the title** (`NavigationCancelEvent` on the root, ignored while a select
-or delete is in flight); `UiFocusRecovery` re-anchors on the selected card after a background click. Level and
-badge are fetched after the cards are on screen and never block the list; any failure leaves the card as built.
 ### Title screen look
 
 The menu is laid out like the hero of [crystallinerift.com](https://www.crystallinerift.com/): a "Counterspell
@@ -98,6 +77,28 @@ nothing picks the pointer; lockup above centred pills).
 | **Play Offline** | `AccountBootstrapper.PlayOfflineAsync()` (sets `IsPlayingOnline=false`, resolves local account) → navigate to character select. No network. |
 | **Play Online** | Probe the server first (`IConnectivityProbe`). Reachable → `PlayOnlineAsync()` (silent guest: token ladder, then the session adopts the **server's** account id — see "Online session identity") → character select. Unreachable → stay on menu, show "Online unavailable — check your connection." Never enters online. |
 | **Continue** | Reads the last chosen mode from the dedicated `LastPlayMode` key (written only on an explicit menu choice — distinct from the `IsPlayingOnline` routing flag) and runs the same path as that mode's button, dropping the player at that mode's **character selection** (not straight into the world). Online resumption is probe-gated identically. Shown only once a mode has been chosen at least once. |
+
+## Character select (`CharacterSelectController`)
+
+Rebuilt 2026-10-25 after the Stitch "Character Select Menu" (project `6481024048933492445`, light variant —
+its sky/slate palette is CrTheme's paper palette). `Assets/CR/UI/Resources/CharacterSelect.uxml` + `.uss`:
+
+- **Top bar**: brand eyebrow, "Character Select", and an Online/Offline pill (`IsPlayingOnline`).
+- **Headline**: "Save slots / Choose your hero" and a capacity pill — "2 of 3 characters" with a dot per slot
+  when the online cap is known, else a plain count (`CharacterSelectLayout`, pure and tested).
+- **Card row** (`FocusScrollView`, horizontal, so the focused card stays in view): one `.cs-card` Button per
+  trainer — a dark art panel with the trainer's monogram (no per-trainer portraits are baked yet), the lead
+  creature's badge ("Cindris Lv.5", from `ICreatureInventoryService.GetTeamAsync` + the species name), and a
+  plate with the name, "Seeker · Level N" (`ITrainerProgressReader`) and a SELECTED / READY pill. The selected
+  card also shows an **A** keycap. Then ONE "Create character" card (`btn-create-new`) for the next free slot;
+  it stays visible but disabled, with the reason, when the cap is reached.
+- **Bottom bar**: "Ready to play as {name}", **Delete** (ghost; opens the destructive `ChoiceDialog`) and
+  **Play** (primary, A keycap), and an A / B legend.
+
+Interaction: focus or hover on a card selects it (the bottom bar acts on the selected card); A or a click on a
+card plays it; **B / Escape returns to the title** (`NavigationCancelEvent` on the root, ignored while a select
+or delete is in flight); `UiFocusRecovery` re-anchors on the selected card after a background click. Level and
+badge are fetched after the cards are on screen and never block the list; any failure leaves the card as built.
 
 ## Online session identity
 
