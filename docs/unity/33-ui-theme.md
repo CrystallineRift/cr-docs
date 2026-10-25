@@ -32,7 +32,7 @@ theme and the dialog's tokens would resolve to nothing.
 | `Assets/CR/UI/Theme/CrTheme.tss` | The theme: default Unity theme + `CrTheme.uss` |
 | `Assets/CR/UI/Common/ScaledWindow.cs` | `.cr-window` frame that sizes itself by UI Scale |
 | `Assets/CR/UI/Common/UiScaleApplier.cs` | Applies System → Graphics → "UI Scale" to every panel; exposes `ActiveScale` |
-| `Assets/CR/Tests/Editor/CrThemeTests.cs` | The guard tests |
+| `Assets/CR/Tests/Editor/CrThemeTests.cs` | The guard tests, including that the `--cr-lore-*` tokens equal `LorePalette` |
 
 ## Tokens
 
@@ -45,7 +45,9 @@ touching a screen.
 | **accent** | Sky blue | Paper-screen highlights, buttons | `--cr-accent`, `-strong`, `-bright`, `-soft`, `-softer`, `-tint`, `-deep`; `--cr-focus` (navy fill on a focused/selected control); `--cr-text-on-accent` |
 | **glass** | Dark translucent overlays | Market, Shop, battle Bag, target picker, evolution | `--cr-glass-scrim`, `-bg`, `-surface`, `-surface-raised`, `-surface-hover`, `-surface-active`, `-selected`, `-border`, `-border-mid`, `-border-soft`, `-focus`, `-accent`, `-text`, `-text-soft`, `-text-muted`, `-text-dim`; `--cr-currency` |
 | **hud** | Warm dark in-world notices | Toasts, quest tracker | `--cr-hud-surface`, `-text`, `-text-muted`, `-accent`; `--cr-reward`, `--cr-dialogue-accent` |
+| **brand** | The palette of crystallinerift.com | Title screen (main menu + backdrop) | `--cr-brand-night`, `-cream`, `-ember`, `-ember-deep`, `-pill`, `-pill-border`, `-shadow` — see [Account mode & startup → Title screen look](19-account-mode-startup.md#title-screen-look) |
 | **status** | Semantic | Any family | `--cr-danger`, `--cr-warning`, `--cr-success`, `--cr-success-bright` |
+| **lore** | Pastel-on-dark / deep-on-light keyword colours in story text | Dialogue, barks, banner, tracker, journal (via `LorePalette`) | `--cr-lore-{relic,creature,person,place,order,event}-on-dark` / `-on-light`, `--cr-lore-emphasis-on-dark` / `-on-light` |
 
 ### Scales
 
@@ -76,7 +78,7 @@ introduced, grouped by the family that owns them:
 | `--cr-status-*` | Paper menus' destructive (rose), done (emerald) and claimable (amber) states. `--cr-danger` (red) stays the generic status colour |
 | `--cr-type-*`, `--cr-hp-*` | Creature-class accents, HP bar states |
 | `--cr-glass-buy-*`, `--cr-glass-danger-*`, `--cr-glass-focus-ring` | Market / Shop buttons and gamepad focus ring |
-| `--cr-currency-*`, `--cr-market-*`, `--cr-bag-*`, `--cr-tier-*` | Wallet accents, Market, battle Bag (incl. capture-crystal rows), tier badges |
+| `--cr-currency-*`, `--cr-market-*`, `--cr-bag-*`, `--cr-tier-*` | Wallet accents, Market, battle Bag (incl. Summoning Shard rows), tier badges |
 | `--cr-evolution-*` | Evolution cutscene and the area banner |
 | `--cr-battle-*`, `--cr-condition-*`, `--cr-mission-*` | Battle HUD cards, status-condition badges, mission accents |
 | `--cr-dialogue-*`, `--cr-hud-*` | Dialogue panel; toasts + quest tracker share the hud family |
@@ -97,6 +99,16 @@ inside `rgba()`), a few deliberately brighter `:focus` states, and the legacy `C
 - USS can't put `var()` inside `rgba()`, so there is no "accent at 40%". A translucent variant
   that recurs gets its **own token** (that's why glass has `-border`, `-border-mid`, `-border-soft`).
 - A token you use must exist — see [Guard](#guard).
+- **Link the screen's own stylesheet from its layout:** `<Style src="X.uss" />` in `X.uxml`. Never look a
+  sheet up with `Resources.Load<StyleSheet>("…/X")` when a layout named `X` sits at the same Resources key:
+  UXML import writes an empty `inlineStyle` StyleSheet into the `.uxml` asset, and the lookup can return
+  that one instead of `X.uss`. That is how the arrival banner ("Cliff Ruins", "The Meadow") drew as plain
+  top-left dark text in the 2026-10-10 playtest: `AreaBannerPresenter` asked for `Areas/AreaBanner` and got
+  the importer's empty sheet. Every Resources layout with a same-named `.uss` now links it (AreaBanner,
+  EvolutionOverlay and StartupFlow gained the link; the other 21 pairs already had it), and the seven
+  presenters that did the lookup (area banner, evolution, quest tracker, achievement toast, dialogue,
+  shop, market) dropped it. A sheet assigned in the Inspector stays as an optional override where a scene
+  serializes one (the shop and market handlers in `Core.unity`).
 
 ## Shared classes
 
@@ -150,6 +162,12 @@ colour, zero size), which reads as a broken screen. `CrThemeTests` (EditMode) ca
 | `EveryRuntimePanelWearsTheCrTheme` | Both PanelSettings above have `CrTheme.tss` as their theme |
 | `TheThemeImportsItsTokens` | `CrTheme.tss` imports `unity-theme://default` and `CrTheme.uss` |
 | `EveryTokenAStylesheetUsesIsDefinedInTheTheme` | Every `var(--cr-…)` in any `.uss` under `Assets/CR` is defined in `CrTheme.uss` or by a stylesheet itself (e.g. a `--cr-window-*` override) |
+
+`ResourcesStyleSheetLinkTests` (EditMode) holds the stylesheet rule above:
+`Every_Resources_layout_links_the_stylesheet_that_shares_its_name` (checked on the instantiated tree, not
+the XML text), `No_code_looks_a_stylesheet_up_by_a_name_that_a_layout_also_has` (a C# `Resources.Load` of a
+`StyleSheet` whose resolved name is also a layout's fails), and
+`The_arrival_banner_layout_wears_AreaBanner_uss_and_not_the_importers_empty_sheet`.
 
 ## Editor preview caveat
 

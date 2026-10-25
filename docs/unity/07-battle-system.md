@@ -24,12 +24,12 @@ Gameplay systems (input gates, ambient audio) release on `BattleClosed`, not `Ba
 **A capture is not a battle win (spec B7).** `EndBattle` computes `playerWon` from the winning side, but
 `BattleEndReason.ReportsBattleWon(reason, playerWon)` additionally excludes `Capture`: catching the wild
 creature ends the battle without a `BattleWon`/`TrainerDefeated` outcome. The capture's
-own progress (`CreatureCaptured`, and the crystal's `ItemUsed`) comes back on the item-use result and is
+own progress (`CreatureCaptured`, and the shard's `ItemUsed`) comes back on the item-use result and is
 applied through `IQuestService.ApplyServerProgress` from `OnlineOfflineItemDomainService` — the client
 never reports the capture as a separate quest/achievement event. `BattleBagPanelHandler`'s capture branch
 no longer looks up the captured creature's base content key or calls a reporter itself; it just ends the
 battle with `BattleEndReason.Capture` and lets the item-use response's progress apply. Offline item use
-(potions in and out of battle, capture crystals) now binds to the same DLL `ItemUseDomainService` +
+(potions in and out of battle, Summoning Shards) now binds to the same DLL `ItemUseDomainService` +
 effect handlers the server runs (`ItemUseOfflineBindings.Install`, called from
 `LocalDevGameInstaller`) instead of the old hand-rolled `OfflineItemUseService` (deleted, M1-F1,
 cr-api-unity `8aac92b1`) — this is what gives an offline potion its `ItemUsed` progress outcome (a
@@ -117,6 +117,7 @@ public interface IBattleCoordinator
 | `PlayerMustSwap` | `(string trainerId)` | Player's active creature fainted but has a backup; HUD must force a swap |
 | `BattleEnded` | `(bool playerWon, string outcomeLabel)` | Show result screen |
 | `RunAttempted` | `(bool success)` | Show escape message |
+| `ActionResolving` | `(ActionOutcome outcome)` | Every resolved action, raised once per step **before** its presentation plays: the authority has decided and nothing has been shown yet. The lead-in to `ActionResolved`, for a presenter that has to cue something ahead of the verdict from the outcome itself (`CaptureThrowWatcher` raises `CaptureResolving` from it) |
 | `ActionResolved` | `(ActionOutcome outcome)` | Every resolved action, raised once per turn **after** its presentation has played. The outbound seam for battle extensions — see [Battle Extensions](?page=unity/24-battle-extensions) |
 | `MissionProgressed` | `(string missionName, int current, int threshold)` | An in-battle mission ticked forward (e.g. applying Burn); HUD shows a fading progress toast |
 | `MissionCompleted` | `(string missionName, string unlockedAbilityName)` | An in-battle mission finished and unlocked a move for the rest of the battle; HUD shows a completion banner |
@@ -138,7 +139,9 @@ notification.
 
 ## Wild Battle Turn Loop
 
-Wild battles drive a sequential turn loop entirely client-side. The server resolves each half-turn via a dedicated endpoint.
+> **Superseded.** Battles now run in simultaneous rounds; the diagram below is the pre-v0.2.0 half-turn loop. See [Battle Rounds (client)](#battle-rounds-client).
+
+Wild battles drove a sequential turn loop client-side, with the server resolving each half-turn via a dedicated endpoint.
 
 ```
 StartBattleAsync
@@ -148,6 +151,7 @@ StartBattleAsync
        else
            IWildBattleAIDomainService.DecideActionAsync → submit via IBattleDomainService
            IBattleDomainService.SubmitActionAsync → ActionOutcome
+    └─ RaiseActionResolving(outcome)                                              ← lead-in seam (before the beats)
     └─ await IBattlePresentationSequencer.PlayOutcomeAsync(outcome, action, ctx)   ← paced beats
     └─ RaiseActionResolved(outcome)                                               ← extension seam
     └─ if outcome.BattleEnded → RaiseBattleEnded → break
@@ -168,6 +172,28 @@ Neither seam can alter how an action resolves. See [Battle Extensions](?page=uni
 `SubmitPlayerAction(string actionJson)` is called by the HUD (or any input handler) to unblock the `TaskCompletionSource` awaited in the loop. The action JSON matches the backend's action format, e.g. `[{"type":0,"abilityId":"...","targetCreatureId":"..."}]`.
 
 The wild trainer GUID is `00000000-0000-0000-0000-000000000001` (defined in `WildTrainerIds.WildTrainerId`).
+
+## Battle Rounds (client)
+
+The server resolves a whole round per intent (see [Battle Persistence → Battle Rounds](?page=backend/09-battle-persistence#battle-rounds)); the client sends one action and plays back every returned step in order. It never orders or resolves anything itself. Offline uses the same flow through `OnlineOfflineBattleDomainService`, which delegates `ResolveRoundAsync` to the local domain service (`BattleHttpDomainAdapter.ResolveRoundAsync` throws `NotSupported`: online resolves server-side in `BattleTurnDomainService`).
+
+- **Playback.** `BattleCoordinator.PlayStepsAsync` raises `StepTurnCue` (replaces `OpponentStepTurnCue`) for every step, both sides, so the cinematic attacker and defender anchors are right when the opponent goes first. The ending step is the last `BattleEnded` step (`RoundEndingStep`).
+- **Interrupted.** A step with `Interrupted` plays no cue and no damage, only turn end, and the HUD narrates "X fainted before it could act".
+- **ConditionTick.** A tick step is a status flash, an HP drop and, when `ActorFainted`, a faint plus recall (unless the battle ended). No turn cue.
+- **Swap-only round.** When the resolution has `NeedsSwap` (or the active creature is fainted) the loop opens the switch menu only: no attacks, bag or run, back is suppressed. Anything else is held back client-side without costing a server strike. Smoke runners handle this through `SmokeSwapExtensions`.
+- **Refusals.** A lone refusal step with the same round key re-opens the same menu with the reason; no round was spent.
+- **Optimistic switch.** The HUD keeps a `PendingSwap` and moves its tracked creature only when the server's Switch step plays; a refusal drops the request.
+- **Resync.** On a transport error, 5xx, `InvalidRoundKey`, `RoundIncomplete` (409 `round_incomplete`, error text `battle-round-incomplete`), `NotYourTurn` or `Conflict`, `ResyncAsync` reads the battle state: if the round advanced it replays `lastRoundSteps` (narrated), if the battle ended it ends, otherwise it re-reads the round key and re-prompts. It gives up on the 6th consecutive failed submit (after 5 resync attempts; `MaxResyncFailures` = 5, and any successful round resets the count). `NotFound` and `IllegalAbility` are handled separately. Against an old server (no `lastRoundSteps`) it only refreshes the key.
+- **Old-server tolerance.** Missing `NeedsSwap`, `Interrupted` or `lastRoundSteps` fall back to the old behaviour, and opening steps are still played if present.
+- **Draw.** `BattleLossRules.IsPlayerLoss` is true for `Draw` (whiteout and heal), and the HUD says "It's a draw!".
+- **Ability list from the server.** The HUD renders `BattleStateDto.ActiveCreatureAbilities` through `AbilityListBuilder` (server order, cost, `Affordable`, `Reason`, PP; local content only for name, icon, category, power) instead of the progression set. A server move with no local content is skipped with one warning; an empty list falls back to the old local list. See [Ability Learning UI](?page=unity/45-ability-learning-ui).
+- **Learn prompt in the aftermath.** After a step's level-up beat and before `RaiseActionResolved`, `PlayStepsAsync` awaits `IAbilityLearnPrompter.RunAsync(outcome.ExperienceAwards, ...)` when an award carries `AbilitiesLearned` or `Offers`. Auto-learns toast and log ("Cindris learned Flame Wheel!"); an offer opens `ChoiceDialog` ("Forget which move?") and a choice sends the learn intent. The summary screen adds a line under the LEVEL UP chip.
+- **Rest.** In the cost modes the HUD adds a **Rest** row after the four moves; it submits `[{"type":6}]` (an intent; the server decides the recovery). `BattleTurnNarration.IsRest` narrates it.
+- **Resource HUD.** `BattleResourceHud` (pure) and `BattleCardResources` draw the Energy bar, Charge pips and Surge label per cost mode (`AbilityCostModeSetting.Mode`), the cost badge on each row ("5 E", "+1 C"/"-6 C", "3 S", PP "12/15"), and the `cmd-row--unaffordable` state with "Not enough Energy" and its siblings. Free mode draws today's HUD.
+- **Resource beats.** `BattleBeatPlan` adds a `ResourceChange` phase (after Impact/Miss, or alone for a Rest or item step); the sequencer raises `BattleEvents.ResourceChanged(creatureId, kind, before, after)` and the HUD redraws from the server's stamp.
+- **HUD log.** `BattleLogQueue` shows 6 lines and releases new ones every 350 ms, flushing when the battle ends, so both sides' actions stay readable.
+- **DI.** `LocalDevGameInstaller` binds `IBattleCoinFlip` to `SeededBattleCoinFlip`; `BattleRoundServicesWiringTests` covers the turn and encounter services.
+- **Forced update.** The server's `min_client_version` is `0.2.0`; older builds are blocked from online play by `GameSessionManager`.
 
 ## Presentation Orchestrator
 
@@ -210,6 +236,8 @@ restored on `ExitBattle` — so the whole exchange reads without re-authoring pe
 Set it to 1 for the rig's exact authored lenses.
 
 ## Force-Swap on Faint
+
+> Under simultaneous rounds the replacement is a swap-only round after the round ends (see [Battle Rounds (client)](#battle-rounds-client)); the opponent does not act in it.
 
 When the player's active creature faints but the team still has an alive backup, the server keeps the battle Active and returns `ActionOutcome.NeedsSwap = true` (see [Battle Persistence — Force-Swap on Faint](?page=backend/09-battle-persistence)). The client turns this into a forced swap rather than ending the battle.
 
@@ -312,10 +340,11 @@ The HTTP base URL resolves through `IGameConfiguration` via `GameConfigurationKe
 | `playerCreatureSlots` / `opponentCreatureSlots` | `List<Transform>` | Optional per-side stand points for 2v2/NvN/boss; empty → the single creature position above is slot 0 |
 | `defaultBiome` | `BiomeType` | The biome active when the arena awakens |
 | `biomes` | `BiomeEnvironment[]` | Maps each `BiomeType` to a root `GameObject` to activate/deactivate |
+| `battleOnly` | `GameObject[]` | Objects that exist only while a fight is staged here (the dressing's `[Arena Backdrop]` tube). Hidden in `Awake` and by `Deactivate`, shown by `Activate`; in the open world the arena stands in plain sight, so nothing that is not scenery shows between fights. `cr_dress_arenas` registers the backdrop; `cr_arena_battle_only` catches up older arenas; `cr_world_validate` reports an unlisted backdrop as an error. See [Area Scenes](?page=unity/22-area-scenes) |
 
 `BiomeType` enum values: `Grassland`, `Forest`, `Cave`, `Desert`, `Mountain`, `Beach`, `Swamp`, `Tundra`, `Volcanic`.
 
-`BattleArena.Activate(BiomeType? biome)` activates the arena at the given (or default) biome. `SetBiome(biome)` can be called at any time to swap active environment roots. `Deactivate()` hides all environment roots.
+`BattleArena.Activate(BiomeType? biome)` dresses the set: the given (or default) biome plus every battle-only object. `SetBiome(biome)` can be called at any time to swap active environment roots. `Deactivate()` hides all environment roots and the battle-only objects again. The coordinator remembers the arena it lit (`_activeArena`) and `DeactivateActiveArena()` (idempotent, fake-null safe: the cell can unload under a battle) runs on every way out: first under the cover in `CloseWithFadeAsync`, and in `AbortUnstagedEncounter`. `EvolutionStageDirector` stages its cutscene in the same arena with the same `Activate` / `Deactivate` pair.
 
 Use **CR > Battle > Create Placeholder Arena** (editor menu) to scaffold a new arena GameObject with all child transforms pre-wired and `arenaKey` set to `"arena_placeholder"`.
 
@@ -333,10 +362,10 @@ The battle camera is a **reactive, editor-authored Cinemachine 3 system**. `Batt
 | `BattleCameraRig` | Editor-authored prefab: one `CinemachineCamera` per `BattleCameraRole` (`Establishing`, `Action`, `Reaction`, `LowAngle`, `Hero`), a `CinemachineTargetGroup`, a `CinemachineImpulseSource`, and a `BattleCameraProfile`. Assigned to `BattleArena.cameraRig`. |
 | `BattleCameraProfile` | ScriptableObject of feel values (blend seconds, action/faint holds, orbit °/s, intro radius multiplier, shake force). Persists across Play-mode tuning; framing lives on the vCams. |
 | `BattleFormation` | Maps the live battle onto arena slot anchors (`AttackerAnchor`/`DefenderAnchor`/`AllActiveAnchors`). 1v1 today; shaped for NvN / N-v-1. |
-| `BattleCameraShakeResponder` | Decoupled shake. Reacts to `CameraCueDefender`/`HeavyHit`/`CameraCueFaint`, coalesces same-frame signals into one force-scaled impulse, fires the rig's impulse source. Reaches the active rig via the shared `BattleCameraRigContext`. |
+| `BattleCameraShakeResponder` | Decoupled shake. Reacts to `CameraCueDefender`/`HeavyHit`/`CameraCueFaint`, coalesces same-frame signals into one force-scaled impulse, fires the rig's impulse source. Reaches the active rig via the shared `BattleCameraRigContext`. The force is scaled by the player's Screen Shake setting (100 / 50 / 0 %, and 0 under Reduced Motion) through `IFeelSettings`; it stays the only thing that shakes the camera in a battle (a [Feel moment](?page=unity/41-game-feel) never does). |
 | `ScreenFader` | Full-screen white overlay (code-built top-most UGUI canvas, no prefab) that **masks the camera cut** into and out of battle. The coordinator awaits `FadeAsync(target, seconds)` around staging/`EnterBattle` and around `CloseBattle`'s teardown. |
 
-**Battle in/out transition (fade-masked cut).** Rather than easing the camera back to the player on exit, the coordinator fades to white (`~0.3s`), then switches the camera under the cover. On entry: fade to white → stage + `EnterBattle` → fade from white (the intro sweep plays as it clears). On exit: fade to white → `ExitBattle` (which now sets the Brain blend to **`Cut`** for an instant snap back to the player, restoring the overworld's saved blend a frame later) + arena teardown → fade from white onto the overworld. Applies to both wild and NPC battles.
+**Battle in/out transition (fade-masked cut).** Rather than easing the camera back to the player on exit, the coordinator fades to white (`~0.3s`), then switches the camera under the cover. On entry: fade to white → `arena.Activate()` + stage + `EnterBattle` → fade from white (the intro sweep plays as it clears). On exit (`CloseWithFadeAsync`): fade to white → `DeactivateActiveArena()` (the battle-only backdrop goes first, before anything below can throw) → `ExitBattle` (which now sets the Brain blend to **`Cut`** for an instant snap back to the player, restoring the overworld's saved blend a frame later) + `ExitArenaAsync` → `BattleClosed` → fade from white onto the overworld. Applies to both wild and NPC battles.
 
 **Beat → shot role**
 
@@ -393,7 +422,7 @@ Lookups go `GeneratedCreature` (via `IGeneratedCreatureRepository.GetCreature`) 
 
 `BattleCoordinator` inspects the result after `EnterArenaAsync` and logs an Error + raises `BattleEvents.StagingFailed("opponent visual" | "player visual")` when a creatureId was passed in but no visual spawned. The battle still proceeds.
 
-`BattleCoordinator.EndBattle` calls `_stager.ExitArenaAsync` alongside `_cameraController.ExitBattle()`, so the same teardown path covers both player teleport restore and creature visual cleanup.
+`BattleCoordinator.CloseWithFadeAsync` (reached from `CloseBattle`) calls `_stager.ExitArenaAsync` alongside `_cameraController.ExitBattle()`, after `DeactivateActiveArena()`, so the same teardown path covers the arena's battle-only dressing, the player teleport restore and the creature visual cleanup.
 
 ## `SpawnerEncounterBehaviour`
 
@@ -412,6 +441,8 @@ On `OnTriggerEnter` (Player tag), a coroutine `EncounterDelayRoutine` is started
 ## Wild Battle AI
 
 `IWildBattleAIDomainService` is a DLL interface, not something `BattleCoordinator` calls directly any more — the same `WildBattleAIDomainService` runs offline (bound locally) and server-side, but online the server now runs it inline inside `BattleTurnDomainService.SubmitTurnAsync` as part of resolving the player's own submitted action (server-authority C2), not through a separate endpoint. The old `/wild-turn` endpoint Unity used to call after every player turn is retired (410); see [Battle Persistence → Wild Turn Endpoint](?page=backend/09-battle-persistence#wild-turn-endpoint-retired).
+
+Under simultaneous rounds this brain picks at the start of each round, before it sees the player's pick.
 
 Decision priority:
 1. 20% random chance → use a Status-category ability if one exists
@@ -595,7 +626,7 @@ The root is hidden (`DisplayStyle.None`) on start and shown when `BattleEvents.B
 
 Choosing a consumable from the bag now asks which creature to use it on when the item
 heals, revives or cures (`BattleItemTargeting.NeedsChoice` — opponent-targeting items and
-capture crystals skip the step). `BattleBagPanelHandler.GetTargetsAsync` refreshes the team,
+Summoning Shards skip the step). `BattleBagPanelHandler.GetTargetsAsync` refreshes the team,
 builds `TargetCandidate` cards through the shared `TargetCandidateBuilder` (also used by the
 overworld bag) and judges each with `ItemTargetRule`; the HUD's `target-panel` renders one
 row per creature, disabling rows the item cannot be used on and echoing the rule's reason
@@ -919,7 +950,8 @@ finally
 ```
 
 `AbortUnstagedEncounter` is deliberately quiet — the player never left the overworld, so the correct
-outcome is to leave them there. It cancels any pending action source, sets the ended/closed flags so
+outcome is to leave them there. It cancels any pending action source, puts back any arena that was lit
+(`DeactivateActiveArena()`: nothing should be, but whatever is goes back), sets the ended/closed flags so
 a later `CloseBattle` cannot manufacture a `force_close` result, and raises
 `BattleEvents.EncounterAborted` for anything that wants to react.
 
@@ -998,9 +1030,11 @@ works because **the database pool is derived data** — the asset is the source,
 at world init. A pool that lost its templates (a bad sync, a soft-delete sweep) is rebuilt from the
 asset; soft-deleted rows are invisible to the read path, so the sync writes fresh ones.
 
-It cannot fix a definition that is itself wrong. If the asset holds templates with no creature key,
-the sync resolves nothing, the prune guard declines to delete anything, and `TryRestoreAsync` returns
-false — logged as an error, because the content needs a person and no retry will change that.
+It cannot fix a definition that is itself wrong. If the asset holds templates with no creature key, or
+no templates at all, the writer refuses it (it throws, and the tables are left as they were) and
+`TryRestoreAsync` returns false — logged as an error naming the spawner, because the content needs a
+person and no retry will change that. Online, a server config the writer refuses is a failed pull: recovery
+warns and falls back to the authored definition.
 
 `EnsureReadyAsync` runs the same check **when the zone activates**, so the common case is repaired
 before the player ever walks into the grass, and an unfixable zone reports itself at world init

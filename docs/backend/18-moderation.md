@@ -23,7 +23,8 @@ ever ships inside `game-data.bytes`.
 
 `AdminActionKind`: `ShadowBan`, `LiftShadowBan`, `RemoveListing`, `AdjustCurrency`, `GrantItem`,
 `RemoveItem`, `Note` (unused in v1), `GrantExperience`, `GrantCreature`, … `GrantTrainerXp` (16),
-`SetTalentRank` (17), `RespecTalents` (18), `GrantAchievement` (19), `RevokeAchievement` (20).
+`SetTalentRank` (17), `RespecTalents` (18), `GrantAchievement` (19), `RevokeAchievement` (20), `SetStoryBeat` (21),
+`ClearStoryBeat` (22), `QuestCompleted` (23), `DeleteTrainer` (24).
 Members are appended, never renumbered — the integer is persisted in `admin_action.kind`, so
 reordering rewrites history.
 
@@ -70,7 +71,7 @@ worse than no action at all, which is why `admin_action.reason` is `NOT NULL`.
 | Method | Rules |
 |---|---|
 | `SearchPlayersAsync(term, limit)` | Straight delegation to `IPlayerSearchRepository`, limit clamped. |
-| `GetPlayerDossierAsync(accountId)` | One read for the whole picture: account + provider links, moderation state (a *clear default* when the account has never been moderated — the absence of a row is not an error), every trainer with team / creature storage / backpack / item storage / active listings, and the last 20 `admin_action` rows. Listings come from the **operator** browse (`IMarketService.AdminBrowseListingsAsync(Active, accountId, …)`), which filters to `Active` in SQL and includes the listings a shadow ban hides from players — the seller-facing read clamps at 100 rows and would have silently truncated a busy account. `null` when the account does not exist. Each `TrainerDossier.progress` carries that trainer's `TrainerProgress` (level, XP, XP into/for next level, spent/available talent points, `NeedsRespec`, and the raw `Allocations`/`Modifiers`/`QuestLockedTalentIds` a dossier UI joins against talent tree content — see [Talents](25-talents.md)) — null when it cannot be read, never a failed dossier. |
+| `GetPlayerDossierAsync(accountId)` | One read for the whole picture: account + provider links, moderation state (a *clear default* when the account has never been moderated — the absence of a row is not an error), every **player character** (NPC battle identities that share the account are excluded: `GetPlayerTrainersInAccountPaginated`) with team / creature storage / backpack / item storage / active listings, and the last 20 `admin_action` rows. Listings come from the **operator** browse (`IMarketService.AdminBrowseListingsAsync(Active, accountId, …)`), which filters to `Active` in SQL and includes the listings a shadow ban hides from players — the seller-facing read clamps at 100 rows and would have silently truncated a busy account. `null` when the account does not exist. Each `TrainerDossier.progress` carries that trainer's `TrainerProgress` (level, XP, XP into/for next level, spent/available talent points, `NeedsRespec`, and the raw `Allocations`/`Modifiers`/`QuestLockedTalentIds` a dossier UI joins against talent tree content — see [Talents](25-talents.md)) — null when it cannot be read, never a failed dossier. |
 | `SetShadowBanAsync(accountId, reason, expiresAtUtc, actor)` | An `expiresAtUtc` already in the past → `InvalidArgument`, because a ban nothing would ever enforce must not be recorded as one the operator will believe is in force. Unknown account → `NotFound`. Idempotent: re-banning updates reason/expiry on the same row rather than creating a second one, and records a second audit entry. Metadata `{"expiresAt":…}`. |
 | `LiftShadowBanAsync(accountId, reason, actor)` | `NotFound` when the account does not exist — saying `NotBanned` would read as confirmation that the operator looked at the right player. Otherwise `NotBanned` for an account with no row, an unflagged row, **or a ban that already lapsed** — an expired ban needs no lifting. |
 | `RemoveListingAsync(listingId, reason, actor)` | Delegates to `IMarketService.AdminRemoveListingAsync`, which owns both the creature transfer and its audit row, and maps `MarketOperationReason` → `ModerationReason`. Exactly **one** `admin_action` row is written, by Market, not two. |
@@ -182,6 +183,7 @@ sets it (and `AdminActorName`) through its environment or secret store, never in
 |---|---|---|---|---|
 | GET | `/players?q=&limit=` | | `PlayerSearchHit[]` | 400 `InvalidSearchTerm` when `q` trims to fewer than 2 characters |
 | GET | `/players/{accountId}` | | `PlayerDossier` | 404 |
+| DELETE | `/players/{accountId}/trainers/{trainerId}` | `ReasonRequest { reason }` | 204 (no body) | 400 `InvalidReason`, 404 (not a live player character of that account: NPC identity, other account, already deleted), 409 `trainer-has-open-listings` (body `{code: "trainer-has-open-listings", error: "requirements_not_met", message}`); audit `DeleteTrainer` (24), metadata `{trainerId, trainerName}` |
 | PUT | `/players/{accountId}/shadow-ban` | `ShadowBanRequest { reason, expiresAt? }` | `AccountModeration` | 400 `InvalidReason`, 404 |
 | DELETE | `/players/{accountId}/shadow-ban` | `ReasonRequest { reason }` | `AccountModeration` | 400 `InvalidReason`, 404, 409 `NotBanned` |
 | POST | `/trainers/{trainerId}/currency` | `AdjustCurrencyRequest { delta, reason }` | `AdjustCurrencyResponse { currencyAfter }` | 400 `InvalidReason`/`InvalidQuantity`, 404, 409 `InsufficientFunds` |
@@ -192,9 +194,15 @@ sets it (and `AdminActorName`) through its environment or secret store, never in
 | POST | `/trainers/{trainerId}/creatures/from-spawner` | `GrantCreatureFromSpawnerRequest { spawnerContentKey, poolName?, level?, reason }` | `GrantCreatureFromSpawnerResponse` (below) | 400 `InvalidReason`/`InvalidQuantity`, 404, 409 `NoSpawnCandidate`/`StorageFull` |
 | PUT | `/trainers/{trainerId}/talents/{talentId}` | `SetTalentRankRequest { rank, reason }` — see [Talents](25-talents.md#admin) | `TrainerProgress` | 400 `InvalidReason`, 404; audit `SetTalentRank` (17); 409 `{ error: TalentSpendError, progress }` — **not** the flat `{error, reason}` shape every other route here uses |
 | POST | `/trainers/{trainerId}/talents/respec` | `ReasonRequest` | `TrainerProgress` | 400 `InvalidReason`, 404; audit `RespecTalents` (18) |
+| GET | `/trainers/{trainerId}/quests` | | `AdminQuestBoard { instances[], available[] }` (see [below](#quest-and-achievement-admin-2026-10-20)) | 404 |
+| POST | `/trainers/{trainerId}/quests/{contentKey}/complete` | `ReasonRequest` | `QuestAdminCompleteResult { contentKey, instanceId, granted, completed, rewardsPaid, alreadyDone, reason }` | 400 `InvalidReason`, 404 (trainer or quest key); audit `QuestCompleted` (23) |
+| GET | `/trainers/{trainerId}/achievements` | | `AdminAchievementBoard` (see [Achievements](15-achievements.md#admin-achievement-board)) | 404 |
 | GET | `/market/listings?state=&sellerAccountId=&offset=&limit=` | | `MarketListingView[]` — hidden rows **included**, `sellerShadowBanned` set | |
 | DELETE | `/market/listings/{id}` | `ReasonRequest` | `MarketListingView` (post-removal, `state = Cancelled`) | 400, 404, 409 `AlreadySold`/`StorageFull` |
 | GET | `/actions?accountId=&trainerId=&listingId=&offset=&limit=` | | `AdminAction[]`, newest first | |
+
+| GET | `/trainers/{trainerId}/progression?flagCategory=` | | `PlayerProgressionResponse { trainer, quests[], flags[], flagsTruncated, defeatedTrainerNpcKeys[], itemTotals[] }` | 404 (missing trainer or NPC trainer) |
+| GET | `/trainers/{trainerId}/timeline?before=&limit=` | | `{ items[], nextBefore }` (stat events and admin actions merged, newest first; `limit` default 50, clamped 1..200) | 400 on a bad `before` cursor |
 
 Both item routes and both shadow-ban routes are method pairs on the same path; the two `DELETE`s
 that carry a body (`/shadow-ban`, `/trainers/{id}/items`, `/market/listings/{id}`) read it via
@@ -358,3 +366,65 @@ database).
 - [Spawner System](03-spawner-system.md) — the pools, templates and weighted draw `GrantCreatureFromSpawnerAsync` rolls.
 - [Talents](25-talents.md) — `SetTalentRankAsync`/`RespecTalentsAsync`, the `respec` flag on `GrantTrainerXpAsync`, and `WouldOverspendTalents`.
 - [Creature Generation](04-creature-generation.md) — `CreateFromSpawnerAtLevelAsync` and what a template decides.
+
+## Progression debugger routes
+
+The two `GET /trainers/{trainerId}/progression` and `/timeline` routes feed the web
+[Player Progression Debugger](../admin-web/08-player-progression-debugger.md). Rules:
+
+- **Admin only and read-only.** Both are `RequireAdmin` (editor and content-write keys and player tokens get 403). A read writes no `admin_action` row; only state-changing routes above are audited.
+- **The trainer id comes from the route.** NPC trainers are hidden (404).
+- **`progression`** reuses the quest domain: each quest gets a state (Locked 0, Available 1, InProgress 2, ReadyToTurnIn 3, Completed 4, Abandoned 5, Failed 6) decided over all of the trainer's instances of that template, with the same offer check as the NPC's list (see [Quest System](07-quest-system.md)), and each requirement carries its current `actual` value when computable. `flags` are the trainer's `trainer_stat` values with a `category`, capped at 2000 (`flagsTruncated`); `?flagCategory=` filters server-side.
+- **`timeline`** merges `stat_event` and `admin_action` rows. The cursor `before` is opaque (`<utc ticks>_<id>`); each source is read in `(occurred_at DESC, id DESC)` order and the merge uses the same order, so events with identical times are neither skipped nor repeated. `nextBefore` is set only when more exist.
+- **Player search** (`GET /players?q=`) ignores NPC trainers and matches by email prefix or trainer-name prefix; new Postgres indexes on `LOWER(trainers.name)` and `LOWER(accounts.email)` (with `text_pattern_ops`) back it.
+- **Indexes.** `admin_action (target_trainer_id, occurred_at DESC, id)` (M13003) and `stat_event (trainer_id, occurred_at DESC, id)` (Stats M9005, see [Stats](08-stats-system.md)).
+
+## Admin delete trainer (2026-10-24)
+
+`DELETE /api/v1/admin/players/{accountId}/trainers/{trainerId}` (`RequireAdmin`, body `{ reason }`) soft-deletes one player character and its inventories. Both ids come from the route.
+
+- **Same domain rule as the player's own delete** (`ITrainerDomainService.DeleteOwnedTrainerAsync`, see [Starter Creature Flow](05-starter-creature-flow.md)): ownership, row lock, then the deletion guards. The Market open-listings guard answers **409 `trainer-has-open-listings`**; the operator removes the listing first (`DELETE /market/listings/{id}`), then retries.
+- **404** for an NPC identity, another account's trainer, or one already deleted. A blank reason is 400 `InvalidReason` before anything is read.
+- **Audit:** `DeleteTrainer` (24) is written after a successful delete with `{trainerId, trainerName}`. The name is read before the delete (null if unreadable). Refusals write nothing.
+- **No idempotency key:** a repeat is simply 404.
+- **Dossier:** `GetPlayerDossierAsync` now lists player characters only, so the Studio Trainers dialog never offers an NPC battle identity. Studio web: [Accounts: Trainers dialog](../admin-web/01-content-editing.md#system---accounts-trainers-dialog-2026-10-24).
+
+## Story beat admin routes (2026-10-18)
+
+`POST` / `DELETE /api/v1/admin/players/{accountId}/trainers/{trainerId}/story-beats/{key}` grant or revoke a story beat for
+support and debugging (body `{ reason }`, 204; 400 bad key or revoking `act1-done`; 404 trainer not on the account). Audit
+kinds `SetStoryBeat` (21) and `ClearStoryBeat` (22). `TrainerDossier` now also returns `StoryBeats`, `ActiveQuestKeys` and
+`CompletedQuestKeys`. Details: [Quest System](07-quest-system.md#story-beats-2026-10-18).
+
+## Quest and achievement admin (2026-10-20)
+
+Support can see every quest and achievement a trainer has, and finish a quest for them. All three routes are `RequireAdmin`;
+the trainer comes from the route, never the body. The two reads write no audit row.
+
+- **`GET .../quests`** returns `instances[]` (every instance in any status, including Abandoned and Failed: `instanceId`,
+  `contentKey`, `title`, `questLine`, `lineStep`, `status` as the `QuestStatus` integer, `repeatNumber`, `isRepeatable`,
+  `acceptedAt`, `completedAt`, `rewardsClaimed`, `objectives[] { id, description, current, required, completed }`) and
+  `available[]`: live templates the trainer has **no instance of in any status**, each with `unmetRequirements[]` (the
+  existing `QuestStatusRequirement` shape, `met == false` only).
+- **`POST .../quests/{contentKey}/complete`** is the operator Complete. Rulings:
+  - **It goes through normal completion.** Objectives are raised to their target, then the usual `TryCompleteInstanceAsync`
+    runs and, if it wins, `QuestCompleted` is recorded to the progress sink. So story beats (`grants_beats`), lifetime stats
+    (`quests_completed`) and chain follow-ups happen exactly as if the player had finished it. It is not a flag write.
+  - **It pays the rewards**, whatever the quest's claim mode (`ClaimRewardsAsync`).
+  - **Which instance.** The latest completed instance with unclaimed rewards (claim only); else the oldest in-progress
+    instance; else, for a one-shot quest, its completed instance (`alreadyDone`); else the quest is granted first
+    (`granted: true`: never started, or abandoned/failed and restarted) and then completed.
+  - **One-shot is idempotent.** Pressing Complete twice pays once; five concurrent calls pay once. **A repeatable quest pays
+    again**: if the latest repeat is completed and claimed, Complete starts a new repeat and pays it. The web dialog warns.
+  - **Partial payout is not retried.** If the reward grant fails partway, the completion and beats stay, the response is
+    `completed: true, rewardsPaid: false` with `reason` set, and the audit row records it. The existing claim marks the
+    instance claimed before it grants, so a second Complete answers `alreadyDone` and does not retry the payout. The response and
+    the audit metadata list what was paid and what was not; the operator tops up with the Grant currency / Grant item /
+    Grant XP dialogs.
+  - An unknown or soft-deleted quest key is 404 and writes nothing. No-ops (`alreadyDone`) and failed claims are audited too.
+  - Metadata: `{contentKey, instanceId, granted, completed, rewardsPaid, alreadyDone, reason}`; actor from `AdminActor.From`.
+- **Known gaps.** Two concurrent first Completes on a never-started one-shot quest can each create an instance (accept has no
+  unique guard); rewards, beats and stats still fire once, but a stray in-progress duplicate may remain. A new repeat always gets
+  `RepeatNumber = 1` (pre-existing accept behaviour).
+- **Achievement revoke** now sticks and claws back unique items; see [Achievements](15-achievements.md#revoke-sticks-m18011). The
+  revoke HTTP response does not carry the clawback list; it is in the `admin_action` metadata, and the web UI reads it from there.

@@ -6,7 +6,12 @@ The player menu is a 7-tab overlay opened from the overworld via the `ToggleMenu
 the whole out-of-combat UI: the player's squad, their bag, their quest log, their record, and the
 game's settings — all without leaving the world scene.
 
-Tabs: **Team | Bag | Storage | Quests | Map | Talents | Achievements | System**
+Tabs: **Team | Bag | Astral Realm | Quests | Map | Talents | Achievements | System**
+
+The third tab is the **Astral Realm** to the player: its label is set in `PlayerMenuWindow.uxml` (still
+`name="storage-tab"`; the label change is pending merge, until then the tab reads "Storage") and its own
+strings are in `StorageText`. This page and the code keep calling it Storage, the name of the inventory
+behind it.
 
 Every tab reads real data from domain services. Nothing on Team, Bag, Storage, Quests, Talents, or
 Achievements is mocked or hand-authored — see the Achievements tab section below for how its two seam
@@ -172,7 +177,7 @@ Three controls:
   reads *Moving &lt;name&gt; — pick a slot*), then press any other card, its *Swap here* button, or an
   empty slot's *Move here (slot N)* target. Pressing the armed card again (*Cancel*) abandons the
   gesture. Empty slots become `Button`s only while a move is armed.
-- **→ Storage** — a `Button` beside Move, on the **picked card only**. One press moves that creature
+- **→ Astral Realm** — a `Button` beside Move, on the **picked card only**. One press moves that creature
   off the team and into storage via `MoveToStorageAsync`, then redraws with the selection back on
   the first card (there is no creature left to follow) and a toast naming what moved. No
   confirmation prompt: the storage screen moves it straight back, and a dialog in front of a
@@ -509,13 +514,13 @@ into a `BagItemFacts` (kind + `HeldByCreature` / `UsableOverworld` / `TargetsOwn
   `HeldByCreature` flag. **Use** follows the item's kind, not its flags: anything that is not
   equipment and is flagged `UsableOverworld`. A dual-use item such as the heal potion (a consumable
   that is also holdable so it auto-triggers in battle) therefore offers **both** buttons; a capture
-  crystal (battle-only consumable) offers neither. A button that does not apply to the item class is
+  Summoning Shard (battle-only consumable) offers neither. A button that does not apply to the item class is
   hidden. There is no longer a third "shown but disabled" state — targeting is asked for after the
   press, so once an item is selected `CanUse == ShowUse` and `CanEquip == ShowEquip`.
 
 > **Data trap (fixed 2026-09-04).** `ItemType.Consumable` is `0` and `Equipment` is `1`. The capture
-> crystal, exp-share charm and heal potion seeds (M6007 / M6009 / M6013) wrote `item_type = 1`, so
-> every seeded consumable classified as equipment and the bag offered Equip on a Radiant Crystal.
+> Summoning Shard, exp-share charm and heal potion seeds (M6007 / M6009 / M6013) wrote `item_type = 1`, so
+> every seeded consumable classified as equipment and the bag offered Equip on a Radiant Summoning Shard.
 > The seeds now write `0` and `M6019FixSeededConsumableItemType` corrects rows on already-migrated
 > databases (Postgres and every Unity SQLite file, including the online caches). The authored
 > `ItemDefinition` SO has no item-type field — the seed is the only source of `item_type`, so a new
@@ -536,11 +541,53 @@ encrypted prefs store) under a `GameConfigurationKeys` constant and is pushed li
 | Graphics | **UI Scale** slider (`ui-scale-slider`, 70–150%) | `UiScale` | `UiScaleApplier.SetScale` |
 | Graphics | **Quest Tracker** toggle (`quest-tracker-toggle`) | `QuestTrackerHidden` | `QuestTrackerPresenter.SetShown` |
 | Game | Combat Speed dropdown | `BattlePacingScale` | `BattlePresentationSequencer` at battle start |
+| Game | **Story Camera** dropdown (`story-camera-dropdown`): Cinematic / Gentle (cuts only) / Off | `StoryCameraMode` | `StoryCameraSetting`, read at each cued line ([Story Camera](?page=unity/40-story-camera)) |
+| Game | **Text Effects** dropdown (`text-effects-dropdown`: Full / Static colour / Plain) | `LoreTextMode` (`full` / `static` / `plain`) | `ITextDisplaySettings` → `LoreText.Mode`, Text Animator behaviours on/off; see [Lore text](?page=unity/39-lore-text) |
+| Game | **Dialogue Text Speed** dropdown (`dialogue-speed-dropdown`: Instant / Fast / Normal) | `DialogueTextSpeed` (`instant` / `fast` / `normal`) | `ITextDisplaySettings` → `DialogueScreenPresenter`, from the next line |
+| Game | **Reduced Motion** toggle (`reduced-motion-toggle`) | `ReducedMotion` | `IFeelSettings`: the feedback director, the battle camera shake; `IReducedMotionSetting`: the story beats' flicker, lightning and lights-out ([Pillar Cutscene](?page=unity/42-pillar-cutscene)) |
+| Game | **Screen Shake** dropdown (`screen-shake-dropdown`, 100% / 50% / Off) | `ScreenShake` (the `ScreenShakeLevel` number, 0 = Full) | `IFeelSettings`: `BattleCameraShakeResponder`, camera-motion Feel moments |
+| Game | **Rumble** toggle (`rumble-toggle`) | `RumbleDisabled` | `IFeelSettings`: `HapticsResponder` |
 
 The tracker key stores the **hidden** flag, not "shown": the tracker is on by default and
 `TryGet<bool>` cannot tell "never written" from `false`, so an absent key has to mean the default.
-The checkbox shows the positive. The rest of the Game card (volume, notifications, reduced motion,
-language) is still decorative.
+The checkbox shows the positive. The three game-feel rows go through `IFeelSettings`
+(see [Game Feel](?page=unity/41-game-feel)) and follow the same rule: Reduced Motion is a flag (off), Screen
+Shake is stored as the `ScreenShakeLevel` number so that an unset key (0) is Full, and Rumble is stored as
+"disabled" so that an unset key is on. **Language** (dropdown + *Open folder*, with a help line) is real too
+([Localization → packs](?page=unity/06-localization)); Master Volume and Notifications are still decorative.
+
+### Layout: the page scrolls and nothing on it shrinks
+
+Playtest, v0.1.8: "what the heck happened to the system page". The page (title, three cards of 2 to 6 rows, the
+tech-demo buttons, two action buttons) is about 900 px tall and sat in a plain `VisualElement` inside a window
+with about 520 px of content height (1920×1080: panel 1200×675, window 621). UI Toolkit's `flex-shrink` defaults
+to 1, so the column was squeezed: every 50 px settings row shrank (to 15 and 8 px at 1280×800, 11 and 3 px at
+1920×1080, 1 px at UI scale 1.5), the slider, toggles and dropdown overflowed into the next row, "Return to world"
+was 1071 px wide across the "Cave" button and "Open folder" sat on the Language row. Nothing had changed in the
+styling; the page had grown a row at a time (UI Scale, Quest Tracker, Language and its help line, the tech-demo
+section) until the window could no longer hold it.
+
+- The System page is a **`FocusScrollView`** (`Assets/CR/UI/Common/`, a `ScrollView` that also scrolls the control
+  that takes focus into view, because UI Toolkit never does: the d-pad would otherwise walk off the bottom of the
+  screen). In UXML: `<CR.UI.Common.FocusScrollView>` in place of `ui:ScrollView`.
+- **Nothing on it can shrink**: `.options-scroll .section-title/.section-sub`, `.settings-card`,
+  `.settings-section-label`, `.settings-row`, `.settings-slider`, `.settings-checkbox`, `.system-button` and
+  `.quit-button` are `flex-shrink: 0`; a row is a fixed 50 px (`min-height` as well); the label keeps one line with an
+  ellipsis and takes the slack; the dropdown, slider, value and toggle keep their size.
+- **Buttons are as wide as their text**: `.system-button--compact` (no 220 px minimum, `white-space: nowrap`) on
+  "Open folder" and the tech-demo buttons; the action buttons keep the minimum. The tech-demo buttons sit in a
+  `.settings-card--buttons` card that wraps (`flex-direction: row; flex-wrap: wrap`) instead of a column stretched to
+  the window's width.
+- **Test**: `RuntimePanelLayoutHarness` (`Assets/CR/Tests/Editor/`) is a real runtime panel on a RenderTexture of the
+  chosen size, using the project's Panel Settings (theme, scale mode, reference resolution) and a real `UiScaleApplier`,
+  laid out in EditMode by driving the panel's own update; it reproduces the play-mode numbers above exactly.
+  `SystemTabLayoutTests` lays the page out at 1280×800 and 1920×1080 × UI scale 0.75 / 1 / 1.5 and asserts one row
+  height, controls inside their row, the label first and nothing overlapping horizontally, no two blocks or buttons
+  overlapping, no button wider than 300 px, the page a scroll view that stays inside the window (the scroller's
+  `highValue`), and focus scrolling into view. 28 of the 30 layout cases failed on the old layout. The same harness
+  drives the World Map's layout tests ([World Map](?page=unity/35-world-map)) and `StartupFlowStyleTests` (the legacy
+  startup sheet's title rule used `unity-text-align` and `font-weight`, two things USS does not know; it is now
+  `-unity-text-align: middle-center` and `-unity-font-style: bold`).
 
 ### UI scale
 
@@ -815,8 +862,10 @@ as a cancel, so no path leaves an item half-used or a modal stranded.
 
 - `TeamManagementView` is **not** used by `PlayerMenuWindow`. It is still used by
   `GameDataManagerController` and must not be deleted.
-- The System tab's Master Volume / Notifications / Reduced Motion / Language rows are still static
-  decoration; Look Sensitivity, Invert X/Y and Combat Speed are real and persist via
-  `IGameDataRepository`.
+- The System tab's Master Volume / Notifications rows are still static
+  decoration; Look Sensitivity, Invert X/Y, UI Scale, Quest Tracker, Combat Speed, Story Camera, Text Effects, Dialogue
+  Text Speed, Reduced Motion, Screen Shake, Rumble and Language are real and persist via `IGameDataRepository`.
+- `MenuInputBlocked` (the open key is ignored; closing is never blocked) is true in the prologue room **and** while a
+  skippable story beat holds `IStoryBeatGate`: Esc is the beat's hold-to-skip as well as the menu key.
 - The `.evo-*` and `.friend-*` rules in `PlayerMenuWindow.uss` are now unused; they are kept so the
   stylesheet stays a superset while those features are unbuilt.

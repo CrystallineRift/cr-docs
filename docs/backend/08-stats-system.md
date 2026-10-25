@@ -280,6 +280,8 @@ Defined in `CR.Stats.Data.Constants.StatKey`. Use these constants rather than in
 | `CreaturesCapturedTotal` | `"creatures_captured_total"` | Increment | `LifetimeStatProjector` on `CreatureCaptured` (the server's capture) |
 | `CreaturesDefeatedTotal` | `"creatures_defeated_total"` | Increment | `LifetimeStatProjector` on `CreatureDefeated` |
 | `TrainersDefeatedTotal` | `"trainers_defeated_total"` | Increment | `LifetimeStatProjector` on `TrainerDefeated` |
+| `StatKey.TrainerLostKey(npcKey)` (`TrainerLostPrefix`) | `"trainer_lost_{npcKey}"` | Max 1 | `LifetimeStatProjector` on `BattleLost` when both facts `opponentNpcKey` and `lossAllowed` are present; in `ServerOwnedStatKeys` (P1a) |
+| `StatKey.HealAtLastUtc` | `"heal_at_last_utc"` | Set (unix s) | `TeamHealService.HealAtNpcAsync` after a heal only; the 60 s cooldown; server-owned |
 | `ItemsCollectedTotal` | `"items_collected_total"` | Increment (+quantity) | `LifetimeStatProjector` on `ItemCollected` (pickups; loot from C2) |
 | `QuestsCompleted` | `"quests_completed"` | Increment | `LifetimeStatProjector` on `QuestCompleted` — at completion, not claim |
 | `QuestCompletedKey(key)` | `"quest_completed_{key}"` | Increment | `LifetimeStatProjector` on `QuestCompleted` (key trimmed, lower-case) |
@@ -377,7 +379,7 @@ query string is accepted but ignored. Because `trainer_stat` rows are keyed by `
 to the token's account before reading; a trainer that doesn't (or doesn't exist) gets `404 Not Found`
 rather than another account's stats.
 
-This endpoint returns the full `Dictionary<string, long>` from `GetAllAsync`. It is a **debug endpoint** — not intended for production client use. Gating it behind an internal/admin role before shipping is recommended.
+This endpoint returns the full `Dictionary<string, long>` from `GetAllAsync`. It is a **debug endpoint** — not intended for production client use. Admins who need a player's flags or event history use the read-only admin routes (`GET /api/v1/admin/trainers/{id}/progression` and `/timeline`, see [Moderation](18-moderation.md#progression-debugger-routes)), not this one.
 
 The client-facing route group `StatEndpoints` maps at `/api/v1/stats` — `GET trainer/{trainerId}`,
 `GET trainer/{trainerId}/{statKey}`, `GET trainer/{trainerId}/{statKey}/history`, and
@@ -454,3 +456,9 @@ cr-api/Stats/
 - [Quest System](?page=backend/07-quest-system) — primary writer of stats via `RecordProgressEventAsync` and `ClaimRewardsAsync`
 - [Backend Architecture](?page=backend/01-architecture) — DI registration patterns, repository singleton vs scoped, dual-DB
 - [Auth and Accounts](?page=backend/06-auth-and-accounts) — `account_id` / `trainer_id` scoping used on all stat reads and writes
+
+## Admin timeline read and the `stat_event` index
+
+`IStatRepository.GetEventsForTrainerAsync(trainerId, beforeAt, beforeId, limit)` returns a trainer's events newest first in `(occurred_at DESC, id DESC)` order with a keyset cursor (limit clamped 1..200). The admin timeline uses it. M9005 adds `idx_stat_event_trainer_occurred` on `stat_event (trainer_id, occurred_at DESC, id)`; on production create it ahead of the deploy with `CONCURRENTLY` (see [Optimistic Concurrency, deploy notes](28-optimistic-concurrency.md#deploy-notes)).
+
+The key prefixes `readable_read_`, `npc_met_` and `quest_completed_` are server-owned and refused on every client-write route.

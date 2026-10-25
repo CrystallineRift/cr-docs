@@ -2,9 +2,8 @@
 
 CR authors and runs its own branching dialogue format — node graphs stored as JSON on the backend,
 edited in a Unity GraphView window, and played back by a small, engine-free runner shared between
-cr-api and cr-api-unity. It exists alongside the legacy Pixel Crushers Dialogue System plugin
-(see [Dialogue System Integration](?page=unity/11-dialogue-integration)), which still drives every
-NPC that has no CR-authored conversation. Nothing here is merged, deployed, or playtested yet — see
+cr-api and cr-api-unity. It is the only dialogue system: the third-party Pixel Crushers plugin was
+removed on 2026-10-11, so an NPC with no authored dialogue simply has nothing to say. See
 [Status](#status) at the end of this page.
 
 The runner code (`CR.Dialogue.Model`, `CR.Dialogue.Runtime`) is compiled once in cr-api and shipped
@@ -14,14 +13,13 @@ playback), so "what a dialogue does" can never drift between the two.
 
 ## Why this approach
 
-### Why a custom format instead of extending the Pixel Crushers plugin?
+### Why a custom format?
 
-The plugin's data lives in a proprietary Lua-backed database that only exists inside the Unity
-Editor at runtime — there is no way to validate it on the server, sync it as ordinary content, or
-drive it from a backend condition (a quest's grant mode, a requirement check) without going through
-Lua script fields nobody can statically check. CR's format is a plain JSON document with a typed C#
-model on both ends: the server can validate it byte-for-byte before it is ever stored, and a
-condition or action is a strongly-typed C# class instead of a string of injected Lua.
+A dialogue kept in an editor-only, script-driven database cannot be validated on the server, synced
+as ordinary content, or driven from a backend condition (a quest's grant mode, a requirement check)
+without script fields nobody can statically check. CR's format is a plain JSON document with a typed
+C# model on both ends: the server can validate it byte-for-byte before it is ever stored, and a
+condition or action is a strongly-typed C# class instead of a string of injected script.
 
 ### Why does the dialogue core know nothing about quests?
 
@@ -37,7 +35,7 @@ speakers and text. Every domain-specific behavior — `quest.accept`, `progress.
 
 This is enforced by a real test, not just convention:
 `Assets/CR/Tests/Editor/DialogueCoreLayeringTests.cs` scans every `.cs` file under
-`Assets/CR/Dialogue` (except the legacy `Implementation/` folder, the Pixel Crushers adapter) for a
+`Assets/CR/Dialogue` for a
 `using CR.Quests.Dialogue` / `using CR.Progress.Dialogue` / `using CR.Npcs.Dialogue` line and fails
 if it finds one. The project's own comment on that test is honest about its limits: **there is no
 asmdef boundary enforcing this yet** — it is a source-text scan, not a compiler error. Do not treat
@@ -319,10 +317,10 @@ Other load-bearing details:
 - **The look follows the Stitch design "Cinematic Bottom-Bar Dialogue System"** (2026-09-23):
   a floating slate card (`rgba(2,6,23,0.84)`, hairline white border, 16px corners, 96% wide) capped
   at 42% of screen height; a teal speaker pill (rose for a player line, `dialogue--player`) over a
-  bold white line; choices in a right-hand column, each a button with a lettered teal badge (A, B,
-  …) and an arrow overlaid as absolutely positioned children so `Button.text` stays the option line;
-  and a low console strip with an "A CONFIRM" hint on the left and the Continue control on the
-  right. A portrait plate sits left of the text (slate, teal glow border) showing the speaker's
+  bold white line; choices in a right-hand column, each a button with a teal badge (the face button
+  that picks it, see below) and an arrow overlaid as absolutely positioned children so `Button.text`
+  stays the option line; and a low console strip with an "A CONFIRM" hint on the left and the Continue
+  control on the right, on plain lines only. A portrait plate sits left of the text (slate, teal glow border) showing the speaker's
   initials (`DialoguePanelPolicy.Initials`) until `NpcDefinition` carries art; three static pulse
   bars follow the pill as in the design. The typeface is the design's own Plus Jakarta Sans
   (`Assets/CR/UI/Fonts/PlusJakartaSans/`, SIL OFL 1.1, Bold for lines and choices, ExtraBold for
@@ -341,6 +339,29 @@ Other load-bearing details:
   double-advance (old and new button both live for one frame). Option buttons ARE rebuilt every
   Choice step; they are protected by a realtime-based debounce instead
   (`DialoguePanelPolicy.InputAccepted`).
+- **A choice is one press** (playtest fix, 2026-10-10: "it feels like a stutter to select something then
+  confirm it"). Picking an option chooses it and advances in one action: a click or tap, Submit on the
+  focused option (keyboard, or gamepad A; focus starts on the first option), or the face button its badge
+  shows. The badges read A, B, X, Y for the first four options (`DialoguePanelPolicy.BadgeGlyph`; a bullet
+  after that, because no button picks those), and B, X and Y pick the second to fourth options through
+  input actions armed only while a choice is pending (`PickByFaceButton`). Moving focus with the stick or
+  the arrows never answers. B is also Cancel: the pick answers that press and the Cancel the same press
+  raises is dropped (`DialoguePanelPolicy.CancelIsFacePick`), so one press never gives two answers; Escape,
+  and B on a choice with no second option, keep Cancel's decline meaning. With options on screen the
+  footer drops its "A CONFIRM" hint (`ShowsConfirmHint`) and the empty strip goes away; plain lines keep the
+  hint and the Continue prompt. A press inside the debounce window of a freshly shown step is ignored, so
+  the press that chose never also skips the line that follows. Pinned by `DialoguePanelPolicyTests` and
+  `DialogueScreenPresenterTests`; the face-button action wiring does not fire in edit mode, so that path is
+  proven in play mode.
+- **The body is a Text Animator `AnimatedLabel`, and lines can be typed out.** Each block of body
+  text goes through `LoreText.Decorate` (lore keywords coloured, a relic shimmering) and, unless the
+  player's Dialogue Text Speed is Instant, is typed by the label's `Typewriter`. While a line types a
+  Continue / Submit / Cancel press only completes it and the next press advances (`DialogueLineReveal`);
+  a choice's options wait for their prompt, so while a prompt types a press only completes it, and once
+  the options appear one press picks and advances (one press never both completes a line and picks or
+  advances); the panel carries `dialogue--typing`. With no
+  `ITextDisplaySettings` bound lines are instant. Details, the safety timeout and the settings:
+  [Lore text](?page=unity/39-lore-text).
 - Sorting order 40 — above the shop (5) and battle summary (10), below the toast rig (60).
 - `OnContextChanged(UIContext newContext)` closes the panel whenever the game leaves the Overworld
   context (a battle starting, a cutscene) — `Close()` cancels whatever step is pending, which the
@@ -413,8 +434,8 @@ in play mode:
 > World init only starts once a trainer is chosen. An area's NPCs initialize on that same trainer
 > change, in a task `AreaLoader` launches unawaited — nothing sequences it against dialogue sync.
 > Whenever the NPCs won that race, each looked its dialogue up in a table that had not been written
-> yet, and stayed on the Plugin backend for the rest of the session. This happened for real: Scout
-> Maren resolved to `Plugin` in a play-mode test before this fix.
+> yet, and stayed dialogue-less for the rest of the session. This happened for real: Scout
+> Maren resolved to no dialogue in a play-mode test before this fix.
 
 Definitions need no trainer and no server, and the local database finishes migrating before the
 Zenject container even exists, so there is nothing to wait for at boot. World init still repeats the
@@ -434,22 +455,19 @@ battle, market, merchant, conversation.
 
 ```
 GiveCreature
-  > (canBattle: crBusy → IgnoredConversationBusy | CR bark → TrainerBarkCr
-               | Plugin bark → TrainerBarkPlugin | else → TrainerBattleNow)
+  > (canBattle: crBusy → IgnoredConversationBusy | bark → TrainerBarkCr | else → TrainerBattleNow)
   > Market
   > Merchant
   > (crBusy → IgnoredConversationBusy)
-  > (hasConversation: Cr → DialogueCr | Plugin (+player transform known) → DialoguePlugin
-                     | Plugin (no player transform) → DialoguePluginBlocked)
+  > (hasConversation → DialogueCr)
   > None
 ```
 
-`NpcDialogueBehaviour.Backend` (`Assets/CR/Game/World/Behaviours/NpcDialogueBehaviour.cs`) is a
-**computed** property — `DialogueBackend.Cr` if `InitializeAsync` found a dialogue for this NPC's
-content key, else `DialogueBackend.Plugin` if a `DialogueSystemTrigger` is configured, else `None` —
+`NpcDialogueBehaviour.HasCrDialogue` (`Assets/CR/Game/World/Behaviours/NpcDialogueBehaviour.cs`) is a
+**computed** property — true if `InitializeAsync` found a dialogue for this NPC's content key —
 never latched at init time. NPC init is asynchronous and can lose the race to the player pressing
-Interact; latching the backend once turned either failure mode (init not finished yet, or a
-dialogue-lookup exception) into an NPC that silently had nothing to say for the rest of the session.
+Interact; latching it once turned either failure mode (init not finished yet, or a dialogue-lookup
+exception) into an NPC that silently had nothing to say for the rest of the session.
 
 ### Merchants talk first, and every NPC can have a dialogue
 
@@ -488,28 +506,21 @@ server online or the offline DLL talk service) — the authority, not the client
 advances a `TalkToNpc` objective. `NpcInteractionRouting.RecordsTalkProgress(route)` decides, per route,
 whether `NpcInteractionBehaviour` itself sends that intent for a bare Interact press:
 
-- **On the CR backend**, nothing but an authored `quest.recordTalk` action sends the talk (via
+- **For a conversation, only an authored `quest.recordTalk` action sends the talk (via
   `IQuestService.TalkToNpcAsync`, `QuestRecordTalkActionHandler`). A dialogue linked to an NPC that
   never reaches a `quest.recordTalk` node means the quest objective can NEVER progress through that
   NPC — no error appears anywhere; the audit rule described in [Dialogue
   Authoring](?page=unity/32-dialogue-authoring) exists specifically to catch this before it ships.
-- **On the Plugin backend**, `QuestDialogueBridge` sends the talk intent when the conversation
-  *completes*, using the actor's `content_key` field, not its display name (see [Dialogue System
-  Integration](?page=unity/11-dialogue-integration)).
-- **When the route is a swallowed press** (`IgnoredConversationBusy`, `TrainerBarkPlugin`, or either
-  `Dialogue*` route), `NpcInteractionBehaviour` sends nothing itself — sending here too would
+- **When the route is a swallowed press** (`IgnoredConversationBusy` or `DialogueCr`), `NpcInteractionBehaviour` sends nothing itself — sending here too would
   double-count a talk the conversation (or the busy-refusal, or the bark) will handle, or has already
-  handled, on its own. `TrainerBarkPlugin` counts as a conversation for this purpose: `QuestDialogueBridge`
-  sends its talk when the bark completes, same as any other Plugin conversation.
+  handled, on its own.
 - **When the NPC has nothing to do at all** (route `None`), the press still sends the talk intent —
   this is how a `TalkToNpc` objective completes against an NPC with no conversation configured.
 
 ## Status
 
-Not merged, not deployed, not playtested. The Pixel Crushers plugin is still fully wired in the
-project and still drives every NPC that has no CR-authored dialogue — it is the LEGACY backend, kept
-until playtesting is done and slated for removal after that (see [Dialogue System
-Integration](?page=unity/11-dialogue-integration)).
+The Pixel Crushers plugin is gone (2026-10-11): this is the only dialogue system, and an NPC with no
+authored dialogue takes the silent `None` route.
 
 - **Package.** The Unity project consumes cr-api's Dialogue assemblies as a file-referenced local
   package (`Packages/manifest.json` → `cr-api/Convenience/CR.Game.Compat/bin/unity-package`). It was
@@ -519,8 +530,8 @@ Integration](?page=unity/11-dialogue-integration)).
 - **Preview pane.** Built: see [Dialogue Authoring → Preview Pane](?page=unity/32-dialogue-authoring#preview-pane).
 - **Only the Meadow Merchant talks right now.** The five guide dialogues and the scout bark are
   parked (moved under `Defs/_Parked/`, out of the provider) so each NPC and quest kind can be
-  verified one at a time; a placed guide with no dialogue takes the silent, `DialogueBackend.None`
-  path and a trainer with no bark battles at once. See
+  verified one at a time; a placed guide with no dialogue takes the silent `None`
+  route and a trainer with no bark battles at once. See
   [Dialogue Authoring → Active And Parked](?page=unity/32-dialogue-authoring#the-shipped-dialogues-active-and-parked).
 - **Localization is wired but empty.** `IDialogueTextResolver.Resolve` receives a `DialogueTextSource`
   (dialogue content key, node id, option id, source text). `LocalDevGameInstaller` binds

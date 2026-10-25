@@ -83,6 +83,8 @@ The 12 checks (all assert zero dangling rows among non-deleted records):
 
 `build-packages.sh` writes the artifact to `bin/unity-package/StreamingAssets/CR/game-data.bytes` (with its `game-data_schema_version.txt` companion) and aborts the package build if generation fails. It then **auto-copies** the freshly baked `game-data.bytes` + version file into `cr-api-unity/Assets/StreamingAssets/CR/`, so the live Unity project always picks up the latest bake. (The manual **`CR → Content → Bake Game-Data DB`** editor menu still exists but is now optional — only needed for ad-hoc rebakes from inside the Editor.)
 
+The copy lands in the Unity working tree **uncommitted**, and a player build uses the committed floor, which never migrates at runtime: commit both files with the package change. `--base <floor>` makes the tool start from an existing floor instead of an empty database and run only the migrations it lacks, so rows the production overlay carries (story creatures such as the gaterbear) survive; use it to migrate the committed floor forward. `BundledFloorSchemaTests` and `ci/check-floor-schema.sh` fail when the committed floor is behind the package.
+
 :::caution
 **Two migration paths, two build graphs.** The bake tool runs the migrations from a `dotnet run` (Debug) build of its own project graph, so the floor always carries the newest migration classes. The `*.Data.Migration.dll`s that ship inside the Unity package (used by the client to migrate its **online-cache** DBs) come from each project's **Release** output, built by the script's per-project `build_if_needed` list. A migration project missing from that list is *copied* but never *rebuilt* — its DLL gets a fresh mtime and stale contents, and the floor and the client disagree about the schema. `Game/CR.Game.Data.Migration` was exactly that case until 2026-09-03 (nothing in the compat csproj graph references it). Verify a shipped migration with `strings bin/unity-package/Runtime/CR.<Domain>.Data.Migration.dll | grep M<number>`, never with `ls -l`.
 :::
@@ -149,6 +151,13 @@ out.
 The source prefab is unpacked completely rather than kept as a variant, so a CR creature never
 inherits from a vendor prefab that a pack reimport can change or delete.
 
+A creature with no model of its own can be a placeholder built from one the project already owns. `cr_build_gaterbear_placeholder`
+is that for the gaterbear: a Prefab Variant of the CR `wolfpup.prefab` (a variant of a CR prefab, not of the vendor's, so
+the rule above still holds) at 1.8x scale with a tinted copy of the wolf's material, made Addressable at `creatures/gaterbear`,
+with its portrait baked through `cr_bake_portraits` and the definition pointed at both. It is safe to re-run after tuning the tint or
+scale. Replacing it with a real model means overwriting the prefab at the same address and re-baking the portrait. Every placeholder
+like this has a row in the [AI content ledger](?page=content/01-ai-content-ledger).
+
 Push the result with `cr_sync_creatures` (the same call Crystalline Rift Studio's per-row Push makes), then
 re-bake the offline floor:
 
@@ -205,6 +214,23 @@ explicit `NULL` — `INSERT OR IGNORE` swallows the constraint violation, so the
 success, writes nothing, and the pool silently stays as it was. Always read the affected rows back
 after a seed migration rather than trusting that it ran.
 :::
+
+## Pushing Studio content from the CLI
+
+Studio's **Push All Content** button has a headless twin for the open Editor, so a push no longer needs the window or a modal. Both call the same method (`ContentStudioTool.QueueAllContentPush`), so the order (creatures first, trainer battles last, then the achievements catalog), the per-asset saves and the `ContentPushLog` stamps are identical. The stamps are what clear the **Push N Edits** pill.
+
+```
+unity cmd --project-path <cr-api-unity> cr_studio_push_all --args dry   # pending edits per tab + destructive-push warning
+unity cmd --project-path <cr-api-unity> cr_studio_push_all --args go    # queue the push; returns at once
+unity cmd --project-path <cr-api-unity> cr_studio_push_status           # progress, then one line per type
+unity cmd --project-path <cr-api-unity> cr_studio_push_status --args cancel
+```
+
+- **`dry`** prints the server the Studio points at (the Local/Production switch), then `N of M edited since last push` for every tab, the total, and the same "these types remove server rows the assets do not list" text the dialog shows. It reloads the asset lists first, so a long-open window's stale lists cannot hide edits. A bare call does the same as `dry`; only `go` pushes, standing in for the dialog's confirm.
+- **`go`** queues one `StudioJob` per type plus one for achievements. `StudioJobRunner` steps them on `EditorApplication.update`, one request per tick, so the command returns before anything is sent. It refuses while the runner is already busy.
+- **`cr_studio_push_status`** reads `PushRunLedger` (shared with the window's own Push All): `RUNNING`, `DONE`, `DONE WITH FAILURES` or `STOPPED`, the job in progress, and `OK` / `FAILED` per type. A type stopped part-way is listed as never answered and is not stamped.
+
+A push writes live content to that server, so the user runs `go`. The ledger and the queue are lost on a domain reload (a script compile); a push interrupted that way shows as `STOPPED`, and the unstamped types stay pending.
 
 ## Related Pages
 

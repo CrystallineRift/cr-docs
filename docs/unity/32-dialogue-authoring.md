@@ -221,6 +221,18 @@ from that same asset land as an update instead of a second row. An unreadable or
 never shown as "Valid" — it gets a real finding and full diagnostics in its chip, not a green
 checkmark that hides the problem.
 
+**Row versions and conflicts.** Every `DialogueDefinition` and `QuestDefinition` keeps a hidden `serverRowVersion`
+(0 means never pulled). Pull stores the server's `rowVersion`, but only when the whole row applied: a quest whose
+prerequisite could not be resolved (a deleted target) is marked "Pull incomplete", its version does not advance, and Push
+refuses it until it is fixed on the server or re-pulled. Push sends the stored version as `expectedRowVersion`. A 409 does not
+count as a failure: the row shows a conflict box ("Pull this row"; on a row deleted on the server also "Recreate row" and "Delete
+local"), the push summary reads "N conflict(s) — pull those rows, then push again.", and the tab is not stamped as pushed.
+A background check (at most once a minute) shows **Pull N Edits** in the header when the server moved ahead. Pulling dialogues
+needs a content-write key (it pages `includeDocument=true`, 50 at a time). Layout-only changes made in the web canvas do not
+move the version, so they never show as pending. The contract is in [Optimistic Concurrency](?page=backend/28-optimistic-concurrency).
+
+The quest Inspector also has **Story Line** and **Line Step** fields, pushed as `questLine` / `lineStep`.
+
 **Review** — the tab's per-row Diff/Push/Revert flow used by every other content type ([Content
 Registry → Review window](?page=unity/08-content-registry)) applies to dialogues the same way.
 
@@ -274,9 +286,8 @@ and falls to an idle line only when nothing else matches — the same first-matc
   `ReturnToGiver` + no giver to `ClaimNow` — the same as `AutoOnCompletion` — specifically so a
   quest never strands its own reward behind a giver that does not exist. If a quest is meant to
   require a return trip, it must have a `giverNpcContentKey`.
-- **On the CR backend, only `quest.recordTalk` records a talk for an NPC that has a dialogue.**
-  Unlike the legacy Plugin path (where `QuestDialogueBridge` records any completed conversation
-  automatically), a CR-authored dialogue linked to an NPC records nothing on its own. A `TalkToNpc`
+- **Only `quest.recordTalk` records a talk for an NPC that has a dialogue.**
+  A CR-authored dialogue linked to an NPC records nothing on its own. A `TalkToNpc`
   objective targeting that NPC needs a reachable `quest.recordTalk` action somewhere in its
   dialogue, or the objective can never progress — with no error anywhere to say so. This is exactly
   what audit rule 6 exists to catch before it ships.
@@ -349,14 +360,18 @@ The demo script is the main story, and its Act 1 is three quests on one NPC, the
 (`dialogue-merchant-area-1`, NPC `demo-merchant-area-1`, placed six metres in front of the Meadow
 spawn point). The document is the reference for a giver who is also a shop:
 
+> **Pending deploy (cr-api PR #70, feature/retire-welcome):** the server retires Welcome (M7020): the starter and the two
+> potions are granted at trainer creation, First Battle loses its Welcome requirement and is given by this NPC. The
+> Unity half (parking the Welcome asset, this hub's dialogue) is pending. See [Quest System](?page=backend/07-quest-system).
+
 1. **Welcome** (`quest-welcome-to-cr`, auto-granted, auto-paid). The hub's first case is
    `quest.objectivePending` on it: he begs for help from inside the wagon, the player asks how
-   ("I don't have a soulbeast"), and that option's `quest.recordTalk` completes the talk objective.
+   ("I don't have a krytorus"), and that option's `quest.recordTalk` completes the talk objective.
    "Here, catch." The rewards land as the conversation ends: the starter creature
    (`welcome-npc-reward-spawner`) and two `item_heal_potion_30`.
 2. **First Battle** (`quest-first-battle`, auto-granted once Welcome completes, auto-paid). Until it
-   is done the hub falls to `trapped`: "get that soulbeast away from my wagon". Winning one wild
-   battle pays xp, gold and three `capture_crystal_standard`, the binding gems he hands over as he
+   is done the hub falls to `trapped`: "Still here? That gaterbear's not leaving on its own…". Winning one wild
+   battle pays xp, gold and six `capture_crystal_standard` (Summoning Shards), which he hands over as he
    climbs out.
 3. **Runaway Cargo** (`quest-runaway-cargo`, requires First Battle, offered by and returned to him).
    `quest.state Available` reaches the offer; while Active or ReadyToTurnIn the hub gives **repeat

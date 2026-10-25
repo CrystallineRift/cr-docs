@@ -60,6 +60,38 @@ Interaction: focus or hover on a card selects it (the bottom bar acts on the sel
 card plays it; **B / Escape returns to the title** (`NavigationCancelEvent` on the root, ignored while a select
 or delete is in flight); `UiFocusRecovery` re-anchors on the selected card after a background click. Level and
 badge are fetched after the cards are on screen and never block the list; any failure leaves the card as built.
+### Title screen look
+
+The menu is laid out like the hero of [crystallinerift.com](https://www.crystallinerift.com/): a "Counterspell
+Games presents" line (`menu-studio`, `loc-skip` — brand text is never translated), the **Crystalline Rift**
+lockup (`title-lockup`, `Assets/CR/UI/Title/Art/title_lockup.png`, rendered from the site's own typography:
+Josefin Sans + Nanum Brush Script with the ember gradient), then the actions as cream pills that turn ember
+when focused or pressed; the bottom-left corner holds Link Email (or the account id once linked — never the address, see
+[Link Email](#link-email)) and the bottom-right the build stamp. Every colour is a `--cr-brand-*` token (see [UI theme](33-ui-theme.md)); the layout
+carries no inline styles (`MainMenuTitleStyleTests`). `btnOptions` is kept for its localization key but hidden —
+nothing wires it yet.
+
+Under every PreGame screen sits the **painted backdrop**: `TitleBackdropController`
+(`Assets/CR/UI/Title/TitleBackdropController.cs`), created by `MainMenuController.Awake` as a child UIDocument on
+the same PanelSettings with sorting order **-10** (MainMenu 0, LinkAccount 10, CharacterSelect 20). It registers
+with `IUICoordinator` and follows the `UIContext`: shown in PreGame, hidden the moment the player enters the
+world, shown again on "Quit to Main Menu". It renders `Assets/CR/UI/Resources/TitleBackdrop.uxml` — the site's
+fourteen parallax layers (`Assets/CR/UI/Title/Art/title_*.png`, 2880×1620 from the 5760×3240 KickstarterWeb
+sources) listed back to front in `CR.UI.Logic.TitleBackdropLayers` with the site's depths and idle loops:
+
+| Piece | Where | What |
+|---|---|---|
+| `TitleBackdropLayers` | `Assets/CR/UI/Logic/` | The 14 layers: element/texture name, depth (0 sky … 3.3 soulstone), idle loop + delay |
+| `ParallaxDrift` | `Assets/CR/UI/Logic/` | Pointer → per-layer pixel offset (away from the pointer, × depth, half vertically; 16 px at depth 1), frame-rate-independent lerp |
+| `ParallaxFloat` | `Assets/CR/UI/Logic/` | The site's `drift` (40 s, ±1.2 % x), `bob` (8 s, ±1 % y) and `pulse` (7 s, opacity .94→1, scale 1.08→1.092) loops; art is drawn at scale 1.08 so the drift never shows an edge |
+| `ParallaxIdleSway` | `Assets/CR/UI/Logic/` | Where the "pointer" wanders after 2.5 s without mouse or stick input (a Deck has no cursor) |
+| `TitleBackdropController` | `Assets/CR/UI/Title/` | Reads `Gamepad.current` sticks, then `Mouse.current`, then the sway; writes `translate`/`scale`/`opacity` per layer each frame |
+
+Presentation only: nothing in the backdrop or the menu styling reads or writes game state. The world still
+loads behind it as before (`AreaLoader` "menu backdrop" path) so streaming is warm when the player enters.
+Tests: `ParallaxDriftTests`, `ParallaxFloatTests`, `TitleBackdropLayersTests` (pure), `TitleBackdropLayoutTests`
+and `MainMenuTitleStyleTests` (real laid-out panel: every layer resolves its texture, fills the panel, stack order,
+nothing picks the pointer; lockup above centred pills).
 
 | Button | Behavior |
 |---|---|
@@ -112,9 +144,15 @@ cannot sign the player's own device out.
 
 ## Link Email
 
-A **Link Email** button on the main menu, shown under the same connectivity rule as Play Online
-(server unreachable: it explains and does nothing), performs the entry login and only then opens the
-`LinkAccount` screen. The screens (`LinkAccount`, `SignedOutDialog`) live in the boot scene
+A **Link Email** button in the main menu's bottom-left corner (`menu-account`), shown under the same
+connectivity rule as Play Online (server unreachable: it explains and does nothing), performs the entry
+login and only then opens the `LinkAccount` screen. Once the server has said the account is linked, the
+corner shows a "Linked account" caption and the **account id** instead of the button — never the address:
+the title screen is what streamers broadcast, and a visible email invites spam. `LinkAccountController`
+caches only the fact in the `account_linked` game-data key (`GameConfigurationKeys.AccountLinked`, "1"/"0",
+written only on a settled "linked" or "not linked" answer — `LinkedAccountMemo`), and `MainMenuController.Show`
+re-reads it with the server-named `account_id` through the pure `MainMenuAccountLine` (`CR.UI.Logic`).
+A cache of the server's answer, never the authority: the Link Email screen rewrites it on every `/me`. The screens (`LinkAccount`, `SignedOutDialog`) live in the boot scene
 `Assets/CR/Scenes/Core.unity`. The state logic is
 the pure `LinkAccountFlow` (`CR.Core.Data.Logic`, with `LinkAccountState` / `LinkAccountView`); the
 controller only binds it to UI Toolkit (`CrTheme` tokens, no inline styles).
@@ -179,6 +217,51 @@ Characters created offline live in the offline SQLite DB with `IsOnlineTrainer =
 online live on the server with `IsOnlineTrainer = true`. Each character-select screen lists only the current
 mode's set — enforced naturally by which repository/DB is queried under `IsPlayingOnline`. No extra cross-mode
 guard is needed; an offline character is structurally never offered in online mode, and vice versa.
+
+## Deleting a character and online slots
+
+Character Select (`CharacterSelectController`) puts a **Delete** button on every character card and, online, shows
+a slots label above the list.
+
+**Delete flow.**
+
+1. Delete disables the card's buttons and opens a `ChoiceDialog` titled "Delete {name}?" with one Delete option
+   ("Their creatures, items and progress are gone for good.") and Cancel. Initial focus is on **Cancel**
+   (`ChoiceDialog.ShowAsync(..., focusCancel: true)`), so a stray Enter or A press never deletes.
+2. Confirm calls `ITrainerDeletionService.DeleteOwnedTrainerAsync(trainerId)`. The client names the character;
+   the authority decides (account comes from the session, never from the UI).
+3. `TrainerDeletionOnlineOfflineService` routes it:
+   - **Online:** `ITrainerRepository.DeleteTrainer` = one HTTP `DELETE /trainer/{id}`. `TrainerOnlineRepository`
+     evicts the `TrainerList` and `Trainer` cache entries **even when the server answers 404** (stale local
+     copy), then rethrows. `TrainerDeletionServerErrors` maps 404 to `NotFound` and 409 to `Blocked` (code from
+     the response, fallback `trainer-delete-refused`); anything else rethrows.
+   - **Offline:** cr-api's own `ITrainerDomainService.DeleteOwnedTrainerAsync` over local SQLite. Same rules, no cap
+     (`TrainerDomainOptions.Offline`, no deletion guards bound in `LocalDevGameInstaller`).
+4. If the deleted character is the session's current trainer (and the outcome is not `Blocked`), the session is
+   cleared (`IGameSessionService.ClearTrainerAsync`).
+5. `TrainerDeleteUiRule.For(kind)`: `Deleted` and `NotFound` both mean "gone", so the list reloads and focus lands on
+   the first card (or Create New). `Blocked` shows the reason in the status label (`cs-status--error`):
+   `ErrorText.TryGetServer(code)` first (`trainer-has-open-listings`, `trainer-limit-reached` are keyed in
+   `ErrorText`), else the server message. Thrown errors show `PlayerErrorText.For(ex)`.
+
+:::note Online router stays out of the transaction members
+`TrainerOnlineRepository` throws `NotSupportedException` for `CountPlayerTrainersInAccountAsync`,
+`LockAccountForTrainerCreateAsync` and `DeleteTrainerInTransactionAsync`, by design: the cap and the delete run on
+the server, and online there is one HTTP call. `TrainerOnlineOfflineRepository` forwards them to the online or
+offline repository by `IsPlayingOnline`, so reaching the online ones is a wiring bug. Only offline
+`TrainerDomainService` touches them.
+:::
+
+**Slots label.** `ITrainerSlotsService.GetSlotsAsync()` (`TrainerSlotsOnlineOfflineService`): offline returns `null`
+(label hidden, no cap); online `GET /trainer/slots` returns `{ used, max }` (`max` null = unlimited). Any failure is a
+warning and `null`, and Character Select falls back to the listed count with no max. That is **fail-open**: the
+client only decorates, the server still refuses the 4th create. `TrainerSlotPolicy` holds the pure rules
+(`ShowsSlots`, `IsFull`, `CanCreate`; `max` null or `<= 0` is unlimited). The label reads "{used} of {max}
+characters", or "... delete one to make room." (`cs-slots--full`) when full, and Create New is disabled while full.
+
+**Dev tools.** Raw `ITrainerRepository.DeleteTrainerAsync` is unchanged and stays for GameDataManager and smoke
+tests. It skips the domain rule (ownership, guards, inventories). Player UI must go through
+`ITrainerDeletionService`.
 
 ## Wiring summary
 

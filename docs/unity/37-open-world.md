@@ -1,0 +1,734 @@
+# Open World
+
+> **Status: on cr-api-unity main** (merged in PR #65, `41b92439`), behind `world_mode`. Missing, empty or unknown values
+> mean Legacy (`WorldModeSetting`). The mode comes from `GameSettings.defaultWorldMode` (shipping default Legacy), or in the
+> Editor from this machine's override in Studio → Server & Keys → World mode. The default flips to `open` only after the
+> Act 1 corridor is playtested. Nothing here changes cr-api, the schema or the server-authority boundary.
+
+Seamless travel on the continent map: walk from region to region with no door, fade or loading screen. The world is a
+grid of streamed cell scenes; a byte mask of the user's map says which region any world position is in.
+
+## Architecture
+
+| Piece | What |
+|---|---|
+| **Cells** | 256 m squares over a 1956 x 1476 m map (8 x 6). One scene per cell: `Assets/CR/Scenes/World/Cells/World_c{c}_r{r}.unity`, created on demand (only built cells exist). Towns/dungeons/interiors may be their own scenes, hosted by a cell in `WorldLayout`. |
+| **World scene** | `Assets/CR/Scenes/World/World.unity`, always loaded in open mode beside `Core`. Owns `RenderSettings`, the backdrop (mountain ring + ocean plane), cell proxies, `RegionTracker`, `WorldStreamer`. |
+| **`WorldLayout`** | SO (`Resources/OpenWorld/WorldLayout.asset`): cell size, map size, built cells, hosted scenes, start spawn (1a), ring radii, legacy-key table. |
+| **`RegionMask`** | SO (`Resources/OpenWorld/RegionMask.asset`): one byte per metre = region index, plus the region table (key, display name, parent). `Sample(worldX, worldZ)`; out-of-map clamps to the nearest region. |
+| **`RegionProfile` / `RegionProfileSet`** | Optional per-region banner, music, room tone, sky/fog/ambient. Lookup: region, then parent, then World defaults. |
+| **Pure logic** | `CR.Game.OpenWorld.Logic` (no scene API, EditMode-tested): `WorldGrid`, `CellId`, `CellRingRule`, `CellStreamPlan`, `RegionDebounce`, `LegacyAreaKeyMap`, `WorldResumeRule`, `RegionMaskBuilder`. |
+
+All game assets load through `IOpenWorldAssets`; the mode comes from `WorldModeSetting` (config key `world_mode`).
+
+### Dormant / Active
+
+`WorldStreamer` ticks about 4 Hz from the player position (decision logic in `WorldStreamerCore`, testable with a fake loader).
+
+| Ring | Rule (defaults) | State |
+|---|---|---|
+| Active | player cell + cells within 40 m | loaded, logic on |
+| Dormant | built cells within 256 m | loaded, rendered, logic off, **no server calls** |
+| Proxy | everything else | unloaded; its proxy draws |
+
+Hysteresis: unload only past ring radius + 32 m; Active demotes at 40 + 16 m. One load and one unload in flight at a time.
+`CellActivator` (one per cell scene) promotes (runs the cell's `IWorldInitializable`s once per visit, enables activatable
+behaviours and animators) and demotes (disables them, `CullCompletely`). A re-promotion re-runs world init, like today's
+per-load. **World init per visit:** `IWorldInitializable`s of a cell run on each promotion (a merchant's promotion sends no stock call: the player walking up to it does, at most once a minute per merchant, and the authority re-rolls a shelf only after a trade and its restock cooldown; see [Merchant Shop → Restocking](?page=unity/18-merchant-shop#restocking)); ones on inactive objects (parked content, e.g. the demo quest-giver the corridor build parks) are skipped and logged by name, so an initializable must be active at promotion: one switched on later in the visit (a OneShotWorldEvent's `enableOnPlay`, a story beat) is not initialized until the next promotion, and nothing in the scenes does that today (`IWorldInitializable` states the contract); a trainer switch mid-promotion restarts the cell's promote with the new context. A failed load retries with backoff (1, 2, 4 s) and does not block other cells.
+
+**Hold at edge.** If the player outruns streaming (resume, slow Deck) `WorldEdgeHold` covers the screen and gates gameplay input
+(`GameplayInputHolds`, which `PlayerInputGate` honours) while a built cell within ~4 m is not yet Active, then releases. After 5 s it
+toasts "still loading". Battles, cutscenes, placement, tech demo and suspend hand control to their own flow. Battles also freeze streaming for their duration.
+
+### Region identity
+
+`RegionTracker` samples the mask about 4 Hz; a new key must hold 0.5 s (`RegionDebounce`) before `RegionChanged(from, to)`.
+On change: banner (boxes show their own name), music crossfade (`RegionAudioDirector`), sky/fog/ambient blend
+(`RegionEnvironmentDirector`, 3 s), and a forced trainer-location save. Location XP is unchanged (location-enter intent).
+`RegionTracker` is the `ICurrentLocationSource` in open mode (`AreaLoader` in legacy). A mask sample from a stale position
+(e.g. right after a tech-demo return) is ignored until the next `SnapTo`, so a bad region is never force-saved.
+
+**Region audio.** `RegionProfile` carries `musicKey` / `ambienceKey` played through `IGameAudio`; the AudioClip fields are secondary.
+The existing playlist crossfade (`CrMusicPlaylistCommand`) is unchanged (ruling R25); `RegionSoundtrack` crossfades its own two voices and
+cuts the outgoing one on a mid-fade change. A region with no profile uses its parent, then World defaults; an empty `ambienceKey` keeps the room tone.
+
+### `world_mode`
+
+Game config key `world_mode`: `legacy` (default; today's door/fade areas, untouched) or `open` (case-insensitive;
+missing or unknown means legacy). In open mode the trainer row keeps `last_area_key` / `last_pos_xyz` / `last_yaw`, but the
+key holds a **region key** and the position is **world space**. A saved key that is not a region key (old saves such as
+`Meadow`) resumes at the 1a start spawn (`WorldResumeRule`).
+
+### Server authority
+
+Unchanged. Streaming and regions are presentation; the client still only sends intents (location enter, battle action).
+Dormant cells make no calls; nothing here reports outcomes.
+
+## Coordinates
+
+1 map pixel = 1 m. Map top-left (0,0) is world (x=0, z=1476): `x = px`, `z = 1476 - py`; y is height. The grid never moves,
+so positions are saved in world space with no conversion. Cell (c, r) covers x in [256c, 256c+256), z in [256r, 256r+256).
+
+## Editor tools
+
+Menu `CR/World/...`; every CLI command is `cr_world_*` and takes **one string** `args` (`--args "..."`).
+
+| CLI command | `args` | Does |
+|---|---|---|
+| `cr_world_import_map` | none | Reads `world-map.png` + `regions.json`, writes `RegionMask.asset` and `region-mask-debug.png` (stays in `Data/Map`). Logs unknown colours with counts. The map PNG itself lives at `Resources/OpenWorld/world-map.png` (imported as a Sprite for the world map UI). |
+| `cr_world_create_cell` | `"c,r"` | New cell scene `World_c{c}_r{r}`: root `Cell_c{c}_r{r}`, 256 m blockout ground, a `SceneContext` (parent contract `CoreContext`), `CellActivator`, `AreaWorldInitializer`; adds it to Build Settings and `WorldLayout.builtCells` (scene names). |
+| `cr_world_migrate_area` | `"Key,x,z"` e.g. `Meadow,250,880` | Copies a legacy area scene's content into the right cell(s), offset so the area default spawn lands at world (x, z). Doors are dropped. The legacy scene is read, never saved. |
+| `cr_world_refresh_activatables` | `"c,r"` or `""` (every built cell) | Re-collects a cell's activatables (see below) and saves the cell. |
+| `cr_world_validate` | none | Objects outside their cell (+/- 2 m, looks inside migrated containers and nested gameplay placements), built cells missing from Build Settings, regions with no profile, unresolved NPC keys, ocean spawns, terrain seams > 1 mm, > 4 terrain layers (warning), corridor story objects buried > 0.5 m, corridor builder children outside their cell. Summary `E error(s), W warning(s), I info`; checks skipped for a missing provider/mask/profile set show as warnings. |
+| `cr_world_bake_proxy` | `"c,r"` | Bakes the cell's far-field proxy to `Resources/OpenWorld/Proxies/Proxy_c{c}_r{r}.prefab` via `ICellProxyBaker` (built-in fallback baker: copies of enabled renderers ≥ 8 m, one LOD level per group, nothing a `BattleArena` lists as battle-only, shadows off, plus a `TerrainProxy` per terrain; Amplify baker later). |
+| `cr_world_add_lods` | `"c,r"` | Adds `LODGroup`s to the cell's large renderers (grouped; small clutter gets a cull distance); vendor LODGroups (from the prefab's source chain, variants included) are kept and counted. Idempotent: rewrites a group only when it differs from the plan and saves the cell only when it wrote one. The corridor build's `lods` step runs the same pass over its owned containers. |
+| `cr_world_audit_vendor_lods` | `"c,r[,fix]"` | Lists vendor LODGroups carrying instance overrides; `fix` reverts them and saves the cell. Run before `cr_world_add_lods`. |
+| `cr_world_build_backdrop` | none | Builds the ocean plane + mountain ring blockout prefab (`OpenWorld/WorldBackdrop`), instanced in `World.unity`; skips ring cubes over built cells and adds the `VistaGround` (land mesh of unbuilt cells near Mirandale, `M_VistaGround.mat`). |
+| `cr_world_*_corridor` | see below | Corridor builder: seed, build, check, render, revert (section "Terrain and the corridor builder" below). |
+| `cr_world_seed_profiles` | none | Creates/refreshes `RegionProfiles.asset` from the legacy area scenes' audio + environment. Idempotent. |
+
+Menu only: Import World Map, Create Cell, Validate World, Migrate Legacy Area (wizard), and the Scene-view Region overlay (borders, roads, cell lines, "you are in 2b" readout).
+
+### Migration containers (idempotent)
+
+Migrated content goes under `[Migrated {area}]` containers beneath each cell root. Re-running `cr_world_migrate_area` for the
+same area deletes that area's containers in every built cell first, then copies again: no duplicates. Missing-scene and
+missing-root checks run before anything is modified. Doors inside prefab instances are unpacked and removed.
+
+### Activatables collector
+
+One collector (`CellActivatableExtensions.CellActivatables` / `Scene.RefreshActivatables()`) is used by Create Cell, Migrate and
+`cr_world_refresh_activatables`. It gathers spawners (`SpawnerWorldBehaviour`), NPC interaction/AI, encounter zones, pickups,
+location triggers, arenas and Animators into `CellActivator.SetActivatables`. Run the refresh after hand-adding such objects to a cell.
+
+### ArenaKeyTable
+
+Battle arenas are looked up by the encounter's own arena content key (spawner `_battleArenaKey` / trainer battle `battleArenaKey`),
+through `ArenaKeyTable`, so two areas migrated into one cell keep distinct arenas (Meadow `meadow-arena`, Village `starter-wild-zone`).
+Same-key unregister no longer drops a sibling's arena.
+
+## `regions.json`
+
+`Assets/CR/Game/OpenWorld/Data/Map/regions.json` is the importer's input beside `world-map.png` (the user's map, the source of truth; do not change its structure).
+
+```json
+{
+  "ink":     ["#212b31", "#302230"],
+  "regions": [ { "key": "2b", "name": "The Meadow", "parent": "2", "color": "#015c4b", "seeds": [[237,549],[301,410]] } ],
+  "boxes":   [ { "key": "2a", "x": 186, "y": 450, "w": 74, "h": 72 } ]
+}
+```
+
+- **`ink`**: label/line colours. These pixels are not regions; they take the most common neighbouring region (iterated mode fill).
+- **`regions`**: `key` (content key, e.g. `2b`, `mountain`, `ocean`), display `name`, `parent` (`""` for none), fill `color`, and `seeds`: map **pixel** points `[x, y]` (y down, like the image) known to lie in that region. A region may be a colour shared with siblings (e.g. 2a/2b are one green); seeds separate them.
+- **`boxes`**: outlined towns/interiors that share the surrounding colour. Pixel rectangle `x, y, w, h` -> region key, applied after the colour pass.
+
+Unknown colours are reported, never guessed silently.
+
+### Fixing a region
+
+1. Open `region-mask-debug.png` (beside `regions.json`; each region a distinct hue, keys drawn at seeds) and find the wrong area.
+2. Edit `regions.json`: move a seed into the correct area, add a seed for a missed pocket, or adjust/add a box for a town.
+3. Re-import: `cr_world_import_map` (or `CR/World/Import World Map`).
+4. Re-check `region-mask-debug.png`, then `cr_world_validate`.
+
+## Tech-demo areas
+
+Cave, Shore, Crags and Dunes have no place on the map. They stay as their legacy scenes, reachable only from the player menu's
+dev/Editor "Tech demo areas" entry (System tab). The whole round trip is `TechDemoRoundTrip` (behind `ITechDemoHost`):
+
+- **Enter:** remembers the world pose, awaits `IWorldStreamer.SuspendAsync` (all cells unload) behind the fade, then `AreaLoader.GoToAreaAsync`. Region key `techdemo` is held on `RegionTracker`; the audio/environment directors stand down so the legacy `AreaAudio` / `AreaEnvironment` apply; proxies and backdrop hide. A suspend that exceeds 15 s aborts the entry and puts the player back (log only).
+- **Return:** unloads the area, resumes streaming, restores the remembered **return pose** and releases the region (instant change back to e.g. `2b`, directors take over). If the area will not unload the player stays in the tech demo and gets a toast.
+- **Trainer switch inside a tech demo:** leaves the area and resumes the world before placing the new trainer.
+
+Legacy keys map through `WorldLayout` (`Meadow` -> `2b`, `Village` -> `2a`, the four above -> `techdemo`).
+
+## Act 1 corridor (built)
+
+Four cells: `World_c0_r4` (1a summit ruins; start spawn **(208, 30.1, 1105)**, ground 30.0), `World_c0_r3` (descent, wagon terrace,
+escort track, Philroe and Izzandra's farm in 2a, the migrated Meadow in 2b), `World_c1_r4` and `World_c1_r3` (fjord bank, Hound Tor, road).
+Each cell has one Unity Terrain generated by the corridor builder (next section); the old blockout ground, the 1a plateau/ramp and the
+Village group are parked (`SetActive(false)`), never deleted. The shipped assets are `WorldLayout`, `RegionMask`, `RegionProfiles`,
+`WorldBackdrop`, `World.unity` and the corridor layout `Assets/CR/Game/OpenWorld/Data/Corridor/Act1Corridor.asset`.
+
+## Terrain and the corridor builder
+
+Everything between the summit and the farm is generated by one idempotent Editor builder from one ScriptableObject,
+`Act1Corridor.asset` (`CorridorLayout`, menu **CR/World/Corridor**). The asset is the source of truth: hand edits to builder
+objects are lost on the next build unless recorded as overrides. Code: `Assets/CR/Game/OpenWorld/Editor/Corridor/` (Editor) and
+`Assets/CR/Game/OpenWorld/Logic/Terrain/` (pure, engine-free, EditMode-tested in `CR.Game.OpenWorld.Logic.Tests`).
+It is presentation and staging only: no client→server call, nothing reports an outcome.
+
+### Layout sections
+
+| Section | Holds | Seed class (reset) |
+|---|---|---|
+| terrain | cells, terrain settings, solver, region height rules, polygons (shelf, balcony, wagon terrace, farm pad), contours, pads, noise, paths (GP goat path, ET escort track, conform paths), layers, splat, edge guards | `Act1TerrainSeed` |
+| adjustments | every touched story/gameplay object (rows A1-A6, W1, C1-C42, D1-D2): scene, path, from/to, treatment, **zone** and **reason** | `Act1AdjustmentsSeed` |
+| summit / descent / wagon / farm | landmarks, polylines (rims, fences), rows (cabbages), composites (scarecrow, clothesline), scatter rules, detail rules, paint areas | `Act1SummitSeed`, `Act1DescentSeed`, `Act1WagonSeed`, `Act1FarmSeed` |
+| mood | World light + fog, the eight region rows (one dusk) | `Act1MoodSeed` |
+| checks | sightlines, walk beats, beat-skip boxes, keep-outs, camera bookmarks | `Act1ChecksSeed` |
+
+`cr_world_seed_corridor --args section=<name>|all` rewrites one section from its seed class (other sections untouched). After the
+build-out the asset is authoritative, so seeding is a **reset**, not a step of the normal loop.
+
+### Steps and commands
+
+| CLI | Menu (`CR/World/Corridor/…`) | Does |
+|---|---|---|
+| `cr_world_build_corridor --args steps=height+paint+trees+details+dressing+guards+adjust+environment,cells=c0_r4+c0_r3+c1_r4+c1_r3,zones=terrain+summit+wagon+farm+mood,dry` | Build Act 1 Corridor / (Dry Run) | Opens missing cells additively, runs the steps, saves changed scenes/assets, closes what it opened. Defaults: all steps, all cells, all zones, not dry. `zones` filters only adjust + environment. The height solve always covers all four cells. Report `Temp/CorridorBuild/last-report.txt` (counts per container, every adjustment old → new + reason, rejected placements + why, solver residual, timings). Refuses in play mode. |
+| `cr_world_check_corridor --args navmesh[,bare][,only=…]` | Check / Check with NavMesh | Read-only checks below; returns `ok` or `FAIL n`; `Temp/CorridorBuild/check.txt`. |
+| `cr_world_render_corridor --args views=02_spawn_south+06_balcony_vista` | Render Views | Camera bookmarks → RenderTexture → PNG in `Temp/CorridorRenders/` (never a screen read). Warms the builder's particle systems first. |
+| `cr_world_revert_corridor --args confirm` | Revert… | Restores every manifest entry (active flags, transforms, box sizes, gate doors, World light, region profiles), empties the owned containers, parks the terrains (TerrainData kept). |
+| `cr_world_seed_corridor --args section=…` | Seed Layout Section/… | See above. |
+| — | Record Selection As Override / As Removed | Stores the selected builder children's position/rotation/scale delta (or `removed`) in `layout.overrides` by stable id; applied last on every build. |
+
+Steps: **height** (constraints → harmonic SOR solve 4/2/1 m → bicubic 0.5 m → noise → path benches → pads; one world grid feeds all
+four terrains, so shared edges are bit-identical), **paint** (grass/path/rock/snow-or-farmfield per 0.5 m texel), **trees** (terrain
+tree instances, vendor LODGroups kept), **details** (grass/flowers, zero under every placed footprint + 0.3 m), **dressing**
+(landmarks, polylines, rows, composites, scatter, combined crop meshes), **guards** (edge guards), **adjust** (the §3 rows through
+`CorridorStoryPlacer`), **environment** (World light, fog, sky, region profiles), **lods** (last: the `cr_world_add_lods` grouping and
+vendor guard over the renderers in the owned containers only, so a child an earlier step created or recreated gets its LODGroup before the
+hashes are recorded; idempotent, an unchanged container gets no write).
+
+### Containers and idempotency
+
+The builder owns only `[Corridor Terrain]`, `[Corridor Landmarks]`, `[Corridor Dressing]` (one sub-container per rule),
+`[Corridor Farm]` and `[Corridor Guards]` under each `Cell_c{c}_r{r}` at local (0, 0, 0). Outside them it touches only the adjustment rows
+and the World/RegionProfile mood values, and every first touch stores the original in `Act1Corridor.manifest.asset`.
+
+- Children are synced by **stable id** (scatter: `<rule>_c<col>r<row>_<gx>_<gz>_<pick>_<member>`): same id + prefab → transform updated only
+  when it differs by more than 1e-4; otherwise recreated; orphans destroyed. Randomness only comes from `StableRandom`/`HashNoise` (seed 20261008).
+- Adjustments are absolute and matched by xz (`AdjustmentMatch`): at `from` or `to` → applied; anywhere else → skipped and reported
+  "moved by hand" (adopt it with an override).
+- A content hash per owned container and per TerrainData (component types, transforms, colliders, materials, lights, terrain settings)
+  is stored in the manifest by every saved build; the check's `hashes` group fails on drift. A second identical build reports
+  **0 changes** and saves no scene.
+- LODGroups on builder children come from the build's own **lods** step, so a recreated child gets its group back in the same build.
+  `cr_world_add_lods` groups the rest of the cell (renderers outside the owned containers, e.g. the migrated Meadow); it rewrites a group
+  only when its levels, members or bounds differ from the plan, saves the cell only then, and reports `n written`.
+
+### Checks (`cr_world_check_corridor`)
+
+| Group | Proves |
+|---|---|
+| adjust | every adjustment row matches exactly one object and is at target |
+| grades | GP ≤ 22° (stair 20.4° ± 0.5, ≤ 26°), ET ≤ 12°, cross-slope ≤ 14°, step ≤ 0.30 m (0.40 stair) |
+| escort | waypoints on the ground (\|Δy\| ≤ 0.05), 3.2 m headroom, capsule clear, 2.5 m clearance to every solid |
+| triggers / grounding | every story box/sphere contains its ground point; story objects and landmarks seated; spawn ground 30.0; the cart's crash pose |
+| sightlines | spawn/balcony → city and pillar, farm gate → R7, Leg C → wagon, stair top → chimney smoke, den, wagon → R7 |
+| rims | summit rims and farm fences: largest hole ≤ 0.6 m at blocking height |
+| seams / bounds / materials | edge seams ≤ 1 mm, builder children inside their cell ± 2 m, no pink/null materials |
+| trees | instance count within 600 ± 15 % |
+| sun | the glade is lit by every region sun (terrain-only occlusion) |
+| keepouts | spawn safety/flatness, legacy `entrance`, barn apron, Barn Sleep, Izzandra, morning spot, gate → Izzandra corridor, arena tube, arches |
+| hashes | containers and TerrainData match the last saved build |
+| navmesh (opt-in) | a temporary in-memory NavMesh: the beat chain spawn → … → farm → spawn completes within 1.6× authored length; beat-skip boxes (arrival, first sight, pillar) and borders (mountain, fjord, south edge) are **not** reachable, each with a positive control |
+
+### Edge guards
+
+Invisible 3 m × 0.6 m BoxColliders (no renderer) on layer `Ignore Raycast`, planned by `EdgeGuardPlanner` along fjord rims and
+built-cell borders that face unbuilt cells (584 today); none within 20 m of the escort.
+
+### Sun override, resume lift, smoke lift
+
+- `RegionProfile.overridesSun` + `sunEuler/sunColor/sunIntensity`: `RegionEnvironmentBlend` slerps the sun with the fog/sky blend
+  and skips the skybox swap when the target material is already current. All eight profiles share `Sky_TahrokDusk` and sun
+  Euler (22, 60, 0) (the planned 16° left the glade's west end in the ridge's shadow).
+- `OpenWorldBootstrap.MovePlayerAsync` lifts a buried saved position onto the terrain (`GroundLiftRule`, tolerance 0.25, clearance 0.1) after
+  warming the cell and before `IOpenWorldPlayer.Teleport`; positions above the ground (bridges, roofs) are untouched.
+- `StorySmokeRunner.Teleport` lifts to terrain + 0.2 the same way, so smoke teleports written for the blockout stay valid.
+
+### LODs and proxies
+
+- `cr_world_audit_vendor_lods --args c,r[,fix]` lists (and with `fix` reverts) LODGroup overrides on vendor prefab instances. Run it before
+  `cr_world_add_lods`. A vendor group is any LODGroup that comes from the prefab's **source chain**, so prefab variants (Remesh `BigGate`,
+  whose model root has no LODGroup) are recognised; `cr_world_add_lods` skips and counts them.
+- `cr_world_bake_proxy` copies only the last LOD level of a group, skips disabled renderers (vendor collider hulls) and everything a
+  `BattleArena` lists as battle-only (the arena's `[Arena Backdrop]` tube is saved active and hidden only at runtime, so the bake has to leave it
+  out itself: `BattleOnlyProxyExtensions.BattleOnlyRenderers`; see [Area Scenes](?page=unity/22-area-scenes)), and adds a
+  `TerrainProxy` child per terrain: 65 × 65 mesh, skirts to y −10 on edges facing unbuilt cells, 256² colour map from the layers
+  (`Resources/OpenWorld/Proxies/Terrain/ProxyTerrain_c{c}_r{r}.asset/.png/.mat`). The material is saved with URP's opaque setup already
+  applied (RenderType tag, MotionVectors pass off, `_MainTex` = `_BaseMap`), so URP does not rewrite it on first play. A rebake does
+  renumber the proxy prefab's local fileIDs (same content); revert that churn if nothing else changed.
+
+### Performance budget (Steam Deck 1280 × 800)
+
+| Item | Budget | Measured (Editor, 2026-10-10) |
+|---|---|---|
+| Frame | ≥ 40 fps summit, ≥ 50 fps farm | pending Deck run |
+| SRP batches (opaque) | ≤ 500 summit, ≤ 350 farm | pending Deck run |
+| Visible triangles incl. shadows | ≤ 1.2 M | pending Deck run |
+| Terrain trees | ≈ 600, treeDistance 200 | 605 (279 / 73 / 179 / 74 in c0_r4 / c0_r3 / c1_r4 / c1_r3) |
+| Builder GameObjects (excluding guards) | ≤ 700 | 437 (c0_r4 248, c0_r3 169, c1_r4 4, c1_r3 16); crops combined (125 + 5 heads → 2 meshes) |
+| Lights / particles | 2 unshadowed points / 1 system | 2 lanterns, 1 chimney smoke |
+| LODGroups added by `cr_world_add_lods` | — | c0_r4 3 large + 38 small, c0_r3 38 + 386, c1_r4 1 + 0, c1_r3 1 + 1; 687 vendor groups kept |
+| Proxies | one LOD level per group | renderers 65 / 158 / 3 / 0 + one TerrainProxy each; ≈ 23.4 k / 111.6 k / 8.8 k / 8.4 k triangles |
+
+Levers if the Deck misses: treeDistance 150 → detail density 0.5 → `fir_slopes` × 0.75 → pixel error 8 → a Deck quality level with
+2 shadow cascades at 40 m. Record the Deck numbers at bookmarks 02, 06 and 09 here.
+
+### Change the corridor
+
+See [Setting Up the World System → Tweak and rebuild the corridor](?page=guides/04-setup-world-system) and the single-page guide
+`CR/docs/2026-10-09-corridor-builder-guide.html`.
+
+## Towns (P1a, 2026-10-18)
+
+(Unity: lands with the `feature/world-p1a` client PR.) A town is data plus a builder, like the corridor.
+
+- **`TownLayout`** (`Assets/CR/Data/Towns/<key>.json`): points, walls, gates, plots, square, spawns, locations and NPCs on a pad. Pure logic and checks live in `Game/OpenWorld/Logic/Towns` (`TownChecks`, `TownWallPlanner`, `TownBuildPlanner`, `TownFoliageRule`, `TownOrientedRect`).
+- **Kits** (`Data/Towns/kits.json`): 49 roles in three kits (city 29, village 12, seaside 8), sizes measured from the prefabs by `cr_town_kits_measure`. City buildings are big (house 9.6 x 11.6 m); the door side of every City building is its +X.
+- **Commands.** `cr_town_check <key>` validates the layout; `cr_town_build <key>` builds the `[Town <key>]` container in the host cells (idempotent: owned container plus manifest, a repeat build reports `0 changes`; renaming an NPC key gives `created 1, removed 1`); `cr_town_render` writes review renders. Pad flattening and scatter exclusion come from the region overlay `pads` / `scatterExclusionRects`. Order: terrain, paint, scatter and trees, town build, story step, validate.
+- **NPCs.** Placed by registry key (`TownNpcPlacer`). A town NPC must be named `CR_NPC_*` for `cr_dress_cell_npcs` to dress it.
+- **Sandbox.** `town-test` on the Bridgeford pad (cell World_c3_r3) with `interior-test-house`. P1b removed it (see below).
+
+## Interiors (P1a)
+
+An interior is a hosted scene far below its host cell, entered through a door.
+
+- **Slot.** x/z = the door's x/z snapped to a 64 m grid, y = -200 - 40 x slotRow (first free row per town). Volume = 64 x 30 x 64 m AABB, recorded in `Data/Interiors/<key>.json` and compiled by `cr_interior_build` into `Resources/OpenWorld/InteriorVolumes.asset`. `InteriorVolumeChecks` rejects overlap. The room stands under the door (clamped 4 m inside the slot) and the region check samples the room, not the whole slot, against the region at the door. No `RegionHold`: same x/z is the same region.
+- **Hosted scenes.** `HostedScene {sceneName, col, row, interiorKey}`; scene `Interior_<key>.unity` with its own `HostedSceneActivator` and `AreaWorldInitializer`. `HostedSceneGroup` is reconciled every streamer step from what is true (host ring, loaded, active): host and hosted scene load at Dormant, promote together and unload together. A load that fails 3 times faults the door's waiter and the bootstrap puts the player at the start spawn. `cr_interior_build` adds the scene to Build Settings and `hostedScenes`; `cr_interior_check` validates both.
+- **Doors.** `WorldDoor` (Interact) calls `IOpenWorldRelocator.RelocateToInteriorAsync(interiorKey, spawnId)`, which warms the host cell (`IWorldStreamer.WarmHostedAsync`) and ensures the scene is loaded before the teleport; the exit door reverses. Both are default interface methods so other packages' doubles still compile.
+- **Ground lift.** Every lift user (`LiftOntoTerrain`, `TrySampleTerrainHeight`, the smoke runner) is honoured centrally: inside a volume, `TrySampleTerrainHeight` returns null and `LiftOntoTerrain` returns the position unchanged (`InteriorVolumeRegistry.Current`).
+- **Resume inside an interior.** `WorldResumeSteps`: resolve the volume, warm the host cell, load the hosted scene, place the player.
+- `InteriorLighting` sets the interior's ambient; `cr_interior_render` writes renders.
+
+## Wagon travel (P1a)
+
+`WagonStop` (Interact) opens a UI Toolkit list (`UI/Travel`: `TravelListView`, `TravelCoverCard`, `TravelUiPanel`, `TravelList.uss`) over `IWagonTravel`/`WagonTravelService`. Stops come from `Resources/OpenWorld/WagonStops.json` (built from `Data/Towns/wagon-stops.json` by `cr_wagon_build`; three stops: farm, Mirandale south gate, Bridgeford inn). A stop is listed once its region is discovered (`DiscoveredRegions`, read only); the ride is a cover card plus the normal location save. No beat is set by a ride. `rides[]` plus `StartRideAsync(rideKey)` run a scripted ride: the barn-sleep morning waits 4 s, then rides `act1-to-mirandale`, only for the trainer who slept. Strings are in `WorldText` (see the [ledger](?page=content/01-ai-content-ledger)).
+
+## Story rows (P1a)
+
+`CorridorLayout.story` is a `StoryRows` object with a list per row kind (12 kinds, `GauntletRow` among them). `ContinentSeedLoader` has a `story` section; the overlay merge prefixes **row ids only**, registry keys (event, dialogue, npc, quest, beat, location, arena, trainer) stay raw. `CorridorStoryStep` (`cr_world_build_corridor ... steps=story`) owns `[Continent Story]` / `[Corridor Story]`, stamps each row (`StoryRowStamp` hash) and is idempotent (a rebuilt toggle target rebuilds its event). Act 1 cells belong to `Act1Corridor`, so their rows are in `Data/Corridor/Act1/story.json` (`cr_world_seed_corridor --args section=story`); the continent `story.json` is empty. A layout builds only its own cells, so an overlay story row in an Act 1 cell errors.
+
+**Registry validation.** `StoryRegistry` reads `Game/Story/Content/story-registry.json`; `StoryRowChecks` runs inside `cr_world_validate` and reports `story:<row>: unknown npc/dialogue/quest/beat/location/trainer key`. A zone's `arenaKey` is required. Registry NPCs placed by story rows need an `NpcDefinition`, or the existing unresolved-NPC rule errors.
+
+## NPC looks and content commands (P1a)
+
+- **Looks.** `npc-looks.json` (presets, defaults, per-key looks, tint materials) read by `NpcLookTable`; `RoleFor(name, npcType)` picks the role from the name segment, else the authored `_npcType`, else the legacy substring. `cr_dress_cell_npcs` dresses with BSMC 2.0 paths (`Prefabs/Catalog`, `Prefabs/Fantasy/Catalog/<Slot>`) and skips scenes without NPCs. Run it with `-executeMethod`; the pipeline CLI drops the long sweep.
+- **`cr_quests_import_staging`**: imports staged story quests into the quest assets (dry run reports `0 changes`).
+- **`cr_content_push`**: pushes quests, dialogue and NPC/trainer rows to the Studio server. The default server is production, so the user runs it. `ContentPushFilter` skips parked paths and any key with a `test` segment (for example `trainer-bridgeford-test`).
+- **`cr_author_trainer`**: creates a trainer definition plus its NPC row in one command.
+- `NpcDefinition.regionKey` round-trips through push, pull and the inspector.
+
+## Mirandale and Bridgeford (P1b, 2026-10-19)
+
+(Unity: cr-api-unity PR #108.) Two real towns replace the `town-test` sandbox, which `cr_town_remove` deleted (data, interior, scene, volume, trainer asset).
+
+- **Mirandale** (`Data/Towns/mirandale.json`, region 6a, `city` kit, pad 310-400 x 705-795). Walled, four gates; 29 plots; square r 11.5 m with the Governor's stage, bell and `mirandale-arena`; Merchant Row, the Lower End with the open pit yard (`serpent-pit-arena`), Watchtower, Helena's school, the Damisel manor and the healer's house. 7 registry NPCs (Philroe, Mackio, Helena, Damisel, Roric, Mauricio, Merchant Row merchant), 9 locations. Interiors (`Data/Interiors/`): `serpent-tavern`, `helena-school`, `damisel-manor`, `watchtower`, `mirandale-healer`.
+- **Bridgeford** (`Data/Towns/bridgeford.json`, region 18a, pad 925-1005 x 826-906). No wall; three bridges, crossroads square (r 11 m, `bridgeford-arena`), signpost, merchant stall, 11 plots, 2 NPCs, 3 locations. One interior: `bridgeford-inn` (Healer innkeeper). Its four `BeatGatedPass` rows live in `regions/18.json` `story`.
+- **Wagon.** `Data/Towns/wagon-stops.json` keeps three stops (farm, Mirandale south gate, Bridgeford inn, moved beside the inn). The ride `act1-to-mirandale` (barn-sleep morning) ends at the Mirandale south gate; no beat is set by a ride.
+
+### Engine additions
+
+- **`TownPlot.startDisabled`.** The plot and its door build inactive (`TownPlanRow.StartDisabled`, `TownDesiredChild.Active`); a rebuild restores the start state and the hash covers it. Swap partners share one footprint: `School_intact` / `School_burnt` sit at the same local spot, and `TownChecks` skips the plot-overlap test when either plot is `startDisabled`. A story event toggles the pair (`school-burns`).
+- **Cross-cell rule.** Town plots must stay inside the town's cell. The Mirandale pad crosses the c1_r2 / c1_r3 line at z 768, and c1_r3 is an Act 1 cell the Continent layout does not build, so the school pair lives at local (-14, 7). A row in the wrong cell is not built and its toggle is not found (`cr_world_build_corridor` warns).
+- **`StoryRows.pickups`.** `StoryPickupRow {id, itemKey, quantity 1, oncePerTrainer true, position | interiorKey + localPosition {x,y,z}}`. World rows are placed by the story step (`StorySceneBuilder.Pickup`, `CR_Pickup` prefab, instance id `story-pickup-<id>`); interior rows are placed by `cr_interior_build` in `[Interior Story Pickups]` inside the hosted scene. Checks: item in registry `items`, quantity 1, `oncePerTrainer` true, interior file exists. The one P1b pickup is `key_music_player` in the Damisel manor.
+- **Pickup scan.** `cr_pickup_placements_scan` / `_push` read `Scenes/Areas`, `Scenes/World/Cells` and `Scenes/World/Interiors` (`PickupSceneFiles`). A legacy area scene that holds a migrated copy of the same instance is skipped (`FirstPerInstance`), the repeat is reported.
+- **`InteriorFile.arenaKey`.** Puts a `BattleArena` at the room centre and gives interior NPC slots that arena. The check needs a registry arena and a room of at least 8 x 8 m. `serpent-tavern` should carry `serpent-pit-arena`.
+- **`cr_town_remove <key>[,dry]`.** Removes the town containers and manifest, each interior (scene, `hostedScenes` row, volume, Build Settings, manifest), the town's own wagon stops and rides, and its `-test` NPC/trainer definitions (compacting null provider slots). Town and interior data files stay.
+- **NPC dressing.** `cr_dress_cell_npcs` also dresses `npc_<key>` / `NpcWorldBehaviour` objects and scans `Interiors` scenes.
+
+### Act 2 story flow
+
+`Game/Story/Content/story-registry.json` (rev 3) lists regions 6 and 18 as built. Quests run in order (line-act-2, then line-act-3 step 1); each grants beats on completion:
+
+| # | Quest | Beat granted |
+|---|---|---|
+| 1 | The Lockdown | (none) |
+| 2 | The First Duel (`shard-for-hellcat`) | (none) |
+| 3 | The Crowned Serpent (gauntlet `gauntlet-serpent-pit`) | `serpent-pit-won` |
+| 4 | Festival of Souls | `festival-done` |
+| 5 | The Night the School Burned | `school-burned`, `mirandale-open` |
+| 6 | The Trail Splits | `road-open` |
+
+**Gates** (`BeatGatedPass`): `pass-6a-south-gate` needs `act1-done`; `pass-6b-bridgeford-road` needs `mirandale-open`; `pass-18-north`, `-south`, `-southwest` need `road-open`; `pass-18-east` needs `road-done` (Act 3 end). Turn-back barks are `ui.story.bark.pass.*`. Dialogues use `story.beat`, `npc.trainerLost` and `battle.start`, so the server dialogue vocabulary must be live before Studio pushes them.
+
+**Owner steps after merge:** `cr_content_push --args all`, `cr_world_locations_push`, `cr_spawners_push`, NPC rows with `regionKey` / `lossAllowed`, then `cr_pickup_placements_scan` / `_push`. The server still needs a `key_music_player` item and pickup definition.
+
+## The Road: Act 3 (P2, 2026-10-19)
+
+(Unity: cr-api-unity "World P2: The Road — Act 3"; spec `CR/docs/specs/2026-10-19-world-p2-the-road-act3-design.md`, §2 as amended by §6 B1-B9.) After `road-open` the player leaves Bridgeford by any of three roads and frees three corrupted crystals from three generals, in any order. Anton's closing quest then grants `road-done`, which opens `pass-18-east` (Act 4). The story registry is rev 4 (regions 7, 10, 11, 12, 13, 14, 19 are `built`).
+
+### The three spokes
+
+| Spoke | Regions | Towns and camps | General (band) | Wagon ride from Bridgeford |
+|---|---|---|---|---|
+| North, the Warden of the Mines | 19 Ravine (19b hold, 19c Cellblock 83), 7 North Mesa | `ravine-hold` (19b, inn `ravine-inn`, healer `npc-ravine-innkeeper`, merchant `shop-ravine-hold`); Covenant mesa camp (7, not a town: tents, fire, `npc-covenant-medic` Healer) | Warden L18 (spoke band L13-16) | `bridgeford-to-ravine-hold` |
+| South, the Marshal of the Sands | 11 Redwood, 10a Erranume camp, 13 Desert, 14 Coastal Scrubland | `redwood-village` (11a, inn `redwood-inn`, healer `npc-redwood-innkeeper`, merchant `shop-redwood-village`); `erranume-camp` (10a, healer `npc-erranume-elder`, no merchant); `sedran-hamlet` (13c, healer `npc-sedran-elder`, no merchant) | Marshal L20 (L15-18) | `bridgeford-to-redwood-village`, `bridgeford-to-sedran-hamlet` |
+| South-west, the Veiled General | 12 Jungle, 10b Inselberg | none; the Drowned Gate (12) and the grown crystal (10b); the captive `npc-erranume-sister` | Veiled General L22 (L17-20) | none |
+
+Bands are fixed per spoke (no scaling with generals freed). `Data/Towns/wagon-stops.json` now has six stops (farm, Mirandale south gate, Bridgeford inn, `ravine-hold`, `redwood-village`, `sedran-hamlet`); the new rides are `allowUndiscovered false`, so a town must be visited once first. The camp at 10a is reached on foot. Wild zones use the seven `*-wild-act3` spawners, retuned to the spoke bands (ravine/mesa L13-16, forest/desert/scrub L15-18, jungle/karst L17-20); the zones that sat on set pieces were moved and pinned (19a, 13c, 12g, and 13a at (456,200)).
+
+**Healers.** `npc-ravine-innkeeper`, `npc-redwood-innkeeper`, `npc-erranume-elder` and `npc-sedran-elder` are Healer NPCs; `npc-covenant-medic` heals at the mesa camp. Their dialogues offer `team.heal`; shops are `npc.openShop` options.
+
+### Quest lines (four steps per spoke)
+
+Each spoke is a `questLine line-act-3-<spoke>` (`questLine`/`lineStep` are Studio metadata only). Ordering is explicit: type 7 (`road-open`) on step 1 and a type 0 (QuestCompleted) row on the previous step for steps 2-4. A VisitLocation fires once per session and the server has no objective order, so the fight and the attune are separate quests.
+
+| Step | North | South | South-west |
+|---|---|---|---|
+| 1 | `quest-the-mines` (Cellblock 83: visit, read the ledger, beat the two guards) | `quest-sedran-hamlet` (Erranume camp, read the camp pillar, Sedran oasis, read the paint, Sedran elder) | `quest-jungle-passage` (Drowned Gate, beat the two poachers) |
+| 2 | `quest-the-covenant-camp` (Henrik, Nicolai; the Henrik choice is flavour, both options `quest.recordTalk`) | `quest-the-great-dune` (beat the two sand riders, visit the dune) | `quest-the-inselberg` (visit the crystal, talk to the sister) |
+| 3 | `quest-the-warden`: beat `npc-warden` (fight only, no beat) | `quest-the-marshal`: beat `npc-marshal` | `quest-the-veiled-general`: beat `npc-veiled-general` |
+| 4 | `quest-attune-cellblock-83` "The Red Pillar" | `quest-attune-great-dune` "The Dune Pillar" | `quest-attune-inselberg` "The Grown Crystal" |
+
+Step 3 is the general's fight (objectives are NPC keys, never trainer keys; a general beaten before step 3 is active does not count, `allowRematch true` covers it). Step 4 has one objective, ReadReadable `readable-<r>-pillar`, and carries `grantsBeats` for the general beat (`general-warden`, `general-marshal`, `general-veiled`); steps 1-3 grant none. Rewards are 400/600/900 XP plus 300 XP on step 4, gold 80/120/200/100, times 1.0 / 1.2 / 1.4 per spoke; step 4 also gives 3 `capture_crystal_standard`.
+
+**Closing quest.** `quest-izzys-trail-east` (`line-act-3`, region 18) requires all three general beats (three type-7 rows), auto-grants, completes on TalkToNpc `npc-anton-bridgeford`, and grants `road-done`. After any two beats Anton (`dialogue-anton-bridgeford`: `two`, `closing`, `c2`, `done`) and the signpost (`readable-18-signpost`: `s-two`, `s-done`) change their text via `story.beat`; no mechanics.
+
+### The reusable crystal set piece
+
+One shape, three sites (`crystal-cellblock-83` in 19c, `crystal-great-dune` in 13c, `crystal-inselberg` at `10:crystal` in 10b). Per site, in the region overlay `story` block:
+
+1. **Location** `story-<site>` (size 12) at the pillar (`story-red-pillar`, `story-great-dune`, `story-inselberg-crystal`).
+2. **Arena** `<site>-arena` about 10 m from the pillar (`cellblock-83-arena`, `great-dune-arena`, `inselberg-arena`). Guards, riders and poachers use an arena within about 150 m of where they stand: `jungle-gate-arena` (12), `sedran-arena` (13c), `waystop-arena` (14).
+3. **General NPC row**: NpcType Trainer, trainer key, arena key, with a `Data/Trainers/<trainer>.json` and a definition from `cr_author_trainer`. Teams: Warden ground/poison (gaterbear L18, poisonbomb L17, spike L18, snakelet L16); Marshal fire/ground (cindralis L20, cindrakar L19, spike L20, dragonfire L18); Veiled General wind/radiant/ice stand-ins for psychic (sunflowerfairy L22, sunflorapixie L21, snowbomb L21, dragonspark L20). All `lossAllowed false`, `allowRematch true`.
+4. **Attune event** `attune-<site>`: `waitForQuestActive` the step-4 quest, `requiredQuestObjective` 0 (the pillar readable). The pillar swap is in `stages[]` on node `attune` of `dialogue-attune-<site>` (nodes `a1, a2, attune, a4, a5, end`; Ahksun and Tobias), so the colours change mid-line; event-level `enableOnPlay`/`disableOnPlay` are not used. Shots: a Wide on the pillar (a1, 1.6 s, 15 m south, fov 60) and ReturnToPlayer (a5); a 2 s prelude on 19 and 13.
+5. **Blue cluster landmarks** `<r>:pillar_blue_a/_b` with `startDisabled`, placed beside the red or purple cluster that the stage disables. In 10b the stage also swaps the cage for `cage_open`. The beat comes from the step-4 quest (server); nothing client-side decides anything.
+
+Region 7's duplicate `red_pillar`, `cellblock_gate`, `cellblock_cage` and `mine_head` were removed; 19c owns Cellblock 83.
+
+### Roads
+
+`Data/Map/roads.json` (now 37 roads) gained `road-act3-north`, `road-act3-south` and `road-act3-southwest`. Rivers are not edited: `ContinentPathsSeeder` plus `RoadCrossingPlanner` derive bridges from road x river intersections at `section=paths`.
+
+| Road | From to | Length |
+|---|---|---|
+| `road-act3-north` | `pass-18-north` past the Covenant camp pass-by and the Cellblock yard to the hold pad (ends 570,1200) | 547 m |
+| `road-act3-south` | `pass-18-south` through 11a and 10a, joins `road-10` at (520,215.5), ends 280,182 | 1331 m |
+| `road-act3-southwest` | `pass-18-southwest` to the jungle edge, the 10b crystal spur, then west to the Drowned Gate pass-by | 984 m |
+
+Cell row is `floor(z/256)`, column `floor(x/256)`. Act 1 pinned cells are `x < 512` and `768 <= z < 1280`; no sampled point of the new roads falls there. The south road crosses the mountain for about 52 m between 11a and 10a (the only way into the 10a enclave); vet it in the height build. After a road change the controller rebuilds `steps=height+paint+trees+dressing+details+guards` for the touched cells.
+
+### Engine additions
+
+- **`LandmarkPlacement.startDisabled`.** A landmark builds inactive; `GameObject.ApplyStartDisabled` (`CorridorPlacementExtensions`, called from `CorridorDressingStep`) re-disables it on each rebuild, which counts as Updated only if someone switched it on. It never re-activates: turning the flag off needs a `SetActive` or a recreate.
+- **Kit roles `tent` and `awning`** (`Data/Towns/kits.json`, village kit, sizes from `cr_town_kits_measure`): `tent` 12.0 x 11.7 m (max over 5 prefabs, so camp plots should set `w`/`d` tighter), `awning` 4.5 x 4.6 m (4 Seaside cloth-frame prefabs). `awning` is a free role in `TownChecks`, so it may stand on the square.
+- **`TownPlot.tint`** (`"#RRGGBB[AA]"`): `TownTint.TryParse`, `TownPlanRow.Tint` (in the signature hash), `TownChecks` rejects bad hex, and `PlotTint` multiplies each material's `_BaseColor`/`_Color` through a `MaterialPropertyBlock` (no material writes; re-applied at `OnEnable`). Used for the red Covenant paint on `house_b` in `sedran-hamlet` (`#8E3B2F`). Not yet checked visually.
+- **Act 3 smoke plan.** `Game/Story/Smoke/Act3Smoke{Names,StepKind,Step,Plan}.cs`: 25 steps (Bridgeford, north spoke, back, south, back, south-west, back, Anton, `road-done`, `pass-18-east` opens). Plan only, like Act 2; the runner sections (`act2|act3|act4`) arrived in P3, see [The Court](?page=unity/37-open-world#the-court-act-4-p3-2026-10-19).
+- **New data files.** Towns `ravine-hold`, `redwood-village`, `sedran-hamlet`, `erranume-camp` (each 40-70 m pad; `square.arena false`, so the registry arena is a story arena row); interiors `ravine-inn` and `redwood-inn` (copies of `bridgeford-inn`, slotRow 0); run `cr_interior_build ravine-inn` and `redwood-inn` before the volume tests pass.
+
+### Healer region key
+
+The server (`TeamHealService.HealAtNpcAsync`) refuses a heal unless `trainer.LastAreaKey` equals `npc.RegionKey` (OrdinalIgnoreCase; empty refuses). `LastAreaKey` comes from `TrainerLocationTracker` via `RegionTracker.CurrentRegion` = `RegionMask.Sample(x,z)`, which is the **leaf** mask key (`6a`, `19b`), not the top-level parent. Interiors are not held, so inside an inn the region is the door's leaf. So an NPC's `regionKey` must be the leaf area key:
+
+| Healer | regionKey |
+|---|---|
+| `npc-mirandale-healer`, `npc-serpent-barkeep` | `6a` (Act 2, corrected) |
+| `npc-bridgeford-innkeeper` | `18a` (Act 2, was `18`) |
+| `npc-ravine-innkeeper` | `19b` |
+| `npc-redwood-innkeeper` | `11a` |
+| `npc-erranume-elder` | `10a` |
+| `npc-sedran-elder` | `13c` (the elder stands at x 381; the hamlet straddles 13c/13a near x 391) |
+| `npc-covenant-medic` | `7` (no sub-areas at the camp) |
+
+Probe a spot with `cr_world_probe_ground`. `lossAllowed` is not gated on region (`IsLossAllowedAsync` reads `npc.LossAllowed` only). The Act 2 healer dialogues `dialogue-mirandale-healer`, `dialogue-bridgeford-inn` and `dialogue-serpent-barkeep` now offer "Can you see to my team?" with `team.heal`; before, a Healer with a conversation could heal only through its document and had no such option.
+
+**Owner steps after merge:** `cr_content_push --args all`, `cr_world_locations_push` (seven new `story-*` VisitLocation targets), `cr_spawners_push` (seven retuned `*-wild-act3`, two new `shop-*`), NPC rows with `regionKey` = leaf area key and `lossAllowed`. The server dialogue vocabulary (`story.beat`, `npc.trainerLost`, `battle.start`) must be live first.
+
+## The Court: Act 4 (P3, 2026-10-19)
+
+(Unity: cr-api-unity "World P3: The Court — Act 4"; spec `CR/docs/specs/2026-10-19-world-p3-the-court-act4-design.md`, §2 as amended by §6 B1-B10.) After `road-done` (`pass-18-east` open) the player enters the Pilgrimage Season bracket at the Coliseum, beats the Champion in the crypt and frees the fourth crystal (`coliseum-won`), then crosses `pass-20-east` to the Capital, where the Actuators' Court rules against them and Gaweyn loses the case in the Marble Tower (`court-done`). The story registry is rev 5 (regions 20 and 21 are `built`). Band L24-30.
+
+### Places
+
+| Place | Where | What |
+|---|---|---|
+| `coliseum-town` | 20b pad (only its SE quadrant, x 1380-1420, z 955-1000, is leaf `20b`) | City kit: inn (interior `coliseum-inn`, healer `npc-coliseum-innkeeper`, regionKey `20b`), merchant `npc-coliseum-merchant` (`shop-coliseum`), Pilgrimage stalls with awnings, the Champion banner (`champion_flag` landmark kept), wagon stop `coliseum-town`. `square.arena false`. |
+| `arena-ring` | 20a, ring rect 1240-1320 x 960-1040 | Tiny single-plot town file: one `gatehouse` plot, `crypt_door`, whose door is interior `arena-crypt` (stand point at the ring's south gate). The four towers stay landmarks; the arena row `coliseum-arena` is a story row at the ring centre (1280,1000). |
+| `arena-crypt` | interior, `arenaKey crypt-arena` | The Champion `npc-champion` (Trainer, `lossAllowed false`, `allowRematch true`) beside the fourth crystal, which is interior props, not the old `20:arena_crystal` landmark (deleted; `20_vista` passWhen rewritten). |
+| `capital` | 21a pad, 100 percent 21a | Walls own the ring (the P0 west/south gate and tower landmarks and the `court_hall` / `marble_tower` masses were removed), inn (`capital-inn`, healer `npc-capital-innkeeper`), merchant `npc-capital-merchant` (`shop-capital`), a `court_hall` plot whose door is `court-hall`, four houses, plinth, benches, wagon stop `capital`. Roland `npc-roland` (QuestGiver) stands inside the south gate. The Lower End (21b) is outside the pad and stays untinted landmarks. |
+| `marble-tower` | 21c pad 1705-1752 x 1235-1266 | Tiny single-plot town file: one scaled (2.4) `tower` plot, door `marble-tower`. |
+| `court-hall` | interior | Benches, dais stand-in, judge's table; `npc-court-clerk`, `npc-regent` (talk only). |
+| `marble-tower` | interior, one flat hall, `arenaKey tower-arena` | Guards `npc-court-guard-1/2` near the door, `npc-gaweyn` at the far end beside the dais. |
+
+Rides `bridgeford-to-coliseum` and `bridgeford-to-capital` (`allowUndiscovered false`). Interior doors come only from town plots inside a pad, which is why the ring and the tower get their own one-plot files. Integration fixes: the `coliseum-inn` plot moved and the `marble-tower` room shrank to a 12 x 12 hall (tower plot scale 2.0) so each door and its room sit in one region (the first builds were refused: the room reached 20c water / 21a and mountain). The dais in `court-hall` and `marble-tower` is a sunk `statue_base` plinth (id `dais`, top at floor level, so NPCs standing on the floor are not buried). The first `cr_interior_build` of `arena-crypt` and `court-hall` shows the `[Interior Story]` container; the second build reports 0 changes. Interior volumes are written by `cr_interior_build`; run it for `coliseum-inn`, `arena-crypt`, `capital-inn`, `court-hall`, `marble-tower` before the volume tests pass.
+
+### Quest line (`line-act-4`, five steps)
+
+Step 1 needs `road-done` (type 7); steps 2-5 need the previous step (type 0). A scripted loss cannot sit in a gauntlet (it would reopen the stage forever), so Izzy's final is not a gauntlet stage.
+
+| Step | Quest | Objectives |
+|---|---|---|
+| 1 | `quest-the-tournament` | VisitLocation `story-coliseum-gate`; TalkToNpc `npc-coliseum-master`; the bracket (DefeatTrainersFromList `npc-bracket-1/2/3`, run as `gauntlet-coliseum-bracket`); FightTrainer 43 `npc-izzandra-final` (win or lose) |
+| 2 | `quest-under-the-arena` | DefeatTrainer `npc-champion` only (the crypt door is open all along) |
+| 3 | `quest-attune-arena` | ReadReadable `readable-20-arena-pillar`; grants beat `coliseum-won` |
+| 4 | `quest-the-marble-tower` | Visit `story-capital-gate`; Talk `npc-roland`; Visit `story-marble-tower`; Talk `npc-court-clerk`, `npc-regent`, `npc-gaweyn` (the server has no order on the talks; each dialogue stands alone) |
+| 5 | `quest-the-verdict` | ReadReadable `readable-21-edict-of-daemamion`; DefeatTrainersFromList `npc-court-guard-1/2`; DefeatTrainer `npc-gaweyn`; grants beat `court-done` |
+
+- **Bracket then Izzy.** The gauntlet is host `npc-coliseum-master` (a story `npcs` row at the ring gate), healer `npc-coliseum-medic`, trainers bracket 1-3 (L24-26, two creatures each). After stage 3 the master says Izzy waits. `npc-izzandra-final` is a separate Trainer row (`trainer-izzandra-final`, L27 sunflowerfairy, wolfpup, crabby; `lossAllowed true`, `allowRematch true`, arena `coliseum-arena`); her dialogue has win, lose and challenge branches, and the story continues either way. The Edict's rule against a Hellcat touching a human is flavour text in the master's dialogue.
+- **Attune by reading.** As in P2: the step-3 pillar readable carries the beat. The pillar swap (red cluster off, blue cluster on) is a stage on node `attune` of `dialogue-attune-arena`; the event `attune-arena` lives in the crypt.
+- **Regent.** No event row (an event dialogue alone fails the content audit and would race the NPC's own `recordTalk`). `dialogue-regent-audience` is `npc-regent`'s dialogue: the pending-talk case is the audience, otherwise a one-line dismissal. `the-verdict` is an event row inside `court-hall` (`waitForQuestActive quest-the-verdict`) and has its own dialogue, `dialogue-the-verdict` (clerk, Regent, Gaweyn's aside); the clerk's `dialogue-court` is talk only.
+- **Fights.** Champion L29 (dragonfire, gaterbear, cindrakar, shell; challenge only while step 2 is Active); court guards L27; Gaweyn L30 (snowbomb, poisonbomb, dragonspark, cindralis; challenge only when step 5 is Active and both guards are beaten, via `quest.objectiveCount`). Champion and Gaweyn use objective type 43 (NPC key).
+- **Gates.** `pass-20-east` (BeatGatedPass, requires `coliseum-won`, bark `ui.story.bark.pass.coliseum-east`) sits on the last 20a point of road-25 at (1422,1057), yaw 90, so the Capital is unreachable until step 3 completes. `pass-21-east` (requires `court-done`, bark `ui.story.bark.pass.capital-east`) sits on road-32 at (1676,1030). The `flight-east` lineCue (Roland's `flight` node) fires at the Capital's south gate after `court-done`.
+- **Rewards (mine, spec silent).** XP 1500 / 1800 / 600 / 1600 / 2200, gold 300 / 350 / 200 / 320 / 400; 3 `capture_crystal_standard` on steps 3 and 5; 3 super potions on step 5.
+
+### Story rows inside interiors (engine E1)
+
+`StoryEventRow`, `StoryReadableRow` and `StoryLocationRow` gained `interiorKey` and `localPosition` (the pickups pattern, shared interface `IInteriorHosted`). `localPosition` is room-local: x,z from the room centre, y above the floor (events also lift by half their size, so the box sits on the floor); `yaw` applies. Rules:
+
+- `InteriorBuildTool.BuildStory` places them in a container `[Interior Story]` under the interior root (via `StoryRowPlacer.Build` with an `anchorOrigin`; shot points are room-local, y = floor + up) and hashes them (`InteriorBuildTool.Hash(file, pickups, gauntlets, story)`; an empty story hashes as before). Entry point is unchanged: `cr_interior_build --args <key>[,dry]`.
+- `StoryRows.InWorld()` drops every interior-hosted row, so `CorridorStoryStep` skips it and reports `hosted by interior <key> (the interior build places it)`. `StoryRowChecks` errors if the interior has no file and warns when `localPosition` is zero.
+- Toggle names in an event resolve inside the interior root (`InteriorToggleResolver.Find`: any descendant including inactive ones, `[Gauntlets]`, arena children), as written or as `Prop_<name>`.
+- `InteriorProp` gained `id` (object `Prop_<id>`, else the old `Prop_<index>_<prefab>`) and `startDisabled` (built inactive). The crypt uses `crystal_red` and `crystal_blue` with the blue one disabled; the attune stage swaps them. Checks reject duplicate ids and whitespace.
+- Used by: `readable-20-arena-pillar` and `attune-arena` (crypt), `readable-21-edict-of-daemamion`, `readable-21-court-notice` and `the-verdict` (court hall). The outdoor locations `story-arena-crypt` and `story-capital-court` stay as discovery text only.
+
+### Roads
+
+`roads.json` is now 39 roads. Existing roads already reach the 20b pad from `pass-18-east`; the two new pieces only fill gaps, and are separate ids because they are disjoint:
+
+| Road | From to | Length |
+|---|---|---|
+| `road-act4-east-spur` | pad west edge (1352,972) to the ring's east side (1322,966), 2 m outside the ring rect (the south-edge point is within 10 m of `arena_gate_s`) | 30.6 m |
+| `road-act4-east` | (1519.5,1128.5) to the Capital pad west edge (1640,1128), north of the Lower End | 133.5 m |
+
+No bridges (no river crossings) and no point in the pinned Act 1 cells. Rebuild `height+paint+trees+dressing+details+guards` for the touched cells.
+
+### Kit and smoke
+
+- **`gatehouse` kit role** (`kits.json`, city kit, `BLD_03_4x4_Ext_01`, frontYaw 90, 7.19 x 5.75 x 18.1 m): the 4x4 shell, smaller than `house`. A plot's `door` works on any role (the planner puts the door out along the role's frontYaw past the footprint); `KitRolesP3Tests` confirms it for `tower` and `gatehouse`. Verify the door side with a render (frontYaw assumed).
+- **Dais props.** No dais exists in the packs; use `P_PROP_statue_base_city_01` (a 4.2 m plinth) or the half stair run `P_MOD_Stairs_02_E_straight_01_half` (low step, under 2.6 m). The `P_MOD_Base_02_straight_large` is 6 m high.
+- **Act 4 smoke plan.** `Game/Story/Smoke/Act4Smoke{Names,StepKind,Step,Plan}.cs`: 31 steps in gate order (`pass-18-east`, tournament, crypt, attune, `coliseum-won`, `pass-20-east`, tower, verdict, `court-done`, `pass-21-east`). Kinds are Act 3's plus TalkToNpc, RunGauntlet, FightTrainer.
+- **Runner sections (engine E2).** `cr_story_smoke_start --args act2|act3|act4` (Play) lists the plan, then reads state back without driving the player: quests through the quest service, beats through `IStoryBeatReader`; walks, fights and reads print as `drive` lines. It fails only if state is not a clean prefix of the plan, and ends with `probed steps reached from the start: N of M`. `--args plan:act4` (or `cr_story_smoke_plan --args act4`) prints the listing without Play. Code: `ActSmokeSections`, `ActSmokeLine`, `ActSmokeProbe`, `ActSmokeProgress`, `StorySmokeRunner.Acts.cs`.
+
+### Healer keys and owner steps
+
+Healers use leaf keys again: `npc-coliseum-innkeeper` `20b`, `npc-coliseum-medic` `20a`, `npc-capital-innkeeper` `21a` (see [Healer region key](?page=unity/37-open-world#healer-region-key)). Other NPC keys: master, bracket 1-3, Izzy final, Champion `20a`; Roland, clerk, Regent, merchant `21a`; Gaweyn and the guards `21c`.
+
+**Owner steps after merge:** `cr_content_push --args all`, `cr_world_locations_push` (new `story-*` VisitLocation targets), `cr_spawners_push` (`shop-coliseum`, `shop-capital`), NPC rows with `regionKey` = leaf area key and `lossAllowed`. The server dialogue vocabulary (`story.beat`, `npc.trainerLost`, `battle.start`) must be live first.
+
+## The Volcano: Act 5 (P4, 2026-10-19)
+
+(Unity: cr-api-unity "World P4: The Volcano — Act 5" #111; spec `CR/docs/specs/2026-10-19-world-p4-the-volcano-act5-design.md`, §2 as amended by §6 B1-B8.) After `court-done` the player crosses the Blight, frees the fifth crystal (`blight-open`), passes Crow's Gate, climbs the tower above the Volcanic Town, beats the false king in two stages, attunes the crimson crystal (`finale-done`), watches the credits and the pillar relight, and wakes in Mirandale for the epilogue. Registry rev 6 (regions 27, 24 and 23 are `built`). Band L30-36. The Act 5 content is AI-drafted (see the [AI content ledger](?page=content/01-ai-content-ledger)).
+
+### The Blight (region 27) and the beached fleet (23b)
+
+No town. The husk mound is the `27:husk_statue` plus husk stones (there is no `husk_cave` landmark): locations `story-husk-mound`, `story-dead-spire`, readable `readable-27-husk-mound`, the two marines `npc-blight-marine-1/2` (L30, arena `blight-arena`). The Dead Spire (`27:spire_main` + `spire_hex`, key `crystal-outwash` kept) is the fifth crystal. Attune is the P2/P3 pattern: event `attune-spire` (trigger on readable `readable-27-spire-pillar`, `waitForQuestActive quest-attune-spire`, `playIfQuestCompleted true`) stages on node `attune` of `dialogue-attune-spire` (disable the red pair, enable the `startDisabled` blue pair `spire_blue_a/_b`); reading the pillar grants `blight-open`. Region 27a is a small block (x 1270-1374, z 686-790); the wild zone is pinned there, 52 m from the spire.
+
+The Admiral (`npc-admiral`, L33, arena `fleet-arena`, `lossAllowed false`, `allowRematch true`) stands at the beached fleet in 23b (1867,916; location `story-beached-fleet`). Her rows live in `regions/27.json` at 23b world positions (the cell step places them; the validator does not check story rows against regions).
+
+### Crow's Gate (region 24)
+
+`pass-24-gate` (BeatGatedPass, requires `blight-open`, bark `ui.story.bark.pass.crows-gate`) sits at (1703,648), 8 m before road-32 crosses the gate (1700,641). The back door `pass-33-blight` (bark `ui.story.bark.pass.crows-back`) sits on road-33 at (1740,553.5) and needs the same beat, so the Capital-side detour cannot skip the Blight. West of the gate is the allies' camp (location `story-crows-camp`): `npc-henrik-crows` (QuestGiver, branches on the general beats), `npc-erranume-elder-crows` (Healer; her "sky" case needs both ambushers beaten via `quest.objectiveCount`), `npc-nicolai-crows` (merchant, `shop-crows-camp`). The last ambush at the wrecked cart is `npc-crow-ambusher-1/2` (L31, arena `crows-arena`). Readable `readable-24-crows-gate-notice`.
+
+### Volcanic Town and the tower (region 23)
+
+| Place | Where | What |
+|---|---|---|
+| `volcanic-town` | pad 1798-1858 x 578-682 (about 80 percent 23a, 19 percent 23b east of x 1850 and z > 678) | Village kit with a city wall ring and one west gate at (1806,631), where road-32 ends (the `town_gate` landmark was removed). Inn plot (door `volcanic-inn`), merchant stall (`npc-volcanic-merchant`, `shop-volcanic-town`), four dark-tinted houses, well, lamps. `cr_town_check` ok. Inn and stall sit in the 23a part. |
+| `volcanic-inn` | interior, copy of `capital-inn` with warmer ambient, door (1820,600) | Healer `npc-volcanic-innkeeper` (regionKey `23a`, `team.heal`). |
+| tower foot | (1858,790), west face of the tower | `story-tower-gate`, arena `tower-foot-arena`, `npc-false-king` (L34), event `menothas-voice`. Moved west from the spec's 1880 because the tower mesh collider is solid. |
+| crimson crystal | (1912,790), footprint about +-10 m | Readable `readable-23-crimson-crystal` and event `attune-crimson` on its south face (1912,775), arena `crimson-arena`, `npc-false-king-ascended` (L36) on the north side, blue twin `crimson_blue` (`startDisabled`). |
+
+Wagon stop `volcanic-town`; rides `capital-to-volcanic-town` and `bridgeford-to-volcanic-town` (`allowUndiscovered false`) and `volcano-to-mirandale` (`allowUndiscovered true`, to `mirandale-south`; the credits start it).
+
+**Two-stage false king (engine E3).** `StoryNpcRow.startDisabled` builds the NPC inactive (it is in the row hash; `StoryRowPlacer.ApplyStartDisabled`, also on the interior path). `npc-false-king-ascended` is `startDisabled true` and the event `ascension` (`waitForQuestActive quest-the-ascension`, `requiredQuestObjective` index 0 pending, so stage 2 appears only after stage 1 is beaten) enables `CR_NPC_npc-false-king-ascended` through `enableOnPlay`. `NpcWorldBehaviour.OnEnable` runs `LateInitAsync`: it initialises itself once with the pass's context when the world pass for its visit is done and it was not already initialised (`WorldReadiness`, `LateInitGate`, `WorldReadinessExtensions.ReadinessOf`; `AreaWorldInitializer.Context/Generation/Readiness`, `GameInitializer.Readiness`). Limit: an object enabled in the middle of a running pass is not reached until the next pass. `OneShotWorldEvent` restore keeps working (another trainer's restore builds the NPC inactive again). `ascension` and `epilogue-gathering` have no shots (shots are cued by dialogue lines, and these events have no dialogue).
+
+**Menothas and Ahksun's choice.** `menothas-voice` (trigger 12x6x12 at (1859,788), `waitForQuestActive quest-the-tower-by-the-volcano`, requiredQuestObjective = the stage-1 DefeatTrainer pending, dialogue `dialogue-menothas`, five lines, speaker "Menothas") plays before the fight; the false king stands 14 m north. Ahksun's choice is inside `dialogue-attune-crimson` (two options, same continuation to node `attune`, recorded nowhere, flavour only). There is no `ahksun-choice` event (two events on one pending readable would race). Attune event `attune-crimson` swaps `23:crimson_crystal` for `23:crimson_blue`; reading the crystal grants `finale-done`. Same-cell rule: `ascension`, the ascended NPC, `attune-crimson`, its readable, `crimson-arena` and `23:crimson_blue` are all at z >= 768 (cell x7 z3); `attune-spire` and the blue spire pair are at z < 768, x >= 1280 (cell x5 z2).
+
+### Credits and relight (engine E1)
+
+`StoryCreditsDirector` (runtime, `IProgressionNotifier.StoryBeatsSet`) watches for `finale-done` for the current trainer only. Live run: present the sequence, set `IStoryFlags` key `credits.seen` (`StoryFlagKeys.CreditsSeen`), then `IWagonTravel.StartRideAsync("volcano-to-mirandale")`. Once per trainer (the flag), also on a presenter or content failure (it still flags and rides). Replay from Settings → Game card → "Credits / Watch" (`credits-row` in `PlayerMenuWindow.uxml`, `IStoryCredits.ReplayAsync()`) presents only: no flag, no ride; the row is hidden when `IStoryCredits` is unbound (legacy world mode). No server call and no write path: it is presentation of a server outcome.
+
+- **Logic** (`Game/Story/Logic`, no Unity): `CreditsSequencePlan` orders pillars (order then file order), `PhaseAt` (Relight, Roll, Done), `LitCountAt`, `RollProgressAt`, `CanSkipAt` (only from the end of the relight), `RollSeconds` = lines x 1.1 s; hold <= 0 falls back to 1.2 s. `CreditsRun` Live/Replay, `CreditsKeys`.
+- **UI** (`UI/Credits`): `CreditsPresenter` (sorting 70) and `CreditsView` (UI Toolkit; `world-map.png` silhouette fit by aspect, pillar dots at percent positions, `credits-pillar--lit` as each lights, map dims, scrolling roll, skip hint). Skip = Esc, Enter, Submit or NavigationCancel, ignored before the relight. `StoryCredits.uss` uses CrTheme tokens only.
+- **Data.** `Game/Story/Content/credits-pillars.json` (`sites[]`: `siteKey`, `mapPx`, `order`, `holdSeconds`; six sites, 1.2 s each, pixels on `world-map.png` 1956 x 1476 with y = 1476 minus world z: cellblock-83, great-dune, inselberg, arena, outwash, crimson) and `credits.json` (`sections[]`: `title`, `names[]`; seven placeholder sections "Crystalline Rift — <role>"). The runtime reads identical copies in `Assets/CR/Resources/Story/` (`ResourcesCreditsContentSource`); `CreditsContentFilesTests` fails if they differ. After editing: `cp Assets/CR/Game/Story/Content/credits*.json Assets/CR/Resources/Story/`.
+- **DI.** `BindOpenWorld` binds the content source, presenter and `StoryCreditsDirector` (`AsSingle().NonLazy()`).
+- Not eyeballed in Play yet. Out of scope: the far-proxy baker still bakes one state of `startDisabled` pairs (red pillars from afar).
+
+### Epilogue (Mirandale, region 6)
+
+`quest-epilogue` (VisitLocation `story-mirandale-square` then TalkToNpc `npc-helena`) is granted on `finale-done`; the credits run first, then the ride. Helena's epilogue is a new first case `ep1`-`ep6` (+ `ep-rec` recordTalk) in `dialogue-helena-school`, on `quest.objectivePending quest-epilogue npc-helena`, before `school-burned`. Izzy and Philroe appear as extra bodies `npc-izzandra-epilogue` and `npc-philroe-epilogue` (rows appended to `regions/6.json`, `startDisabled true`, 6a, at (349,754) and (361,754); the old `izzandra` row stays 9 m west). The event `epilogue-gathering` (`waitForQuestActive quest-epilogue`, objective 0 pending, `playIfQuestCompleted true`, no dialogue, 20x6x20 at (355,754)) enables the two `CR_NPC_*`. Their dialogues `dialogue-izzandra-epilogue` and `dialogue-philroe-epilogue` are four lines each. `finale-done` is the game's "main story complete" state. No New Game+.
+
+### Quest line (`line-act-5`, eight steps)
+
+Step 1 needs `court-done` (type 7); steps 2-8 need the previous step (type 0).
+
+| Step | Quest | Objectives |
+|---|---|---|
+| 1 | `quest-into-the-blight` | Visit `story-husk-mound`; Read `readable-27-husk-mound`; DefeatTrainersFromList `npc-blight-marine-1/2` |
+| 2 | `quest-the-beached-fleet` | Visit `story-beached-fleet`; DefeatTrainer (type 43) `npc-admiral` |
+| 3 | `quest-attune-spire` | Read `readable-27-spire-pillar`; grants `blight-open` |
+| 4 | `quest-crows-road` | Visit `story-crows-camp`; Talk `npc-henrik-crows`; DefeatTrainersFromList ambushers 1/2; Talk `npc-erranume-elder-crows` |
+| 5 | `quest-the-tower-by-the-volcano` | Visit `story-volcanic-town`; Visit `story-tower-gate`; DefeatTrainer `npc-false-king` |
+| 6 | `quest-the-ascension` | DefeatTrainer `npc-false-king-ascended` |
+| 7 | `quest-attune-crimson` | Read `readable-23-crimson-crystal`; grants `finale-done` |
+| 8 | `quest-epilogue` | Visit `story-mirandale-square`; Talk `npc-helena` |
+
+Fights use type 43 (NPC key) like Acts 3 and 4. Fight dialogues challenge only while their quest is Active. Rewards are the writer's (spec silent): XP 2200 / 2800 / 800 / 2400 / 3000 / 3600 / 1200 / 1500, gold 420 / 500 / 250 / 450 / 520 / 600 / 400 / 300; 3 and 5 `capture_crystal_standard` on steps 3 and 7; hyper/max potions and max revives on 2, 5, 6, 7. Teams: marines L30 x2 creatures, Admiral L33 x4, ambushers L31 x2, false king L34 x4, ascended L36 x5 (the only five-creature team, asserted by a test). `quest-epilogue` reuses `story-mirandale-square` (also Act 2's `quest-festival-of-souls`); unique within Act 5, confirm in play.
+
+### Roads and gates
+
+`roads.json` now has 41 roads. `road-32` keeps its id; points up to (1738.5,693.5) are unchanged and the last leg now runs through the gate (1700,641) to the town gate (1806,631), length 655 (was 573). `road-act5-blight` leaves road-32 at (1738.5,805), runs west (z 790-826, clear of the 25a pad z <= 760) and ends (1290,790), 25.3 m from `27:husk_statue` (460 m). `road-act5-spire` is a 42.5 m spur from (1314,808) to (1320,766), 25 m from `27:spire_main`. No bridges. Rebuild cells x5 z2, x4 z3, x7 z2, x7 z3, x6 z2 (roads and rows) and c1_r2 (epilogue rows). Region keys in the road report are a nearest-seed probe, not the real mask; the builder recomputes them.
+
+### Smoke
+
+`Act5Smoke{Names,StepKind,Step,Plan}` (43 steps; kinds are Act 4's minus RunGauntlet plus `PlayEvent`): court-done beat, the eight quests in order, `blight-open`, `pass-24-gate`, `menothas-voice`, `ascension`, `finale-done`, `epilogue-gathering`. `cr_story_smoke_start --args act5` (Play), `plan:act5` / `cr_story_smoke_plan --args act5` (no Play). `ActSmokeSections.Names` = act2..act5. `Act5SmokePlanTests` checks every key against registry rev 6.
+
+### Healer keys and owner steps
+
+Healers use leaf keys: `npc-volcanic-innkeeper` `23a`, `npc-erranume-elder-crows` `24` (see [Healer region key](?page=unity/37-open-world#healer-region-key)). Other keys: marines `27a`; Admiral, false king, ascended `23b`; Henrik, Nicolai, ambushers `24`; Volcanic merchant `23a`; epilogue bodies `6a`.
+
+**Owner steps after merge:** `cr_content_push --args all`, `cr_world_locations_push` (new `story-*` VisitLocation targets), `cr_spawners_push` (`shop-crows-camp`, `shop-volcanic-town`, retuned `*-wild-act45`), NPC rows with `regionKey` = leaf area key and `lossAllowed`. Run `cr_interior_build volcanic-inn`, the town build for `volcanic-town`, the wagon build, and the story build. The server dialogue vocabulary (`story.beat`, `npc.trainerLost`, `battle.start`, `team.heal`, `npc.openShop`, `quest.objectiveCount`) must be live first. The wagon-stops test list (`TownDataFilesTests`) needs the new stop and three rides.
+
+### Integration results
+
+- **Registry rev 6 complete.** A script check of every location, dialogue, NPC, trainer, arena, event, shop, beat and quest key plus every bark text key in the story blocks of regions 27, 24, 23 and 6 found 0 missing; both registry copies are identical and all 12 writer barks are referenced by rows.
+- **Builds (all exit 0).** `cr_town_build volcanic-town` (63 rows, `cr_town_check` ok); `cr_interior_build volcanic-inn` (slot 0, no region finding); `cr_wagon_build` (9 stops, 9 rides, regenerates `Resources/OpenWorld/WagonStops.json`); `cr_world_build_corridor` with story: 180 changes, 0 errors, 0 warnings (163 story rows: 17 event, 43 bark, 21 readable, 10 pass, 34 npc, 15 arena, 16 location), then a dry run of 0 changes; `cr_world_validate`: 46 cells, 0 errors, 0 warnings. `TownDataFilesTests` now expects the stop `volcanic-town` and the three new rides.
+- **Trigger audit.** `attune-spire` and its toggles sit in cell x5 z2; `attune-crimson`, the crystal, `crimson_blue`, the ascended king and `crimson-arena` in cell x7 z3; `menothas-voice` uses objective index 2 of `quest-the-tower-by-the-volcano` (Visit, Visit, Defeat) and its trigger lies inside `story-tower-gate`; `epilogue-gathering` is in cell c1_r2. `ascension` and `epilogue-gathering` carry no dialogue, so they have no shots.
+- **Fix.** `cr_world_locations_scan` gave `story-husk-mound` areaKey 20; it was set to 27 by hand in `WorldLocations.asset`. A later re-scan may revert it.
+- **Credits data.** The six `credits-pillars.json` pixel positions were checked against the overlay world positions (y = 1476 minus z) and are correct; names stay placeholders.
+- **Open.** The credits view, the tower and crimson trigger layout and the Menothas shot framing are not eyeballed. `story-volcanic-town` and `story-tower-gate` can be entered before their quest is active if the player walks in (the town is gated by `blight-open`).
+
+## Side regions, the wagon network and the boat hop: P5 (2026-10-19)
+
+**Program close.** The world build-out ran in five phases, P0 to P5: P0 terrain, roads, profiles and the far field; P1 the Mirandale and Bridgeford towns, the town builder, wagon rides and the Act 2 story; P2 the Road (Act 3); P3 the Court (Act 4); P4 the Volcano (Act 5, credits and epilogue); P5 (this section) the side regions, the wagon network and the boat hop. They shipped as cr-api-unity PRs #106 to #111 plus the P5 PR #112, cr-api PRs #86 to #89 (story beats, server vocabulary) and cr-docs PRs #53 to #58 plus the P5 docs PR #112. All of the content is AI-drafted (see the [AI content ledger](?page=content/01-ai-content-ledger)). The owner still has to: run the Studio pushes for Acts 2-5 and the side content, play the smokes (`act2` to `act5` and `side`), take the renders (no town, interior, stop prop or region 3 camp has been eyeballed), rebuild the local cr-api package before the next game build, then tag and build.
+
+(Unity: cr-api-unity "World P5" #112; spec `CR/docs/specs/2026-10-19-world-p5-side-regions-fast-travel-design.md`, section 2 as overridden by section 6 B1-B6.) Every region now has a reason to be visited: six side towns with a healer and a merchant, a readable and barks at each remaining set piece, wagon stops in the towns, and a boat from Coastal City to Fathamore Island. Side lines are optional and never gate the main story. Registry rev 7: regions 3, 4, 5, 8, 9, 15, 16, 17, 22, 25, 26, 28, 29 and 30 are `built`.
+
+### The six side towns
+
+| Town | Pad (leaf) | Inn / lodge interior | Healer (`regionKey`) | Merchant (`regionKey`, shop) | Wagon stop |
+|---|---|---|---|---|---|
+| `village-2` | 4a (only x 342-393, z 1189-1215; the rest of the pad is 4b and mountain, so every plot is at z <= 1215) | `village-2-inn` (city house role, 10x8 room) | `npc-village-2-innkeeper` (4a) | `npc-village2-merchant` (4a), `shop-village-2` | `village-2` |
+| `the-teeth` | 9c (only x 633-682, z 590-609; plots at z >= 591) | `teeth-inn` (city inn role, 14x10) | `npc-teeth-innkeeper` (9c) | `npc-teeth-merchant` (9c), `shop-the-teeth` | `the-teeth` (9b, top level 9) |
+| `coastal-city` | 15a (plots up to local z 28; 15b lies above world z 250) | `coastal-inn` | `npc-coastal-innkeeper` (15a) | `npc-coastal-merchant` (15a), `shop-coastal-city` | `coastal-city` (wagon) and `coastal-quay` (boat) |
+| `scrub-village` | 25a (only for z <= 745.5) | `scrub-inn` (volcanic-inn layout, recoloured) | `npc-scrub-innkeeper` (25a) | `npc-village-25-merchant` (25a), `shop-village-25` | `scrub-village` |
+| `cold-lodge` | 29a (100 percent) | `cold-lodge` (city house role, cold tint) | `npc-lodge-keeper` (29a, inside) | `npc-lodge-trader` (29a, inside), `shop-cold-lodge` | `cold-lodge` |
+| `fathamore-port` | 30 (100 percent) | `admiral-hall` (16x12; the side line's stage) | `npc-fathamore-harbourmaster` (30, town healer, no plot) | `npc-fathamore-merchant` (30), `shop-fathamore` | `fathamore-quay` (boat) |
+
+Pads that straddle regions were probed against the region mask; every NPC row carries the leaf key from the probe (the writer's default keys were superseded). The Teeth keeps the gate and tower landmarks; Coastal City keeps `lighthouse_standin` and the plaza statue; the cold lodge merchant stands inside the interior (interiors host merchants through the same `TownNpcPlacer.Configure` path; not seen in Play). Greybox houses and landmarks the towns replace were removed from the region files (15, 25, 29, 30). `cr_town_check` reports ok for all six; `cr_interior_build <key>,dry` shows no findings for the NW three.
+
+### The wagon network (engine E1)
+
+The network already existed: `WagonTravelRule.Destinations` lists every other stop whose top-level region is discovered (and whose `requiredBeat` is met). P5 adds two rules and no server change (a ride is presentation: `WagonTravelService` relocates and the normal location save/enter intent follows; nothing is sent for a ride).
+
+- **Same vehicle.** A stop has `vehicle: "wagon" | "boat"` (default and unknown values read as wagon; `Check()` flags unknown values). The menu at a stop lists only destinations of the same vehicle (`WagonVehicle`, `WagonRideGate`). Cross-vehicle plain travel is refused (`NotDiscovered`).
+- **Authored rides at the stop.** A ride row may carry `requiresQuestActive` (a quest content key). While that quest is Active or Completed the ride's destination is also listed at the ride's `from` stop; `allowUndiscovered true` lets an undiscovered destination show, otherwise it must be discovered; the destination's `requiredBeat` still applies. The gate is a presentation read of quest state through `IQuestGateReader` (`QuestServiceGateReader` over `IQuestService`, bound in `OpenWorldBindingsExtensions`; unbound means gates closed; keys are read once per menu open). Ungated authored rides (`act1-to-mirandale`, `volcano-to-mirandale`, `bridgeford-to-*`) are story-started and are never added to the menu, otherwise the farm cart would list undiscovered Mirandale.
+- **Stops added in P5** (all wagon unless noted): `village-2` (382,1193), `the-teeth` (649,620), `cold-lodge` (962,1357), `coastal-city` (1076,208), `scrub-village` (1611,708), plus the boat stops below. They have no rides of their own; the network lists them. `wagon-stops.json` now holds 16 stops and 11 rides, and `cr_wagon_build` regenerates `Resources/OpenWorld/WagonStops.json`. The wagon-stops expectations in `TownDataFilesTests` need the new stops and the two boat rides.
+
+### The boat hop (engine E1/E2)
+
+Two boat stops: `coastal-quay` (region 15a, at the old `15:quay_boat` spot 1058,180, yaw 30) and `fathamore-quay` (region 30, at `30:quay_boat` 1880,26, yaw 90). Both landmarks were removed from the region files so the stop prop owns the spot. `cr_wagon_build` places the boat prop (`Assets/Fantastic Seaside Town/Prefabs/Props/P_PROP_boat_comp_town_01.prefab`, the one the overlays used) for boat stops and the cart otherwise (`WagonBuildTool.PropFor`; the build refuses if a boat stop exists and the prefab is missing). The cover line is keyed by the destination's vehicle: `ui.world.wagon.cover` "Half a day by wagon." and the new `ui.world.wagon.cover.boat` "Half a day by boat." (`WorldText.CoverFor`). Known follow-up: the stop's interact prompt still reads "Take the wagon" for boat stops.
+
+Rides: `coastal-quay-to-fathamore-quay` (`allowUndiscovered true`, `requiresQuestActive quest-the-admirals-port`, so the island is reachable by boat once the side quest is taken) and the return `fathamore-quay-to-coastal-quay` (`allowUndiscovered false`; the island is discovered on arrival). `npc-ferryman` (15a, 1067,183) is flavour only: his dialogue does not start the ride; the stop does. The Fathamore wild zone moved off the port pad to (1816,45) r12 and is pinned (62 m away).
+
+### The side lines (`line-side`, optional)
+
+| Step | Quest | Requirement | Objectives | Reward |
+|---|---|---|---|---|
+| 1 | `quest-the-admirals-port` | type 7 `coliseum-won` | Talk `npc-harbourmaster` (the letters); Visit `story-fathamore-landing` (arrive by boat); Talk `npc-admirals-wife` | 350 XP, 80 gold |
+| 2 | `quest-fathamore-crossing` | type 0 previous | DefeatTrainersFromList `npc-fleet-deserter-1/2` (L31, arena `fathamore-quay-arena`, trainers `trainer-fleet-deserter-1/2`); Talk `npc-admirals-wife` | 500 XP, 150 gold, 3 `capture_crystal_standard` |
+| - | `quest-the-pilgrims` | type 7 `road-open` | Talk `npc-pilgrim-mother`; Read `readable-3-waystone`; DefeatTrainer (type 43) `npc-bridge-toll` (L14, arena `fjord-bridge-arena`) | 300 XP, 60 gold |
+
+None grants a beat, so nothing in the main story waits on them. The Admiral's wife (`dialogue-admirals-wife`) branches in order: pending crossing talk plus `quest.objectiveCount` objective 0 min 2 (both deserters beaten) gives lines w4-w6, the waiting line while only the crossing is pending, the port talk w1-w3, then `finale-done` w8, `blight-open` w7, else w0. The harbourmaster, pilgrim mother and wife use `recordTalk`. `dialogue-bridge-toll` and `dialogue-fleet-deserter` fight only while their quest is Active (else a declined idle line). Everything is derived by the authority; the client reports no outcome.
+
+**Region 3 finding.** The 3b island (x 288-315, z 1102-1124) is cut off by 18-21 m of fjord water, the P0 bridge piece (2 x 6.8 m) cannot span it, and the original camp, waystone and dock sat on the water bed. The pilgrim camp, `npc-bridge-toll` and `fjord-bridge-arena` therefore stand on the reachable west bank (2b land, y 3-6, within 40 m of 3a): tent (262,1082), cart (268,1077), waystone (278,1088) with readable `readable-3-waystone` (275.5,1088.5), pilgrim mother (266,1084), toll trainer (270,1092), arena (264,1095), a bridge stub, dock and rowboat. A real crossing (three bridge pieces and a guard gap) is a follow-up. Not render-verified.
+
+### Readables and barks in every remaining region
+
+One readable at each set piece, with a radius estimated from prefab scale: `readable-3-waystone`, `-4-standing-stone` (696.5,1228.5), `-5-sunk-gate` (583,899.5), `-8-hound-statue` (166.5,736; readable and barks only, no quest), `-9-crystal-site` (846,556), `-16-scar` (1485,623), `-17-mine-head` (1031,538), `-22-elder-oak` (1590,900), `-25-scar-stone` (1520,799), `-26-crown-rock` (1755,517), `-28-mine-head` (1003,1223), `-29-frost-statue` (1076,1337). Each region also has bark rows (`ui.story.bark.side.<stem>.<1|2>` plus the first-draft keys the NW files name); regions 5, 8, 9, 28 and 29 name one bark each, the rest two. `SideContentTests` fails with the missing key if a region file names a bark that is not in `StoryText.cs`. New visit locations: `region-3`, `region-5`, `region-8`, `region-28`, `story-coastal-harbour` (1058,180) and `story-fathamore-landing` (1880,28), plus a `story-<town>` location per town. Wild zones were already placed in P0; only 30 moved.
+
+### Road spurs
+
+`roads.json` gains `road-side-coastal` (15a to 15a, 44.6 m, (1004,157) to (1015,200), from the end of road-11 into the west edge of the Coastal City pad) and `road-side-teeth` (9d to 9c, 40.8 m, (616,632) to (656,624), from `road-act3-southwest` into the Teeth pad at z >= 591). No bridges; Act 1 cells untouched. Rebuild the cells they cross: (col 3, rows 4-5) and (col 2, row 3). The spur ends sit at or inside the pads; nudge if a gate looks wrong. The region keys in the road report are a nearest-seed probe, not the mask.
+
+### Smoke
+
+`SideSmoke{Names,Step,StepKind,Plan}` (17 steps): `coliseum-won`, `quest-the-admirals-port` (harbourmaster, `story-fathamore-landing`, wife), `quest-fathamore-crossing` (deserters 1/2, wife), `road-open`, `quest-the-pilgrims` (pilgrim mother, `readable-3-waystone`, toll). `ActSmokeSections.Names` = act2..act5 and `side`. `plan:side` / `cr_story_smoke_plan --args side` lists the plan without Play; `cr_story_smoke_start --args side` runs it in Play. Every plan key is checked against registry rev 7. `SideContentTests`, `SideDialogueSyncTests`, `SideDialogueKeys` and `SideSmokePlanTests` cover the content; `Wagon|Travel|Smoke|Side` ran 307 passed, 0 failed (engine run), and the writer filter ran 225 of 225.
+
+### Body count after rebuilds
+
+After any rebuild of towns, interiors, the wagon build or the story build, count the bodies (NPC rows) against the registry: 19 side NPCs (6 healers, 6 merchants, harbourmaster, ferryman, Admiral's wife, pilgrim mother, toll-taker, 2 deserters) must each exist once, with the leaf `regionKey` from the probe table above. A rebuild that drops a model or rebuilds a town without its merchant leaves a registry key with no body, and its dialogue never opens. Check `cr_world_validate` (46 cells, 0 errors, 0 warnings at the last run), then a dry `cr_world_build_corridor` with story (expect 0 changes), then the `side` smoke plan.
+
+### Owner steps after merge
+
+`cr_content_push --args all`, `cr_world_locations_push` (new `story-*` VisitLocation targets), `cr_spawners_push` (the six side shops), NPC rows with `regionKey` = leaf area key and `lossAllowed`. Run the town builds for the six towns, `cr_interior_build` for the six interiors, `cr_wagon_build` and the story build. The server dialogue vocabulary (`story.beat`, `npc.trainerLost`, `battle.start`, `team.heal`, `npc.openShop`, `quest.objectiveCount`) must be live first. Healers in Act 2 needed the leaf-key fix (see [Healer region key](?page=unity/37-open-world#healer-region-key)); the P5 healers use leaf keys from the start.
+
+### Integration results
+
+- **Builds.** Town builds x6 (16/14/13/14/12/11 rows), interior builds x6, `cr_wagon_build` (16 stops, 11 rides), then the corridor build with story: 226 changes, 0 errors, 0 warnings (7 batches); a dry run reports 0 changes; `cr_world_validate`: 46 cells, 0 errors, 0 warnings. The first build failed with 9 errors (the pilgrim set sits in pinned Act 1 cell c1_r4, "Continent does not build"); see the pinned-cell rule below. `cr_world_locations_scan` added 7 locations and `areaKey`s were fixed to the parent region numbers (scrub-village 25, village-2 4, the-teeth 9, cold-lodge 29, coastal-city and harbour 15, fathamore-landing 30); a rescan adds 0. Full EditMode run: 1296 of 1296 pass.
+- **Body count.** `StylizedBody_FullBody` per World scene vs the pre-P5 base: 56 before, 68 after, none lower (c1_r4 1 to 4, c2_r2 0 to 1, c4_r0 0 to 3, c6_r2 5 to 6, c7_r0 0 to 4).
+- **Registry.** Rev 7 resolves with 0 missing keys; the NW bark keys were folded into the `ui.story.bark.side.<stem>.N` scheme and the first-draft duplicates deleted.
+
+### Review fixes
+
+- **Pinned Act 1 cells.** Story rows may stand in pinned cells, and landmarks too when the landmark entry opts in with `pinnedCellOk` (default false; opted: region 3 `erramoor_bridge`, `dock`, `waystone`, `pilgrim_tent`, `pilgrim_cart`, `rowboat`, `bank_crag`, region 4 `farmstead`, `hay_ricks`, `elder_tree`). `CorridorBuilder` runs a trailing Story + Landmarks-only batch for those cells (`PinnedStoryBatchPlan`, `CorridorPinnedStoryExtensions`): no terrain, no scatter, no content hashes; un-opted overlay landmarks in pinned cells are swept. The Act 1 TerrainData SHA-256 is unchanged for c0_r3, c0_r4, c1_r3 and c1_r4. Final build 23 changes, 0 errors, dry 0; `CorridorPinnedStoryTests` (8) cover the plan decision, the scene-bound dry-run is checked by hand.
+- **First Fathamore crossing.** The boat ride is offered while `quest-the-admirals-port` is Active, and the ferryman and the Admiral's wife now also need objective 0 (the harbourmaster talk) done; otherwise they answer "See the harbourmaster first; he holds the letters." (nodes `fh` and `wh`). The quest sits on `line-side-erramoor` step 1 (the pilgrims line).
+- **Boat stops.** A boat stop always lists its authored rides (destination beat still applies), same vehicle only (`WagonRideGate`, `WagonRideGateTests`). The gate reader reads the `ActiveQuests` snapshot. The interact prompt is vehicle-aware: "Take the boat" (`ui.world.wagon.prompt.boat`, `WorldText.PromptFor`; the stop carries `vehicle`).
+- **village-2 ground.** The town sits on sloped ground (accepted greybox, noted in `village-2.json` `_doc`). Follow-up: stamp the pad after an Act 1 re-pin.
+- **Rebuilds drop NPC bodies.** A cell rebuild can drop NPC models. After any town, interior or corridor rebuild run `cr_dress_cell_npcs` and compare the `StylizedBody_FullBody` count per scene against the table above (none may drop), then a dry build (0 changes).
+- **Open.** Region 3 camp on the west bank, the stop props, plot positions and the cold lodge interior merchant are not render-verified; `StoryShotScenesTests.arrival` fails before and after P5 (needs `cr_story_author_shots`).
+
+## Wild zone bands and world content lint (world fill, 2026-10-22)
+
+`Data/Map/region-bands.json` maps each top parent region to an act (`parentAct`), each act to a spawner band (`actBand`) and each band to a level range.
+
+| Band | Levels | Acts / regions |
+|---|---|---|
+| `act1` | 1-6 | act 1: regions 1 and 2 (new) |
+| `act2` | 6-12 | act 2 |
+| `act3` | 12-24 | act 3 |
+| `act45` | 24-36 | acts 4 and 5 |
+
+**Act 1 is authored.** `RegionBands.AuthoredAct = 1`: `GeneratesWildZones` is false for it, so `ContinentWildZoneSeeder` (`section=wildZones`) and `WildSpawnerSeeder` (`cr_spawners_seed_wild`) never generate zones there, even though the band exists. Act 1 has two hand spawners (`Content/Defs/Spawners`):
+
+| Spawner | Region / position | Pool |
+|---|---|---|
+| `act1-ruins-wild` | region 1, (240, 1080), r 12 | spike, wolfpup, sunflowerfairy, mudcalf; L4-6 |
+| `act1-foothill-wild` | region 2, (318, 945), r 12 | gaterbear, spike; L3-5 |
+
+Both are placed as **gated `StoryZoneRow`s** in the region file's `story.zones` with `requiredBeat: "act1-done"` (`arenaKey meadow-arena`). `story.zones` is the **only** path for wild zones in pinned Act 1 cells and town-family leaves (the `wildZone` section is for generated zones); the zone appears only once the beat is set, so the early walk stays encounter-free.
+
+Other band changes: region 22's zone now uses `forest-wild-act45` (was an act-3 spawner). The seeder generated the defs the remaining regions needed: `grassland-wild-act3`, `wetland-wild-act3`, `island-wild-act3`, and `coast-wild-act45` (`island-wild-act45` too). Spawner names are `<family>-wild-<band>`; `cr_spawners_push` publishes them.
+
+### World content lint
+
+`Assets/CR/Tests/Editor/WorldContentLintTests.cs` fails the build when parallel authors clash, instead of in a playtest.
+
+| Guard | Fails when |
+|---|---|
+| Key uniqueness | A quest, dialogue, npc or trainer key repeats across Defs; a key is used by two kinds of Def; the story registry allocates a key to two regions (known legacy exceptions listed in the test; do not add); the staging `quests.json` or readable files hold a key twice or clash with a Def. |
+| Species windows (pools) | A spawner pool template's level range leaves its species' window. |
+| Species windows (teams) | A trainer team slot leaves its species' window. |
+| Window table | The hand table disagrees with the creature Defs' `MinLevel` evolution rules (windows are also derived from the rules; the hand entries win). |
+| Slot ids | A trainer slot template id is not the deterministic slot id. |
+| Zone spawners | An overlay wild zone or story zone names a spawner not registered in `ContentDefinitionProvider`. |
+| Pickup definitions | A story pickup item has no `pickup_definition` on the committed floor (a shrinking known-missing list; the test fails when an entry is fixed, delete it then). |
+| Pickup ids | Two pickup instances share an id (collection is tracked per instance id). |
+
+Species windows (inclusive levels; unlisted species are unconstrained):
+
+| Species | Window |
+|---|---|
+| `creature_cindris` / `cindralis` / `cindrakar` | 1-7 / 8-19 / 20+ |
+| `creature_dragonspark` / `dragonfire` | 1-23 / 24+ |
+| `creature_crabby` / `shell` | 1-15 / 16+ |
+| `creature_bud` / `blossom` | 1-11 / 12+ |
+| `creature_sunflowerfairy` / `sunflorapixie` | 1-13 / 14+ |
+| `creature_snakelet` / `poisonbomb` | 1-17 / 18+ |
+
+Side packets lint trainer teams against the same windows ([Side Content Packets](?page=unity/46-side-content-packets)); dungeons are covered by [Dungeon Scaffold](?page=unity/47-dungeon-scaffold).
+
+## World map tab
+
+In open mode `OpenWorldMapLayoutSource` replaces the legacy node layout: every region (sub-regions included; not mountain, ocean or unassigned) is shown
+with `WorldMapUnknownAreaDisplay.AllVisible` (no fog; discovery of regions deferred). `WorldMapDefinition.backgroundSprite` draws `world-map.png` in a
+child element sized to the same canvas rect as the nodes (`WorldMapLayout.BackgroundRect`), and `IWorldMapMarkerSource` places an exact player marker from
+`IOpenWorldPlayer` (refreshed on tab open, not live). Since v0.1.8 the definition is built with `nodeDisplay = Markers` (a 16 px marker per
+region with a decluttered name beside it), the tab fills its page and the map zooms (1 to 8, opening at 2.5× on the player) and pans;
+the pin is the region tracker's key only, never the legacy area loader's. See [World Map → The open-world map](?page=unity/35-world-map).
+
+## Story start and migration
+
+New trainer in open mode wakes in **1a Cliff Ruins**, descends past the merchant, sees the Meadow (2b) and Village (2a); Act 1 must still play end to end, online and offline. Steps (playable after each): World scene + streamer + tracker behind `world_mode`; Act 1 corridor cells; tech-demo entry; flip default to `open`; delete the legacy door path.
+
+## Far field (summary)
+
+Per-object LODs and per-cell proxies (fade 0.5 s on load/unload, terrain proxies included), plus the backdrop and vista ground. GPU occlusion culling and GPU Resident Drawer are off today and trialled on the Deck behind an A/B. The Act 1 corridor's terrain and dressing come from the corridor builder; the art in it is an AI draft (see the [AI content ledger](?page=content/01-ai-content-ledger)).
+
+## See also
+
+[World Map](?page=unity/35-world-map) (the player menu Map tab), [World Behaviours](?page=unity/03-world-behaviours). Story beats, the gauntlet and the Healer: [Opening Story](?page=unity/38-story-opening#healer-battlestart-and-the-scripted-loss-p1a).

@@ -197,6 +197,21 @@ and leaves it standing in the world, which reads as a wild creature the player c
 never fight. It is no longer placed in the areas; the prefab stays in the project as a dev tool for
 looking at a creature in a scene.
 
+**Quest-hide key (2026-10-23 fix).** `SpawnerWorldBehaviour.hideWhenQuestCompletedKey` now defaults to
+empty (never hidden). It used to default to `quest-first-battle`, meant only for the stationary wagon
+gaterbear zone, so every builder-stamped zone inherited it (161 serialized zones, 160 of them plain roaming
+zones) and `RoamingSpawnerBehaviour` despawned the creatures once First Battle was complete: they appeared,
+then vanished, with no log line. Now:
+
+- Only `StorySceneBuilder` sets the key, on the stationary wagon zone (`story-gaterbear-wagon`).
+- `cr_world_clear_quest_hide` (args `dry` = text scan only, no scenes opened) empties the key on every
+  non-stationary zone in the cell scenes. It is dialog-free and refuses to run while an open scene has unsaved
+  changes. `CR_EncounterZone.prefab` stores the field explicitly, empty.
+- `WorldQuestHideLintTests` scans scene YAML and prefabs: only stationary zones may carry a non-empty key.
+- The quest-hidden check re-runs when `IQuestService.OnSessionReady` fires, so a zone that read quest state before
+  the session was set (it logs at debug and keeps its state) is corrected as soon as the session is ready.
+  `LatestOnlyTicket` makes a newer read supersede an older, slower one.
+
 ### Meadow art sets
 
 The `style` option picks which set dresses the Meadow; the Cave set is fixed. Switching style
@@ -370,6 +385,35 @@ Two more traps the tests pin down:
 - `GeometryChangedEvent` **bubbles**, so the card resizing lands in the band's own handler. Sizing
   from `evt.newRect` there measures the card and feeds its padding back into itself — a layout
   loop. The handler ignores any event whose target is not the band.
+
+## HUD notices
+
+The top of the screen is shared by the arrival banner, the quest and discovery toasts and the quest tracker.
+
+- **Banner.** Max width 56% of the panel, centred; band 8% of height; panel `sortingOrder` 35. `AreaBannerPresenter` also
+  implements `IAreaBannerStatus` (`IsShowing`, `Cleared`), the only thing others wait on; consumers take it
+  `[InjectOptional]` (null means never showing).
+- **TopCenter rule.** `TopCenterNoticeRule.MayShow(holdActive, ctx, bannerShowing)`: a top-centre toast starts only in the
+  Overworld, with no `HudNoticeHold` and no banner on screen. Otherwise it stays queued and is re-checked when the hold
+  lifts, the banner clears or the context changes. `AchievementToastPresenter` gates the TopCenter slot through
+  `PendingToastQueue.TryDequeueDrainable`; the queue cap is 12 (oldest dropped).
+- **HudNoticeHold.** Static counted hold (`Hold` / `Release`, `Lifted` event on the last release) taken by staged scenes such
+  as the wagon call-out. Not a `UIContext`, so the dialogue panel's context does not change. A banner arrival during a hold
+  is dropped. A leaked hold hides HUD notices for the session, so callers must balance it.
+- **Tracker reveal.** `QuestTrackerReveal`: cards that first appear while the banner shows wait for it to clear plus 0.3 s
+  before the tracker fades in. Hide rules (hold, not Overworld, menu open, the player's setting) always win. The tracker
+  polls `HudNoticeHold.Active`. Width is x14 of the layout unit (`QuestTrackerLayout`).
+- **One Main Story guide, local beats nearby.** The main-story quest's own tracker card is the single guide and leads the
+  stack (amber `quest-tracker--main` accent). "The main quest" is one rule, `MainQuestRule`, shared by the guide and
+  `QuestTrackerSelector`: the live quest in the main-story category or on a `line-act-N` line with the lowest (act, step).
+  The pinned "Main Story" header line shows only in the gap, when no main quest is active (`MainStoryHudRule.ShowPinnedLine`).
+  A place-bound step (visit a location, e.g. "Go to Philroe's Wagon") is a `MainStoryBeat` on the hint. Its text appears
+  only in the lighter secondary prompt (`quest-tracker-nearby`), never on the card: for such a step the card keeps the
+  broader guidance (the objective's own authored text, else the quest summary, else the title). The prompt shows within 30 m
+  of the nearest trigger volume carrying the key and hides past 38 m (`NearbyBeatProximity`, hysteresis). It fades over
+  0.35 s and is `display:none` otherwise, so it takes no space. `StoryBeatTargetLocator` reads the scene's
+  `LocationTriggerBehaviour` volumes by key (throttled to once a second); it only measures distance and never changes
+  quest state.
 
 ## The battle camera across scenes
 
@@ -767,6 +811,40 @@ defect in this feature was found in an image rather than in a log. Particle syst
 edit mode, so ambient FX are absent from the shots, and the AZURE foliage shader renders its leaves
 red in batch mode — neither reflects how the scene looks in the Editor.
 
+### The backdrop is battle-only
+
+In the open world an arena stands in plain sight between fights, and the 31 m tube read as a pale green
+cylinder in the meadow. `BattleArena` therefore carries a **battle-only list** (`battleOnly`, Inspector
+header *Battle-only*): objects that exist only while a fight is staged there. `Awake` hides every entry
+(whatever the scene saved as active is put away on the first frame), `Activate` shows them with the biome,
+and `Deactivate` hides them again with the environment roots. The list is the one marker; nothing is tagged
+or matched by name at runtime. A destroyed entry (its cell unloaded) is Unity's fake null, so the loop tests
+`!= null`, never `?.`.
+
+Who dresses and undresses the set:
+
+| Caller | When |
+|---|---|
+| `BattleCoordinator` (wild and NPC paths) | `arena.Activate()` right before `EnterArenaAsync`; the arena is remembered as `_activeArena` |
+| `BattleCoordinator.CloseWithFadeAsync` | `DeactivateActiveArena()` first under the white cover, before the camera cut and `ExitArenaAsync`: the single teardown every staged battle reaches (win, defeat, flee, capture, error, force-close, whiteout) |
+| `BattleCoordinator.AbortUnstagedEncounter` | the same `DeactivateActiveArena()`: nothing should be lit, but whatever is goes back |
+| `EvolutionStageDirector` | the cutscene is staged in the same arena: `arena.Activate()` after the player is teleported, `arena.Deactivate()` in the `finally` behind the fade ([Evolution authoring](?page=unity/30-evolution-authoring)) |
+
+`DeactivateActiveArena` is idempotent and a no-op when nothing was lit.
+
+Editor side (`Assets/CR/Game/Areas/Editor/ArenaBackdropExtensions.cs`): `cr_dress_arenas` lists the backdrop it
+builds through `RegisterBackdropsAsBattleOnly` (idempotent; on a prefab instance the change is recorded as an
+override). An arena dressed before the list existed is brought up to date with
+**`cr_arena_battle_only`** (`--scenes a.unity,b.unity`, or every `World_c*_r*` cell when omitted; a scene open
+with unsaved edits is skipped). `cr_world_validate` reports an unlisted `[Arena Backdrop]` as an **error**
+("would stand in plain sight between fights"), and `World_c0_r3` (the meadow arena) was fixed that way.
+
+The far-field proxy has to know too: `cr_world_bake_proxy` reads the scene as saved, where the backdrop is
+active, and would have copied the tube into the proxy for as long as the proxy is up. `FallbackCellProxyBaker`
+leaves out every renderer on or under an object some arena in the scene lists as battle-only
+(`BattleOnlyProxyExtensions.BattleOnlyRenderers`, inactive arenas and entries included); the `c0_r3` proxy was
+rebaked. See [Open World](?page=unity/37-open-world).
+
 ## Two things that would otherwise loop or break
 
 **Doors ping-ponging.** A trigger reports an overlap every frame, and the player is placed near the
@@ -822,13 +900,23 @@ online/offline like every other trainer call — the online path also mirrors in
 The write deliberately lives outside the profile-update SQL — a movement-cadence save and an
 appearance edit can never clobber each other.
 
-**Content dependency (L7 review, M2 close):** `PUT /trainer/{id}/location` refuses (400) any
-`AreaKey` that does not match an authored `world_location.area_key` row (`IWorldLocationDiscoveryService.AreaKeyExistsAsync`
-— see [Location Discoveries](?page=backend/24-location-discoveries)). An area whose scene ships
-without ever getting a `world_location` row pushed from Studio therefore has every location save
-in it silently fail — the tracker/AreaLoader writer above logs the failure, but there is no
-player-facing symptom besides "my position didn't resume" after the next session. Push at least
-one `world_location` per playable area before shipping it.
+**Area key rule (server-authoritative, both modes):** `TrainerDomainService.UpdateLastLocationAsync`
+refuses any `AreaKey` that is neither an authored `world_location.area_key` (the legacy areas — Meadow,
+Village, Cave, Shore, Crags, Dunes) nor a `world_region.key` (the open-world regions), throwing
+`UnknownAreaKeyException`; `PUT /trainer/{id}/location` maps it to `400 "AreaKey does not match a known
+world location or region."`. The check lives in the domain service, not the endpoint, so the offline
+path (the same DLL against local SQLite) enforces it too. A refused save is logged by the
+tracker/AreaLoader writer; the only player-facing symptom is "my position didn't resume" next session.
+
+- **Legacy areas:** push at least one `world_location` per playable area from Studio before shipping it.
+- **Open-world regions:** `world_region(key UNIQUE, name, parent?)` (Talents, cr-api
+  `M15012CreateWorldRegionTable`) is seeded from `cr-api-unity/Assets/CR/Game/OpenWorld/Data/Map/regions.json`
+  (`regions[].key`, `name`, `parent`; `""` parent → null) plus `techdemo` — 77 keys, fixed UUIDv5 ids,
+  insert-if-absent. It is **not** synced from the client: a region added to `regions.json` needs a new
+  seed migration in cr-api (and a package rebuild for offline) before its saves are accepted.
+
+See [Location Discoveries](?page=backend/24-location-discoveries) and
+[Trainer Progression](?page=backend/22-trainer-progression).
 
 ### Resuming
 

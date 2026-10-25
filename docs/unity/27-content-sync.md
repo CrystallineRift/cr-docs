@@ -31,11 +31,11 @@ not share.
 | `ServerContentSyncService` | Fetches each domain, pages it, validates it, hands rows to the writer, returns a report. |
 | `ContentSyncWriter` | All the SQL. Takes a connection string and parsed rows — no web client — so it can be tested against a real database. |
 | `ContentSyncIds` | Lowercases every id written, and derives stable ids for junction rows. |
-| `ContentSyncReport` / `ContentDomainResult` | Per-domain outcome. `MayRecordVersion` is true only when every domain applied. |
+| `ContentSyncReport` / `ContentDomainResult` | Per-domain outcome. `MayRecordVersion` is true only when every domain applied. `ContentDomainResult.RowByRow` builds the result for a domain written one row at a time (spawners): `Applied` when nothing was refused, else `Failed` with the rows that did land counted and the refused keys named. |
 | `ContentSyncPaging` | Page-walk rules: full page means keep going, short page ends it, hard cap stops a runaway. |
 | `ContentSyncSafety` | Guards the destructive half — deletions reconcile only against a provably complete pull *and* a plausible row count. |
 | `BattleMissionEditorSyncHelper` | Crystalline Rift Studio's battle-mission transport (`GET /all`, `PUT`, `DELETE`). Editor-only, and the one content type whose offline copy comes from an exported seed migration rather than from this pull. |
-| `ISpawnerSyncClient` | The spawner write path, reused by the pull. Optional on the sync service: a caller baking into a scratch file cannot supply one that writes to the right place, so it passes null and the domain is skipped rather than writing into the live database. |
+| `ISpawnerSyncClient` | The spawner write path, reused by the pull. Returning means the spawner was written; a spawner the writer refuses (no creature templates, an unresolved reference) throws, and the caller counts it as not written. Optional on the sync service: a caller baking into a scratch file cannot supply one that writes to the right place, so it passes null and the domain is skipped rather than writing into the live database. |
 
 ### Domains, in the order they run
 
@@ -149,12 +149,43 @@ existing upsert and prune logic. Crystalline Rift Studio's editor push is unaffe
 re-pulls the single spawner from the server when reachable, and falls back to the authored floor
 otherwise.
 
+**A refused spawner is a failure, not a write.** The local writer hands every spawner to the cr-api
+`SpawnerConfigSyncService`, which refuses a payload with no creature templates and one whose creature,
+growth profile or progression set does not resolve. `LocalSpawnerSyncClient` used to return quietly for
+an empty definition (a log line, then "synced"), so every caller counted it as written. It now lets the
+refusal throw, with the tables untouched, and each caller counts the spawner as not written and names its
+key: world init (`SpawnerDefinitionSyncBehaviour`) skips it and lists it in its summary, recovery falls
+back or returns false, and this pull skips it and goes on with the rest.
+
+The domain result follows. `SyncSpawnersAsync` returns `Failed` — the status documented as "untouched or
+partial" — when any spawner was refused, with `Rows` counting the spawners that did land and the message
+naming the ones that did not (`ContentDomainResult.RowByRow`). It does not add a state for this. The rest
+of the sync is unaffected and nothing blocks game start: the other domains report on their own, the
+runtime sync only warns "local content may be behind the server", `MayRecordVersion` stays false, and the
+online entry re-syncs once. The floor bake (`cr_bake_floor_from_server`) never sees it, because it passes
+no spawner client and the domain reports `Empty`. Studio's pull and push do not read this result.
+
+A spawner the server lists with a content key but no templates is refused every time, so it warns on every
+sync and makes each online entry re-sync until someone fixes or removes it.
+
+**Description and battle arena key.** The pulled row's `description` and `battleArenaKey` go to the writer
+too (`ISpawnerSyncClient.SyncAsync(..., description, battleArenaKey)`), as do the same two fields of an
+authored `SpawnerDefinition`. Both follow one rule, shared with Studio's push (`TrimmedOrNull`): the value
+trimmed, and a blank sent as null — never `""` — because the service reads null as "keep what the row
+holds". A sync with nothing to say never blanks a value.
+
 The server side of Studio's push (`POST /api/v1/spawners/sync-config`, both for a `SpawnerDefinition`
 and for a `TrainerBattleDefinition`'s `-team` spawner) replaces pools and templates in **one
 transaction** since 2026-10-01 — a battle start that reads the spawner mid-push sees the old team or
 the new one, never none — and **refuses a payload with no templates** (`400`, names `allowEmpty`)
 rather than emptying the spawner. Studio never sends `allowEmpty`; a trainer with no authored slots
 is a push error to fix in the Editor, not a server state.
+
+The same route accepts the spawner's optional `description` and `battleArenaKey`: null, absent or blank
+keeps the server's value, a non-blank value sets it (trimmed), and a spawner the push creates starts with
+an empty description and no arena key. Clearing either stays a Studio web action (the by-content-key PUT).
+Studio's push sends both (`ContentCreatorSyncHelper.BuildSpawnerSyncConfigBody`, by the same `TrimmedOrNull`
+rule), so an authored arena key such as `meadow-arena` reaches the server with the next Spawners push.
 
 ## Elemental reactions and the damage matrix
 
@@ -191,7 +222,7 @@ The active pointer is written into `battle_system_version.active_elemental_damag
 **only when the named version actually arrived with cells** — pointing at a version this database
 holds no rows for is how every matchup silently becomes 1.0. That row lives in `game-data.bytes`
 with the matrix it names: the offline `IBattleSystemVersionRepository` binding reads the content
-database, not `player-data.bytes`, because a single column naming an authored matrix version is
+database, not `playerData.bytes`, because a single column naming an authored matrix version is
 content, not player state.
 
 Multipliers on both tables are clamped to `[0, 10]` on write, mirroring the server-side validation.
@@ -204,6 +235,16 @@ A negative multiplier heals the target it was meant to hurt — which is what th
 the floor into a scratch directory, runs the content sync against it, and publishes to
 `StreamingAssets/CR/game-data.bytes` **only** if no domain failed. An unreachable server leaves the
 shipped floor untouched. The Build Players window can run it as a pre-build step (off by default).
+
+**Authentication (pending merge, cr-api-unity `c2e3164f` on `feature/mountain-buildout`).** Every content
+route is behind the API's authorization policy, so the bake reads `GameServerHttpAddress` and gives
+`ServerContentSyncService` an `EditorServiceTokenManager` for that server: an `ITokenManager` over
+`EditorServiceAuth`, the same service-token exchange the Studio's push and pull use, with the Studio's stored
+content key for that server (Local or Production). A failed exchange throws with its reason
+(`EditorServiceAuth.BearerFor(url, out error)`), so the domain reports Failed with something to act on, and
+`RefreshAccessTokenAsync` drops the cached token so the next request exchanges afresh. No server address configured stops the bake with the
+existing floor untouched. Before this the bake sent no bearer, all 7 domains came back unauthorized and the
+bake refused to publish. Tests: `Assets/CR/Tests/Editor/EditorServiceTokenManagerTests`.
 
 Before this, the shipped floor was built purely from migration seed data and had never seen the
 live server.
@@ -222,9 +263,13 @@ Because WAL parks committed pages in `-wal`/`-shm` sidecars, `GameDataAdopter` n
 alongside the database when it adopts a new floor. A fresh database must never inherit the previous
 one's write-ahead log.
 
+## Ability economy and learning fields
+
+`Abilities` rows carry `maxPp`, `energyCost`, `chargeDelta` (signed) and `poolCost` (default 1), plus `cost` as a wire alias of `maxPp` for older servers (`maxPp` wins). `ContentSyncWriter` writes all four columns into the local `ability` table and must not clamp `chargeDelta`. `Creatures` rows carry `defaultAbilityProgressionSetName`: on Pull `ResolveProgressionSetByName` maps it back to the local set and keeps the existing species default when the server omits the column; on push it is sent from `CreatureDefinition.defaultProgressionSet`. `ProgressionSets` now include the `line_*` sets. The version-check answer also carries `ability_cost_mode` (see [Ability Learning UI](?page=unity/45-ability-learning-ui)); it is not content and is never written to the floor.
+
 ## What a base creature does *not* carry
 
-`creature` has no `growth_profile_id` and no `ability_progression_set_id` — M1023 removed both
+`creature` has no `growth_profile_id` and no `ability_progression_set_id` — M1023 removed both (the later nullable `default_ability_progression_set_id`, M21001, is the species default, not a per-spawn choice; it is synced as `defaultAbilityProgressionSetName`)
 deliberately. The **spawner template** decides which growth profile and move set a spawn receives
 (`creature_spawner_template`), and the **generated creature** records what it got. A review asked
 for these to be synced onto the base creature; a schema test now pins the fact that they do not

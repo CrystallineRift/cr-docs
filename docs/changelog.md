@@ -40,6 +40,794 @@
   free slot; capacity pill with dots; bottom bar with Delete / Play (A) and an A/B legend; B returns to the
   title. `CharacterSelectLayout` (pure, tested). unity/19 has the section.
 - **Docs:** unity/10 (Gamepad tip, Input actions table, controls table, Files), 18, 28, 19.
+## 2026-10-24 — Studio: delete a player's trainer from Accounts
+
+cr-api #97, cr-admin-web #41.
+
+- **What:** System -> Accounts gains a **Trainers** button per account. The dialog lists the account's player characters; **Show** deep-links to Live Ops -> Players focused on the trainer, **Delete** (admin scope, reason required) calls the new `DELETE /api/v1/admin/players/{accountId}/trainers/{trainerId}`. 404 reads "Already gone"; 409 `trainer-has-open-listings` points to Live Ops -> Market to remove the listing first.
+- **Why:** Support could not remove a player's character; only the owner could, from Character Select.
+- **cr-api:** `AdminEndpoints.DeleteTrainerAsync` over the same `DeleteOwnedTrainerAsync` rule as the player's own delete (guards apply, no idempotency key), audit `AdminActionKind.DeleteTrainer = 24` with `{trainerId, trainerName}`; the player dossier now lists player characters only (NPC battle identities excluded).
+- **Studio web:** `TrainersDialog`, `useDeleteAccountTrainer`, Trainers button in `AccountsPage`.
+- **Docs:** [Moderation](?page=backend/18-moderation) gains "Admin delete trainer"; [Content Editing](?page=admin-web/01-content-editing) gains "System -> Accounts: Trainers dialog"; `doc-sources.json` globs.
+
+## 2026-10-24 — Cindris breathes fire at the wagon
+
+cr-api-unity lane `uC` (`feature/cindris-fire`). Client only; no cr-api change.
+
+- **What:** On Philroe's `help-fire` line the presentation Cindris casts, a fireball flies from her mouth to the stationary gaterbear's snout, the bear recoils and swipes back, and she flinches (`HellcatFireCue` on `Cue_wagon-fire`; windup 0.35 s, travel 0.45 s, bear recoil 0.45 s, swipe 0.35 s, cat recoil 0.30 s; Feel `feel/hit-heavy` 0.5 on impact, `feel/hit-normal` 0.35 on the swipe). Reuses `HCFX_Fire_01`, `fire_hit`, `ClawSlash_Fire`. Skip, `Ended`, another line or Reduced Motion settle it at once.
+- **Why:** The `help-fire` card played over a still scene.
+- **Unity:** `HellcatFireCue`, `FireTimeline` / `FirePhase`, `FireArc`, `BearReaction` / `BearPose`, `HellcatLeap.controller` (`Cast` + `Hit` states, unscaled Animator), `Mouth` anchor and cue wiring in `StorySceneBuilder.AddWagonOpening`, scene `World_c0_r3` rebuilt. The bear's visual child moves, never its root.
+- **Docs:** [Opening Story](?page=unity/38-story-opening) gets "Fire on help-fire"; one [AI Content Ledger](?page=content/01-ai-content-ledger) row; `doc-sources.json` globs for the new files.
+
+## 2026-10-23 — Character delete and the 3-character online cap
+
+cr-api branch `feature/trainer-delete-and-cap` and cr-api-unity lane `uA` (not yet merged or deployed).
+
+- **What:** Players can delete a character from Character Select (Delete button, confirm dialog focused on Cancel). Online accounts are capped at 3 live characters (`Trainers:MaxPlayerTrainersPerAccount`, `0` = unlimited); `POST /trainer` answers `409 trainer-limit-reached` at the cap, `DELETE /trainer/{id}` answers `409 trainer-has-open-listings` while the character has open market listings, and `GET /trainer/slots` feeds an "N of 3 characters" label. Offline has no cap and uses the same delete rule over local SQLite.
+- **Why:** There was no player-facing delete, and nothing stopped an account from piling up characters. Known gap: the cap limits live characters, not creations, so create/delete churn re-grants starter kits; a per-account create rate limit is the follow-up if abused. Related rows (quests, stats, achievements, battles, pickups, talents, location discoveries) stay orphaned behind the soft-deleted character, intentionally.
+- **cr-api:** `TrainerDomainOptions`, `ITrainerDeletionGuard`, `TrainerDomainService.DeleteOwnedTrainerAsync` (ownership, row lock, guards, then inventories, all soft deletes), namespaced advisory lock on create, `POST /trainer` forces `IsNpc=false`, `MarketListingsTrainerDeletionGuard`, live-seller conditional listing insert, Market seller view hides deleted characters, `ApiErrorCodes` entries, `TrainerSlotsResponse`.
+- **Unity:** `ITrainerDeletionService` / `TrainerDeletionOnlineOfflineService`, `ITrainerSlotsService` (fail-open), `TrainerSlotPolicy`, `TrainerDeleteUiRule`, `CharacterSelectController`, `ChoiceDialog` focus-cancel, `ErrorText` entries; the online trainer repository throws `NotSupported` for the new transaction members by design.
+- **Docs:** [Account Mode & Startup](?page=unity/19-account-mode-startup) gains "Deleting a character and online slots"; [Starter Creature Flow](?page=backend/05-starter-creature-flow) gains "Character cap and delete"; `doc-sources.json` globs for the new files.
+
+## 2026-10-23 — Cindris leap cue on the wagon opening
+
+cr-api-unity PR #149 (merged to main). Client only; no server change.
+
+- **What:** On Philroe's `help-leap` line the presentation Cindris leaps from the rocks above the wagon and lands between the player and the gaterbear (`HellcatLeapCue`, marks `Mark_wagon_leap_start` / `Mark_wagon_leap_land`, `HellcatLeap.controller`, crouch 0.30 s / air 0.85 s / land 0.15 s, Feel `feel/hit-heavy` on landing, settles at the landing on skip).
+- **Why:** The "something black drops from the rocks" card played over an empty scene.
+- **Unity:** `HellcatLeapCue`, `LeapArc`, `HellcatLeapTimeline` / `HellcatLeapPhase`, `StorySceneBuilder` (marks, controller, geometry asserts), scene `World_c0_r3` rebuilt (NPC bodies unchanged, 10). Play-check of `help-bond` framing pending.
+- **Docs:** [Opening Story](?page=unity/38-story-opening) gets "Hellcat leap" under the wagon opening; one [AI Content Ledger](?page=content/01-ai-content-ledger) row; `doc-sources.json` globs for the new files.
+
+## 2026-10-23 — Roaming creatures no longer vanish after First Battle
+
+cr-api-unity PR #148 (merged to main). Client only; no server change.
+
+- **What:** `hideWhenQuestCompletedKey` defaulted to `quest-first-battle`, so 160 roaming zones despawned their creatures once First Battle completed (they appeared, then vanished). The default is now empty; only the stationary wagon zone sets it. `cr_world_clear_quest_hide` swept the 160 scene keys; `WorldQuestHideLintTests` guards scenes and the prefab; roaming zones re-check on `IQuestService.OnSessionReady`.
+- **Why:** Online trainers past First Battle saw no wild creatures.
+- **Unity:** `SpawnerWorldBehaviour` default, `RoamingSpawnerBehaviour` session-ready re-check, `LatestOnlyTicket`, `WorldQuestHideCommands`, `CR_EncounterZone.prefab`, cell scenes.
+- **Docs:** [Area Scenes](?page=unity/22-area-scenes) roaming section gains the quest-hide key note; `doc-sources.json` globs for the command and lint test.
+
+## 2026-10-22 — World fill content
+
+cr-docs `feature/world-fill`. World fill content: 154 side quests, 15 optional dungeons (specs under `Data/Dungeons`), zones and pickups. Client content only; no server change.
+
+- **New page.** [World Fill Content](?page=content/02-world-fill): a table per side packet (A1-A11, S1a, S1b, S2a, S2b) with quest key, name, giver, kind, level band and dungeon, plus the dungeons table. Generated by `scripts/gen-world-fill.py`.
+- **Ledger.** [AI Content Ledger](?page=content/01-ai-content-ledger) has a World fill section: per packet manifest, dialogue and readable rows (405 text files) and one row per dungeon gimmick note. `scripts/gen-world-fill-ledger.py` prints it.
+
+## 2026-10-22 — World fill tooling
+
+cr-docs `feature/world-fill`. Documents the cr-api-unity world-fill tooling (client and editor only; no server change).
+
+- **New pages.** [Side Content Packets](?page=unity/46-side-content-packets) (`cr_side_lint` / `cr_side_author`, packet schema, lint rules, side ledger, hand-written dialogue) and [Dungeon Scaffold](?page=unity/47-dungeon-scaffold) (`cr_dungeon_check|scaffold|build`, spec, derived files, prop-swap convention).
+- **Open World.** New act1 spawner band (L1-6, regions 1 and 2), the gated hand spawners `act1-ruins-wild` / `act1-foothill-wild`, region 22 on `forest-wild-act45`, the generated act3/act45 defs, and the World content lint guards with the species windows table.
+
+## 2026-10-22 — Ability learning and ability economy (server merged)
+
+cr-docs `feature/ability-economy`. The cr-api server code and the cr-api-unity client are both merged on `feature/ability-economy` (not deployed); the pages describe the real names on both sides.
+
+- **New pages.** [Ability Economy](?page=backend/29-ability-economy) (the `ability_cost_mode` flag, five modes, cost columns, resource tables, `AbilityCostPolicy` / `BattleResourceLedger`, Rest, Tonics and Surge Shard, wire shapes), [Ability Learning](?page=backend/30-ability-learning) (line sets, species default, last-four generation rule, `WriteAbilitySlotAsync`, offers, learn intent, tones and resonance) and [Ability Learning UI](?page=unity/45-ability-learning-ui).
+- **Migrations.** Creatures `M21001` (species default set), `M21002` (generic abilities), `M21003` (line sets), `M21004` (Gaterbear), `M21005` (retire legacy sets), `M21006` (ability cost columns), `M21007` (`current_energy`), `M21008` (`generated_creature_ability_pp`). Game `M21201` (`app_config.ability_cost_mode`), `M21202` (`battle_creature_charge`), `M21203` (`battle.trainer{1,2}_surge_bonus`). Items `M21101` (24 tones), `M21102` (tone merchant stock), `M21103` (6 tone pickups), `M21104` (Tonics, Surge Shard, stock). The offline floor is rebaked at `M21201`.
+- **New endpoints.** `PUT /api/v1/admin/app-config/ability-cost-mode`; `POST /api/v1/trainers/{trainerId}/creatures/{creatureId}/abilities/learn`; `GET .../abilities/learnable`; `ability_cost_mode` and `ability_cost_mode_name` on `GET /api/v1/version-check`; `defaultAbilityProgressionSetName` on `PUT /api/v1/creatures/by-content-key/{key}`. New battle action `Rest` (6); new item effects `TeachAbility` (13), `RestoreEnergy` (14), `BoostSurge` (15).
+- **Updated pages.** [Creature Generation](?page=backend/04-creature-generation) (the stale `ability_progress` section is replaced by the set-based last-four rule and the species default), [Battle Persistence](?page=backend/09-battle-persistence) (new tables and columns, Rest, economy stamps), [Item Effects](?page=backend/19-item-effects) (new effect types and codes; the offline section now describes `ItemUseOfflineBindings` binding the shared `ItemUseDomainService`).
+- **Unity side.** [Ability Learning UI](?page=unity/45-ability-learning-ui) now uses the merged names: `ChoiceDialog`, `AbilityLearnPrompt` / `AbilityOfferQueue` / `AbilityLearnPrompter` (`IAbilityLearnPrompter` for the battle aftermath, `IAbilityOfferPresenter` for the bag and `QuestManager`), `ICreatureLearnClient` with HTTP and offline adapters, `GameChange.AbilityLearned`, `AbilityListBuilder`, `BattleResourceHud` / `BattleCardResources`, `ResourceChange` beats, `AbilityCostModeSetting` with the Studio override and `OverlayAppConfigRepository`, Storage Learnable, new bag target kinds and verdicts, and the authoring tools (`LineSetAuthoring`, `AbilityCostAuthoring`, `ToneItemAuthoring`, `EnergyItemAuthoring`). Also updated: [Battle System](?page=unity/07-battle-system), [Battle Bag UI](?page=unity/13-battle-bag-ui), [Roaming Encounters](?page=unity/43-roaming-encounters) (second server flag), [Content Registry](?page=unity/08-content-registry) (four cost fields, line sets, species default), [Content Sync](?page=unity/27-content-sync). The offline floor was rebaked at the final server head. All "(lands with slice N)" markers are gone.
+- **Ledger.** Rows whose content now lives in migrations are `AI draft (seeded, <migration>)`: the four abilities, the 11 learn lists, 24 tones, the Tonic items and Surge Shard, and the cost tiers.
+
+## 2026-10-22 — Studio Push All from the CLI, and encounter diagnostics
+
+cr-api-unity `fix/v023-encounters-push`. Client only; no server change.
+
+- **`cr_studio_push_all` / `cr_studio_push_status`.** Push All Content without the modal, sharing one queue method with the toolbar button. `dry` lists pending edits per tab and the destructive-push warning; `go` queues the jobs and returns at once. See [Content Pipeline](?page=unity/17-content-pipeline).
+- **Achievements are now a queued job** in Push All instead of a blocking call at queue time.
+- **Fresh team read for the encounter gate.** `TeamFaintedGateDriver` drops the cached team before every read, so an online cache read that raced the battle-closed invalidation cannot leave the gate closed on a stale empty team. It also logs each open/close with its reason.
+- **`[EncounterReadiness]` line at world init** (roaming flag, spawner zones, team size, gate) with a warning per blocker, and a named error when a zone's spawner cannot be resolved. See [Project Setup](?page=unity/01-project-setup).
+
+## 2026-10-22 — Account-link emails match crystallinerift.com
+
+cr-api `fix/email-brand-layout`. Not deployed. New `EmailLayout` renders the sign-in code and new-device notice HTML in the site brand; text bodies unchanged. Docs: Auth and Accounts.
+
+## 2026-10-20 — Player admin: quest board, operator Complete, sticky achievement revoke
+
+cr-api `feature/player-admin-quests-achievements`, cr-admin-web PR #37. Not deployed.
+
+- **Quests tab and Complete.** `GET /admin/trainers/{id}/quests`, `POST .../quests/{key}/complete` (audit kind 23). Complete grants a never-started quest, runs normal completion (beats, stats, chain) and pays rewards. One-shot is idempotent; a repeatable pays again. A partial payout is not auto-retried: the response and audit list paid/unpaid and the operator tops up with the Grant dialogs.
+- **Achievements tab.** `GET /admin/trainers/{id}/achievements`. Revoke now sticks (M18011 `achievement_unlocked.revoked`); only Grant restores. Revoke takes back unique items from the backpack only (shortfall recorded, never negative).
+- **Unique items.** M6025 `item.is_unique`; writes bind `ItemWrite` (omitted keeps stored). Unique checkbox in the Studio item editor.
+- **Offline fix.** SQLite `TryMarkUnlockedAsync` always returned false, so offline unlocks never paid rewards or points XP. Fixed; offline players now receive them (playtest wanted).
+- **Docs.** Moderation, Achievements, Quest System, Item Effects, Player Progression Debugger, Item Editing.
+
+## 2026-10-19 — World P5: Side regions, the wagon network and the boat hop (closes the world build-out)
+
+cr-api-unity `feature/world-p5` (PR #112, not deployed), cr-docs `docs/world-p5` (PR #112). Needs the P1a/P1b server vocabulary (`story.beat`, `npc.trainerLost`, `battle.start`) plus `team.heal`, `npc.openShop` and `quest.objectiveCount` live before any Studio push. No server change.
+
+- **Six side towns.** `village-2` (4a), `the-teeth` (9c), `coastal-city` (15a), `scrub-village` (25a), `cold-lodge` (29a) and `fathamore-port` (30), each with an inn or lodge interior (`admiral-hall` on Fathamore), a healer, a merchant and shop, and a wagon stop. Healers and merchants use leaf `regionKey`s from the mask probe.
+- **Wagon network and boat hop.** Stops gain `vehicle` (`wagon` | `boat`); a stop's menu lists only destinations of the same vehicle. Rides gain `requiresQuestActive` and are also offered at their `from` stop while that quest is Active or Completed. Boat stops `coastal-quay` and `fathamore-quay` use the quay boat prop and the cover line "Half a day by boat." The first crossing needs `quest-the-admirals-port` active.
+- **Side lines.** `line-side`: `quest-the-admirals-port`, `quest-fathamore-crossing` (two L31 deserters), `quest-the-pilgrims` (L14 toll-taker). Optional; none grants a beat. Registry rev 7.
+- **Every remaining region.** 12 readables at the set pieces and bark rows in regions 3, 4, 5, 8, 9, 15, 16, 17, 22, 25, 26, 28, 29, 30. Region 3's pilgrim camp stands on the west bank because the fjord island is not reachable.
+- **Roads and smoke.** `road-side-coastal` and `road-side-teeth` spurs. `cr_story_smoke_start --args side` (17 steps; plan-only via `plan:side`).
+- **Review fixes and integration.** Build 226 changes, 0 errors, dry 0, validate 0, bodies 56 to 68. Story rows and opt-in landmarks (`pinnedCellOk`) may stand in pinned Act 1 cells via a trailing Story + Landmarks-only batch (no terrain, no hashes; Act 1 TerrainData SHA unchanged). The first Fathamore crossing needs the harbourmaster talk first (ferryman and wife redirect). Boat stops list their authored rides, same vehicle only, with a "Take the boat" prompt. village-2 sits on sloped ground (pad-stamp follow-up). Rebuilds can drop NPC bodies: re-dress and body-count check.
+- **Docs.** [Open world](?page=unity/37-open-world) P5 section (with the program-close summary), 93 AI content ledger rows, `doc-sources.json` globs.
+- **Owner Studio push list.** `cr_content_push --args all`, `cr_world_locations_push`, `cr_spawners_push` (the six side shops), NPC rows with `regionKey` = leaf area key and `lossAllowed`. Healers in Act 2 needed the leaf-key fix; the P5 healers use leaf keys from the start.
+- **Program close (P0-P5).** Delivered by cr-api-unity PRs #106-#111 plus the P5 PR, cr-api PRs #86-#89 and cr-docs PRs #53-#58 plus the P5 docs PR. Owner follow-ups: Studio pushes for Acts 2-5 and the side content, Play smokes act2-act5 and side, renders, a local cr-api package rebuild before the next game build, then tag and build.
+
+## 2026-10-19 — World P4: The Volcano (Act 5: the Blight, Crow's Gate, the tower and the finale)
+
+cr-api-unity `feature/world-p4` (PR #111, not deployed), cr-docs `docs/world-p4`. Needs the P1a/P1b server vocabulary (`story.beat`, `npc.trainerLost`, `battle.start`) live before any Studio push. No server change.
+
+- **Blight and fleet.** Region 27: husk mound, two marines, the Dead Spire (fifth crystal; attune by reading grants `blight-open`, blue pair `startDisabled`). The Admiral fights at the beached fleet in 23b (her rows sit in `regions/27.json`).
+- **Crow's Gate.** `pass-24-gate` and the back door `pass-33-blight` (both need `blight-open`), the allies' camp (Henrik, the Erranume elder as healer, Nicolai's `shop-crows-camp`) and the last ambush.
+- **Volcanic Town and tower.** Town `volcanic-town` (inn `volcanic-inn`, healer, merchant `shop-volcanic-town`), rides `capital-to-volcanic-town`, `bridgeford-to-volcanic-town`, `volcano-to-mirandale`. Two-stage false king: `npc-false-king` (L34), then `npc-false-king-ascended` (L36, five creatures) appears through the `ascension` event. Menothas speaks in `menothas-voice`; Ahksun's choice lives inside `dialogue-attune-crimson` (flavour, same outcome); attuning the crimson crystal grants `finale-done`.
+- **Story.** Quest line `line-act-5`, eight steps (`quest-into-the-blight` to `quest-epilogue`), 20 dialogue and readable documents, Helena's epilogue case, 12 barks, 14 NPCs, 7 trainers, 2 shops. Registry rev 6.
+- **Credits and epilogue.** `StoryCreditsDirector` plays the pillar relight and credits roll on `finale-done` (once per trainer via `IStoryFlags`, replay under Settings → Credits, data `credits.json` and `credits-pillars.json` with Resources copies), then the `volcano-to-mirandale` ride. Mirandale epilogue: Helena's first case, Izzy and Philroe epilogue bodies enabled by `epilogue-gathering`.
+- **Roads.** `road-32` re-routed through Crow's Gate to the town gate (same id), `road-act5-blight` and `road-act5-spire` (41 roads).
+- **Engine.** `StoryNpcRow.startDisabled` plus initialise-on-enable for `NpcWorldBehaviour` (`WorldReadiness`, `LateInitGate`); Act 5 smoke plan (43 steps) and `cr_story_smoke_start --args act5`.
+- **Healer keys.** Healers keep leaf keys (`23a`, `24`). The Act 2 healers needed the same fix in P2 (Bridgeford `18a`; Mirandale healer and Serpent barkeep `6a`) so `TeamHealService` stops refusing the heal; re-push those NPC rows if not yet pushed.
+- **Ledger.** 73 AI rows added. → [AI Content Ledger](?page=content/01-ai-content-ledger)
+- **Owner steps (Studio pushes).** `cr_content_push --args all`; `cr_world_locations_push` (new `story-*` VisitLocation targets); `cr_spawners_push` (`shop-crows-camp`, `shop-volcanic-town`, `*-wild-act45`); push NPC rows with `regionKey` = leaf area key and `lossAllowed`. Run `cr_interior_build volcanic-inn`, the town and wagon builds, and rebuild cells x5 z2, x4 z3, x7 z2, x7 z3, x6 z2 and c1_r2.
+- **Integration build.** Registry rev 6 complete (0 missing keys); town, interior and wagon builds ok (9 stops, 9 rides); corridor build with story 180 changes, 0 errors, dry run 0; `cr_world_validate` 0 errors, 0 warnings; `story-husk-mound` areaKey fixed to 27 by hand (a re-scan may revert it); `ascension` and `epilogue-gathering` have no shots because they carry no dialogue.
+- **Open.** Playtest pending; credits visuals not eyeballed in Play; tower and crystal clearances unrendered; the far-proxy baker still bakes one state of `startDisabled` pairs; the Menothas voice, Ahksun's choice and the Regent's regency are inventions beyond the novel; the dialogue verbs need the server vocabulary before a content push; two Act 4 sync tests were stale after unrelated Act 4 dialogue edits.
+
+## 2026-10-19 — World P3: The Court (Act 4: the Coliseum, the Capital and the Regent)
+
+cr-api-unity `feature/world-p3` (PR #110, not deployed), cr-docs `docs/world-p3`. Needs the P1a/P1b server vocabulary (`story.beat`, `npc.trainerLost`, `battle.start`) live before any Studio push. No server change.
+
+- **Coliseum.** Town `coliseum-town` on the 20b pad, the arena ring (`arena-ring`, 20a) with the bracket gauntlet (`gauntlet-coliseum-bracket`: host `npc-coliseum-master`, healer `npc-coliseum-medic`, three duelists L24-26), then Izzy's final as a separate `lossAllowed` fight (`npc-izzandra-final`), and the crypt interior `arena-crypt` with the Champion (L29) and the fourth crystal as interior props. `pass-20-east` (needs `coliseum-won`) keeps the Capital unreachable until the crystal is freed.
+- **Capital.** Town `capital` (walls, inn, merchant, `court_hall` plot), interiors `capital-inn`, `court-hall` and `marble-tower` (via the one-plot `marble-tower` town file), Roland at the gate, the Regent audience as `npc-regent`'s dialogue, the Edict of Daemamion as a readable, Gaweyn's fight with two court guards first, and `pass-21-east` (needs `court-done`) with the `flight-east` lineCue.
+- **Story.** Quest line `line-act-4`, five steps (`quest-the-tournament`, `quest-under-the-arena`, `quest-attune-arena` grants `coliseum-won`, `quest-the-marble-tower`, `quest-the-verdict` grants `court-done`), 19 dialogue and readable documents, 13 barks, 17 NPCs, 8 trainers, 2 shops. Registry rev 5.
+- **Roads.** `road-act4-east-spur` and `road-act4-east` (39 roads); existing roads already reach the pad from `pass-18-east`.
+- **Engine.** Story event, readable and location rows can sit inside an interior (`interiorKey` + `localPosition`, `[Interior Story]` container, hashed); `InteriorProp.id` / `startDisabled`; city kit role `gatehouse`; Act 4 smoke plan (31 steps) and the runner sections `cr_story_smoke_start --args act2|act3|act4` plus `plan:act4` (plan listing without Play).
+- **Healer keys.** Healers use leaf keys again (`20b`, `20a`, `21a`). The Act 2 healers needed the same leaf-key fix in P2 (Bridgeford `18a`, Mirandale and the Serpent barkeep `6a`), otherwise `TeamHealService` refuses the heal.
+- **Verdict dialogue.** The `the-verdict` event has its own dialogue `dialogue-the-verdict`; the clerk's `dialogue-court` is talk only.
+- **Interiors.** `coliseum-inn` moved and the `marble-tower` room shrank to 12 x 12 so door and room share a region; the dais is a sunk statue-base plinth; the first interior build shows `[Interior Story]`, the second 0 changes.
+- **Ledger.** 65 AI rows added. → [AI Content Ledger](?page=content/01-ai-content-ledger)
+- **Owner steps (Studio pushes).** `cr_content_push --args all`; `cr_world_locations_push` (new `story-*` VisitLocation targets); `cr_spawners_push` (`shop-coliseum`, `shop-capital`); push NPC rows with `regionKey` = leaf area key and `lossAllowed`. Run `cr_interior_build` for the five new interiors and rebuild the touched road cells.
+- **Open.** Playtest pending; interior story rows have not run through a real `cr_interior_build` yet; the `gatehouse` door side and the dais stand-ins are unchecked visually; the `marble_tower` mass was removed in favour of the scaled tower plot; the Regent and Gaweyn dialogue verbs need the server vocabulary before a content push.
+
+## 2026-10-19 — World P2: The Road (Act 3: the Warden, the Marshal, the Veiled General)
+
+cr-api-unity `feature/world-p2` (PR #109, not deployed), cr-docs `docs/world-p2`. Needs the P1a/P1b server vocabulary (`story.beat`, `npc.trainerLost`, `battle.start`) live before any Studio push. No server change.
+
+- **Spokes.** North (19 Ravine + 7 North Mesa), south (11 Redwood, 10a Erranume camp, 13 Desert, 14 Coastal Scrubland) and south-west (12 Jungle + 10b Inselberg) open after `road-open`, in any order, with fixed bands (L13-16, L15-18, L17-20). Towns `ravine-hold`, `redwood-village`, `sedran-hamlet`, camp `erranume-camp`, Covenant mesa camp; interiors `ravine-inn`, `redwood-inn`; three new wagon stops (six in all) with rides from Bridgeford. → [Open World](?page=unity/37-open-world#the-road-act-3-p2-2026-10-19)
+- **Story.** 13 quests (four per spoke: sites and escorts, the fight, then attune by READING the pillar, which carries the general beat; plus `quest-izzys-trail-east`, which grants `road-done` and opens `pass-18-east`), 27 dialogue and readable documents, 22 barks, 20 NPCs, 9 trainers (Warden, Marshal, Veiled General and six guards, riders and poachers), 2 shops, 7 wild spawners retuned. Registry rev 4.
+- **Crystal set piece.** Location, arena, general NPC row and an attune event whose pillar swap is a stage on dialogue node `attune`; blue cluster landmarks with `startDisabled`.
+- **Roads.** `road-act3-north`, `-south`, `-southwest` in `roads.json` (37 roads); bridges derive from road x river crossings at `section=paths`. No sampled point in the pinned Act 1 cells.
+- **Engine.** `LandmarkPlacement.startDisabled`, kit roles `tent` and `awning`, `TownPlot.tint` (`PlotTint`), Act 3 smoke plan (25 steps, plan only).
+- **Healer fix.** The server compares `trainer.LastAreaKey`, the LEAF mask key, to `npc.RegionKey`, so Act 2 healers needed correcting (Bridgeford innkeeper `18` to `18a`; Mirandale healer and Serpent barkeep `6a`) and all Act 3 healers use leaf keys (`19b`, `11a`, `10a`, `13c`, `7`). The Act 2 healer dialogues now offer `team.heal`. Re-push those NPC rows.
+- **Ledger.** 105 AI rows added. → [AI Content Ledger](?page=content/01-ai-content-ledger)
+- **Owner steps (Studio pushes).** `cr_content_push --args all`; `cr_world_locations_push` (seven new `story-*` VisitLocation targets); `cr_spawners_push` (`shop-ravine-hold`, `shop-redwood-village`, retuned `*-wild-act3`); push NPC rows with `regionKey` = leaf area key and `lossAllowed`. Before the build: `cr_interior_build ravine-inn` and `redwood-inn`, town builds, `cr_dress_cell_npcs`, rebake the floor.
+- **Open.** Playtest pending; `PlotTint` and the tent/house fit unchecked visually; the south road crosses 52 m of mountain between 11a and 10a; `OpeningChain` visit-target test fails until the locations scan/push; the jungle general fights are far from `inselberg-arena` (poachers use `jungle-gate-arena`).
+
+## 2026-10-19 — World P1b: Mirandale, Bridgeford and the Act 2 main story
+
+cr-api-unity `feature/world-p1b` ([PR #108](https://github.com/efranford/cr-api-unity/pull/108), not deployed). Needs the P1a server vocabulary (`story.beat`, `npc.trainerLost`, `battle.start`) live before any Studio push.
+
+- **Towns.** `Data/Towns/mirandale.json` (region 6a, 29 plots, 5 interiors) and `bridgeford.json` (18a, 11 plots, `bridgeford-inn`); `town-test` removed. → [Open World](?page=unity/37-open-world#mirandale-and-bridgeford-p1b-2026-10-19)
+- **Engine.** `TownPlot.startDisabled` swap partners, `StoryRows.pickups` (world and interior), `InteriorFile.arenaKey`, `cr_town_remove`, pickup scan over cell and interior scenes, wider NPC dressing. Town plots must stay inside the town's cell (z 768 line).
+- **Story.** Six quests (Lockdown to The Trail Splits), 20 dialogues, 5 readables, barks, 6 trainers, 3 shops; beats `serpent-pit-won`, `festival-done`, `school-burned`, `mirandale-open`, `road-open`; passes gated by `act1-done`, `mirandale-open`, `road-open`, `road-done`.
+- **Ledger.** 77 AI rows added. → [AI Content Ledger](?page=content/01-ai-content-ledger)
+- **Owner steps (Studio pushes).** `cr_content_push --args all`; `cr_world_locations_push` (five new VisitLocation targets); `cr_spawners_push` (three `shop-*` spawners); push NPC rows with `regionKey` and `lossAllowed`; `cr_pickup_placements_scan` then `_push`. Server: add the `key_music_player` item and pickup definition.
+- **Open.** School swap toggles warn (cross-cell); Playtest pending; two unrelated lane test failures (Ahksun shard prefab, story shot arrival).
+
+## 2026-10-18 — World P1a: town builder, interiors, wagon travel, story rows, healer and gauntlet
+
+cr-api `feature/world-p1a`, cr-admin-web `feature/world-p1a`, cr-api-unity `feature/world-p1a`, cr-docs `docs/world-p1a` (none deployed). Migration M16101 runs on deploy (M17006 from story-beats is already pending); rebuild the compat packages, rebake the offline floor (it must be at the package head, see the v0.2.1 entry) and re-export the NPC registry seed before the Unity build. The server dialogue vocabulary change (`feature/world-p1a-vocab`) must be live before Studio pushes any document using the new verbs.
+
+- **Server.** `NpcType.Healer` (4), `npcs.loss_allowed` and `npcs.region_key`, and `POST /api/v1/trainers/{id}/team/heal-at/{npcKey}` (Healer, same region, not in battle, 60 s apart). `BattleLost` carries `opponentNpcKey` and `lossAllowed`, written as the `trainer_lost_<key>` stat; `BattleStateDto.LossAllowed`; quest objective `FightTrainer` (43); 409 `no_usable_creature` when the team is all fainted. → [NPC System](?page=backend/02-npc-system#healers-and-heal-at-p1a), [Battles](?page=backend/09-battle-persistence#allowed-losses-and-no-usable-creature-p1a-2026-10-18)
+- **Towns and interiors.** `TownLayout` data, kits and `cr_town_build` / `cr_town_check`; interiors as hosted scenes in 64 m slots below the host cell with `WorldDoor`. → [Open World](?page=unity/37-open-world#towns-p1a-2026-10-18)
+- **Wagon travel.** Stops, a travel list with cover card, scripted rides. → [Open World](?page=unity/37-open-world#wagon-travel-p1a)
+- **Story rows.** `CorridorLayout.story`, `CorridorStoryStep`, registry validation in `cr_world_validate`; `cr_content_push`, `cr_quests_import_staging`, `cr_author_trainer`, NPC looks. → [Open World](?page=unity/37-open-world#story-rows-p1a)
+- **Story client.** Beats reader, `BeatGatedPass`, `story.beat`, Healer, `battle.start`, `npc.trainerLost`, scripted loss and the gauntlet. → [Opening Story](?page=unity/38-story-opening#healer-battlestart-and-the-scripted-loss-p1a)
+- **Studio.** Healer type, Loss allowed and Region key on the NPC editor, objective type 43, the three dialogue verbs, and "Lost to" on the dossier. → [Content Editing](?page=admin-web/01-content-editing), [Dossier](?page=admin-web/08-player-progression-debugger)
+- **Open.** Playtest pending (door, wagon and UI were EditMode-tested only); `town-test` NPCs still lack definitions; trainer key split between `npc-bridgeford-test` and `trainer-*` is unresolved.
+
+## 2026-10-18 — Story beats: server-set story flags, world gates
+
+cr-api `feature/story-beats`, cr-admin-web `feature/story-beats`, cr-api-unity `feature/story-beats`, cr-docs `docs/story-beats` (none deployed). Migration M17006 runs on deploy; rebuild the compat packages and rebake the floor before the Unity build; then Studio quest push.
+
+- **Beats.** Named flags in `trainer_stat` (`story_beat_<key>`), set by the server when a quest with `grants_beats` completes, or by an admin. The client never sets one. `TrainerProgress.StoryBeats` and `ProgressReport.NewStoryBeats` expose them; requirement type 7 gates quests on a beat; `act1-done` is backfilled for trainers who already finished Runaway Cargo. → [Quest System](?page=backend/07-quest-system#story-beats-2026-10-18)
+- **Studio.** Quest editor gets requirement options 6 and 7, a "Grants story beats" chips field and "Sets beats" on the Flow tab; the player dossier lists beats and quests with grant/revoke (not `act1-done`). → [Quest Editing](?page=admin-web/04-quest-editing#story-beats)
+- **Unity.** `IStoryBeatReader`, `BeatGatedBlocker`/`BeatGatedPass`, dialogue `story.beat`, and `IStoryBeatGate` renamed `ISkippableBeatGate`. → [Opening Story](?page=unity/38-story-opening#story-beats-on-the-client-2026-10-18)
+## 2026-10-18 — Wagon opening: Philroe's call-out, one gaterbear, HUD notices
+
+cr-api-unity `feature/wagon-opening-cutscene`, cr-docs `docs/wagon-opening-cutscene` (not merged or deployed). **Studio push after merge:** `story-gaterbear-wagon`, `dialogue-merchant-area-1`, `dialogue-izzandra-farm`, `quest-runaway-cargo`.
+
+- **Staged call-out.** Philroe repeats "Help!" until the player enters the wagon trigger; then First Battle activates, the HUD and input are held, he calls out, the player runs to the mark on a scripted route, the conversation plays with story shots and a potion toss, and holding Cancel skips it. Presentation only. → [Opening Story](?page=unity/38-story-opening#wagon-opening-philroes-call-out-and-one-gaterbear)
+- **One gaterbear.** The wagon spawner holds one stationary gaterbear that stands on a mark, charges once when the gate opens (dialogue heard or call-out played) and is hidden after First Battle.
+- **Content.** Izzandra reacts to the shout; the Mudcalf pen canon (rail down, three Mudcalves bolted) is in Philroe's offer and the Runaway Cargo description. AI-written rows are in the content ledger.
+- **HUD notices.** Banner capped to 56% width; top-centre toasts wait for the banner and a new `HudNoticeHold`; the quest tracker reveals after the banner; toast queue cap 12. → [HUD notices](?page=unity/22-area-scenes#hud-notices)
+- **Open.** The scripted run is proven on a stand-in rig only; smoke in Play on the real Malbers rig is pending.
+## 2026-10-18 — v0.2.1 hotfix: offline floor rebaked, stale-floor guards, forced update
+
+cr-api `fix/min-client-0.2.1-floor-tool`, cr-api-unity `fix/floor-20006-guard`, cr-docs `docs/floor-schema-guard`. Deploy order: merge and deploy cr-api (migration 20006), pull cr-api main on the build Mac, then merge cr-api-unity and tag `v0.2.1`.
+
+- **What broke.** v0.2.0 shipped the v0.1.9 offline floor (schema 20002) against a package at 20005. A player build never migrates `game-data.bytes`, so every quest and dialogue sync failed at boot with `no such column: quest_line` / `row_version` (40 errors on the start screen). → [Standalone Builds](?page=unity/21-standalone-builds#offline-data-floor)
+- **Floor migrated forward.** The committed floor now carries every migration through 20006, with the production overlay rows (the gaterbear and friends) kept, via the new Migrations.Tool `--base <floor>` option. → [Content Pipeline](?page=unity/17-content-pipeline#how-it-is-built)
+- **Guards.** `BundledFloorSchemaTests` (EditMode) and `ci/check-floor-schema.sh` (before every game build) fail when the committed floor lacks a migration the linked package runs or the version file disagrees with the package head.
+- **Forced update.** Migration 20006 raises `min_client_version` to `0.2.1`; `bundleVersion` is 0.2.1. 0.2.0 clients are blocked from online play until updated.
+
+## 2026-10-18 — Battle rounds: both sides choose, the server orders by Speed (build v0.2.0)
+
+cr-api `feature/battle-simultaneous-rounds`, cr-api-unity `feature/battle-simultaneous-rounds`, cr-docs `docs/battle-simultaneous-rounds` (none deployed). **Deploy order: publish the v0.2.0 build first (or in the same window), then merge and deploy cr-api via cr-ops.** Migrations 20003 and 20004 run on deploy; rebuild the compat packages (`build-packages.sh --clean` from merged main) before the Unity build, and copy the `.bytes` floor.
+
+- **One round, both sides.** The player picks, the server AI picks blind, the server resolves and returns every step in order. Item, capture, switch and run go first (player, then opponent); attacks go by current Speed, recomputed every round (condition modifiers and the talent Speed bonus included). Speed ties are a server coin flip. → [Battle Rounds](?page=backend/09-battle-persistence#battle-rounds)
+- **KO cancels the slower move.** The step is `Interrupted` and the HUD says "X fainted before it could act". Replacements arrive after the round: the AI swaps at once, the player gets a swap-only round with no opponent action.
+- **Condition ticks.** Damage-over-time now ticks once per round, after the attacks, as `ConditionTick` steps. Only each side's active creature ticks (a benched creature with a condition does not tick until it is switched back in, as in Pokémon), and a step is emitted only when the tick dealt damage or a condition ended. A tick KO pays XP and loot like any KO. Battle rolls use a private per-battle salt, so they cannot be predicted from the battle id and round.
+- **Refusals cost nothing.** An illegal switch, a Run in a trainer battle or a rejected item returns only the refusal step and the same round key. The 3-strike forfeit counters stay.
+- **Resync.** Battle state now returns `lastRoundNumber`, `lastRoundSteps` and `endReason`. A client that lost a response replays the last round and continues; a round left half-resolved returns 409 `round_incomplete`.
+- **Forced update.** Migration 20004 raises `min_client_version` to `0.2.0`. Old builds can still parse the wire (additive) but are blocked from online play until updated; the Unity Editor and every build need `bundleVersion` 0.2.0 or higher to play online. → [Asset Management](?page=backend/10-asset-management)
+- **Unity.** Per-step turn cues for both sides, Interrupted and tick playback, swap-only menu, optimistic switch committed only when the Switch step plays, resync instead of ending the battle on a network error, draw counted as a loss, six-line paced HUD log. → [Battle System](?page=unity/07-battle-system#battle-rounds-client)
+- **Playtest pending.** Scripted story fights (gaterbear at the wagon, the capture lesson, the three runaway captures) may need balance tweaks now that the opponent can act first; none were changed.
+
+## 2026-10-17 — Talent unlock rules, synergy effects, talent tree editor, quest flow editor
+
+cr-api `feature/talent-rules-and-editors`, cr-api-unity `feature/talent-rules-sync`, cr-admin-web `feature/talent-quest-editors`, cr-docs `docs/talent-quest-editors` (none deployed). Deploy order: cr-api first (migrations M15105, M15106; rebuild the compat packages), then the web build, then the Unity release. Then, in Studio, **Pull talent trees once** before any talent push (assets never pulled have version 0 and a push would 409), and rebake the offline floor with the package build.
+
+- **Unlock rules.** A talent can require another talent at a rank (any tree), points spent in a tree, or a finished quest. The server enforces them on spend (`talent-rule-locked`), refuses rule loops across trees, and evaluates the build as a fixpoint, so the order of stored rows no longer matters. A content edit that breaks a spent talent shows as "Respec required". → [Talents](?page=backend/25-talents#unlock-rules)
+- **Talent states from the server.** `TrainerProgress.TalentStates` gives each talent a state, every unmet reason and resolved current/next values. The game and the debugger render it and never recompute rules; `QuestLockedTalentIds` is deprecated. → [Talents](?page=backend/25-talents#talent-states-for-clients)
+- **Synergy effects.** An effect can be a percent of another effect's total. New `CreatureSpeedPercent` (35, cap 0 to 50%) scales player-side creature Speed from the move speed bonus, which affects first turn, escape chance and battle snapshots. → [Talents](?page=backend/25-talents#synergy-effects)
+- **Talent tree editor (web).** Grid per tree with tiers, cards, rule chips, inspector, live checks, Try it, All trees and View as player. → [Talent Tree Editor](?page=admin-web/09-talent-tree-editor)
+- **Quest flow editor (web).** One quest as How it starts, Goals, Turn in, Rewards, with neighbours (including talents it unlocks). Saved goals cannot be reordered. → [Quest Flow Editor](?page=admin-web/10-quest-flow-editor)
+- **Talent row versions.** `talent_tree.row_version` (M15105) with per-tree 409s; identical trees never bump. → [Optimistic Concurrency](?page=backend/28-optimistic-concurrency#talent-trees)
+- **Unity.** Studio edits rules and synergy, pushes one tree at a time with conflict rows, and gains **Pull talent trees**; the seed export refuses stale trees. The Talents tab reads trees from the server (floor offline) and shows every lock reason. → [Talents UI (Unity)](?page=unity/36-talents-ui)
+- **Content move.** In-game talent content is now server/local DB content, not the baked SOs, so web edits reach players.
+
+## 2026-10-17 — Studio node editors: dialogue canvas, quest story map, progression debugger, row-version conflicts
+
+cr-api `feature/studio-quests`, `feature/studio-dialogues`, `feature/studio-debugger`, cr-api-unity `feature/studio-sync-row-version`, cr-admin-web `feature/studio-node-editors`, cr-docs `docs/studio-node-editors` (none deployed). Deploy order: cr-api first (migrations M17004, M17005, M14003, M9005, M13003, M4015, Auth 19), then the web build, then the Unity release. Deploy notes: [Optimistic Concurrency](?page=backend/28-optimistic-concurrency#deploy-notes).
+
+- **Dialogue canvas.** The web Studio edits a dialogue as cards and arrows, with a server-driven rule builder, live checks, a quest list and a Play preview. New server routes: `vocabulary`, `validate`, `quest-links`, `includeDocument`. → [Dialogue Canvas](?page=admin-web/06-dialogue-canvas), [Dialogue Server Domain](?page=backend/21-dialogue-domain)
+- **Quest story map.** Quests are cards, prerequisites are arrows, story lines are lanes. Quests gain `quest_line` and `line_step` (there is no separate quest kind), and the server refuses prerequisite loops. Card positions are stored in `quest_map_layout`. → [Quest Story Map](?page=admin-web/07-quest-story-map), [Quest System](?page=backend/07-quest-system#studio-concurrency-and-story-lines)
+- **Conflicts instead of overwrites.** Dialogues, quest templates and the map layout use `row_version`: a Studio push or web save with a stale version gets a 409 and a conflict dialog (web) or conflict box with Pull / Recreate (Unity). Layout moves never conflict. Old callers still work; flip `Studio:RequireExpectedRowVersion` after the Unity release. → [Optimistic Concurrency](?page=backend/28-optimistic-concurrency), [Dialogue Authoring](?page=unity/32-dialogue-authoring)
+- **Player progression debugger.** Admins see a player's quest states, flags and timeline (read-only) and can view the map and the canvas as that player. → [Player Progression Debugger](?page=admin-web/08-player-progression-debugger), [Moderation](?page=backend/18-moderation#progression-debugger-routes)
+- **Server-owned stat keys.** `readable_read_`, `npc_met_` and `quest_completed_` joined the deny-list; an audit query is in the deploy notes. → [Stats System](?page=backend/08-stats-system)
+- **One-time step.** In Unity, Pull once before the first push of assets that were never pulled (a create-only push onto an existing key is a 409).
+
+## 2026-10-14 — Prologue quest: Gran's Letter comes first, the shard glows only after the photo
+
+cr-api `feature/prologue-quest`, cr-api-unity `feature/prologue-quest`, cr-admin-web, cr-docs `docs/prologue-quest` (not deployed). Offline works on merge; online needs a cr-api deploy and a Studio quest push (Gran's Letter and Find Ahksun's new requirement).
+
+- **New objective type.** `ReadReadable` (12) counts a lore readable read to its end, distinct per key. The client sends one intent, `POST /api/v1/trainers/{t}/readables/{key}/read`; `ReadableReadService` validates the key against the authored dialogues (`UnknownReadable` otherwise), emits `ReadableRead`, and the server counts the objective. `LoreReadable` sends the intent when a read ends. → [Quest System](?page=backend/07-quest-system#readable-reads), [Progress Dispatcher](?page=backend/23-progress-dispatcher)
+- **First quest.** New trainers start with **Gran's Letter**: read the letter, look at the photo, inspect the glowing shard. Find Ahksun now requires it. → [Opening Story](?page=unity/38-story-opening)
+- **Skip.** Skipping the prologue sends `POST /api/v1/trainers/{trainerId}/story/prologue/skip`; the server completes every `ReadReadable` objective of the configured prologue quest (`NoPrologueQuest` if none), so Find Ahksun still grants. Gran's Letter requires `QuestNotStarted` Find Ahksun, so trainers past the opening never get it. → [Quest System](?page=backend/07-quest-system#readable-reads)
+- **Shard glow.** In the prologue the shard stays dark until the photo is looked at (`PrologueStep.StoneUnlocked`), then `AhksunCrystalGlow` lights it. The old gate (letter alone unlocked the stone) is gone.
+- **Content ledger.** Quest name, description and the three objective lines are AI drafts. → [AI Content Ledger](?page=content/01-ai-content-ledger)
+
+## 2026-10-11 — Pixel Crushers Dialogue System removed; NPC battle trainers flagged; smoke runner cleans up
+
+Pixel Crushers Dialogue System removed 2026-10-11. cr-api-unity `feature/strip-dialogue-system`, cr-api `fix/npc-battle-trainer-rows` (not deployed).
+
+- **Dialogue.** The CR dialogue system is the only one. `PixelCrushersDialogueHandler`, `IDialogueHandler`, `QuestDialogueBridge`, the `DialogueBackend` enum and `CR Dialog.asset` are gone; `NpcInteractionRouting` lost its plugin routes (`TrainerBarkPlugin`, `DialoguePlugin`, `DialoguePluginBlocked`); `NpcDialogueBehaviour.Backend` became `HasCrDialogue`. `DialogueStateBridge` (conversation gating) lives on its own root object. The legacy integration page is deleted. → [Dialogue System](?page=unity/31-dialogue-system)
+- **NPC trainer rows.** Minted battle trainers are flagged `trainers.is_npc` with `npc_content_key` (M4014, M8020 repair), hidden from the player trainer list, and reused on every mint instead of duplicated. → [Battle Persistence](?page=backend/09-battle-persistence)
+- **Smoke runner.** `StorySmokeRunner` deletes the trainers it creates when the run ends; `cr_smoke_cleanup` removes leftovers. → [Play-mode smoke](?page=unity/38-story-opening)
+
+## 2026-10-11 — v0.1.8 review fixes: a failed smoke stays failed, a walk-up ask does not wait, the shop's ask is time-limited
+
+cr-api-unity `release/v0.1.8` (not deployed). Fixes to what the release review found; nothing here changes what the authority decides.
+
+- **Story smoke.** Four pillar-beat checks (the vista's story camera, the city going dark, the restore, the torn sky) recorded
+  a failure and let the run carry on, and the next phase assignment overwrote `failed`, so a city that never went dark ended
+  as `done` with the FAIL line scrolled out of `cr_story_smoke_status`. Each check now stops the run at its first failure, and
+  `failed` is final: the phase cannot leave it and the last line reads `FAILED`. The runner also stopped asserting First
+  Capture's state from the in-memory active list (a finished giver quest leaves it; the completed history, read the way
+  `quest.state` reads it, decides) and snapshots the list where it waits on it. → [Play-mode smoke](?page=unity/38-story-opening)
+- **Merchant first ask.** The 0 to 2 s wait applies only to a player who was already inside the range when the merchant came
+  to life (`OnPlayerApproached(spawnedInside)`); a walk-up asks at once. The wait is still the merchant's first ask's only.
+- **Shop ask limit.** The shop's "stock this shop" ask gets 3 s (`MerchantShelfExtensions.AskLimit`). An unreachable server
+  used to cost the ask's timeout and then the read's; now the shop reads the shelf as it stands after 3 s and the ask finishes
+  on its own. → [Merchant Shop → Restocking](?page=unity/18-merchant-shop#restocking)
+- **World map.** The gamepad shoulders no longer zoom: they are the menu's tab buttons, so a press changed tab. The triggers,
+  the mouse wheel and +/- zoom, as before.
+- **Vendor source.** The Text Animator package (`Packages/com.febucci.text-animator-unity`) is git-ignored, and
+  `ci/check-vendor-untracked.sh` fails a release build if any of it is tracked. → [Release builds in CI](?page=unity/21-standalone-builds)
+- **Sky storm.** The pillar beat's lightning bolt lost the vendor's sound script with the sound it plays: `SkyStorm.Trim`
+  destroyed the bolt's `AudioSource` but Hovl's `HS_EffectSound` kept calling `PlayOneShot` on it and threw a
+  `MissingReferenceException` on every repeat (three per beat in the smoke). The script is switched off and destroyed first,
+  found by name so the story compiles without the pack. → [Pillar Cutscene](?page=unity/42-pillar-cutscene)
+- **Proxy baker.** `cr_world_bake_proxy` leaves out every renderer a `BattleArena` lists as battle-only: the scene is saved
+  with the arena backdrop active (it is hidden only at runtime), so the far-field proxy carried the pale green tube for as
+  long as the proxy was up. The `c0_r3` proxy is rebaked. → [Area Scenes](?page=unity/22-area-scenes)
+- **Docs.** The three pages numbered 39 are now [Lore text](?page=unity/39-lore-text), [Story Camera](?page=unity/40-story-camera)
+  and [Game Feel](?page=unity/41-game-feel); the Mirandale vista has its own page, [Pillar Cutscene](?page=unity/42-pillar-cutscene).
+- **Open (not fixed here):** the committed floor still points `creature_gaterbear` at Dragon Fire's model and icon, so push
+  the creature from Studio and re-bake the floor before tagging; Ahksun's Glow in `World_c0_r4` is a second always-on
+  real-time light next to the pillar's, against the pillar beat's budget of one; and Crystalline Rift Studio's **Push All**
+  reads the asset list cached when the window opened, so an asset created since is not pushed until the window reloads
+  (logged; → [Content Registry → Reading the window](?page=unity/08-content-registry)).
+
+## 2026-10-10 — v0.1.8: the opening chain, story camera, pillar cutscene, lore text, game feel, merchant restock v2, client retries, playtest fixes
+
+One entry for the day. Unless a group says otherwise, everything here is on branches for release v0.1.8 and not
+deployed: cr-api `integration/round2b` (PRs #73 to #75 plus the opening-chain server) and the cr-api-unity lane
+branches merged into `release/v0.1.8`. The last group was already live on 2026-10-10.
+
+### Merchant restock v2: only a player near a merchant asks, and only traded stock restocks (pending release)
+
+cr-api `integration/round2b` (PR #74), cr-api-unity `fix/merchant-restock-v2-client`.
+
+- **Why:** the client decided when a shop was wiped and re-rolled. Offline, `NpcMerchantBehaviour` passed
+  `force: true` on every world load (`_refreshStockOnWorldLoad`), choosing an outcome that the server-authoritative
+  rule reserves for the authority. Online, the route has ignored `force` since the 2026-09-27 route lockdown, and
+  every merchant spawner was seeded with `restock_cooldown_seconds = 0` ("never auto-restock"), so no online shop
+  restocked: purchases shrank the stock and a bought-out item never came back. A first fix earlier the same day (v1,
+  never released) moved the decision to the authority, but it still asked on every world load and counted the
+  cooldown from the shelf's newest row, so a bought-out shop rolled again at once and a deploy would have re-rolled
+  every shop. v2 replaces both: the load scales with players standing near merchants, not with merchants in the
+  world, and stock nobody has traded with never restocks.
+- **The call (cr-api `15c8d45`):** `INpcMerchantService.StockFromSpawnerAsync` is now `(accountId, trainerId, npcId, ct)`,
+  with no `force` and no spawner key. `StockFromSpawnerRequest` keeps `SpawnerContentKey` and `Force`, optional and
+  ignored, so v0.1.2 to v0.1.7 bodies still bind: `MerchantRestockHttpTests` posts a v0.1.7 body with `force: true`
+  and gets 200 `{ stocked: 0 }` with the stock unchanged. Every `MerchantStockNotAllowedException` refusal is unchanged.
+- **The rule (cr-api `6f7bd1e`, `024b172`, `fe01e61`):** a shelf that was rolled and that nothing has touched since is
+  kept, however long ago the roll was, and that answer costs one row read with no write. A shelf never rolled is
+  rolled. A shelf touched by a purchase or a sale is re-rolled once the spawner's cooldown has run since the **last**
+  touch (0 = never), so a shelf someone is buying from is not replaced under them and a shop bought out completely
+  waits for the cooldown like any other. The roll is drawn first; one transaction then claims the shelf (a
+  compare-and-set on `stock_roll_seq` and the touch stamp the ask read) and replaces its rows, so concurrent asks roll
+  once and a trade that lands between an ask's read and its claim makes the claim lose. An empty roll is still a roll:
+  it is recorded, the shelf keeps its rows, and a warning is logged.
+- **M16010 (cr-api `28caf6e`):** `M16010AddMerchantStockStampsToNpcs` adds `stock_rolled_at`, `stock_touched_at` and
+  `stock_roll_seq` to `npcs` (player-data offline). The backfill stamps every live merchant that holds rows as rolled at
+  its newest row and leaves it untouched, so deploying re-rolls nothing; a shop bought out under the old rules (no
+  rows) is rolled once by its next ask. Purchase and sale stamp the touch inside their own transactions; the clear,
+  and an authoring edit that empties a shelf, reset it. The NPC repositories select the new columns, so M16010 must
+  run on player-data and every online cache, and the floor must be re-baked.
+- **The route (cr-api `df23de7`):** `POST /api/v1/merchants/{npcId}/stock-from-spawner` takes no Idempotency-Key (a key
+  that is sent is ignored; the route is in the exemption list as idempotent by construction) and has its own
+  per-account limiter, `cr-merchant-stock`, 30/min (`RateLimits:MerchantStockPerMinute`). `RoutePolicyCoverageTests`
+  now requires a limiter on every player POST, with the existing unlimited ones (purchase and sell among them) listed
+  as known gaps that may only shrink.
+- **Clearing a shop is content-write only (cr-api `2649a5f`):** `DELETE /api/v1/merchants/{npcId}/inventory` was a
+  player route that answered 200 `{ cleared: true }`, and the next stock intent rolled the emptied shop. It is now
+  merchant-stock authoring like the inventory add, update and remove routes and `restock`: `RequireContentWrite`, with
+  the operator naming `accountId` and `trainerId` in the query (400 when either is empty), no ownership guard and no
+  idempotency key. A player token gets 403 and the stock stays. The client router makes the clear offline-only, like
+  the other authoring writes: online it throws `NotSupportedException` and sends nothing.
+- **M6024 (cr-api `7145c33`):** `M6024SetMerchantRestockCooldowns` sets 900 s on `starting-merchant-items` and
+  `demo-merchant-area-1-items` … `demo-merchant-area-5-items`, only where the value is still 0 and the row is not
+  deleted, so an authored cooldown wins. It stamps `row_version` and `updated_at`, is idempotent, and its `Down()` is a
+  no-op. The six `*MerchantItems.asset` spawners carry `restockCooldownSeconds: 900` to match, pinned with the committed
+  floor by `MerchantRestockContentTests`.
+- **Client (cr-api-unity `fix/merchant-restock-v2-client`):** world init, login and cell streaming ask nothing.
+  `NpcInteractionBehaviour.EnterRange`, after the offer check, sends the ask (`NpcMerchantBehaviour.OnPlayerApproached`;
+  the first one after the merchant comes to life waits a random 0 to 2 s), and the shop asks again before it reads the
+  shelf (`ReadShelfAsync`). `MerchantStockAsks` rations both, the same online and offline: an ask in flight is joined,
+  one within 60 s of the last is not made, and the time is recorded before the call whatever happens. A reported roll
+  invalidates only that merchant's `MerchantStock` key; `CacheScope.MerchantStocked` and `GameChange.MerchantRestocked`
+  are deleted. The body is `{ trainerId }`. A refused purchase re-reads the shelf.
+- **Open:** the Cave, Shore, Crags and Dunes spawners have no guaranteed item, so a first roll comes up empty 0.16% to
+  2.8% of the time, and that shelf then stays empty until a sale and the cooldown, or an operator's clear. Content
+  pushes never re-roll a shelf; whether operators want an explicit "reset this merchant's shelves" action is undecided.
+- **build-packages.sh (cr-api `c98c8df`):** the post-build test summary prints each suite's real result line
+  instead of "(no summary)".
+- **Docs:** unity/18 (Restocking, rewritten), backend/11 (Stocking a merchant; Shelf stamps: M16010), backend/02
+  (merchant routes), backend/06 (the limiter), backend/12 (trades stamp the shelf), backend/27 (the exemption),
+  unity/03, unity/04, unity/05, unity/16, unity/37, unity/38; `doc-sources.json`.
+  → [Merchant Shop](?page=unity/18-merchant-shop#restocking)
+
+### The opening starts with Find Ahksun; First Battle begins at the wagon (pending release)
+
+- **Quests (cr-api `integration/round2b`, cr-api-unity `feature/opening-find-ahksun`):** a new trainer is handed *Find Ahksun*
+  (visit the landing at the cliff's edge) instead of First Battle; *Toward the Lights* walks them down; the wagon's location
+  trigger grants *First Battle*, which now counts the gaterbear only. Before, First Battle was auto-granted at the spawn and a
+  playtester completed it with the first wild fight. → [Quest System](?page=backend/07-quest-system),
+  [Opening Story](?page=unity/38-story-opening)
+  - `QuestRequirementType.QuestNotStarted = 6`: met only while the trainer holds no instance of the named quest in any status.
+    It keeps Find Ahksun away from every trainer who has started First Battle.
+  - **M15014** `SeedOpeningStoryLocations` seeds `story-ahksun-landing` (10 XP) and `story-philroes-wagon` (0 XP, discovery quest
+    First Battle). A replacing location push must contain both. → [Location Discoveries](?page=backend/24-location-discoveries)
+  - Deploy order: cr-api, then the Studio quest push (now sent in dependency order), then the location push. The committed offline
+    floor was migrated forward with the `integration/round2b` package's migrations (M10024, M15014, M16010; its production overlay is
+    untouched), and `OpeningLocationFloorTests` now fails a committed floor that lacks the two locations instead of skipping; the
+    release bake from the server keeps them because the package seeds them.
+- **Unity:** the quest registry is ordered so every quest follows the quests it names (Runaway Cargo used to be written before First
+  Capture, so a fresh offline install did not offer it at the farm gate until the second launch); Ahksun's glow burns from the first
+  frame; Philroe's `breath` fallback names no place; the legacy hub reorder (v0.1.6 trainers on Runaway Cargo) is folded in.
+
+### Story camera: arrival beats show what the dialogue talks about (cr-api-unity `feature/story-camera`, pending release)
+
+- **Shots on dialogue lines.** `StoryShotCue` + `StoryShotPlan` cue a camera shot per line; `StoryCameraDirector` owns one
+  Cinemachine camera above the overworld rig and releases it on every path (conversation end, trainer switch, battle
+  start, destroyed anchor, the line that returns to the player), restoring the Brain's blend and the rig's pitch. Authored
+  for `arrival-ahksun-rises` (pan from the glade to Mirandale, medium on the crystal, city wide) and
+  `arrival-pillar-shatters` (low angle up at the rifts, long lens on the pillar). See [Story Camera](?page=unity/40-story-camera).
+- **Visuals during their lines.** `OneShotWorldEvent` per-line stages: the crystal rises on r1, the rifts open on s1, the
+  charge, burst and lights-out run on s2; unfired stages still run after the dialogue; the flag is written at the end.
+- **Skippable.** Hold Cancel (B / Esc) for 1 s: camera back, conversation cancelled, end state shown. The player menu
+  stays shut during a beat (Esc is both).
+- **Setting.** System → Game → Story Camera: Cinematic (default) / Gentle (cuts only) / Off.
+- **Fix.** The sky-rift strips were single-sided and face up, so they were invisible from the ground; the material is now
+  double-sided.
+- Editor: `cr_story_author_shots`, `cr_story_render_shots`.
+
+### Lore text: keyword styling and the dialogue typewriter (cr-api-unity `feature/lore-text`, pending release)
+
+- **Keyword styling.** `LoreText.Decorate(localized, surface, palette)` colours the first occurrence per text block of
+  glossary terms (soulstone, Summoning Shard, Seeker, krytori, the Actuators, Mirandale …) in dialogue, barks, the area
+  banner flavour line, the quest tracker, the journal and the discovery toast flavour. Names and titles are never
+  touched. The vocabulary is `Content/Text/glossary.json` (21 seeded terms, six categories); Order terms are bold small
+  caps; a relic shimmers and the Astral Realm / a pillar pulse on the two Text Animator labels (dialogue body, banner
+  flavour). Per-language forms are pack rows `gloss.<key>.forms`. Authors get `<cr:em>`, `<cr:term=key>` and `<cr:no>`;
+  raw Text Animator tags in content are an error in the Dialogue Editor and in a content test.
+- **Theme.** `--cr-lore-*` colour tokens (dark and light) mirrored by `LorePalette`; a test fails when they drift.
+- **Settings (System → Game).** *Text Effects* (Full / Static colour / Plain) and *Dialogue Text Speed* (Instant / Fast /
+  Normal), persisted like Combat Speed.
+- **Dialogue typewriter.** The dialogue body is a Text Animator `AnimatedLabel`; lines are typed at Fast by default. A
+  press while a line types only completes it and the next press advances; a choice's options wait for their prompt.
+- Page: [Lore text](?page=unity/39-lore-text). Needs the Text Animator package (untracked; Asset Store id 341308).
+
+### Game feel: the Feel bridge, real comfort settings, rumble, and ten moments (cr-api-unity `feature/game-feel`, pending release)
+
+- **Bridge.** A feedback binding can now play a Feel player prefab (`feelPlayerAddress`, `intensity`). The prefab
+  declares what it does to the screen, time or hands (`CrFeelPlayerInfo`: Cosmetic, CameraMotion, ScreenFlash,
+  TimeScale, Haptic) and `FeedbackDirector` plays one pooled instance at the binding's anchor at
+  `intensity x what the event carried x what the settings allow`. The gate and the intensity rules are engine-free
+  (`CR.Core.Feedback.Logic`) and tested. `CR.Core.Feedback` references Feel; nothing else does. →
+  [Game Feel](?page=unity/41-game-feel)
+- **Settings made real.** System, Game: Reduced Motion (it was a static mock-up), Screen Shake (100 / 50 / 0 %) and
+  Rumble, persisted like Combat Speed. `BattleCameraShakeResponder` scales its force by them and stays the only thing that
+  shakes the camera in a battle.
+- **Rumble.** `HapticsResponder` finally drives a gamepad (Nice Vibrations) from the battle's `VibrationLight / Medium /
+  Strong` signals, gated, merged per frame, and reset on pause, focus loss and battle close.
+- **Ten moments** under `feel/`: hit, heavy hit (50 ms hit stop), faint (60 ms), capture wobble / fail / success, level
+  up, quest turn-in, item use, status applied. `HeavyHit` now has a Soap event asset and wiring. Critical hit and
+  super-effective are not done: the server reports neither (cr-api change described in the page).
+- **Anchors.** New `BattleOpponentCreature` anchor (a capture is about the opponent, not whoever was last cast at); the scene
+  anchors learn the actor, target and opponent when a battle opens.
+- **CI.** `ci/check-fx-keys.sh` also checks `feelPlayerAddress` against the Addressables catalogue.
+
+Review fixes on the same branch:
+
+- **The capture wobble now answers the authority, not the throw.** It was bound to `CaptureAttempted`, which the bag
+  panel raises the moment the player confirms, so a throw the server refused still wobbled (and the broke-free cue matched
+  on `ActionOutcome.ItemId`, which cr-api stamps only on an opponent's own heal, so it could not match the player's own
+  step). New `CaptureResolving` event
+  (Soap asset, wiring entry, regenerated bridge) raised by `CaptureThrowWatcher` from the resolved outcome, ahead of the
+  catch or the miss; a refused throw raises neither it nor `CaptureFailed`. `BattleCoordinator.PlayStepsAsync` raises a
+  new `BattleEvents.ActionResolving` before each step is presented to give it a lead-in. `CaptureAttempted` stays as the
+  battle log's echo, and a test fails if a binding answers it. → [Game Feel](?page=unity/41-game-feel)
+- **Hit stop is capped per resolved action** (120 ms: an impact plus the faint it causes), and the content tests pin
+  which moments freeze time and which events they answer, so the cap holds by construction. It was documented per turn
+  and only tested pairwise.
+- **The feedback director no longer flips Feel's process-wide `GlobalMMFeedbacksActive` when it is disabled**, so it
+  cannot silence a player that was not its own.
+- **Reduced Motion hint** now says what it does: "Removes screen shake and hit stop, and softens light flashes."
+
+### Pillar cutscene: the Mirandale vista (cr-api-unity `feature/pillar-cutscene`, pending release)
+
+The `arrival-pillar-shatters` beat has something to show. Page: [Pillar Cutscene](?page=unity/42-pillar-cutscene).
+
+- **The vista.** `MirandaleVistaBuilder` (from `cr_story_build_scenes --args vista`) builds the great blue crystal
+  (PurePoly `PP_Crystal_Gradient_05`, 54 m, floating over the city centre, with the vista's one real-time light and its 1.5 s
+  blue-purple-red charge), the skyline, the tear in the sky (seeded cracks on a sphere, `StorySkyRift.shader`), the storm
+  (three Hovl bolts trimmed of their light, sound and ground effects, thunder) and the burst (lights-out, Feel moments,
+  roars). Every stage-switched object is built inactive; the burst's explosion hangs from a `Burst Anchor` the pillar's
+  switch-off does not take (the old VFX was parented under the pillar the same stage switched off). The first placeholders
+  (14 copper columns, 7 magenta quads, `RiftFlicker`, two story materials) are gone.
+- **The skyline** (`cr_story_build_skyline`, seeded 1157, diff-based, idempotent, `--args dry`): 34 generated ~100-triangle
+  houses (10 variants wearing the City pack's wall and roof materials, one shared window material) and 5 pack wall towers on a
+  120 m ring, 4.4k of the 60k Deck budget, static-batched, no shadows or probes, colliders off (a picture, not a place; the
+  crystal's mesh collider cut the corridor's sightline checks). The pack's complete buildings were 3,500 to 21,000 triangles each.
+- **Stages.** s1 opens the rifts and the storm; s2 charges 1.5 s, bursts (explosion, flash, boom, camera impulse), hides
+  the pillar, runs a 0.9 s front of darkness across the city's windows (three shader globals, so no material asset is written
+  and the houses stay batched) and the roars from 1.2 s; s3 returns to the player **only after the stage has ended**
+  (`BeginStage` / `EndStage`, `StoryReleaseDeferral`, 10 s cap): a reader who reached s3 in under the charge used to watch
+  the burst from behind the player. The dialogue panel ignores Cancel while a skippable beat holds the gate, so the press
+  that starts the hold never advances a line.
+- **Every piece settles on a reload.** `OneShotPresenter` / `OneShotLifecycle`: enabling only arms, the first frame begins, a
+  restore settles at the end state without beginning, switching off resets the authored world. The dark city and the torn
+  sky are what a trainer who has seen the beat comes back to. `SkyTear` keeps the sky torn under the region environment's
+  swaps (every crossing and the first placement after a reload used to put the plain sky back) and only touches its own
+  scene's sky.
+- **Reduced Motion** (`StoryMotionKind` / `ReducedMotionExtensions`, one table): the shake, the flash and the bolts are
+  skipped, the charge's pulse and the rifts' glow hold steady, the front becomes an even fade; sound and the outcome are never
+  removed. `IReducedMotionSetting` reads the System tab's key at every use; the story camera's new `CinemachineImpulseListener`
+  has gain 0 under it.
+- **Smoke.** The offline story smoke checks the city goes dark, the sky is torn and in view (after the beat, after a restore
+  and after the walk down), three thunder rolls, the burst moment asked for once, three roars, and a restore that plays nothing.
+- **Editor.** `cr_story_render_vista` renders the beat's states from the ramp (lit, charge, half-crossed wave, dark, rifts,
+  burst, bolt) to PNGs; `PillarBurstVfx.prefab` is written only when missing or stale, so a designer's tweak survives a rebuild.
+- **Ledger.** Every number (the city, the crystal, the tear, the storm, the roars, the lights-out, the Feel moments, the
+  stage timing) has a row in the [AI content ledger](?page=content/01-ai-content-ledger); the audio is stand-in clips.
+
+### Integration on `release/v0.1.8`: merchant v2 meets the retries, the burst meets the Feel director (pending release)
+
+- **The stock ask is asked once (`15f6ac84`).** Merged as they were, client retries keyed and retried every POST and merchant
+  v2's stock ask is the one write the server takes with no key and limits per account, so a 503 / 429 / dropped connection
+  sent the ask four times with a key the route ignores. `SimpleWebClient.PostOnce` is the per-call opt-out (no key, the
+  single-attempt executor, the auth layer's one re-send after a rejected token kept); `NpcMerchantClientUnityHttp.StockFromSpawnerAsync`
+  uses it, and purchase and sell stay keyed and retried. `NpcMerchantClientStockAskTests` scripts the transport: wire shape,
+  no key, one send per failure. → [HTTP Clients](?page=unity/05-http-clients), [Merchant Shop](?page=unity/18-merchant-shop)
+- **The pillar burst plays through the game-feel director (`eb146cb6`).** The cutscene lane had a player of its own
+  (`PrefabMomentPlayer`, which woke a prefab that played itself and read Reduced Motion directly); it is gone, and
+  `PillarBurstFeel` asks `IFeelMomentPlayer` for two moments at the crystal: `feel/pillar-shatter` (impulse + 0.25 s flash,
+  `CameraMotion`: Reduced Motion removes it, Screen Shake scales it and Off takes the flash with the shake) and `feel/pillar-boom`
+  (`Cosmetic`, a prefab of its own so sound stays under Reduced Motion). `IFeelMomentPlayer.PreloadAsync` is new: the director
+  loads and pools a player ahead of its first play on its own token, and `StoryMomentPreload` on the charge warms both moments
+  during the 1.5 s. `PillarShatterMomentBuilder` builds both. → [Game Feel](?page=unity/41-game-feel), [Pillar Cutscene](?page=unity/42-pillar-cutscene)
+
+### Client retries (Polly) and one Idempotency-Key owner (cr-api-unity `feature/client-retries-v2`, pending release)
+
+- **Retries:** every request through `SimpleWebClient` now runs under `HttpRetryExecutor`, a wrapper around one shared
+  Polly v8 `ResiliencePipeline`. Up to 3 retries after 0.5 s, 1 s and 2 s (each varied by up to 25%), on no response, 429,
+  502, 503, 504 and the 409 whose body is `idempotency_in_progress`. A `Retry-After` is a minimum for the wait, and one over
+  10 s is not waited for: the failure surfaces at once with `RetryAfterSeconds` intact, so the email link cooldown still
+  reaches its screen.
+  - **500 is not retried**, on any method. The handler ran and failed, which is usually deterministic, and for a keyed
+    write the idempotency middleware deletes the claim on a 5xx, so a retry would be a second real execution rather than a
+    replay.
+  - Never retried either: any other 4xx (a 401 keeps its own in-request re-auth), a signed-out session, a missing online
+    entry, cancellation.
+  - A call is not re-sent once the online session it started in was signed out or replaced (a new online entry); the
+    caller gets the failure that led to the backoff.
+  - `VersionCheckClientUnityHttp` opts out (`HttpRetryExecutor.SingleAttempt`): the startup gate and `ConnectivityProbe`
+    want their "no" at once, not after three backoffs on every launch without a network.
+- **Idempotency-Key:** `SimpleWebClient` is now the only place a key is minted. One GUID per logical call, created before
+  the retry loop and reused by every retry and by the 401 re-send; attached to every verb except GET, HEAD, OPTIONS and
+  TRACE; set after the caller's `before` hook so a request can never carry two. `AccountClientUnityHttp` no longer mints
+  its own for the two email-link POSTs. Reads carry none.
+- **Plugins:** `Assets/Plugins/Polly/` holds `Polly.Core` 8.5.2 and `Microsoft.Bcl.TimeProvider` 8.0.0, the NuGet
+  netstandard2.0 builds unmodified. The rest of Polly's chain is already supplied by the `com.cr.game.compat` package,
+  Unity's Mono class libraries and `Assets/Plugins/Roslyn/`, so shipping a second copy would be a duplicate plugin.
+  `Assets/link.xml` preserves both. No build profile overrides the project-wide Mono backend or the default stripping level.
+- **Review follow-ups:** a token fetch that failed because the auth server is unreachable is no longer retried by the data
+  call (the auth client has already retried the refresh, and nesting the two made one call send 16 refresh POSTs), and a
+  call that has been failing for 15 s is not sent again, so a host that drops connections costs one 20 s connect timeout
+  instead of four (`HttpRetryPolicy.RetryBudget`; Best HTTP has no request timeout here, only the connect one).
+- **Production step (not done):** once a minimum client version that sends keys on every write is enforced, set
+  `Idempotency__RequireKey=true` in the production `/opt/cr/.env` and restart the API. Before that, an unkeyed write is
+  accepted with a warning.
+- **Docs:** unity/05 (Retry Strategy, Idempotency Keys, request lifecycle, the 401 path); `doc-sources.json`.
+  → [HTTP Clients](?page=unity/05-http-clients)
+
+### Playtest round 1 fixes (cr-api-unity `fix/playtest-round1`, pending release)
+
+- **A quest the server completes mid-session no longer vanishes (`4304ea80`).** Online, the server completes a giver
+  quest (First Capture, Runaway Cargo) without a claim and drops it from `/active`. `MirrorActiveAsync` soft-deleted
+  every local row the server stopped listing, and the completed history was reconciled once per session, so the quest
+  left the mirror: `quest.state` never read ReadyToTurnIn, Philroe's hub fell through to its fallback line, and the
+  turn-in (with First Capture's rewards) was skipped. Now each unlisted row is read by id from the server and mirrored
+  as the server answers; it is deleted only on a 404 (`IQuestClient.GetQuestInstanceAsync` returns null for that).
+  `GetCompletedQuestsAsync` brings the active mirror current first while its scope is stale, the HUD tracker also reads
+  the quests waiting for their turn-in, and the story smoke asserts First Capture reaches ReadyToTurnIn and is claimed
+  through Philroe. → [Quest System](?page=backend/07-quest-system#why-those-two-reads-do-not-branch-on-connectivity)
+- **A dialogue choice is one press (`67f4b683`).** A click or tap, Submit on the focused option, or the face button its
+  badge shows picks the option and advances. The badges read A, B, X, Y (a bullet past the fourth); B, X and Y pick the
+  second to fourth options while a choice is pending, and the Cancel that B also raises is dropped then. Moving focus
+  never answers. The footer's "A CONFIRM" hint shows on plain lines only. → [Dialogue System](?page=unity/31-dialogue-system)
+- **Layouts link their own stylesheet (`d159d13c`).** The arrival banner ("Cliff Ruins", "The Meadow") drew unstyled:
+  `AreaBannerPresenter` looked up the StyleSheet `Areas/AreaBanner` and got the empty `inlineStyle` sheet that UXML
+  import writes into `AreaBanner.uxml` at the same Resources key. Every Resources layout with a same-named `.uss` now
+  links it with `<Style src>`, and the seven presenters that looked a sheet up by a layout's name no longer do;
+  `ResourcesStyleSheetLinkTests` keeps it that way. → [UI Theme](?page=unity/33-ui-theme#restyling-and-adding-screens)
+- **The System page scrolls and nothing on it shrinks (`4dceaf4e`, `da3f4ac6`).** "What the heck happened to the system page":
+  the page is about 900 px tall and sat in a plain container inside a window with about 520 px of content height, and UI
+  Toolkit's default `flex-shrink: 1` squeezed every 50 px row to 15, 8, 3 or 1 px until the controls overlapped. It is now a
+  `FocusScrollView` (a `ScrollView` that scrolls the focused control into view, which UI Toolkit never does), every block is
+  `flex-shrink: 0`, rows are a fixed 50 px, and the "Open folder" and tech-demo buttons are as wide as their text in a wrapping
+  card. `RuntimePanelLayoutHarness` lays a real runtime panel out in EditMode at a chosen size and reproduces the play-mode
+  numbers; `SystemTabLayoutTests` covers 1280×800 and 1920×1080 × UI scale 0.75 / 1 / 1.5 (28 of 30 cases failed before). The
+  legacy startup sheet's title rule (`unity-text-align`, `font-weight`: not USS) is fixed and pinned. → [Player Menu → Layout](?page=unity/10-player-menu-ui)
+- **The World Map fills its page, zooms and pans, and names never overlap (`1fa44993`, `f0f6d354`, `4b46f6ea`).** "This map
+  could use more real estate": Unity 6 makes the `TabView` the logical parent of its `Tab`s and selectors walk logical parents,
+  so the fill rules written through the content container never matched; the Map tab now opts in with `tab-fill`. The map
+  takes everything but a 22% info panel, opens at 2.5× on the player's marker, zooms 1 to 8 (wheel about the pointer, +/-/0,
+  the gamepad triggers) and pans (drag past 5 px, the right stick), always clamped to the image. In the open world each of the
+  74 regions is a 16 px marker with a plain-text name (10 to 15 px with zoom) that `WorldMapLabelPlacer` places on the first
+  free side in priority order (the player's region, discovered, the rest) or hides until zoom makes room; widths are measured
+  with the label's own `MeasureTextSize`, not guessed (the guess drew "The Meadow" over its neighbour and was 60% short for
+  wide capitals and CJK). "You are here" pins the region tracker's key only, never the legacy area loader's menu-backdrop scene.
+  A press released outside the map no longer blocks the next drag, and a second finger no longer steals one.
+  → [World Map → The open-world map](?page=unity/35-world-map)
+- **The arena backdrop is battle-only (`cb238aca`, `8fe9d0b1`).** In the open world the dressed arena stood in plain sight,
+  and its 31 m backdrop read as a pale green cylinder in the meadow. `BattleArena.battleOnly` lists what exists only while a
+  fight is staged: hidden in `Awake`, shown by `Activate`, hidden by `Deactivate`, which `BattleCoordinator` now runs first
+  under the cover in `CloseWithFadeAsync` and in `AbortUnstagedEncounter`, and `EvolutionStageDirector` runs round its cutscene
+  in the same arena. `cr_dress_arenas` registers the backdrop, `cr_arena_battle_only` catches up arenas dressed earlier
+  (`World_c0_r3` was), and `cr_world_validate` reports an unlisted backdrop as an error. → [Area Scenes](?page=unity/22-area-scenes)
+
+### The unused "Gains more strength" growth profile is deleted (PR #75, pending release)
+
+- **Why:** `M9990` seeded it with values of 10 to 93, where every other profile uses 100 for "unmodified", so a
+  creature generated with it comes out at a fraction of its base stats. Production has no spawner template naming it
+  and no creature carrying it (checked 2026-10-10), and the generation service already sorts balanced profiles first
+  to keep it away from starters. The remaining seeded profiles are Balanced Growth, Fast Experience and Fire Kitten.
+- **cr-api** (`content/delete-gains-more-strength`, pending merge): `M10024DeleteGainsMoreStrengthGrowthProfile`
+  soft-deletes the row, found by its seed id `7bed9050-25c7-428a-8945-498085f505d4` or by its name. It fires only while
+  nothing refers to it: a non-deleted spawner template naming it (active or not), or any generated creature, keeps the
+  row, and the migration then changes nothing. `Down()` restores nothing.
+- **cr-api-unity** (`content/delete-gains-more-strength`, pending merge): the `Gains more strength` `GrowthProfileConfig`
+  asset and its `CRContent` Addressable entry are removed, so a Studio push no longer sends it, and the Spawner World
+  Behaviour's setup checklist lists the profiles that are really seeded. `GrowthProfileContentTests` pins it: no asset
+  by that name or id, no Addressable entry, and every spawner template still names a profile that exists.
+- **Offline floor:** `Assets/StreamingAssets/CR/game-data.bytes` still carries the row until the floor is re-baked from
+  a cr-api `main` that has `M10024`.
+- **Docs:** backend/03 (Spawner System), Common Mistakes.
+
+### Spawner sync carries the description and arena key; a refused spawner is a failure (pending release)
+
+- **cr-api (PR #73, `a669b3b`, `67d015c`):** `POST /api/v1/spawners/sync-config` accepts the spawner's optional
+  `description` and `battleArenaKey`: null, absent or blank keeps the server's value, a non-blank value sets it
+  (trimmed). The header is written by the id the sync read, and a spawner removed while its push runs is refused
+  (409 naming it) with nothing written.
+- **cr-api-unity (`fix/spawner-sync-gaps`):** Studio's push, the runtime and offline syncs and the pull send both fields
+  (blank as null, never `""`). `LocalSpawnerSyncClient` lets a refusal throw instead of reporting an empty definition as
+  synced, so each caller counts the spawner as not written and names it, and `SyncSpawnersAsync` reports `Failed` with
+  the spawners that did land counted. → [Content Sync](?page=unity/27-content-sync)
+
+### Placeholder gaterbear (cr-api-unity `content/gaterbear-placeholder`, pending release)
+
+- `creatures/gaterbear` is now a scaled (1.8x), olive-tinted Prefab Variant of the Wolf Pup with a portrait baked from
+  it, built by `cr_build_gaterbear_placeholder`; before, the definition pointed at Dragon Fire's prefab and icon, so the
+  wagon fight showed a dragon. It reaches players through the creature push (online) and a floor rebake (offline). The
+  AI content ledger row is updated. → [Opening Story](?page=unity/38-story-opening)
+
+### CI builds never borrow SQLite sidecars or `Assets/CR` (cr-api-unity PRs #73 and #74, merged to main)
+
+- `ci/link-assets.sh` symlinked every untracked file from the live project into the runner's checkout, including the
+  `game-data.bytes-wal` / `-shm` the open Editor keeps, so the 0.1.8-playtest1 Mac build shipped symlinks to the
+  Editor's live database inside `StreamingAssets/CR`. It now skips `*-wal`, `*-shm`, `*-journal` and their `.meta`
+  files, and `ci/build.sh` deletes any already under `Assets/StreamingAssets` before building.
+- It also skips the `Assets/CR` subtree: the game's code and content are all tracked, so anything untracked there is
+  uncommitted work in progress, and a build must ship the commit. → [Standalone Builds](?page=unity/21-standalone-builds#release-builds-in-ci-build-game)
+
+### Merchant stock resolved by the server; offline NPC registry seed M16100 (live, cr-api PR #72)
+
+- **Merchant stock (cr-api `8324296`, PR #72, live 2026-10-10):** `NpcMerchantService.StockFromSpawnerAsync` now
+  picks the stock spawner itself: merchant content key → its NPC registry row under `ContentWorldId` → that row's
+  `item_spawner_content_key`. The cooldown is read from the same spawner. The spawner key the caller sends is
+  ignored, with a Debug log when it differs. Before, offline play rolled whatever key the scene passed, so a client
+  could stock any merchant from any item spawner. Online, the route already overrode the key.
+  - Refusals throw `MerchantStockNotAllowedException`, and nothing is rolled or written. The cases: NPC not found, not
+    a merchant, no registry row, registry row not a Merchant, or no item spawner.
+  - The route answers those refusals with 404 `{ message }`, the same answer as "no such NPC". A registered merchant
+    with no spawner used to answer 200 `{stocked:0}`.
+  - The route no longer falls back to the per-trainer NPC row's own `item_spawner_content_key`. Only the registry
+    names a stock source.
+  - `StockFromSpawnerRequest.SpawnerContentKey` and `Force` stay for compatibility and are documented as ignored.
+- **M16100 (cr-api `659121b` + `644cdab`, PR #72, live 2026-10-10):** `M16100SeedNpcRegistry_20261009` seeds the
+  offline NPC content registry with production's 15 rows: the five area merchants with their stock spawners, the
+  five area quest givers, the legacy `demo-merchant` and `demo-quest-giver` (production registers both as
+  QuestGiver, so neither can be stocked), the Meadow Scout, Izzandra and the market broker. It was exported read-only from production by
+  the Studio's `cr_npc_registry_export_seed`.
+  - It inserts only when absent, keyed on `LOWER(content_key)` on both engines, so M16050's Scout row and any row
+    a Studio push already wrote stay untouched.
+  - Block 16100-16199 is reserved for this export (`SeedNpcRegistry_HighWaterMark.txt`). A re-export with changed
+    rows takes the next number.
+  - Offline, the NPCs now resolve "through the offline NPC registry" instead of falling back to the definition or
+    the scene's type. That log line comes from cr-api-unity PR #71.
+- **Unity package:** cr-api-unity `feature/mountain-buildout` runs the `CR.Game.Compat` 1.0.3 package built from
+  cr-api `main` `7de81f2`. The offline smoke shows Philroe stocking from `demo-merchant-area-1-items`, with no 404
+  and no refusal. → [Merchant Shop](?page=unity/18-merchant-shop)
+
+## 2026-10-09 — v0.1.7: the open world ships
+
+- **What:** release builds now boot the open world and the new opening (Earth prologue → 1a summit → Philroe at the
+  wagon → the farm) instead of the legacy area flow. `GameSettingsShipCheck.ShippingWorldMode` is `Open` and
+  `GameSettings.asset` `defaultWorldMode` is `1`; the release build guard compares the two.
+- **Unchanged:** a missing, empty or unknown `world_mode` still parses as Legacy, and the Studio's per-machine World
+  mode override can still choose Legacy for testing (player builds ignore overrides).
+- **Build:** tag `v0.1.7` on cr-api-unity main `a1582830` (PR #70) → `build-game` publishes to
+  `content.crystallinerift.com/builds/0.1.7/`. → [Standalone Builds](?page=unity/21-standalone-builds)
+
+## 2026-10-09 — Talents floor seed M15040 and an authenticated floor bake (pending merge)
+
+- **Talents floor seed** (cr-api `content/talent-seed-2026-10-09`, pending merge): `M15040SeedTalentContent_20261009`,
+  exported from production by `cr_talent_content_export_seed`, carries the 8 world locations offline (the six areas
+  plus `story-switchback` and `story-philroes-farm`) as insert-if-absent rows with their authored ids on both engines,
+  and mirrors the level curve and the 7 XP rules into SQLite only. Until it merges and the floor is rebaked, offline
+  play has no world locations and earns no discovery XP. Pinned by `TalentContentSeedSqliteTests`; tests that
+  assumed `world_location` started empty now count only their own rows.
+- **Bake Floor From Server** (cr-api-unity `c2e3164f` on `feature/mountain-buildout`, pending merge): the bake now
+  authenticates its content sync with the Studio's service token (`EditorServiceTokenManager` over
+  `EditorServiceAuth`, the same exchange Studio push and pull use). Before, it sent no token, all 7 domains came back
+  unauthorized and the bake refused to publish. A failed exchange now fails the domain with its reason.
+- **Docs:** backend/22 (Offline floor), unity/27 (Baking a floor from the server), unity/34; `doc-sources.json`.
+
+## 2026-10-09 — Vocabulary consistency: talents, Wolf Pup, Astral Realm tab, Studio labels
+
+- **Why:** the opening-story vocabulary pass (krytori, Summoning Shard, Seeker, Astral Realm) had left text
+  in server-seeded talents, a creature flavour line, one menu tab, the Journal's stat labels, Studio
+  dropdowns and the reference docs. Content keys, ids, routes and code identifiers are unchanged.
+- **cr-api** (`feature/vocabulary-consistency`, pending merge): `M15200` rewrites seven talent descriptions
+  ("Crystal save" -> "Shard save", "thrown crystal" -> "thrown Summoning Shard", "Trainer XP" -> "Seeker XP") and
+  `M10023` Wolf Pup's flavour line; both are guarded (only rows still carrying the seed text change) and run on
+  both engines. Server refusal text now says "The Astral Realm is full", "Seeker does not have sufficient
+  quantity" and "That Seeker could not be found".
+- **cr-api-unity** (pending merge): the same talent and Wolf Pup text on the assets (so a Studio push does not revert the
+  migrations), the player-menu tab reads **Astral Realm**, the Journal shows "Seeker Level" / "Seeker XP" (NPC
+  counters such as "Trainers Defeated Total" keep their word), and the item inspector tooltip says Summoning Shard.
+- **cr-admin-web** (`feature/vocabulary-consistency`, pending merge): the item usage-flag label, the capture-modifier help, the talent effect "Shard save chance %"
+  and the Bond Trial reward text.
+- **Left alone on purpose:** the parked guide dialogues and area quests (re-worded when added back), the
+  "Trainer Progression" tool and API names (they name the data model, not the player), and every identifier.
+- **Docs:** unity/07, 10, 13, 14, 26, 32, 33; backend/09, 11, 15, 19, 25, 26; the AI content ledger; `doc-sources.json`.
+  Checked against the code on the way: the "shard survived" message the talents and capture pages described
+  does not exist (the client does not read `ItemRetained`), and First Battle pays six standard shards, not three.
+- **Needs doing:** Studio push (talents, Wolf Pup, the starter zone) and a floor rebake; the admin-web docs mirror
+  updates on its next `sync:docs`.
+
+## 2026-10-09 — Deploy rollback guards (cr-ops live; cr-api CI pending deploy)
+
+- **Why:** production ran a cr-api commit from a feature branch that `main` did not contain, so the next
+  ordinary deploy of `main` would have silently rolled it back.
+- **cr-ops (live 2026-10-09):** `deploy.sh` Guard 4 reads the live api's `cr.git.sha` label and refuses to ship
+  an image that does not contain it (live sha unknown to the repo, or not an ancestor). An unreadable label
+  only warns. `ALLOW_ROLLBACK=1` opts in to an intended rollback.
+- **cr-api CI (pending deploy, cr-api feature/retire-welcome; active once merged to main):** the same check
+  as a "Rollback guard" step in `.github/workflows/deploy.yml`, before "Ship image (keep previous)", with
+  `fetch-depth: 0`; opt out with the `workflow_dispatch` input `allow_rollback`.
+  → [Backend Architecture — Rollback guards](?page=backend/01-architecture)
+
+## 2026-10-09 — Starting kit at trainer creation; Welcome quest retired (pending deploy)
+
+- **Status:** pending deploy (cr-api PR #70, feature/retire-welcome). Not merged, not deployed; the cr-api-unity half
+  (offline binding, parking the Welcome asset) is pending.
+- **cr-api:** `ITrainerCreationService` / `TrainerCreationService` creates the trainer and, when its team is
+  empty, grants one starter (`starter_creature_1_id` at `starter_creature_level`, ability-set fallback
+  `starter_creature_ability_progression_set_id`) and the `starter_items` backpack items
+  (`content_key:qty[,…]`; absent = `item_heal_potion_30:2`, blank = none). Config is validated before any
+  write; a failed starter grant soft-deletes the starter and the trainer and rethrows; a failed item grant is
+  logged and skipped. `POST /trainer` calls it; offline play runs the same service.
+- **M7020RetireWelcomeQuest** (Quests, both engines): soft-deletes `quest-welcome-to-cr`, its objective,
+  reward and requirement rows, and every QuestCompleted requirement on it (First Battle's). First Battle's
+  giver moves from `demo-questgiver-area-1` to Philroe (`demo-merchant-area-1`) where it still holds M14002's
+  value; M14002's own entry is edited for fresh databases. Instance and progress history is untouched;
+  stranded Welcome instances never complete or pay.
+- **NPC ensure:** the type lookup moves into `EnsureWorldNpcAsync`, which also takes the NPC's name from
+  the content registry and reconciles the name on upsert; unknown keys are still ensured as a plain `Npc`;
+  `POST /api/v1/npc/ensure` gets the `PlayerIntent` rate limit. (Ignoring the body's `npcType` and taking
+  the type from the registry is already on cr-api main, since route lockdown round 1.)
+  → [Starter Creature Flow — The Starting Kit](?page=backend/05-starter-creature-flow), [Quest System — Welcome is retired](?page=backend/07-quest-system), [NPC System](?page=backend/02-npc-system)
+
+## 2026-10-09 — M7019 objective-id alignment uses a two-phase re-key (pending deploy)
+
+- **Status:** pending deploy (cr-api PR #70, `feature/retire-welcome`). M7019 is deployed nowhere yet. The
+  two-phase re-key (`99b283b`) ships in #70; the earlier single-phase PR #69 (`f274715`), which mishandled
+  chains and swaps, was closed as superseded.
+- **What M7019 does:** re-keys every live `quest_objective_template` row to
+  `QuestObjectiveTemplateIds.Derive(template, sortOrder)` and repoints
+  `quest_objective_progress.objective_template_id`. That fixes the HUD quest tracker staying at 0/N after a
+  capture online (a prod objective minted before derived ids). The tracker's companion fix (it redraws on
+  `OnActiveQuestsRefreshed`) is on cr-api-unity `fix/quest-tracker-refresh`, not yet on main.
+- **Change:** the re-key is two-phase (every chosen row to a temporary id, then to its derived id, in one
+  transaction), with a deterministic read order and blocked claimants dropped until stable, so chains and
+  swaps between mis-keyed rows resolve regardless of row order.
+  → [Quest System — Authored template ids are authoritative (Objective ids, M7019)](?page=backend/07-quest-system)
+
+## 2026-10-08 — Summoning Shard and Seeker vocabulary (M6023, M18010)
+
+- **Live 2026-10-08** (cr-api PR #68, with the region-key change below). `M6023RenameCaptureCrystalsToSummoningShards`
+  renames the four capture items to Rough Summoning Shard, Summoning Shard, Fine Summoning Shard and Radiant
+  Summoning Shard (content keys `capture_crystal_*` unchanged); `M18010SeekerVocabularyAchievementText` rewords `first_capture` and names the `trainer` category
+  "Seeker". Both only update rows that still hold the seeded text. The five server capture refusals use the
+  Summoning Shards wording; clients key off `ItemErrorCodes`.
+- All of it is AI draft copy: [AI content ledger](?page=content/01-ai-content-ledger) (Opening story round).
+  → [Capture Mechanic](?page=unity/14-capture-mechanic), [Achievements](?page=backend/15-achievements)
+
+## 2026-10-08 — Opening story (cr-api-unity PR #66)
+
+- Earth prologue, arrival at the Meadow wagon, the escorted walk to the farm, lore readables, barks, the
+  scripted capture lesson and place flavour. Presentation only: the client sends existing intents.
+- **Reward push needed:** First Battle and First Capture now pay 6 Summoning Shards each in their assets; push
+  both quests from the Studio, or online First Battle still pays 3 and First Capture pays XP and gold only
+  (AI content ledger, Opening story round).
+  → [Opening Story](?page=unity/38-story-opening)
+
+## 2026-10-08 — Open world on main, behind world_mode (cr-api-unity PR #65)
+
+- Seamless continent travel: streamed cell scenes, a region mask from the user's map, region profiles.
+  Behind `world_mode`; the shipping default is Legacy, set per machine with Studio → Server & Keys →
+  World mode. The default flips to open only after the Act 1 corridor playtest. No cr-api change.
+  → [Open World](?page=unity/37-open-world)
+
+## 2026-10-08 — Trainer location save accepts open-world region keys
+
+- **Why:** the open-world client saves `last_area_key` as a region key (`1a`, `ocean`, `techdemo`, ...);
+  `PUT /trainer/{id}/location` only knew `world_location.area_key`, so every save was a 400.
+- **cr-api:** `world_region(key, name, parent)` (Talents, M15012) seeded from `regions.json` + `techdemo`;
+  the area-key check accepts a `world_location` area key or a `world_region` key and moved from the
+  endpoint into `TrainerDomainService.UpdateLastLocationAsync` (`UnknownAreaKeyException` → 400), so
+  offline enforces it too. New regions need a new seed migration.
+  → [Area Scenes](?page=unity/22-area-scenes#resuming-where-you-stood)
 
 ## 2026-10-08 — GameSettings replaces game_config.yaml
 
@@ -2058,7 +2846,10 @@ Now:
   `AreaNpcKeys`. Ten new `NpcDefinition` SOs, registered and localised.
 - **Five stock spawners**, `demo-merchant-area-{n}-items`, seeded by `M6015` and authored as SOs;
   cheap crystals in area 1, radiant and the charm weighted toward area 5.
-- **Stock refreshes on every world load** (`NpcMerchantBehaviour` forces the re-roll).
+- **Stock refreshes on every world load** (`NpcMerchantBehaviour` forces the re-roll). (**Superseded
+  2026-10-10:** the client no longer forces anything and asks only when the player walks up to a merchant,
+  and the authority re-rolls a shelf only after a trade, once its spawner's restock cooldown has run since the
+  last one; see "Merchant restock v2" in the 2026-10-10 entry above.)
 - **Online is server-authoritative**: `NpcMerchantOnlineOfflineService` routes every merchant call
   to `/api/v1/merchants/*` when online, local SQLite when offline, sampled per call. No fallback.
   New `GET /merchants/{id}/multipliers`; 409 bodies now survive as `ConflictException` so a refused
@@ -2826,7 +3617,10 @@ It was also a gameplay exploit: reloading rerolled the shop's contents.
 
 A cooldown of 0 now means *"do not auto-restock"*, not *"restock every time"*. First-time stocking
 still happens (empty merchant), an elapsed cooldown still restocks, and `force: true` still
-restocks unconditionally. 5 new tests cover each branch.
+restocks unconditionally. 5 new tests cover each branch. (Later: from 2026-08-22 the world load passed
+`force: true` by default, and on 2026-10-10 `force` was removed from the call altogether, the merchant
+spawners got a 900 s cooldown that runs from the last trade, and a shelf nothing has traded with stopped
+restocking at all; see "Merchant restock v2" in the 2026-10-10 entry above.)
 
 Measured on the live save: merchant world-init **~40ms → ~19ms**, world init total **~290ms →
 ~275ms**, and the merchant's stock is now byte-identical across loads (previously re-rolled).
@@ -3588,7 +4382,6 @@ Dialogue scripts can now trigger quest acceptance by calling `AcceptQuest("templ
 - `PixelCrushersDialogueHandler` — registers the `AcceptQuest` Lua function in `Start()` and unregisters in `OnDestroy()`. Raises `IDialogueHandler.OnQuestAcceptedFromDialogue`.
 - `IDialogueHandler` — `event Action<string> OnQuestAcceptedFromDialogue` added.
 - `QuestDialogueBridge` — subscribes to `OnQuestAcceptedFromDialogue` and calls `QuestManager.AcceptQuestAsync(guid)`.
-- → [Dialogue Integration — Quest Acceptance](?page=unity/11-dialogue-integration#quest-acceptance-from-dialogue)
 
 ### Quest reward dispatcher
 

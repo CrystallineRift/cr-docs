@@ -30,6 +30,31 @@
     "path": "admin-web/05-developer-guide"
   },
   {
+    "section": "Admin Web",
+    "title": "Dialogue Canvas",
+    "path": "admin-web/06-dialogue-canvas"
+  },
+  {
+    "section": "Admin Web",
+    "title": "Quest Story Map",
+    "path": "admin-web/07-quest-story-map"
+  },
+  {
+    "section": "Admin Web",
+    "title": "Player Progression Debugger",
+    "path": "admin-web/08-player-progression-debugger"
+  },
+  {
+    "section": "Admin Web",
+    "title": "Talent Tree Editor",
+    "path": "admin-web/09-talent-tree-editor"
+  },
+  {
+    "section": "Admin Web",
+    "title": "Quest Flow Editor",
+    "path": "admin-web/10-quest-flow-editor"
+  },
+  {
     "section": "Backend",
     "title": "Backend Architecture",
     "path": "backend/01-architecture"
@@ -165,9 +190,34 @@
     "path": "backend/27-idempotency-keys"
   },
   {
+    "section": "Backend",
+    "title": "Optimistic Concurrency (row_version)",
+    "path": "backend/28-optimistic-concurrency"
+  },
+  {
+    "section": "Backend",
+    "title": "Ability Economy",
+    "path": "backend/29-ability-economy"
+  },
+  {
+    "section": "Backend",
+    "title": "Ability Learning",
+    "path": "backend/30-ability-learning"
+  },
+  {
     "section": "Introduction",
     "title": "Changelog",
     "path": "changelog"
+  },
+  {
+    "section": "Content",
+    "title": "AI Content Ledger",
+    "path": "content/01-ai-content-ledger"
+  },
+  {
+    "section": "Content",
+    "title": "World Fill Content",
+    "path": "content/02-world-fill"
   },
   {
     "section": "Guides",
@@ -243,11 +293,6 @@
     "section": "Unity",
     "title": "Unity — Player Menu UI",
     "path": "unity/10-player-menu-ui"
-  },
-  {
-    "section": "Unity",
-    "title": "Dialogue System Integration (Legacy)",
-    "path": "unity/11-dialogue-integration"
   },
   {
     "section": "Unity",
@@ -373,5 +418,60 @@
     "section": "Unity",
     "title": "Talents UI (Unity)",
     "path": "unity/36-talents-ui"
+  },
+  {
+    "section": "Unity",
+    "title": "Open World",
+    "path": "unity/37-open-world"
+  },
+  {
+    "section": "Unity",
+    "title": "Opening Story (Unity)",
+    "path": "unity/38-story-opening"
+  },
+  {
+    "section": "Unity",
+    "title": "Lore Text (keyword styling and the dialogue typewriter)",
+    "path": "unity/39-lore-text"
+  },
+  {
+    "section": "Unity",
+    "title": "Story Camera (Unity)",
+    "path": "unity/40-story-camera"
+  },
+  {
+    "section": "Unity",
+    "title": "Game Feel (More Mountains Feel)",
+    "path": "unity/41-game-feel"
+  },
+  {
+    "section": "Unity",
+    "title": "Pillar Cutscene (Unity)",
+    "path": "unity/42-pillar-cutscene"
+  },
+  {
+    "section": "Unity",
+    "title": "Roaming Encounters (API + Unity)",
+    "path": "unity/43-roaming-encounters"
+  },
+  {
+    "section": "Unity",
+    "title": "Ahksun Companion Shard (Unity)",
+    "path": "unity/44-ahksun-companion"
+  },
+  {
+    "section": "Unity",
+    "title": "Ability Learning UI",
+    "path": "unity/45-ability-learning-ui"
+  },
+  {
+    "section": "Unity",
+    "title": "Side Content Packets",
+    "path": "unity/46-side-content-packets"
+  },
+  {
+    "section": "Unity",
+    "title": "Dungeon Scaffold",
+    "path": "unity/47-dungeon-scaffold"
   }
 ]

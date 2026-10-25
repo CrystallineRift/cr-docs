@@ -167,7 +167,7 @@ with `Column(...).Exists()` because SQLite's `Down()` keeps the column.
 
 | content_key | Category |
 |---|---|
-| `quest-welcome-to-cr`, `quest-first-battle`, `quest-runaway-cargo` (Meadow Merchant Act 1) | Main Story |
+| `quest-welcome-to-cr` (retired by M7020, pending deploy), `quest-first-battle`, `quest-runaway-cargo` (Meadow Merchant Act 1) | Main Story |
 | `quest-road-to-shore`, `quest-into-the-dark`, `quest-windbitten-climb`, `quest-sunbleached` | Exploration |
 | `quest-meadow-hunt`, `quest-tidewrack-trials` | Battle |
 | `quest-first-capture`, `quest-hearthmere-supplies` | Bonus |
@@ -190,8 +190,9 @@ uses. A `VisitLocation` objective's target is likewise picked from `ContentPicke
 `visit-location-target-uncatalogued` audit rule, since the authority advances nothing for a key it cannot
 resolve; see [Location Discoveries](?page=backend/24-location-discoveries).
 
-**Supersedes checklist step 0b's `quest_kind`.** Main Story means "main", and every other category is a side quest. Only
-`quest_line` / `line_step` remain planned.
+**Supersedes checklist step 0b's `quest_kind`.** Main Story means "main", and every other category is a side quest, so
+there is no separate `quest_kind` column. `quest_line` / `line_step` shipped with M17004; see
+[Studio concurrency and story lines](#studio-concurrency-and-story-lines).
 
 ## The shipped quest chain
 
@@ -231,9 +232,16 @@ Three things this chain depends on, each of which was a trap:
   the whole playable space and keyed to the area key.
 - **Prerequisites must sync before their dependants.** `LocalQuestTemplateSyncClient` resolves a
   requirement's `referenceId` from a content key to the template's database id by looking it up — and
-  if it is not there yet it warns and stores **null**, which reads as "no prerequisite". The order of
+  if it is not there yet it warns and stores **null**, which the authority never meets (`QuestCompleted`
+  compares completed template ids with it; `QuestNotStarted` is closed without a reference). The order of
   `ContentDefinitionProvider.quests` is therefore load-bearing; the chain is registered in dependency
-  order.
+  order, and that is now a rule rather than a habit: `QuestRegistryOrder` (pure, `CR.Core.Data.Logic`) states
+  it, the Content Audit reports a breach as `quest-registered-before-its-reference`, and
+  `OpeningChainContentTests` / `OpeningChainAuthorityTests` sync the shipped quests into a real migrated SQLite
+  database in list order and read the stored references back. (Runaway Cargo was listed before First Capture
+  until 2026-10-10, so on a fresh offline install the farm gate did not offer it until the second launch.)
+  The Studio's Push All sends quests in the same dependency order (`ContentStudioTool.QuestPushOrder`), because
+  the server refuses a push naming a quest it has not seen yet.
 - **The server resolves the same key on push (2026-10-01).** `PUT /api/v1/quests/templates/bulk` used to
   keep only what `Guid.TryParse` accepted and store **null** for a QuestCompleted requirement authored
   as a content key — which `ConditionEvaluator` compares against completed template ids, so Runaway
@@ -241,7 +249,8 @@ Three things this chain depends on, each of which was a trap:
   ResolveRequirementsAsync` now resolves a QuestCompleted key to the template id — this push's authored
   ids first (order on the wire does not matter), then the stored row — and an unresolvable key refuses
   the whole push with `400 invalid_requirement` instead of silently storing a gate nobody can open.
-  Other requirement types still take a Guid reference as before.
+  `QuestNotStarted` resolves its quest key the same way, and a blank reference is refused outright (left
+  null it would be unmet for everyone). Other requirement types still take a Guid reference as before.
 - **The seed ids are UUIDv5 of the content key**, matching what the authored assets carry. A seed
   with an id of its own is discarded the moment Crystalline Rift Studio pushes the asset — the unique index is
   on `content_key`, so the row already exists and every objective and reward hangs off a template
@@ -291,6 +300,88 @@ trainers may reference specific one of the eight objective/reward ids, so cleanu
 FK-safe migration. Flagging for a follow-up rather than touching production data as a side effect of
 this fix.
 :::
+
+### Welcome is retired (M7020)
+
+:::note Pending deploy (cr-api PR #70, feature/retire-welcome)
+Not merged to main and not deployed. The Unity half (parking the Welcome asset, removing First
+Battle's requirement from its asset, offline trainer creation) is also pending.
+:::
+
+The starter creature and the two `item_heal_potion_30` are now granted at trainer creation by
+`TrainerCreationService` (see [Starter Creature Flow](?page=backend/05-starter-creature-flow)), so
+Welcome's creature reward would be a second starter. `M7020RetireWelcomeQuest` (Quests, both
+engines; `isSqlite` boolean literals, `LOWER()` id matching on SQLite, every statement guarded by
+`deleted = false`, so a re-run is a no-op) retires it:
+
+- **Soft-deletes** every `quest_requirement` of type QuestCompleted (`requirement_type = 0`) whose
+  `reference_id` is Welcome — First Battle's requirement — and Welcome's own requirement, objective
+  and reward rows, then the `quest-welcome-to-cr` template. Welcome is matched by content key **and**
+  by the authored id `f1921cfd-26a0-4b70-b45f-0e28a58fb7e1`, so a requirement left pointing at the id
+  with no template behind it goes too.
+- **First Battle** has no requirement left, so it is the first story quest and, with `grant_mode = 1`
+  (AutoWhenAvailable, unchanged, matching the asset), is granted to every trainer at once (superseded 2026-10-10:
+  Find Ahksun opens the story and First Battle waits for the wagon, see
+  [The opening chain](#the-opening-chain-2026-10-10)). Its giver
+  moves from `demo-questgiver-area-1` (M14002's value) to Philroe, `demo-merchant-area-1`, as First
+  Battle.asset authors it. Only a row still holding M14002's value moves; a giver pushed from the
+  Studio since then is left alone.
+- **Fresh databases.** On a fresh Postgres database Quest migrates before Dialogue, so M14002 runs
+  after M7020 and would set the old giver again. M14002's entry for First Battle was therefore edited
+  to `demo-merchant-area-1` as well. Databases that already applied 14002 never re-run it, which is why
+  M7020 carries the move. M14002 is Postgres-only, so SQLite is unaffected.
+- **Leaves alone** `quest_instance` and `quest_objective_progress` history. `Down()` is a documented
+  no-op: rows soft-deleted before the migration cannot be told apart from the ones it deleted.
+- **Nothing resurrects it.** M7008 is a different key (`quest_welcome_to_cr`); M7014/M7015/M7016 guard
+  on the row existing (soft-deleted included) and run earlier; M14002 and M17002 only UPDATE. A Studio
+  push of the parked Welcome asset fails loudly with a primary-key conflict (the upsert finds no live
+  row by content key and INSERTs under the authored id) rather than reviving it. Studio sync must
+  still exclude `Defs/_Parked/`: a push of an old First Battle asset that carries the requirement
+  would add it back.
+
+**Stranded instances.** A trainer who holds an in-progress Welcome instance keeps it. Its objectives
+now read as empty, so the projector never marks it relevant and it never completes; a claim would
+pay nothing, because `GetRewardTemplatesAsync` filters deleted rows; `GetObjectiveProgressRelinkedAsync`
+makes no writes for it. The instance still appears in `GetActiveQuestsAsync`, so the client should
+hide instances whose template is gone (Unity half, pending).
+
+Tests: `RetireWelcomeQuestMigrationTests` (Quests.Data.Test, SQLite + Postgres, including
+`FirstBattle_MovesFromTheM14002GiverToPhilroe` and `FirstBattle_AGiverPushedSince_IsLeftAlone`),
+`WelcomeQuestSeedPostgresTests` and `M14002SeedPostgresTests` (updated to the retired state).
+
+### The opening chain (2026-10-10)
+
+> **Pending deploy (cr-api `integration/round2b`, cr-api-unity `feature/opening-find-ahksun`):** the enum value,
+> evaluator case and M15014 below are on the integration branch only; the Studio pushes follow the cr-api deploy.
+
+The opening starts with Find Ahksun, walks the player down with Toward the Lights and reaches First Battle at the wagon. First Battle used to be granted to every trainer at the spawn (no requirement, `grant_mode = 1`), so the fight quest sat in
+the tracker a hundred metres above the gaterbear, and a playtester completed it with the first wild fight (its objective was
+"defeat any creature"). The opening is now three quests, all granted by the server and all decided by it:
+
+| Quest | Objective | Requirement | How it is granted |
+|---|---|---|---|
+| `quest-find-ahksun` (sort 0, Main Story) | `VisitLocation` `story-ahksun-landing` ×1 | `QuestNotStarted` `quest-first-battle` | auto, at the first sweep |
+| `quest-the-way-down` "Toward the Lights" (sort 1) | `VisitLocation` `story-philroes-wagon` ×1 | `QuestCompleted` `quest-find-ahksun` | auto, when Find Ahksun is claimed |
+| `quest-first-battle` (sort 1) | `DefeatCreature` `creature_gaterbear` ×1 (the species content key) | `StatThreshold` `location_discovered_story-philroes-wagon` ≥ 1 | the wagon location's `discovery_quest_key`, on the first entry; the auto sweep is the safety net |
+
+- **`QuestNotStarted`** (`QuestRequirementType` 6) is met only while the trainer has **no instance** of the referenced quest in
+  any status (in progress, completed, claimed, abandoned or failed; `ReferenceId` is the quest's template id). It keeps Find
+  Ahksun away from every trainer who is already past it, which no completed-quest or stat check can say. It is closed when no
+  quest is named. Accept and the available list both go through the evaluator, so accept refuses and the auto-grant sweep skips.
+  Offline, the same `ConditionEvaluator` runs against local SQLite.
+- **First Battle counts the gaterbear only.** The battle emits `CreatureDefeated` with the defeated species' content key as
+  the subject; a `DefeatCreature` objective with a target counts only a matching subject. A kill made before the quest is held
+  counts for nothing, so the wagon location (`world_location.discovery_quest_key`, M15014) grants First Battle on the first
+  entry, before the player can reach the gaterbear zone. An in-progress, completed or claimed First Battle is returned
+  untouched; an abandoned or failed one is restarted in place under the existing one-instance rule (the auto sweep does the
+  same).
+- **Existing trainers** keep what they have: accepting a quest that already has an instance returns it unchanged, and Find Ahksun
+  is closed to anyone who holds First Battle. Philroe's hub keeps its legacy cases (see
+  [Opening Story](?page=unity/38-story-opening)).
+
+Tests: `ConditionEvaluatorQuestNotStartedTests`, `QuestNotStartedGateSqliteTests`, `OpeningChainSqliteTests` (cr-api, real
+services on one migrated SQLite file) and, from the Unity side, `OpeningChainAuthorityTests` (the shipped assets synced by the
+real world-init sync, read by the real evaluator).
 
 ## How to Define a New Quest (Step-by-Step)
 
@@ -417,6 +508,7 @@ E deleted the whole compat vertical — `IQuestDomainService.RecordProgressEvent
 that calls this, and the route itself answers 410 regardless of `objectiveType`. Every objective now
 advances through the real intent that produces it, never a client-reported progress event:
 - `TalkToNpc` → the talk intent, `NpcTalkService` (via `POST /api/v1/trainers/{t}/npcs/{npcKey}/talk`)
+- `ReadReadable` → the read intent, `ReadableReadService` (via `POST /api/v1/trainers/{t}/readables/{key}/read`)
 - `VisitLocation` → `POST /api/v1/trainers/{t}/world-locations/enter`
   (`LocationEntryService.EnterAsync`) — see [Location Discoveries](?page=backend/24-location-discoveries)
 - Every battle/defeat/capture/item/quest-completion type → produced by the authority itself
@@ -444,7 +536,7 @@ Read surface used by the player menu's **Quests** tab (`Assets/CR/UI/Quests/Ques
 
 | `QuestManager` method | Routes to | Notes |
 |---|---|---|
-| `RefreshActiveQuestsAsync(ct)` | `IQuestRepository.GetActiveQuestsAsync` | Re-reads InProgress instances and replaces the in-memory list seeded by `QuestWorldBehaviour`. |
+| `RefreshActiveQuestsAsync(ct)` | `IQuestRepository.GetActiveQuestsAsync` | Re-reads InProgress instances, replaces the in-memory list seeded by `QuestWorldBehaviour`, then raises `OnActiveQuestsRefreshed`. |
 | `GetCompletedQuestsAsync(ct)` | `IQuestRepository.GetCompletedQuestsAsync` | Completed instances. |
 | `GetTemplateAsync(templateId, ct)` | `IQuestRepository.GetQuestTemplateAsync` | Name, description, objective texts, rewards. |
 | `AbandonQuestAsync` / `ClaimRewardsAsync` | as before | Unchanged lifecycle calls. |
@@ -487,7 +579,7 @@ that was not already active for the trainer when the session started — regardl
 active:
 
 - auto-granted on trainer select (`QuestGranterBehaviour` → `AcceptQuestAsync`)
-- accepted from a dialogue node (`QuestDialogueBridge.HandleQuestAccepted` → `AcceptQuestAsync`)
+- accepted from a dialogue node (the `quest.accept` action → `AcceptQuestAsync`)
 - discovered purely server-side on a later sync (`RefreshActiveQuestsAsync`, e.g. opening the
   Quests tab after the server granted something the client never requested)
 
@@ -530,8 +622,7 @@ both sides of the seam:
 - **Client:** `IQuestService.AcceptQuestAsync(string questContentKey)` is the only accept. Every
   caller already holds the key — `QuestGranterBehaviour` (the SO's `contentKey`), `QuestAutoGranter`
   (the server's available list), `QuestAcceptActionHandler` (the dialogue arg), `PickupBehaviour`
-  (the reward's `ReferenceKey`). The legacy Lua hook (`QuestDialogueBridge`) resolves its UUID to a
-  template first. `QuestOnlineOfflineRepository.AcceptQuestAsync` sends the key online and hands the
+  (the reward's `ReferenceKey`). `QuestOnlineOfflineRepository.AcceptQuestAsync` sends the key online and hands the
   same key to the local `QuestDomainService` offline — the same boundary, the same code.
 - **Reads:** an online instance names the *server's* template id. When the local content has no row
   under that id, `QuestOnlineOfflineRepository.GetQuestTemplateAsync` answers from the server via
@@ -543,6 +634,29 @@ both sides of the seam:
   `QuestEditorSyncHelper.BuildUpsertBody` sends it. The repository re-keys a minted row as described
   above (instances follow, no FKs), so one "Push" of a diverged quest from Studio makes the server's
   id match the content's. Pushes without an id (older Studio, cr-admin-web) keep the stored id.
+- **Objective ids (M7019, pending deploy — cr-api feature/retire-welcome; it re-keys ids):** templates realign by push, objective rows never did — the upsert keeps
+  the live row at a sort order and never rewrites its id, so a prod objective minted before
+  `QuestObjectiveTemplateIds.Derive(templateId, sortOrder)` kept its old id while every client's
+  local template carries the derived one. The template ids matched, so the server-template fallback
+  above never kicked in, and every progress report named an objective the client's template did not
+  have: the HUD tracker stayed at 0/N after a capture (Runaway Cargo) until a journal refresh let the
+  local re-link heal the row. `M7019AlignObjectiveTemplateIdsToDerived` (Quests, both engines,
+  `ObjectiveTemplateIdAlignment`) re-keys every live objective row to its derived id and repoints
+  `quest_objective_progress.objective_template_id`. It is a **two-phase re-key**, so the result does
+  not depend on row order: rows are read in a fixed order (template, sort order, id); one live
+  claimant is picked per (template, sort order) target; a claimant whose derived id is held by a live
+  row that is not itself moving (correctly keyed, or a skipped duplicate) is dropped, repeated until
+  stable, so no row is left on a temporary id; then, in one transaction, every chosen row and its
+  progress rows move to a temporary id and from there to the derived id. That resolves **chains**
+  (Y's target is held by X, which has a free target) and **swaps** (X holds Y's derived id and Y holds
+  X's). A soft-deleted row squatting on a derived id is moved aside first; a duplicate claimant, or a
+  target held by a correctly keyed live row, is skipped with a `[M7019] WARNING` line. Idempotent; one
+  `[M7019]` line per re-key. Later seeds (M14002) address objectives by content key + sort order,
+  so the re-key does not strand them. Pinned by `ObjectiveTemplateIdAlignmentTests` (SQLite + Postgres,
+  18 cases, including `Chain_BlockedRowReadFirst_IsRekeyedOnceHolderMoves` and
+  `Swap_EachHoldingTheOthersDerivedId_IsResolved`). The two-phase version (`99b283b`) ships in
+  cr-api PR #70 (`feature/retire-welcome`); the earlier single-phase PR #69 (`f274715`) was closed as
+  superseded.
 
 ### Quest endpoints are token-authoritative for the account
 
@@ -570,7 +684,23 @@ locally in **both** modes, deliberately:
 - **Completed instances** — there is no `/completed` REST endpoint. The router already mirrors every
   server-returned instance into the local `quest_instance` table (active fetch, `/progress` results,
   claim results), so online play reads its own mirror instead of inventing a round-trip with nothing
-  to call.
+  to call. A quest the **server** completes on its own (a giver quest such as First Capture or Runaway
+  Cargo, completed by the authority and waiting for its turn-in) reaches the mirror through the active
+  fetch: `MirrorActiveAsync` reads by id (`GET /api/v1/quests/{instanceId}`) every locally active row the
+  server no longer lists, and mirrors what the server answers (Completed and unclaimed is ReadyToTurnIn;
+  Abandoned, Failed and Claimed likewise). It soft-deletes a row **only** when the server answers 404
+  (`IQuestClient.GetQuestInstanceAsync` returns null for that; any other failure still throws), because
+  `/active` drops completed, abandoned, failed and never-existing instances alike, so absence says
+  nothing about which. A row whose read fails is left as it was, the others are still settled, and the
+  first failure is rethrown so the cache warns, leaves the key stale and the next read retries; a late
+  answer never overwrites a row the claim or abandon path settled while it was on the wire. Online,
+  `GetCompletedQuestsAsync` first brings the active mirror current while its scope is stale (sharing the
+  active key's single fetch), because a consumer reacting to a completion asks for the history before
+  anything has refreshed the active list. Before this (playtest fix, 2026-10-10) a quest the server
+  completed mid-session vanished from the mirror: `quest.state` never read ReadyToTurnIn, Philroe's hub
+  fell through to its fallback line, and the turn-in, with First Capture's rewards, was skipped.
+  Pinned by `QuestMirrorTests`, `QuestMidSessionCompletionTests` (router → manager → snapshot → state
+  evaluator → hub → `quest.claim`, before and after the claim) and `QuestClientInstanceReadTests`.
 - **Templates** — templates are *content*, not player state. `QuestWorldBehaviour` syncs every
   `QuestDefinition` SO into the local `quest_template` tables at world init regardless of
   connectivity, so the local domain service is the correct source in either mode and costs no
@@ -681,11 +811,13 @@ When `is_repeatable = true`, a trainer can accept the same template again after 
 | `DefeatCreaturesFromList` | 9 | Defeat N DISTINCT species from `target_reference_ids` (each listed species counts once; `target_count` defaults to the list length, "all of them") |
 | `VisitLocation` | 10 | Travel to a named location |
 | `TalkToNpc` | 11 | Interact with a specific NPC |
+| `ReadReadable` | 12 | Read a lore readable to its end (`target_reference_id` = the readable's dialogue content key, required, count 1; counts distinct keys). Arrives only through the read intent, see [Readable reads](#readable-reads) |
 | `CollectItem` | 20 | Collect a specific item |
 | `CompleteQuest` | 30 | Complete another quest (used for chain objectives) |
 | `DefeatTrainer` | 40 | Win against a specific trainer (`target_reference_id` = trainer battle content key; rematches count, a blank target means any trainer) |
 | `DefeatAnyTrainer` | 41 | Win any trainer battle |
 | `DefeatTrainersFromList` | 42 | Defeat N DISTINCT trainers from `target_reference_ids` |
+| `FightTrainer` | 43 | Fight a specific trainer: a defeat **or** a loss to a `lossAllowed` trainer counts (`target_reference_id` required, `target_count` 1). `ProgressOutcomeObjectiveMap` maps `TrainerDefeated`, and `BattleLost` with `lossAllowed`, to it (`ObjectivesFor(ProgressOutcome)`); the subject is the `opponentNpcKey` fact; distinct per NPC key, so a repeat is idempotent. A plain loss does not advance. Upsert refuses a missing target or a count other than 1 |
 | `ReachTalentRank` | 50 | Reach a rank in a talent (the "teach a talent" gate, [Talents §8.3](25-talents.md#quest-tie-in)); `target_reference_id` = talent content key, blank matches the highest rank on any talent |
 
 **List objectives (9, 42)** store their targets as a JSON array in `quest_objective_template.target_reference_ids`
@@ -710,6 +842,8 @@ it, and a list type's `targetCount` is clamped to `1..list.Count`.
 | `HasItem` | 2 | Sums item quantities across all trainer inventories where `BaseItemId == reference_id` |
 | `CreatureLevel` | 3 | If `reference_id` set: stat `creature_level_{id}`; else `highest_creature_level` |
 | `TrainerLevel` | 4 | Reads stat `trainer_level`, applies `operator_type` vs `target_value` |
+| `UsedItem` | 5 | Reads stat `items_used_{stat_key}`, applies `operator_type` vs `target_value` |
+| `QuestNotStarted` | 6 | Met only while the trainer holds **no** `quest_instance` of `reference_id` (the template id) in any status; closed when `reference_id` is null |
 
 ### `RequirementOperator`
 
@@ -770,7 +904,7 @@ ever arrives through `LocationEntryService.EnterAsync` (the BFF `POST .../world-
 — it claims the discovery ledger, awards per-location XP (a flat rule amount or the location's own
 override), grants a discovery quest if one is authored, and emits `LocationEntered` — see [Location
 Discoveries](?page=backend/24-location-discoveries); `TalkToNpc` only ever arrives through the talk
-intent (`NpcTalkService`, `POST /api/v1/trainers/{t}/npcs/{npcKey}/talk`). Every battle-outcome type —
+intent (`NpcTalkService`, `POST /api/v1/trainers/{t}/npcs/{npcKey}/talk`), and `ReadReadable` only through the read intent (`ReadableReadService`, `POST /api/v1/trainers/{t}/readables/{key}/read`). Every battle-outcome type —
 `WinBattles`, `DefeatCreature`, `DefeatAnyCreature`, `DefeatCreaturesFromList`, `DefeatTrainer`,
 `DefeatAnyTrainer`, `DefeatTrainersFromList` — moved server-side once `BattleDomainService` itself
 started emitting `BattleWon`/`CreatureDefeated`/`TrainerDefeated` (including on a forfeit win —
@@ -781,8 +915,29 @@ the quest **completes** (the completion compare-and-set), not when its rewards a
 still pays no `quests_completed` credit, but `ClaimRewardsAsync` now runs one achievement evaluation pass
 after its reward grants (so a points-earning reward can push a `TrainerLevelReached` achievement over the
 line at claim time) and returns any newly-unlocked achievements on `QuestClaimResult.Progress.NewlyUnlocked`
-— see [Achievements — Evaluation](?page=backend/15-achievements#evaluation). Talk and visit objectives count
-**distinct** keys per quest instance, and a targeted talk/visit objective must have Count 1.
+— see [Achievements — Evaluation](?page=backend/15-achievements#evaluation). Talk, visit and read objectives count
+**distinct** keys per quest instance, and a targeted talk/visit/read objective must have Count 1.
+
+### Readable reads
+
+`ReadReadable` (12) is the objective for a letter, photo or sign the player reads to its end. The client sends one intent:
+`POST /api/v1/trainers/{t}/readables/{key}/read` (Dialogue Service.REST, identity from the token, no body). `IReadableReadService.ReadAsync(accountId,
+trainerId, readableKey, ct)` lowercases the key and checks that it names an authored dialogue document; an unknown key returns
+`UnknownReadable` and counts nothing (the endpoint answers like the NPC talk route's unknown NPC). A known key sets the first-time flag
+`readable_read_<key>` (stats `MaxAsync(1)`, a flag and not a counter, the same reasoning as `npc_met_{key}`), then emits
+`ProgressOutcome{Kind=ReadableRead, SubjectKey=key}` through the progress dispatcher after commit, and returns a
+`ReadableReadResult { Status (Counted | UnknownReadable), ReadableKey, FirstTime, Progress }`.
+`ProgressOutcomeObjectiveMap` maps `ReadableRead` to (`ReadReadable`, Distinct), so reading the same letter twice counts once.
+Template validation requires a target, the same rule as `TalkToNpc`. Offline, the same service runs over the local SQLite.
+The client never reports progress: it sends the intent, the response says what happened. See
+[Progress Dispatcher](?page=backend/23-progress-dispatcher).
+
+**Prologue skip.** Skipping the prologue is also an intent: `POST /api/v1/trainers/{trainerId}/story/prologue/skip` (no body, account from the token).
+`IPrologueSkipService.SkipAsync(accountId, trainerId, ct)` loads the configured prologue quest (`StoryOptions.PrologueQuestKey`, default
+`quest-grans-letter`) and records a readable read, through `IReadableReadService`, for every `ReadReadable` objective target, so the quest
+completes through the normal path (idempotent flags). It returns `PrologueSkipResult { Status (Skipped | NoPrologueQuest), ReadableKeys, Progress }`;
+`NoPrologueQuest` means no such quest is authored and nothing is counted. The player says "I skipped"; the server decides what that completes.
+Offline, the same service runs over the local SQLite.
 
 `ReachTalentRank` (50) is the one type that is **not** count-up-to-target: `TalentService` raising a
 rank (a spend, or an admin set-rank that raises) emits a `TalentRankReached` outcome whose `Quantity`
@@ -901,6 +1056,20 @@ rewards (see "Server authority hardening" below) can carry a genuinely new unloc
 `ApplyServerProgress` is what gets that unlock to the achievement toast. `ReportUnlocks`/
 `ReportTrainerProgress` now have exactly one call site each, inside `ApplyServerProgress`.
 
+### Studio concurrency and story lines
+
+M17004 adds three columns to `quest_template`: `row_version BIGINT NOT NULL DEFAULT 1`, `quest_line VARCHAR(64) NULL` and
+`line_step INTEGER NULL`. M17005 adds `quest_map_layout`. The Studio story map and the Unity Studio use them.
+
+- **Story line.** `questLine` is a slug (`^[a-z0-9][a-z0-9-]{0,63}$`, else 400 `invalid_quest_line`); `lineStep` is an order within the line (1 or more, else 400 `invalid_line_step`; a step with no line is also 400). On the bulk request, `questLine: ""` clears the line and step, `null` keeps the stored value, and a `null` `lineStep` keeps it. Both are presentation and grouping only: the authority does not use them to offer or gate a quest. Category (`Main Story` vs side) is unchanged.
+- **Row version.** Entities (list, `by-content-key`, bulk success `templates[]`) carry `rowVersion`. Bulk rows accept `expectedRowVersion` and `DELETE` accepts `?expectedRowVersion=`; the rules and the 409 body are in [Optimistic Concurrency](?page=backend/28-optimistic-concurrency). The up-front check runs before line, objective, requirement and cycle validation, so a stale push gets the 409 first; basic 400s (blank key, undefined enum, area length) are all raised before anything is written.
+- **Requirement keys.** `requirements[].referenceContentKey` (by-content-key and `includeChildren`) is the target quest's content key for `QuestCompleted` / `QuestNotStarted`, resolved by the server including deleted templates; `null` means the target is gone. Clients must use it and never map GUIDs to keys themselves.
+- **`GET /api/v1/quests/templates?includeChildren=true`** returns each template with objectives, rewards and requirements in one call (three table reads grouped in memory). It needs content-write (403 `forbidden` otherwise); the default list is unchanged and open.
+- **Loops are refused.** A bulk push that would create a `QuestCompleted` cycle returns 400 `{ error: "requirement_cycle", message, quests: [keys] }`. The check walks stored live requirements plus the batch and starts from the batch's own keys, so an old loop elsewhere does not block an unrelated push.
+- **Map layout.** `GET`/`PUT /api/v1/quests/map-layout/{scope}` (content-write) stores the story map's card positions and lane colours as one JSON document per scope, with the same `rowVersion` and 409 contract. It is presentation only and not in the game client. Validation: scope slug, document an object up to 256 KB, at most 2000 positions, colours `#rrggbb`; errors are 400 `invalid_scope`, `invalid_document`, `invalid_expected_row_version`.
+- **Rollout flag.** `Studio:RequireExpectedRowVersion` (default `false`); when `true`, a write without `expectedRowVersion` is 400 `expected_row_version_required`. Until then such a write logs a Warning with the caller.
+- **Revive.** An unconditional write onto a soft-deleted template now revives it. It used to hit the `content_key` unique constraint and return 500.
+
 ### Crystalline Rift Studio sync: `PUT /api/v1/quests/templates/bulk`
 
 Used by the Unity editor Crystalline Rift Studio to push `QuestDefinition` ScriptableObjects to the server. Each entry is matched by `content_key` and the template row plus all its objectives, rewards, and requirements are replaced atomically.
@@ -910,6 +1079,9 @@ are the only two quest endpoints gated behind `AuthorizationPolicies.RequireCont
 other quest route (accept, progress, claim, abandon, the reads) stays on the ordinary player-token
 policy. This is the exact same content-write gate the dialogue endpoints use (see
 [Dialogue Server Domain](?page=backend/21-dialogue-domain)).
+
+Each request row also takes `expectedRowVersion`, `questLine` and `lineStep`; a stale version returns 409
+`row-version-conflict` (see [Studio concurrency and story lines](#studio-concurrency-and-story-lines)).
 
 ```json
 PUT /api/v1/quests/templates/bulk
@@ -1117,9 +1289,17 @@ what to do next, and how far along it is. Added 2026-09-26.
   `PickingMode.Ignore` throughout. Registers with `IUICoordinator` inside `Init` and shows only in
   `UIContext.Overworld`; hides while the shared `isMenuOpen` flag is up (player menu, shop, market,
   conversation) and when the System tab's **Quest Tracker** toggle is off.
-- **Data:** every `IQuestService` event (`OnSessionReady`, accepted, granted, objective updated,
-  completed, abandoned, rewards claimed) only marks the card stale; `Update` rebuilds on the main
-  thread from `ActiveQuests`, fetching each template once per session through `GetTemplateAsync`.
+- **Data:** every `IQuestService` event (`OnSessionReady`, `OnActiveQuestsRefreshed`, accepted,
+  granted, objective updated, completed, abandoned, rewards claimed) only marks the card stale;
+  `Update` rebuilds on the main thread from `ActiveQuests` plus the completed history's quests that
+  still wait for their turn-in (Completed and unclaimed), fetching each template once per session
+  through `GetTemplateAsync`. A refresh replaces the in-memory list with the in-progress set, so a quest
+  the server finished mid-session drops out of it while its giver still owes the rewards; reading the
+  history keeps its "Return to *giver*" card (when both hold the id, the in-memory instance wins).
+  Pinned by `QuestTrackerTurnInTests`. `OnActiveQuestsRefreshed` fires after `RefreshActiveQuestsAsync` swaps
+  in the authority's list (journal open, every dialogue snapshot) — without it the tracker kept the
+  counts it drew before the swap (HUD 0/3 while the journal showed 2/3). Pinned by
+  `QuestManagerRefreshTests`.
 - **Choice and wording** are pure (`Assets/CR/UI/Logic/QuestTracker*.cs`, `CR.UI.Logic`, no cr-api
   references, so the presenter flattens instances to `QuestTrackerCandidate` primitives):
   `QuestTrackerSelector.Choose` picks the in-progress quest with the lowest authored `SortOrder`
@@ -1164,7 +1344,8 @@ builder.Services.AddScoped<IQuestDomainService, QuestDomainService>();
 ```
 
 `IQuestInstanceRepository.DeleteInstanceAsync(instanceId)` soft-deletes an instance and its objective-progress rows.
-The Unity online router calls it for locally mirrored active instances the server no longer lists;
+The Unity online router calls it for a locally mirrored active instance the server no longer lists **and** answers
+404 for when asked by id (an unlisted instance the server still has is mirrored as the server reports it instead);
 `UpsertFromServerAsync` revives a deleted row (`deleted = false` on conflict) so a mirror sweep that raced a
 server-side accept heals on the next read.
 
@@ -1215,3 +1396,57 @@ server-side accept heals on the next read.
   `{ "error": "requirements_not_met" }`. Re-accepting a quest already held returns it without a check.
 - **Server grants.** `IQuestDomainService.GrantQuestAsync(accountId, trainerId, templateKey, reason, ct)` creates (or returns)
   an instance without the requirement check. It has no route; server features (location discovery quests) call it.
+
+## Story beats (2026-10-18)
+
+A **story beat** is a named flag the server sets when the story reaches a point (for example `act1-done`, `mirandale-open`).
+The client reads beats to open roads, bridges and passes, to branch dialogue and to gate quests. The client never sets a
+beat: beats are granted by quest completion or by an admin. There is no intent route that sets a beat.
+
+- **Storage.** A beat is a `trainer_stat` row, key `story_beat_<key>` (`StatKey.StoryBeatKey(key)`, prefix
+  `StatKey.StoryBeatPrefix`), value 1, written with `MaxAsync`. The prefix is in `ServerOwnedStatKeys`, so a client stat
+  write cannot touch it. Beats are monotone (once set, set); the only carve-out is admin revoke (below).
+- **Keys.** Content strings, lower-case `^[a-z0-9][a-z0-9-]{0,62}$`. Nothing in code enumerates them
+  (`StoryBeatKeyExtensions`: regex, max 8 per quest, normalise).
+- **`grants_beats`.** Migration **M17006** adds `quest_template.grants_beats TEXT NULL` (comma-separated keys; Down drops it on
+  Postgres only). `QuestTemplate.GrantsBeats` is a `List<string>`, normalised (trim, lowercase, distinct, sorted) on read and
+  before compare/store. A template with the same normalised list adds no `row_version` bump of its own (the upsert still bumps
+  once, as before). `UpsertQuestTemplateRequest.GrantsBeats`: **omitted/null = keep, `[]` = clear**, an invalid key or more
+  than 8 keys answers 400 `invalid_grants_beats`. `QuestStatusView.GrantsBeats` and the pull/export DTOs carry it.
+- **`StoryBeatProjector`** (`IProgressOutcomeHandler`, Order 150, after `LifetimeStatProjector` at 100) handles
+  `QuestCompleted`: reads the template's `grants_beats`; for each key it does `GetAsync` then `MaxAsync`, and only when the
+  read was 0 it adds the key to the report (`ProgressReportBuilder.AddStoryBeat`, de-duplicated) and enqueues
+  `ProgressOutcomeKind.StoryBeatSet = 16` (SubjectKey = key, FirstTime = true). The outcome is enqueued after the write, so
+  achievements evaluated at the end of the dispatch see the beat. A double completion cannot happen (completion is a CAS).
+  Registered in `Program.cs`; offline registration is in the Unity `ProgressBindings` at Order 150.
+- **No objective row.** `ProgressOutcomeObjectiveMap` has **no row** for `StoryBeatSet` on purpose: a beat advances no
+  quest objective.
+- **Exposure.** `TrainerProgress.StoryBeats` (`List<string>`, sorted, never null) comes from one `GetAllAsync` filtered by
+  prefix in `TrainerProgressionService.GetProgressAsync`. `ProgressReport.NewStoryBeats` (`List<string>`, never null) rides on
+  every intent response; the builder and both merge extensions carry it. No `InvalidationScopes` change (TrainerProgress is
+  already dirtied). An old response without the field reads as empty.
+- **Requirement type 7 `StoryBeat`.** `QuestRequirementType.StoryBeat = 7`: `stat_key` is the beat key without the prefix;
+  the evaluator checks `story_beat_<key>` >= 1. Upsert validates and normalises the key. The Studio quest editor also offers
+  6 `QuestNotStarted`.
+- **Backfill of `act1-done`.** The first `GetProgressAsync` after deploy sets `story_beat_act1-done` when
+  `StatKey.QuestCompletedKey("quest-runaway-cargo")` >= 1 and the beat is unset: one stat read, `MaxAsync`, source
+  `story_beat_backfill`, no outcome, no report, no achievements. Idempotent, same offline. Only `act1-done` is backfilled
+  (`StoryBeatBackfillKeys`, in `Quests.Data` so Moderation can see it). A test pins that the projector's completed-quest key
+  equals the backfill's key.
+- **Admin grant/revoke.** `POST` and `DELETE /api/v1/admin/players/{accountId}/trainers/{trainerId}/story-beats/{key}` (admin
+  policy, `{ reason }` body, 204; 400 for a bad key; 404 when the trainer is not on that account). Grant is `MaxAsync`;
+  revoke is `SetAsync` 0 with source `admin` (the one carve-out of "monotone"). **Revoking `act1-done` is refused (400)**
+  because the backfill would restore it. Audit kinds `SetStoryBeat = 21`, `ClearStoryBeat = 22`. `TrainerDossier` gains
+  `StoryBeats`, `ActiveQuestKeys`, `CompletedQuestKeys`. See [Moderation](18-moderation.md).
+- **Offline.** The same domain DLL runs on local SQLite, so beats work offline without any sync.
+
+## Operator complete and the admin quest board (2026-10-20)
+
+`IQuestDomainService` gains `GetAdminQuestBoardAsync(trainerId)` and `AdminCompleteAsync(trainerId, contentKey)`, used by
+`ModerationService` for `GET /api/v1/admin/trainers/{id}/quests` and `POST .../quests/{contentKey}/complete`. Complete is
+not a shortcut around the quest machinery: it grants the quest if the trainer never had it (or restarts an abandoned or failed
+one), raises each incomplete objective to its target, completes the instance through the normal compare-and-set, records
+`QuestCompleted` to the progress sink (so `StoryBeatProjector`, `LifetimeStatProjector` and chain follow-ups run) and claims the
+rewards. One-shot quests are idempotent (the second call answers `alreadyDone`); a repeatable quest starts and pays a new repeat.
+A reward failure after the claim marker is set is reported (`rewardsPaid: false`, `reason`) and **not auto-retried**. Full
+rulings, response shape and audit kind: [Moderation](18-moderation.md#quest-and-achievement-admin-2026-10-20).

@@ -198,15 +198,144 @@ repositories aren't registered) keeps the old unchecked behaviour.
 
 ## Trainer Creation Owns the Inventories
 
-`POST /trainer` resolves `ITrainerDomainService` and calls `CreateTrainerAsync`, which creates the
-trainer **plus its five inventories** (6-slot team, 100-slot creature storage, 20-slot backpack,
-100-slot item storage) in a single transaction and stamps their ids onto the trainer row. It must
-never call the bare `ITrainerRepository.CreateTrainer` — that inserts only the trainer row, leaves
-every inventory id column NULL, and the first creature grant (e.g. the welcome quest's reward)
-throws `InvalidOperationException("Trainer ... has no team inventory configured")` inside
-`CreatureInventoryService.GetTeamInventoryIdAsync`. Pinned by
-`CR.Api.IntegrationTests.TrainerCreationHttpTests` (real HTTP: account → token → create → assert
-all inventory ids non-null).
+`ITrainerDomainService.CreateTrainerAsync` creates the trainer **plus its five inventories** (6-slot
+team, 100-slot creature storage, 20-slot backpack, 100-slot item storage) in a single transaction and
+stamps their ids onto the trainer row. Nothing may call the bare `ITrainerRepository.CreateTrainer` —
+that inserts only the trainer row, leaves every inventory id column NULL, and the first creature
+grant (e.g. the starter) throws `InvalidOperationException("Trainer ... has no team inventory
+configured")` inside `CreatureInventoryService.GetTeamInventoryIdAsync`.
+
+## Character cap and delete
+
+Each account may hold a limited number of **live player characters** online, and a player can delete one.
+
+**Cap.** `TrainerDomainOptions.MaxPlayerTrainersPerAccount` (`int?`, null = unlimited). The AIO host reads config key
+`Trainers:MaxPlayerTrainersPerAccount` (appsettings default `3`, missing key also 3; `0` or negative = unlimited via
+`NormalizeMax`). Offline binds `TrainerDomainOptions.Offline` (no cap). In `CreateTrainerAsync` the check runs inside
+the create transaction: `LockAccountForTrainerCreateAsync` (Postgres `pg_advisory_xact_lock(hashtext('trainer-create'),
+hashtext(accountId))`, a namespaced key so it never collides with other advisory locks; SQLite is a no-op because its
+single writer already serialises) then `CountPlayerTrainersInAccountAsync` (live, not `is_npc`, no NPC battle-trainer
+identity). `used >= max` throws `TrainerLimitReachedException` and the transaction rolls back.
+
+`POST /trainer` forces `IsNpc = false` and `NpcContentKey = null` on the body, so a client can neither mint an NPC identity
+to dodge the cap nor hide a character from the list.
+
+**Delete.** `ITrainerDomainService.DeleteOwnedTrainerAsync(accountId, trainerId)` returns a `TrainerDeleteOutcome`:
+
+| Outcome | When |
+|---|---|
+| `Deleted` | owned live player character removed |
+| `NotFound` | no such live row for this account, another account's row, an NPC identity, or a repeat delete |
+| `Blocked(code, message)` | an `ITrainerDeletionGuard` refused |
+
+Ordering: read the trainer (before the transaction; SQLite cannot read on a second connection mid-write), then in one
+transaction (1) soft-delete the trainer row (`DeleteTrainerInTransactionAsync`: ownership, `not deleted`, `not is_npc`,
+not an NPC identity; zero rows = `NotFound`; the UPDATE also takes the row lock), (2) run every registered guard,
+(3) soft-delete the four inventories, (4) commit. A block rolls everything back. All deletes are soft.
+
+**Guards.** `ITrainerDeletionGuard.CheckAsync(accountId, trainerId)` returns a `TrainerDeletionBlock` (stable kebab-case
+code plus player text) or null. `MarketListingsTrainerDeletionGuard` refuses with `trainer-has-open-listings` when the
+character has an **open** listing, meaning state Active and not expired (`CountOpenListingsBySellerTrainerAsync`),
+because the listed creatures sit in escrow and must go back to a live character. The reverse race is closed in the Market
+repository: the listing insert is conditional on the seller trainer being live in the same statement (SQLite
+`INSERT ... SELECT ... WHERE EXISTS`, Postgres adds `FOR SHARE` on the trainer row so a concurrent delete waits);
+`MarketService` rolls back with `NotFound` when nothing was inserted.
+
+**Routes.**
+
+| Route | Result |
+|---|---|
+| `POST /trainer` | `409 trainer-limit-reached` at the cap |
+| `DELETE /trainer/{trainerId}` | `204`, `404`, or `409 trainer-has-open-listings` (any guard code) |
+| `GET /trainer/slots` | `{ used, max }`; `max` null = unlimited |
+
+409 bodies use `ApiError.Body(code, "requirements_not_met", message)`; the codes are `ApiErrorCodes.TrainerLimitReached`
+and `ApiErrorCodes.TrainerHasOpenListings` (pinned by `TrainerErrorCodePinTests`). Identity comes from the token only.
+
+**Known and intentional.**
+
+- **Orphaned rows.** Delete soft-deletes the trainer and its four inventories only. Rows keyed by `trainer_id` in quests,
+  stats, achievements, battles, pickups, talents and location discoveries stay behind the soft-deleted character,
+  unread. The one player-visible reader that was fixed is the Market seller view (`GetListingViewsBySellerAsync` now
+  excludes deleted seller characters on both engines).
+- **Restore** is a later admin feature; nothing undeletes today.
+- **Active battles are not checked** by delete.
+- **The cap limits live characters, not creations.** Create then delete again re-grants the starting kit each time. If
+  that is abused, add a per-account create rate limit; not built.
+- A guard runs on its own connection before commit, so the guard check is advisory by itself; the Market insert condition
+  above is what makes the listing race safe.
+
+## The Starting Kit at Trainer Creation
+
+:::note Pending deploy (cr-api PR #70, feature/retire-welcome)
+Not merged to main and not deployed. Until it ships, production still grants the starter inline in
+`POST /trainer` and the potions through the Welcome quest's reward.
+:::
+
+A new trainer gets its starting kit from the authority at creation, not from a quest the client
+completes. `ITrainerCreationService` (`CR.Game.Domain.Services.Interfaces.Trainer`, implementation
+`TrainerCreationService`) is the one creation path:
+
+- **Online:** `POST /trainer` calls `ITrainerCreationService.CreateTrainerAsync`. The request is an
+  intent (name and appearance); `AccountId` comes from the token, and the route keeps
+  `RequireIdempotencyKey`, so a retried key replays the cached response without creating a second
+  trainer.
+- **Offline:** the same service, from the same DLLs, against the player's local SQLite. The Unity
+  binding is pending (cr-api-unity half of the Welcome retirement).
+
+Registered in `AddGameDomainServices` (scoped, plus keyed `"trainer-creation"`), so `CR.REST.AIO`
+needs no `Program.cs` change. Constructor dependencies: `ITrainerDomainService`,
+`ICreatureInventoryService`, `IItemDomainService`, `IItemInventoryService`, `IConfiguration`,
+`ILogger<TrainerCreationService>`.
+
+**What the kit is.** Granted only when the new trainer's team is empty (`GetTeamSizeAsync == 0`). The kit has **no creature**: a new trainer's team is empty through the prologue and the walk down, and the story gives the starter at the wagon (see [The Starter Is Granted at the Wagon](#the-starter-is-granted-at-the-wagon)).
+
+| Part | Configuration | Notes |
+|---|---|---|
+| Backpack items | `starter_items` = `content_key:qty[,content_key:qty]` | Key absent: the default `item_heal_potion_30:2` (`TrainerCreationService.DefaultStarterItems`). Blank or whitespace: no items. Entries are trimmed; each must be `key:qty` with qty >= 1. Granted through `IItemInventoryService.AddToBackpackAsync`, the path `RewardGrantService` uses. |
+
+`starter_creature_1_id` is still validated at creation (a missing or malformed value refuses to create the trainer, so a misconfiguration surfaces at once rather than at the wagon). `starter_creature_2_id` / `_3_id` are not used.
+
+**Ordering and failure.** The trainer's transaction cannot cover the kit: the creature and item
+services each open their own connection. So the order is fixed, and each step's failure is defined:
+
+1. Validate `starter_creature_1_id` (present and a GUID). Otherwise `InvalidOperationException` naming the key; nothing is written.
+2. Parse `starter_items`. A malformed entry (`a`, `a:0`, `a:-1`, `a:x`, `:2`, `a:1,`, `a:1:2`) throws `InvalidOperationException` naming the key; nothing is written.
+3. Resolve each item content key (`IItemDomainService.GetItemByContentKeyAsync`). An unknown or soft-deleted key is logged as an error and skipped, so a retired item never blocks account creation.
+4. Create the trainer and its inventories (one transaction).
+5. (Removed: creation no longer generates the starter. It used to, which handed every new player the Cindris before the story reached the Hellcat bond.)
+6. Add each item. A `Success = false` result or a thrown exception (except `OperationCanceledException`) is logged and skipped, and the remaining items are still granted. The trainer is playable; a 500 after the commit would invite a client retry that creates a second trainer.
+
+Known window, accepted: a process that dies during step 6 leaves some items missing.
+
+### The Starter Is Granted at the Wagon
+
+`StarterGrantProjector` (`CR.Game.Domain.Services.Implementation.Trainer`, progress handler order 160, after `StoryBeatProjector` and before the objective projector) gives the starter. It reacts to the `LocationEntered` outcome the authority itself produced from a validated `POST /api/v1/trainers/{id}/world-locations/enter`; the client reports no outcome. The work is `IStarterGrantService` (`StarterGrantService`), shared with the gaterbear-encounter recovery below. This wagon grant IS Philroe's scripted sequence (wagon arrival, call-out, gaterbear fight).
+
+- **Trigger:** `LocationEntered` for `story-philroes-wagon` (the same location that grants First Battle), or any key in the comma-separated config `starter_grant_location_keys` when set.
+- **Guard:** only when the team is empty (`GetTeamSizeAsync == 0`). Idempotent by state: a revisit, a trainer who already owns a team creature (every trainer created before this change) and a trainer who captured first all get nothing.
+- **Action:** `IStarterCreatureService.GenerateStarterAsync` (`starter_creature_1_id` at `starter_creature_level`) placed on team slot 1. If placement fails the orphaned creature is soft-deleted through `IGeneratedCreatureRepository.DeleteCreature` and the error is rethrown (the dispatcher logs and skips a failing handler, which is why the safety net exists).
+- **Response:** the new creature id is returned in `progress.grantedCreatureIds` of the enter response (`ProgressReport.GrantedCreatureIds`, empty from an older server). The client invalidates its team caches (`GameChange.LocationEntered` clears `CreatureSlots`, `Creature` and `InventoryList`) and re-reads the team from the server; it never infers the grant.
+- **No recovery by walking:** entering any other location grants nothing; only the wagon entry (a key in `starter_grant_location_keys`) grants.
+- **Race:** a per-trainer in-process gate plus the unique `(inventory_id, slot_number)` index; a placement that loses the slot soft-deletes its creature and reports "already granted", so no orphan rows.
+- **Recovery only (gaterbear encounter):** `BattleEncounterDomainService.StartEncounterAsync` finds an empty team and calls `IStarterGrantService.GrantForScriptedEncounterAsync`: it grants only for a `Wild` intent whose spawner key is in `starter_grant_spawner_keys` (default `story-gaterbear-wagon`) AND the trainer's own `location_discovered_<key>` stat shows the wagon was entered AND the team is empty. The `POST /api/v1/battles` response then carries `grantedCreatureIds` and the client refreshes its team (`GameChange.CreatureGranted`). Every other empty-team battle is refused (below) and grants nothing. A failed recovery grant refuses the fight; the retry is the same encounter.
+- **Refusals:** an empty team that cannot be filled is refused with 409 `battle-no-creatures` (`no_creatures`, "You have no creatures yet."), distinct from the fainted-team 409 `battle-no-usable-creature` ("Heal first.").
+- **Client world:** `TeamFaintedGate` is also closed while the team is empty (`NoCreatures`), so no wild contact or trainer battle is offered before the starter (the wagon grant arrives first, so v0.2.2 and later clients have a team before any fight); `TeamSync` and `TeamFaintedGateDriver` re-read on `IProgressionNotifier.CreaturesGranted`.
+- **Offline:** the same handler and service from the same DLLs, wired in the Unity `ProgressBindings` and installer.
+
+The `CreatePlayerAsync` integration fixture gives its trainers a creature through the audited admin spawn-pool grant, because the story's grant also hands out First Battle and moves location counters those fixtures pin.
+
+**Why.** `POST /trainer` already granted the starter inline, but the Welcome quest's reward, claimed
+when the client completed the quest, added a second creature and the potions. The service moves the
+inline grant into one creation path and adds the potions there, and M7020 retires Welcome in the same
+change (see [Quest System](?page=backend/07-quest-system)), which removes the duplicate grant. Trainers
+who already claimed Welcome keep both creatures; no cleanup was done.
+
+Tests: `TrainerCreationServiceTests`, `StarterGrantProjectorTests`, and in `CR.Api.IntegrationTests`
+`TrainerCreationHttpTests` (real HTTP: account → token → create → all inventory ids non-null, an empty
+team and 2 × `item_heal_potion_30` in the backpack, before and after an idempotent replay) and
+`OpeningChainHttpTests.TheStarterCreatureComesFromTheStory_NotFromTrainerCreation` (empty at creation and
+at the landing, one creature after the wagon, still one after a revisit; a lost starter comes back only through the gaterbear encounter, never by walking or another battle).
 
 ## How to Test the Starter Flow Locally End-to-End
 

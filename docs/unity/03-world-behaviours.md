@@ -84,6 +84,12 @@ Two things the numbers do argue for, if load time ever matters:
   ~4ms; the gap is `NpcMerchantBehaviour` calling `StockFromSpawnerAsync` on every world load.
   Invisible with two NPCs, but twenty merchants would add roughly 800ms to every load — restocking
   wants to become lazy (on first shop open) or interval-gated before the world fills out.
+  **It has since become lazy:** that ~40ms was a clear-and-re-roll on every load. Since merchant
+  restock v2 (2026-10-10) world init sends no stock call at all. The intent goes out when the player
+  walks up to a merchant (at most once a minute per merchant), and the authority re-rolls a shelf only
+  after a trade has touched it and the spawner's cooldown has run since (900 s on the shipped
+  merchants); a shelf nothing has touched costs it one row read. See
+  [Merchant Shop → Restocking](?page=unity/18-merchant-shop#restocking).
 
 ## Component Overview
 
@@ -96,7 +102,7 @@ Two things the numbers do argue for, if load time ever matters:
 | `INpcSubInitializable` | Interface for NPC add-on components run after identity resolves |
 | `NpcWorldBehaviour` | Identity-only NPC world behaviour; dispatches to sub-behaviours |
 | `NpcCreatureGrantBehaviour` | Sub-behaviour: seeds a configured creature team onto the NPC |
-| `NpcMerchantBehaviour` | Sub-behaviour: stub for merchant NPC state |
+| `NpcMerchantBehaviour` | Sub-behaviour: records whose shop it is and exposes `MerchantNpcId`; sends the merchant's "stock this shop" intent when the player walks up (`OnPlayerApproached`), never at world init |
 | `NpcTrainerBehaviour` | Sub-behaviour: seeds creature team + items, caches both for battle |
 | `SpawnerWorldBehaviour` | World behaviour: ensures spawner zone exists; exposes `SpawnerId` |
 | `SpawnerEncounterBehaviour` | Activated by `SpawnerWorldBehaviour`; trigger-based wild encounter entry point |
@@ -113,6 +119,13 @@ public interface IWorldInitializable
 ```
 
 Any `MonoBehaviour` that needs account/trainer context at scene start implements this interface and registers itself with `WorldRegistry` in `Awake`. The `CancellationToken` is provided by `GameInitializer` and is cancelled if the scene unloads or the trainer changes again before initialization completes. Always pass `ct` to any async operations inside `InitializeAsync` to support clean cancellation.
+
+**Be active when the scene is initialized.** Area scenes and open-world cells (`AreaWorldInitializer`) initialize only the
+initializables on active GameObjects. An inactive one is parked content (the corridor builder retires objects with
+`SetActive(false)`), so it is skipped and logged by name. One that is switched on later in the same visit (a
+`OneShotWorldEvent`'s `enableOnPlay`, a story beat) is not initialized until the next load or cell promotion. So an
+initializable must not sit under something enabled mid-visit, or whatever enables it must initialize it. No scene does
+that today.
 
 ## `INpcSubInitializable`
 
@@ -385,9 +398,9 @@ GameObject: NPC_Cindris
      _interactionRadius: 3
 ```
 
-## `NpcMerchantBehaviour` — Merchant Stub
+## `NpcMerchantBehaviour` — Merchant Stock Intent
 
-`NpcMerchantBehaviour` implements `INpcSubInitializable`. It is currently a stub that marks the NPC as a merchant and exposes a stable `MerchantNpcId` for use by shop UI systems.
+`NpcMerchantBehaviour` implements `INpcSubInitializable`. World init only records whose shop it is, marks it ready and exposes a stable `MerchantNpcId` for the shop UI; it sends nothing. When the player walks into range with the merchant on offer, `NpcInteractionBehaviour.EnterRange` calls `OnPlayerApproached(spawnedInside)`, which sends the merchant's "stock this shop" intent, `INpcMerchantService.StockFromSpawnerAsync(accountId, trainerId, npcId)` (the first ask after the merchant came to life waits a random 0 to 2 s only when the player was already inside the range then; a walk-up asks at once). It chooses neither the stock source nor a re-roll: the NPC registry row names the spawner, and the shelf's trade history and the spawner's restock cooldown decide whether the shop is re-rolled; the router asks at most once a minute per merchant (see [Merchant Shop → Restocking](?page=unity/18-merchant-shop#restocking)). A refusal is logged as a warning naming the NPC's content key.
 
 ### Example Inspector Setup
 

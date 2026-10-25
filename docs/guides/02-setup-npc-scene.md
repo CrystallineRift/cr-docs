@@ -8,7 +8,7 @@ By the end of this guide you will have a fully wired NPC GameObject in your scen
 
 - The `Scene Context` with `LocalDevGameInstaller` is already in your scene. See [Configuring Scene DI](?page=guides/05-setup-di-scene-context).
 - The world system is set up (`GameInitializer` will be created automatically by Zenject). See [Setting Up the World System](?page=guides/04-setup-world-system).
-- You know the `content_key` for this NPC. It is the string defined in `game_config.yaml` (e.g. `npc_elder_cin`). See [NPC System](?page=backend/02-npc-system) for the backend side.
+- You know the `content_key` for this NPC. It is the `contentKey` on the NPC's `NpcDefinition` under `Assets/CR/Content/Defs/NPCs/` (e.g. `npc_elder_cin`). See [NPC System](?page=backend/02-npc-system) for the backend side.
 - The player's character has the `Player` tag and a `Collider` component so NPC interaction triggers fire correctly.
 
 ---
@@ -78,10 +78,10 @@ Choose one or more sub-behaviours based on what this NPC does.
 
 | Field | Value |
 |---|---|
-| **Creature Base Content Key** | A key in `game_config.yaml` whose value is the creature base UUID (e.g. `starter_creature_1_id`) |
+| **Creature Base Content Key** | Vestigial. Any non-empty slot only marks this NPC as one that offers a gift |
 | **Slot Number** | `0` for the first (and usually only) slot |
 
-The script looks up the key in `IGameConfiguration` at runtime and resolves it to a creature base GUID.
+The creature the NPC hands out is the server's choice: the NPC's authored gift template (`npcs.gift_template_id`, set in Crystalline Rift Studio). The slot key is not resolved; `GameSettings` answers no creature keys. If the server has no gift for the NPC, the receive-gift call answers `NotAGiftNpc`.
 
 ### Trainer Battle NPC
 
@@ -91,8 +91,7 @@ The script looks up the key in `IGameConfiguration` at runtime and resolves it t
 | Inspector Field | Value |
 |---|---|
 | **Allow Rematch** | Check to allow repeated battles after the first (default: true) |
-| **Slots** | List of creature slots — each has a **Creature Base Content Key** (from `game_config.yaml`) and a **Slot Number** (0–5) |
-| **Items** | List of battle items — each has an **Item Id** (UUID string) and a **Quantity** |
+| **Slots** / **Items** | Vestigial; the server never reads them. The NPC's team comes from its `{key}-team` spawner templates and its battle items from `npc_battle_item_loadout`, both built server-side when a battle starts (author them with the Trainer Battle Author) |
 
 ### Merchant NPC
 
@@ -164,9 +163,6 @@ ElderCin (GameObject)
 
 **"_npcContentKey is empty in Inspector. Skipping."**
 You forgot to fill in the `Npc Content Key` field on `NpcWorldBehaviour`. The NPC will not initialize.
-
-**"could not resolve config key '...' to a GUID. Slot skipped."**
-The key you typed in a slot's `creatureBaseContentKey` does not exist in `game_config.yaml`, or its value is not a valid GUID. Check spelling in the YAML and make sure the backend has run migrations so the creature exists in the database.
 
 **Player walks through the NPC but nothing triggers.**
 The player GameObject is missing the `Player` tag. `NpcInteractionBehaviour.OnTriggerEnter` checks `CompareTag("Player")` and silently ignores anything else.

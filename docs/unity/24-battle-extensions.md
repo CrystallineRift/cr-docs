@@ -51,6 +51,11 @@ part.
 That is the whole contract. An extension that needs more than these two seams is probably a battle
 feature, not an extension — see [When *not* to use this](#when-not-to-use-this).
 
+`BattleEvents.ActionResolving` is the same outcome raised once per step *before* its presentation plays. It is
+not a third extension seam (an extension reacts after the fact): it exists so that presentation can lead the
+verdict from the outcome rather than from the player's own intent. `CaptureThrowWatcher` uses it to raise
+`CaptureResolving` ahead of the catch or the "broke free" cue.
+
 ### Outbound: `ActionResolved`
 
 ```csharp

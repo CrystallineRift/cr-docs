@@ -158,6 +158,8 @@ at most 254 characters, exactly one `@`, a dot in the domain, no whitespace, and
 never stored and never logged outside Development. A new request supersedes the caller's earlier
 unconsumed code. Rows older than 24 hours are hard-deleted by a throttled sweep on the request path.
 
+**Email look.** Both emails (code, new-device notice) render through `EmailLayout` (`Services/Email/EmailLayout.cs`): an email-safe 600px table with inline CSS in the crystallinerift.com brand (outer `#1f212c`, "Crystalline" cream + "Rift" `#ff9d49` script wordmark, Google Fonts link with Arial/cursive fallbacks, code in a letter-spaced `#ff9d49` pill, hidden preheader, `color-scheme` meta). Every dynamic value is HTML-encoded; the account id and address never appear. The plain-text body is unchanged.
+
 **Limits** (counted from `account_email_code` rows; over any limit is `429` + `Retry-After`):
 
 | Scope | Limit |
@@ -336,6 +338,7 @@ any client written before that date assumed.
 | The signing key is UTF-8 and at least 256 bits | `JwtAuthentication.SigningKeyBytes` throws below 32 bytes. *Was: decoded as ASCII, which silently replaced every non-ASCII byte with `?`, and no length floor.* |
 | Anonymous auth routes are rate limited | Per client IP: 10/min on `/auth/basic` and `/auth/service-token`, 30/min on `/auth/game`, `/auth/oauth`, `/auth/token/refresh` and `POST /account`. Configurable under `RateLimits`. *Was: unlimited.* |
 | Player-intent routes get their own per-account window | `RateLimitPolicies.PlayerIntent` (`"cr-player-intent"`, default 120/min, `RateLimits:PlayerIntentPerMinute`) partitions on the token's account id, not IP, via `PerAccountWindowFor` — one player's talk, battle-turn submit, or talent spend/respec spam cannot starve a different account behind the same NAT (M2 close, L1: the battle-actions and talent spend/respec routes carried no rate limit at all until this pass). A request that somehow reaches it with no account claim falls back to its IP. |
+| The merchant stock intent has its own per-account window | `RateLimitPolicies.MerchantStock` (`"cr-merchant-stock"`, default 30/min, `RateLimits:MerchantStockPerMinute`), the same `PerAccountWindowFor` partition, on `POST /api/v1/merchants/{npcId}/stock-from-spawner` only. The client sends that intent as the player walks up to a merchant, so a run past a row of shops sends several; a budget of its own keeps that from starving talk, battle and location-entry intents, and a client that loops the ask only spends its own. Like the other limits, a missing, unparseable or non-positive value falls back to the default. Pinned by `RoutePolicyCoverageTests` and `RateLimitCoverageHttpTests`. |
 | Every player-intent write route accepts an `Idempotency-Key` header | Same curated route set as the `PlayerIntent`/`BattleStart` rate limits, above. A retry with the same key and body replays the first response instead of running the handler again. See [Idempotency Keys](27-idempotency-keys.md). *Was: no dedup — a lost response meant the client's only recovery was "resend and hope it wasn't already applied."* |
 | A production host refuses to start with the repo's dev keys | `ProductionSecretsGuard`. |
 | `/auth/basic` reveals nothing about who has an account | An unknown address and a wrong password both return a bare 401. *Was: 404 vs 401 — a free membership oracle.* |
@@ -522,7 +525,7 @@ Container.Bind<IOAuthClient>().To<OAuthClientUnityHttp>().AsSingle();
 Container.Bind<IAccountClient>().To<AccountClientUnityHttp>().AsSingle();
 ```
 
-All auth-related clients use `GameConfigurationKeys.AuthServerHttpAddress` as their base URL, read from `game_config.yaml`. In `CR.REST.AIO`, auth endpoints are served at the same host as all other endpoints, so `auth_server_http_address` and `npc_server_http_address` will be identical in a local development setup.
+All auth-related clients use `GameConfigurationKeys.AuthServerHttpAddress` as their base URL. `SettingsGameConfiguration` answers every `*_server_http_address` key with the selected environment's `apiBaseUrl` (Studio → Server & Keys override in the Editor, else `GameSettings.defaultEnvironmentId`), so `auth_server_http_address` and `npc_server_http_address` are always the same host.
 
 ## REST Endpoints
 
@@ -603,7 +606,7 @@ Auth is wired into the ASP.NET pipeline via `builder.AddCrAuth()` (extension met
 
 ## Common Mistakes / Tips
 
-- **Wrong `auth_server_http_address` in `game_config.yaml`.** All auth requests will 404 or connect refused. Ensure this points to the same host as `npc_server_http_address` when running `CR.REST.AIO`.
+- **Play mode talks to the wrong server.** All auth requests 404, are refused, or log in to production when you meant Local. `auth_server_http_address` is the selected environment's API URL: check the first line of Studio → Server & Keys and press **Use for game** on the card you want.
 - **Expired refresh token in `ObscuredPrefs`.** After a long hiatus (refresh token expiry period), `TokenManager.RefreshAccessTokenAsync` returns 401. The client must redirect to the login screen. Make sure the login scene is wired to `IAuthClient.LoginAsync`.
 - **Forgetting `builder.AddCrAuth()` in a new standalone host.** Requests to protected endpoints will return 401 for all clients. The method configures the JWT validation middleware.
 - **Testing with hard-coded credentials.** Use environment variables or `config.yml` overrides for test account credentials. Never commit credentials to source control.
@@ -613,6 +616,6 @@ Auth is wired into the ASP.NET pipeline via `builder.AddCrAuth()` (extension met
 ## Related Pages
 
 - [Backend Architecture](?page=backend/01-architecture) — middleware, DI wiring, `Program.cs` startup
-- [Unity Project Setup](?page=unity/01-project-setup) — `game_config.yaml` key for auth server address
+- [Unity Project Setup](?page=unity/01-project-setup) — pointing Play mode at a local server
 - [HTTP Clients](?page=unity/05-http-clients) — how `SimpleWebClient` attaches the bearer token to every request
 - [Dependency Injection](?page=unity/02-dependency-injection) — auth bindings in `LocalDevGameInstaller`

@@ -102,20 +102,35 @@ floor, streamed deltas):
 ## Offline data floor
 
 `Assets/StreamingAssets/CR/game-data.bytes` ships in every build and is the offline content
-floor. After backend content changes, re-run `build-packages.sh` (re-bakes the floor) before
-building players, or offline play in the build won't see the new content.
+floor. **A player build never migrates it**: `GameDataAdopter` copies it as-is, and the content
+repositories in the linked cr-api package query whatever columns the package's migrations add. So
+the committed floor must carry every migration the package runs, and `game-data_schema_version.txt`
+must name the package's head. v0.2.0 shipped the v0.1.9 floor (schema 20002) against a package at
+20005: every quest and dialogue sync failed at boot with `no such column: quest_line`.
+
+After backend changes, re-run `build-packages.sh` (it re-bakes the floor and copies it into
+`Assets/StreamingAssets/CR/`) and **commit both floor files** before building players; a build uses
+the committed floor, and the auto-copy only lands in the working tree. To keep the production overlay
+rows a fresh bake drops (story creatures pushed from Studio, such as the gaterbear), migrate the
+committed floor forward instead:
+`dotnet run --project cr-api/Convenience/CR.Data.Migrations.Tool -- <out.bytes> <out_version.txt> --base Assets/StreamingAssets/CR/game-data.bytes`.
+Two guards catch a stale floor: `BundledFloorSchemaTests` (EditMode) and `ci/check-floor-schema.sh`,
+which fails the build-game run before the build starts.
 
 ## Build checklist
 
 1. `build-packages.sh` fresh (DLLs + both natives + baked floor current) — or **CR > Content >
-   Rebake Offline Floor** / `unity cmd cr_rebake_floor` when only content changed.
+   Rebake Offline Floor** / `unity cmd cr_rebake_floor` when only content changed — and the two
+   floor files committed (see Offline data floor above).
 2. Addressables group is whole: the Ability Workbench **Publish** re-registers every ability's
    FX/SFX (`AbilityPublishPipeline`), which is how `CRContent` is rebuilt if entries go missing;
    an Addressables build (`BuildPlayerContent`) with `error=''` confirms no dangling assets.
 3. Server address config: builds read the shipping defaults in `Assets/CR/Resources/configuration/GameSettings.asset`
    (never your Studio overrides). A non-Development build **fails the build guard** unless
-   `defaultEnvironmentId` is `production` and `defaultWorldMode` is the intended ship value (Legacy
-   until flipped) — the message says what to fix. Offline mode works anywhere.
+   `defaultEnvironmentId` is `production` and `defaultWorldMode` equals
+   `GameSettingsShipCheck.ShippingWorldMode` — **Open since v0.1.7** (the open world ships). The message says what
+   to fix. A missing, empty or unknown `world_mode` still parses as Legacy (a parse rule, not the shipping
+   default), and the per-machine Studio override can still pick Legacy for testing. Offline mode works anywhere.
 4. **CR > Build > Build Players…** — tick Windows / macOS / Linux, hit **Build** (see below). The
    manual route still works: **File > Build Profiles**, pick a `CR_Game_*` profile → **Build**.
 5. Windows build output must keep `<name>_Data/` next to the exe; macOS output is a single
@@ -142,6 +157,52 @@ whether it is a Development build (default on, matching the profiles), press **B
 The pure rules — target → profile asset, target → output path, queue order, summary text — live in
 `PlayerBuild/Logic/PlayerBuildPlan.cs` (asmdef `CR.Core.PlayerBuild.Logic`, no engine references)
 with NUnit tests beside it, so the queue and naming are checked without an Editor.
+
+## Release builds in CI (`build-game`)
+
+A version tag (`v0.1.8`) on cr-api-unity, or a manual dispatch, runs the GitHub workflow
+`.github/workflows/build-game.yml` on the self-hosted Mac runner (`[self-hosted, macOS, unity]`). It
+builds the Windows, Linux and macOS players and publishes them to the content CDN, where Crystalline
+Rift Studio's Builds page finds them through `GET /api/v1/builds` (see
+[Architecture](?page=backend/01-architecture)). The steps are scripts under `ci/`:
+
+1. **`ci/check-vendor-untracked.sh`** fails the run when paid vendor source that installs outside `Assets/`
+   is tracked by git: today the Text Animator package, `Packages/com.febucci.text-animator-unity`, which the
+   `Assets/**` ignore rules never reach (`.gitignore` names it, without a trailing slash so the symlink the
+   next step makes is ignored too, and this catches a forced add).
+2. **`ci/link-assets.sh "$CR_ASSET_SOURCE"`** makes the runner's checkout buildable. About 13 GB of
+   Asset Store packs under `Assets/` and `Packages/` are not in git, so the script walks the source
+   project (the live checkout on the same Mac) and symlinks in whatever the checkout lacks: a missing
+   directory whole, a missing file on its own. Tracked files are never touched, so the code that ships is
+   exactly the commit. Two things are never borrowed:
+   - **SQLite sidecars.** Names ending in `-wal`, `-shm` or `-journal` (and their `.meta` files) are
+     skipped. The open Editor keeps `game-data.bytes` in WAL mode, and linking its sidecars shipped
+     symlinks to the Editor's live database state inside the players' `StreamingAssets/CR` (the
+     0.1.8-playtest1 Mac app had them; on any other machine they dangle). `ci/build.sh` also deletes any
+     sidecar already under `Assets/StreamingAssets` before it builds, because older runner checkouts keep
+     the links they were given. (cr-api-unity PR #73.)
+   - **`Assets/CR`.** The game's own code and content are all tracked, so anything untracked there is
+     someone's uncommitted work in progress, and a build must ship the commit, not that. The script
+     skips the subtree (`NEVER_LINK`). In the live project the only ignored files under `Assets/CR` are
+     `.DS_Store` and `.idea` files. (cr-api-unity PR #74.)
+
+   It also skips `Library`, `Temp`, `Logs`, `Builds`, `ServerData`, `obj`, `UserSettings`, `.git`,
+   `.idea`, `.vs` and dot-files at every level.
+3. **`ci/check-fx-keys.sh`** fails the run when an ability's sound or effect key, or an address in the
+   feedback manifest, names nothing in the Addressables catalogue, before 40 minutes go into a build.
+4. **`ci/check-floor-schema.sh`** bakes the package head with the linked cr-api checkout's Migrations.Tool
+   and fails the run when the committed floor lacks one of those migration versions or
+   `game-data_schema_version.txt` disagrees with the head: a player build never migrates the floor
+   (v0.2.0 shipped one 11 migrations behind).
+5. **`ci/build.sh <version> [targets]`** runs Unity headless (`CR.Core.Data.Editor.Build.CiBuild.Run`) to
+   build Addressables and the players, then zips each one as
+   `Builds/CrystallineRift-<Windows|Linux|Mac>-<version>.zip`.
+6. **`ci/publish.sh <version>`** uploads `builds/<version>/` (immutable), `builds/latest/`,
+   `builds/latest.json` and the version's `manifest.json`, then has `ci/builds-index.sh` merge the version
+   into `builds/index.json`. The zips are served only through signed URLs; the JSON stays public.
+
+The runner keeps `Library/` and the asset links between runs (`clean: false`), and resets tracked files
+with `git reset --hard HEAD` before each build. A three-platform build takes about 40 minutes.
 
 ## Distributing the macOS build
 

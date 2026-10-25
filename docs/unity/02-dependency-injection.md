@@ -40,7 +40,7 @@ Rule: **`FromInstance` always pairs with `AsCached`.** `AsSingle` is for binding
 
 1. **Anti-cheat / SQLite init** — `DeviceIdHolder.ForceLockToDeviceInit()`, `SQLiteInitializer.Initialize()` — must run before any SQLite connection is opened
 2. **Core singletons** — `IUIManager`, `IGameConfiguration`, `IDatabaseConnectionStringFactory` — needed by almost everything else
-3. **Construct the connection string factory** — `ConfigurationRepository` and `DatabaseConnectionStringFactory` are constructed directly and bound with `FromInstance` (avoids an install-time `Container.Resolve`, which Zenject warns about); all subsequent `FromInstance` repository bindings use the same factory instance to build their connection strings
+3. **Construct the connection string factory** — `SettingsGameConfiguration` (from `GameSettingsResolver.Resolve(GameSettingsLoader.LoadShippingDefaults(), overrides, isPlayerBuild)`) and `DatabaseConnectionStringFactory` are constructed directly and bound with `FromInstance` (avoids an install-time `Container.Resolve`, which Zenject warns about); all subsequent `FromInstance` repository bindings use the same factory instance to build their connection strings
 4. **Repositories** — online/offline pairs for each domain — registered before migrations so the connection strings are resolved
 5. **Run migrations** — `RunDatabaseMigrationsSynchronously(connectionStringFactory)` — blocks the installer until all schemas exist (offline and online-cache databases)
 6. **Auth** — `IAuthRepository`, `ITokenManager`, `ITokenValidator` — auth comes after repos so it can store tokens in the auth SQLite
@@ -257,7 +257,7 @@ hand-copied binding list.
 - Use `AsSingle()` for stateful services (domain services, managers) — one instance shared by all consumers
 - Use `AsCached()` for repository instances created with `FromInstance` — Zenject will not try to re-create them
 - Use `AsTransient()` for stateless helpers where each consumer should get its own instance (e.g., `ILogger<T>`)
-- `NonLazy()` forces instantiation at bind time — used for `GameInitializer`, `BattleCoordinator`, `QuestDialogueBridge`, and `QuestRewardDispatcher` so they subscribe to events immediately
+- `NonLazy()` forces instantiation at bind time — used for `GameInitializer`, `BattleCoordinator`, and `QuestRewardDispatcher` so they subscribe to events immediately
 - **Never use `FindObjectOfType<T>()` inside an `[Inject]` method.** Zenject resolves injections during `Awake` before the scene is fully initialized. `FindObjectOfType` may return null for objects not yet awake.
 - **Circular dependencies.** Zenject detects circular constructor injection at startup and throws. If you need a circular relationship (rare), use lazy injection with `Lazy<IService>`.
 

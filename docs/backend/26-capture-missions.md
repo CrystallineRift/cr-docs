@@ -3,7 +3,7 @@
 A second battle-mission pool, layered onto the same server-tracked mission design
 [Talents](25-talents.md)'s ability missions already use ([Battle Persistence](09-battle-persistence.md),
 [Battle Extensions](?page=unity/24-battle-extensions)). Completing a capture mission arms a
-**guaranteed capture** for the player's next Capture Crystal throw, rather than unlocking an ability.
+**guaranteed capture** for the player's next Summoning Shard throw, rather than unlocking an ability.
 Spec: `cr-api-unity/docs/superpowers/specs/2026-09-27-capture-missions-phase3-design.md`.
 
 ## The pool
@@ -78,7 +78,7 @@ If nothing is feasible, the battle simply has no capture mission that fight.
    but still rolled through the same `_roll.Next() <= chance` comparison, so the roll seam itself is
    untouched by the guarantee.
 4. **Clearing the flag** — `ClearGuaranteedCaptureAsync` runs only after a capture **commits**
-   (including a storage-full capture — it still commits, so the flag and the crystal are both
+   (including a storage-full capture — it still commits, so the flag and the shard are both
    consumed together). A refused throw (wrong target, ended battle, wrong thrower) never touches the
    flag. A failure to clear it after a successful capture is logged and has no further effect: the
    creature is no longer wild, so a second guaranteed throw is refused as "not wild" regardless.

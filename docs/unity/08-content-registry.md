@@ -13,7 +13,7 @@ The registry bridges two concerns:
 This in-memory registry is the fast lookup layer. The durable offline store underneath it is split into **two databases**:
 
 - **game-data DB** (`game-data.bytes`) — all global authored content (base creatures, abilities, status conditions, growth profiles, items, spawner templates + pools, NPC definitions + teams + inventory, quest templates/objectives/requirements/rewards, `game_assets`, level/exp tables). Read-only at runtime, built as a versioned artifact at build time, and patched via Addressables.
-- **player-data DB** (`player-data.bytes`) — per-account/per-trainer saves. Mutable; migrated in place on app update.
+- **player-data DB** (`playerData.bytes`) — per-account/per-trainer saves. Mutable; migrated in place on app update.
 
 The registry's data ultimately originates from game-data content (offline) or the server manifest (online). A content update patches the game-data Addressable and **never touches player saves**. See the [Content Pipeline (Two-Database Model)](?page=unity/17-content-pipeline) page for the full build/ship/adopt flow and the build-time referential-integrity checks.
 
@@ -451,8 +451,8 @@ foreach (var key in _registry.CreatureKeys)
 | Method | HTTP call | Notes |
 |--------|-----------|-------|
 | `SyncCreature(def)` | `PUT /api/v1/creatures/by-content-key/{contentKey}` | Pushes all base stat fields |
-| `SyncSpawner(def)` | `PUT /api/v1/spawners/by-content-key/{contentKey}` | Pushes spawner metadata + `battleArenaKey` only |
-| `SyncSpawnerFull(def)` | `POST /api/v1/spawners/sync-config` | Pushes metadata **and** pools + templates atomically — this is what **Push All** uses for spawners |
+| `SyncSpawner(def)` | `PUT /api/v1/spawners/by-content-key/{contentKey}` | Pushes spawner metadata + `battleArenaKey` only. Nothing calls it. The PUT writes exactly what it is sent, so a blank `battleArenaKey` (sent as null) or an empty `description` clears the server's value — unlike Push All below |
+| `SyncSpawnerFull(def)` | `POST /api/v1/spawners/sync-config` | Pushes metadata **and** pools + templates atomically — this is what **Push All** uses for spawners. The body carries the asset's `description` and `battleArenaKey` too, trimmed and sent as null when blank (`BuildSpawnerSyncConfigBody`): the route reads null as *keep the server's value*, so Push All never blanks what a web edit wrote |
 | `SyncNpc(def)` | `PUT /api/v1/npc/content-registry`, then (no gift authored) `DELETE /api/v1/npc/content-registry/{contentKey}/gift-creature` | Upserts the NPC content-registry row (`contentKey`, `npcType`, `itemSpawnerContentKey`, `giftTemplateCreatureContentKey`). It sends no `isRematchable`, and no longer needs to: the server's field is nullable, so an omitted flag is *preserved* rather than reset — an NPC-tab push can no longer switch a trainer's rematch off. A null gift on the PUT also means *keep*, so when the asset authors **no** gift creature the push follows up with the idempotent gift `DELETE` (`NpcGiftClearUrl`) — clearing the field in the Studio clears it on the server. Pull fills the field back from the server's gift id (mapped to a creature key through the server creature list), so Pull → Push round-trips a gift instead of deleting it. A server row with **no** gift keeps the authored key, the same rule as `itemSpawnerContentKey` (`SyncFieldMerge.PreferServerUnlessBlank`), so a pull never blanks a gift that was authored but not yet pushed; an id that resolves to no creature also leaves the key and ends Pull with a warning. **Pushing an NPC whose asset authors no gift clears any gift set elsewhere (e.g. in the web Studio)** — run Pull first so the asset picks it up |
 | `SyncTrainerBattle(def)` | five calls, below | Pushes a `TrainerBattleDefinition`'s team, its cached-team reset, the trainer's identity and its battle-item loadout — see *A trainer battle push is five writes* |
 
@@ -502,7 +502,7 @@ Sync is **drift-free**: SOs are the source of truth and pushes are idempotent up
 - **⬆ Push All** — loops every local definition on the tab and upserts it (`SyncCreature` / `SyncNpc` / `SyncSpawnerFull`). No server fetch; the server overwrites by `content_key`. A status line reports `N pushed, M failed`, and per-row badges show each result.
 - **⬇ Pull** — the rare reverse-bootstrap. After a confirm dialog, calls `FetchAll*()`, then for each server entry overwrites the matching local SO (`ApplyTo*`) or creates one (`CreateAssetSilent` + register into `ContentDefinitionProvider`) for server-only keys. Spawners additionally fetch `/by-content-key/{key}/config` so pools + templates come down too. Reports `N updated, M created`.
 
-There is no diff preview, conflict resolution, or in-review delete step — push always wins, and removing a backend record is done explicitly via **Unregister** (below).
+There is no diff preview, conflict resolution, or in-review delete step — push always wins, and removing a backend record is done explicitly via **Unregister** (below). (This describes the older sync helpers. Quests and dialogues in the Studio window are different: they carry a row version and a 409 shows a conflict box on the row, see [Dialogue Authoring](?page=unity/32-dialogue-authoring).)
 
 `CreateAssetSilent<T>()` is an internal helper that creates a definition SO asset at a default path without opening a save dialog, handling name collisions by appending `_1`, `_2`, etc.
 
@@ -773,6 +773,14 @@ whose refresh timing is `EditorMemoPolicy` (pure, 7 tests):
 
 The header's answer is recomputed from the IMGUI body rather than the editor tick, so an idle
 window in the background costs nothing.
+
+:::caution Known bug (logged 2026-10-11): Push All reads a cached asset list
+**Push All** iterates the asset list the window loaded when it opened, not a fresh scan, so a definition created
+after the window was opened (a new quest, spawner or dialogue asset, however it was registered) is **not pushed**
+until the window reloads. Close and reopen Crystalline Rift Studio (or let a domain reload re-create it) before
+pushing new assets, and check the per-row badges: a new asset with no badge was not sent. The fix is to make the
+push read through the same invalidated cache as the counts.
+:::
 
 ### Background jobs and progress
 
@@ -1287,7 +1295,7 @@ var prefab = await _assetLoader.LoadAssetByKeyAsync<GameObject>(def.assetKey);
 `game_config.yaml` was deleted on 2026-10-08. Runtime configuration is now a ScriptableObject,
 `CR.Core.Configuration.GameSettings` (`Assets/CR/Resources/configuration/GameSettings.asset`, committed
 **shipping defaults**): the `BackendEnvironmentsConfig` reference, `defaultEnvironmentId`
-(`production`), `defaultWorldMode` (`Legacy`), `offlineStarterCreatureLevel`, `discordApiBaseUrl`,
+(`production`), `defaultWorldMode` (`Open` since v0.1.7; must equal `GameSettingsShipCheck.ShippingWorldMode`), `offlineStarterCreatureLevel`, `discordApiBaseUrl`,
 `gameDataFileName` and `playerDataFileName`. It is **not** the place for structured content definitions.
 
 Every reader still calls `IGameConfiguration.TryGet(key, out value)`; only the implementation changed.
@@ -1336,13 +1344,18 @@ Created via `Assets > Create > CR > Content > Ability Config`. Fields:
 | `elementType` | `"Normal"` | One of: Normal, Fire, Water, Flora, Ice, Ground, Wind, Lightning, Poison, Radiant |
 | `power` | 0 | Base damage value |
 | `accuracy` | 100 | Hit chance (0–100) |
-| `cost` | 20 | PP cost per use |
+| `maxPp` | 20 | PP pool in PowerPoints mode (replaces the old `cost` field; the old name still deserialises) |
+| `energyCost` | 0 | Energy spent per use (Energy mode) |
+| `chargeDelta` | 0 | Signed Charge change: positive builds, negative spends (BuilderSpender mode). Never clamped |
+| `poolCost` | 1 | Surge spent per use (TurnPool mode) |
 | `priority` | 0 | Turn order modifier |
 | `targetType` | `"Single"` | Target selection type |
 | `category` | `"Physical"` | Physical, Special, or Status |
 | `animationKey` | — | Links to a battle animation asset |
 
 The Inspector warns if `power > 0` and `category == "Status"`.
+
+The four cost fields mirror the committed floor: **CR / Content / Abilities / Apply Floor Costs** (`AbilityCostAuthoring.ApplyFromFloor`, also callable headless with `-executeMethod`) copies `max_pp`, `energy_cost`, `charge_delta` and `pool_cost` from `game-data.bytes` into every `AbilityConfig` by name, so a Push All is a no-op. Tiers and the mode flag are on [Ability Economy](?page=backend/29-ability-economy). `AbilityConfigEditor` shows the four fields; `SyncAbilityDto` and `ContentSyncWriter` carry them.
 
 Pushed by Crystalline Rift Studio → Abilities → ⬆ Push All → `PUT {game_server_http_address}/api/v1/abilities/{id}`, immediately followed by `POST /api/v1/abilities/{id}/sync-conditions` for the ability's status conditions (see *One way to reach the server*).
 
@@ -1361,6 +1374,8 @@ Created via `Assets > Create > CR > Content > Ability Progression Set Config`. F
 The Inspector shows a per-entry foldout sorted by level and warns on duplicate `(level, slot)` pairs. Entries with a null or ID-less `AbilityConfig` are skipped on sync.
 
 `unlockQuestContentKey` is the entry's **quest gate** (`ability_progression_set_entry.unlock_quest_content_key`, M5019): empty means the ordinary "learn it at `level`" entry, a value means the owning trainer must also have completed that quest. It is drawn as a `ContentPicker.Quests()` dropdown of authored `QuestDefinition` content keys rather than a text box, and it rides the push payload — `/sets/sync` reconciles by `(level, slot)` and rewrites the row from the payload, so an *omitted* gate is an *erased* gate. See [Creature Storage → Authoring a gate](26-creature-storage.md#authoring-a-gate-and-keeping-it-through-sync).
+
+**Line sets.** Learn lists per species line are `line_*` progression-set assets in `Assets/CR/Content/Defs/ProgressionSets/`, authored from `line-sets.json` by `LineSetAuthoring` (Editor; `LineSetManifest` reads it). Tone-only moves appear as entries the level-up path ignores. **Species default:** `CreatureDefinition.defaultProgressionSet` names the line set a generated creature of that species uses when its template names none (pushed as `defaultAbilityProgressionSetName`). Details on [Ability Learning](?page=backend/30-ability-learning) and [Ability Learning UI](?page=unity/45-ability-learning-ui).
 
 Pushed by Crystalline Rift Studio → Progression → ⬆ Push All → `POST {game_server_http_address}/api/v1/ability-progression/sets/sync`
 
