@@ -18,7 +18,16 @@
   last device; LT/RT only on tabs with a strip). Keyboard q/e/z/c ignored while typing in a field; the
   Escape that opens the menu is not also its Cancel; `Hide()` blurs focus parked in the menu. Storage
   swap sheet owns Cancel. Market: LB/RB step Browse/Sell/My Listings. New engine-free rules
-  `TabStepRule`, `LastUsedInputDevice`, `TabHintGlyphs`, `MenuInputGuards` (`CR.UI.Input.Logic`, tested).
+  `TabStepRule`, `LastUsedInputDevice`, `TabHintGlyphs`, `MenuInputGuards`, `StickScrollRule`
+  (`CR.UI.Input.Logic`, tested).
+- **Sticks stay in the page (playtest feedback):** the tab headers are not in the focus ring; LB/RB are
+  the only way to another tab and focus lands on the new page's first control. The right stick is out of
+  `UI/Navigate` and bound to the new `UI/ScrollContent`, which scrolls the list under focus
+  (`StickScroller`; menu and Market; the Map pans itself).
+- **Delete-character confirm was invisible:** modal dialogs are their own UIDocuments on the shared
+  overlay panel, whose sorting order (0) ties the scene panel's, so the confirm drew behind the
+  full-screen character select. New `Resources/UI/ModalPanelSettings` (order 100) via `ModalPanel`;
+  `ChoiceDialog` and `MessageDialog` use it; `ModalPanelTests` pins the ordering.
 - **Docs:** unity/10 (Gamepad tip, Input actions table, controls table, Files), 18, 28.
 
 ## 2026-10-08 — GameSettings replaces game_config.yaml
