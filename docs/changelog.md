@@ -28,6 +28,10 @@
   overlay panel, whose sorting order (0) ties the scene panel's, so the confirm drew behind the
   full-screen character select. New `Resources/UI/ModalPanelSettings` (order 100) via `ModalPanel`;
   `ChoiceDialog` and `MessageDialog` use it; `ModalPanelTests` pins the ordering.
+- **The confirm's own label was invisible:** `.choice-row-label` used `color: inherit`, which USS has no
+  keyword for, so the label took the theme's light default on the white row. Explicit colour now, and a
+  `ChoiceOption.Destructive` flag draws the row as the danger action (red-50 fill, red border, red-700
+  bold label; `.choice-row--destructive`). The character delete passes it.
 - **Docs:** unity/10 (Gamepad tip, Input actions table, controls table, Files), 18, 28.
 
 ## 2026-10-08 — GameSettings replaces game_config.yaml
