@@ -28,8 +28,8 @@ readers map the real v2 categories/criteria/points/board end to end.
 | `Assets/CR/UI/WorldMap/WorldMapTab.cs` | Map tab — stylised world map, discoveries, current area, quest markers. See [World Map](35-world-map.md) |
 | `Assets/CR/UI/Achievements/AchievementsView.cs` | Achievements tab — rail (Summary/categories/Statistics), criteria checklists, search |
 | `Assets/CR/UI/Logic/` | Engine-free rules (`CR.UI.Logic` asmdef) shared by the above, unit tested |
-| `Assets/CR/UI/Input/` | Controller glue: `UiTabActions` (the four tab-stepping action names + the one way to find the UI map), `TabStripBumpers` (forwards LB/RB or LT/RT presses to an owner while enabled), `TabStripHints` (LB/RB · LT/RT · Q/E · Z/C badges on a strip, following the last device touched), `ISubTabStrip` (what a tab implements to be stepped by the triggers) |
-| `Assets/CR/UI/Input/Logic/` | Engine-free rules (`CR.UI.Input.Logic` asmdef): `GameplayInputRule`, `GameplayInputHolds`, `TabStepRule`, `LastUsedInputDevice`, `TabHintGlyphs` — unit tested |
+| `Assets/CR/UI/Input/` | Controller glue: `UiTabActions` (the four tab-stepping action names + the one way to find the UI map), `TabStripBumpers` (forwards LB/RB or LT/RT presses to an owner while enabled; drops them while typing or while a dialog holds focus), `TabStripHints` (LB/RB · LT/RT · Q/E · Z/C badges at a strip's ends or appended to a title bar, following the last device touched), `UiTextEntryFocus` (is the focus in a text field / inside this screen), `ISubTabStrip` (what a tab implements to be stepped by the triggers) |
+| `Assets/CR/UI/Input/Logic/` | Engine-free rules (`CR.UI.Input.Logic` asmdef): `GameplayInputRule`, `GameplayInputHolds`, `TabStepRule`, `LastUsedInputDevice`, `TabHintGlyphs`, `MenuInputGuards` — unit tested |
 | `Assets/CR/UI/Resources/PlayerMenuWindow.uxml` | Layout — 7 tabs |
 | `Assets/CR/UI/Resources/PlayerMenuWindow.uss` | Stylesheet — window chrome, Team, Storage, Quests |
 | `Assets/CR/UI/Resources/AchievementsView.uss` | Stylesheet — Achievements tab (`--cr-achievement-*` tokens) |
@@ -40,8 +40,11 @@ readers map the real v2 categories/criteria/points/board end to end.
 :::tip[Gamepad]
 **LB / RB cycle the tabs**, wrapping at both ends; `q` / `e` on a keyboard. **LT / RT step the strip
 inside the tab** (Bag categories, Achievements rail, Talent trees, Storage boxes); `z` / `c` on a
-keyboard. **B closes the menu.** The tab strip and the Bag's category strip carry badges naming the
-buttons, switching between pad and keyboard glyphs with whichever device was touched last.
+keyboard. **B closes the menu.** The title bar's right-hand slot carries badges naming the buttons
+(`LT RT` only while the active tab has a strip, `LB RB` always), switching between pad and keyboard
+glyphs with whichever device was touched last. They sit in the title bar, not in the tab strip: at UI
+scale 1.5 the eight headers already fill the strip, and two badges inside it would push them into
+TabView's scroll arrows.
 
 Until 2026-10-25 none of this worked on a pad, for three reasons worth knowing:
 
@@ -58,8 +61,15 @@ Until 2026-10-25 none of this worked on a pad, for three reasons worth knowing:
 Tab changes go through `TabView.activeTab`, the same path a header click takes, so per-tab data
 reloads happen identically for mouse and pad, and focus moves onto the new header so the next d-pad
 press goes down into that tab. Presses are ignored while the menu is hidden — silently changing an
-unseen tab surfaces later as the menu "opening on the wrong page". The triggers are forwarded only
-to a tab that implements `ISubTabStrip`; on the Map they keep zooming.
+unseen tab surfaces later as the menu "opening on the wrong page" — while a modal dialog over the menu
+holds focus, and, for the keyboard keys, while the player is typing into a text field (`q`/`e`/`z`/`c`
+are letters there; `MenuInputGuards` + `UiTextEntryFocus`). The triggers are forwarded only to a tab
+that implements `ISubTabStrip`; on the Map they keep zooming.
+
+Escape is both `ToggleMenu` and the EventSystem's Cancel. A Cancel delivered in the frame `Show()` ran
+is that same key press and is ignored (`MenuInputGuards.CancelCloses`), and `Hide()` blurs focus that
+sits inside the menu, so a hidden header never keeps the controller. Without both, the second Escape
+reopened the menu and closed it again in the same frame.
 :::
 
 Injected dependencies:
@@ -727,7 +737,7 @@ menu signalled nothing, and the camera kept rotating behind the panel. The gate 
 | `ToggleMenu` | `I`, `Escape`, Gamepad `Start` | Opens/closes the menu. Ignored while another menu holds `isMenuOpen` (shop, market, dialogue) |
 | `NavigateTabsLeft` / `NavigateTabsRight` | `LB` / `RB`, `q` / `e` | One tab along the strip, wrapping; focus follows onto the header. The Market uses the same pair for Browse / Sell / My Listings |
 | `NavigateSubTabsLeft` / `NavigateSubTabsRight` | `LT` / `RT`, `z` / `c` | Steps the active tab's `ISubTabStrip`: Bag categories, Achievements rail, Talent trees (wrap), Storage boxes (no wrap, like the ‹ › arrows) |
-| `Cancel` (UI Toolkit `NavigationCancelEvent`) | `B`, `Escape` | Closes the menu — unless an overlay (choice dialog, target picker, storage swap sheet) stops it first |
+| `Cancel` (UI Toolkit `NavigationCancelEvent`) | `B`, `Escape` | Closes the menu — unless an overlay (choice dialog, target picker, storage swap sheet) stops it first, or it is the Escape that just opened the menu |
 
 **There is one input asset, `Resources/CR_GameInput.inputactions`** — project-wide actions, the
 EventSystem's `InputSystemUIInputModule`, `PlayerInputGate`, `TrainerMovementController`,

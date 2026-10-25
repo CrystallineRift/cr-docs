@@ -14,9 +14,11 @@
   selects), LB/RB step through `TabStepRule` and focus the new header, LT/RT forwarded to the active
   tab's `ISubTabStrip` (Bag categories, Achievements rail, Talent trees, Storage boxes), B closes,
   `UiFocusRecovery` on the window, no opening over a shop/market/dialogue, Team/Quests pages are
-  `FocusScrollView`s, LB/RB badges on the strip (`TabStripHints`, pad/keyboard glyphs by last device).
-  Storage swap sheet owns Cancel. Market: LB/RB step Browse/Sell/My Listings. New engine-free rules
-  `TabStepRule`, `LastUsedInputDevice`, `TabHintGlyphs` (`CR.UI.Input.Logic`, tested).
+  `FocusScrollView`s, LT RT LB RB badges in the title bar (`TabStripHints`, pad/keyboard glyphs by
+  last device; LT/RT only on tabs with a strip). Keyboard q/e/z/c ignored while typing in a field; the
+  Escape that opens the menu is not also its Cancel; `Hide()` blurs focus parked in the menu. Storage
+  swap sheet owns Cancel. Market: LB/RB step Browse/Sell/My Listings. New engine-free rules
+  `TabStepRule`, `LastUsedInputDevice`, `TabHintGlyphs`, `MenuInputGuards` (`CR.UI.Input.Logic`, tested).
 - **Docs:** unity/10 (Gamepad tip, Input actions table, controls table, Files), 18, 28.
 
 ## 2026-10-08 — GameSettings replaces game_config.yaml
