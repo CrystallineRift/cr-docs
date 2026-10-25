@@ -28,8 +28,8 @@ readers map the real v2 categories/criteria/points/board end to end.
 | `Assets/CR/UI/WorldMap/WorldMapTab.cs` | Map tab — stylised world map, discoveries, current area, quest markers. See [World Map](35-world-map.md) |
 | `Assets/CR/UI/Achievements/AchievementsView.cs` | Achievements tab — rail (Summary/categories/Statistics), criteria checklists, search |
 | `Assets/CR/UI/Logic/` | Engine-free rules (`CR.UI.Logic` asmdef) shared by the above, unit tested |
-| `Assets/CR/UI/Input/` | Controller glue: `UiTabActions` (the tab-stepping and scroll action names + the one way to find the UI map), `TabStripBumpers` (forwards LB/RB or LT/RT presses to an owner while enabled; drops them while typing or while a dialog holds focus), `StickScroller` (right stick scrolls the ScrollView under focus), `UiFocusTargets` (a page's first control), `TabStripHints` (LB/RB · LT/RT · Q/E · Z/C badges at a strip's ends or appended to a title bar, following the last device touched), `UiTextEntryFocus` (is the focus in a text field / inside this screen), `ISubTabStrip` (what a tab implements to be stepped by the triggers) |
-| `Assets/CR/UI/Input/Logic/` | Engine-free rules (`CR.UI.Input.Logic` asmdef): `GameplayInputRule`, `GameplayInputHolds`, `TabStepRule`, `LastUsedInputDevice`, `TabHintGlyphs`, `MenuInputGuards`, `StickScrollRule` — unit tested |
+| `Assets/CR/UI/Input/` | Controller glue: `UiTabActions` (the tab-stepping and scroll action names + the one way to find the UI map), `TabStripBumpers` (forwards LB/RB or LT/RT presses to an owner while enabled; drops them while typing or while a dialog holds focus), `StickScroller` (right stick scrolls the ScrollView under focus), `UiFocusTargets` (a page's first control), `DetailPaneFocus` (A into a detail pane's actions, B back to the list item), `TabStripHints` (LB/RB · LT/RT · Q/E · Z/C badges at a strip's ends or appended to a title bar, following the last device touched), `UiTextEntryFocus` (is the focus in a text field / inside this screen), `ISubTabStrip` (what a tab implements to be stepped by the triggers) |
+| `Assets/CR/UI/Input/Logic/` | Engine-free rules (`CR.UI.Input.Logic` asmdef): `GameplayInputRule`, `GameplayInputHolds`, `TabStepRule`, `LastUsedInputDevice`, `TabHintGlyphs`, `MenuInputGuards`, `StickScrollRule`, `DetailPaneRule` — unit tested |
 | `Assets/CR/UI/Common/ModalPanel.cs` + `Assets/CR/Resources/UI/ModalPanelSettings.asset` | The panel every modal dialog draws on, sorting order 100. A code-created dialog is its own UIDocument, so its place in the draw order is its *panel's* sorting order; on the shared overlay panel (order 0, same as the scene's panel) the delete-character confirm drew behind the full-screen character select. `ModalPanelTests` pins the ordering |
 | `Assets/CR/UI/Resources/PlayerMenuWindow.uxml` | Layout — 7 tabs |
 | `Assets/CR/UI/Resources/PlayerMenuWindow.uss` | Stylesheet — window chrome, Team, Storage, Quests |
@@ -74,6 +74,15 @@ unseen tab surfaces later as the menu "opening on the wrong page" — while a mo
 holds focus, and, for the keyboard keys, while the player is typing into a text field (`q`/`e`/`z`/`c`
 are letters there; `MenuInputGuards` + `UiTextEntryFocus`). The triggers are forwarded only to a tab
 that implements `ISubTabStrip`; on the Map they keep zooming.
+
+**Master-detail pages** (talent grid → detail, bag rows → Use/Equip, storage box → Data File, achievements
+rail → pane, squad → featured creature) follow one controller flow, `CR.UI.Input.DetailPaneFocus`: **A on a
+list item** selects it, renders the pane and moves the controller onto the pane's first enabled action
+(`Enter`); **B inside the pane** goes back to the item it was entered from — or the list's current selection
+when that item was rebuilt away — and is consumed, so the menu does not close (`DetailPaneRule`, pure and
+tested); B on the list still closes the menu. After a pane re-renders under the controller (a spend went
+through), `Settle` keeps focus on a live control or returns to the item. Without this, UI Toolkit's tree-order
+focus ring walked every list item before it ever reached the pane, and players never found Spend / Respec.
 
 Escape is both `ToggleMenu` and the EventSystem's Cancel. A Cancel delivered in the frame `Show()` ran
 is that same key press and is ignored (`MenuInputGuards.CancelCloses`), and `Hide()` blurs focus that

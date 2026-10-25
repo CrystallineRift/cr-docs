@@ -32,6 +32,9 @@
   keyword for, so the label took the theme's light default on the white row. Explicit colour now, and a
   `ChoiceOption.Destructive` flag draws the row as the danger action (red-50 fill, red border, red-700
   bold label; `.choice-row--destructive`). The character delete passes it.
+- **Master-detail pages are drivable:** A on a talent / bag row / storage slot / achievements rail entry /
+  squad card moves the controller onto the detail pane's first enabled action (Spend, Use, Learn, Make lead…);
+  B inside the pane returns to the item, not out of the menu (`DetailPaneFocus` + `DetailPaneRule`).
 - **Character select rebuilt** after the Stitch "Character Select Menu" (light): save-slot cards with
   monogram, lead-creature badge, "Seeker · Level N" and a SELECTED/READY pill; one create card for the next
   free slot; capacity pill with dots; bottom bar with Delete / Play (A) and an A/B legend; B returns to the
