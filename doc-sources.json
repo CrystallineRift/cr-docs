@@ -1711,7 +1711,9 @@
         "Assets/CR/Game/World/Editor/Admin*"
       ],
       "cr-admin-web": [
-        "src/pages/live/**"
+        "src/pages/live/**",
+        "src/pages/system/TrainersDialog.tsx",
+        "src/api/hooks/useAdmin.ts"
       ]
     },
     "description": "Live-ops moderation: account_moderation/admin_action, shadow bans and the hidden-seller rule, player dossiers, currency/item adjustments, and the /api/v1/admin routes behind RequireAdmin"
@@ -2371,6 +2373,8 @@
         "src/components/resource/problems.ts",
         "src/components/resource/rowErrors.ts",
         "src/pages/system/GameConfigPage.tsx",
+        "src/pages/system/AccountsPage.tsx",
+        "src/pages/system/TrainersDialog.tsx",
         "src/resources/npcs/**"
       ]
     },

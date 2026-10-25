@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-10-24 — Studio: delete a player's trainer from Accounts
+
+cr-api `feature/admin-trainer-delete`, cr-admin-web #41. Not yet deployed.
+
+- **What:** System -> Accounts gains a **Trainers** button per account. The dialog lists the account's player characters; **Show** deep-links to Live Ops -> Players focused on the trainer, **Delete** (admin scope, reason required) calls the new `DELETE /api/v1/admin/players/{accountId}/trainers/{trainerId}`. 404 reads "Already gone"; 409 `trainer-has-open-listings` points to Live Ops -> Market to remove the listing first.
+- **Why:** Support could not remove a player's character; only the owner could, from Character Select.
+- **cr-api:** `AdminEndpoints.DeleteTrainerAsync` over the same `DeleteOwnedTrainerAsync` rule as the player's own delete (guards apply, no idempotency key), audit `AdminActionKind.DeleteTrainer = 24` with `{trainerId, trainerName}`; the player dossier now lists player characters only (NPC battle identities excluded).
+- **Studio web:** `TrainersDialog`, `useDeleteAccountTrainer`, Trainers button in `AccountsPage`.
+- **Docs:** [Moderation](?page=backend/18-moderation) gains "Admin delete trainer"; [Content Editing](?page=admin-web/01-content-editing) gains "System -> Accounts: Trainers dialog"; `doc-sources.json` globs.
+
 ## 2026-10-24 — Cindris breathes fire at the wagon
 
 cr-api-unity lane `uC` (`feature/cindris-fire`). Client only; no cr-api change.
