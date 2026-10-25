@@ -32,7 +32,11 @@
   keyword for, so the label took the theme's light default on the white row. Explicit colour now, and a
   `ChoiceOption.Destructive` flag draws the row as the danger action (red-50 fill, red border, red-700
   bold label; `.choice-row--destructive`). The character delete passes it.
-- **Docs:** unity/10 (Gamepad tip, Input actions table, controls table, Files), 18, 28.
+- **Character select rebuilt** after the Stitch "Character Select Menu" (light): save-slot cards with
+  monogram, lead-creature badge, "Seeker · Level N" and a SELECTED/READY pill; one create card for the next
+  free slot; capacity pill with dots; bottom bar with Delete / Play (A) and an A/B legend; B returns to the
+  title. `CharacterSelectLayout` (pure, tested). unity/19 has the section.
+- **Docs:** unity/10 (Gamepad tip, Input actions table, controls table, Files), 18, 28, 19.
 
 ## 2026-10-08 — GameSettings replaces game_config.yaml
 
