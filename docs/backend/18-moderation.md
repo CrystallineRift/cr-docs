@@ -24,7 +24,7 @@ ever ships inside `game-data.bytes`.
 `AdminActionKind`: `ShadowBan`, `LiftShadowBan`, `RemoveListing`, `AdjustCurrency`, `GrantItem`,
 `RemoveItem`, `Note` (unused in v1), `GrantExperience`, `GrantCreature`, … `GrantTrainerXp` (16),
 `SetTalentRank` (17), `RespecTalents` (18), `GrantAchievement` (19), `RevokeAchievement` (20), `SetStoryBeat` (21),
-`ClearStoryBeat` (22), `QuestCompleted` (23).
+`ClearStoryBeat` (22), `QuestCompleted` (23), `DeleteTrainer` (24).
 Members are appended, never renumbered — the integer is persisted in `admin_action.kind`, so
 reordering rewrites history.
 
@@ -71,7 +71,7 @@ worse than no action at all, which is why `admin_action.reason` is `NOT NULL`.
 | Method | Rules |
 |---|---|
 | `SearchPlayersAsync(term, limit)` | Straight delegation to `IPlayerSearchRepository`, limit clamped. |
-| `GetPlayerDossierAsync(accountId)` | One read for the whole picture: account + provider links, moderation state (a *clear default* when the account has never been moderated — the absence of a row is not an error), every trainer with team / creature storage / backpack / item storage / active listings, and the last 20 `admin_action` rows. Listings come from the **operator** browse (`IMarketService.AdminBrowseListingsAsync(Active, accountId, …)`), which filters to `Active` in SQL and includes the listings a shadow ban hides from players — the seller-facing read clamps at 100 rows and would have silently truncated a busy account. `null` when the account does not exist. Each `TrainerDossier.progress` carries that trainer's `TrainerProgress` (level, XP, XP into/for next level, spent/available talent points, `NeedsRespec`, and the raw `Allocations`/`Modifiers`/`QuestLockedTalentIds` a dossier UI joins against talent tree content — see [Talents](25-talents.md)) — null when it cannot be read, never a failed dossier. |
+| `GetPlayerDossierAsync(accountId)` | One read for the whole picture: account + provider links, moderation state (a *clear default* when the account has never been moderated — the absence of a row is not an error), every **player character** (NPC battle identities that share the account are excluded: `GetPlayerTrainersInAccountPaginated`) with team / creature storage / backpack / item storage / active listings, and the last 20 `admin_action` rows. Listings come from the **operator** browse (`IMarketService.AdminBrowseListingsAsync(Active, accountId, …)`), which filters to `Active` in SQL and includes the listings a shadow ban hides from players — the seller-facing read clamps at 100 rows and would have silently truncated a busy account. `null` when the account does not exist. Each `TrainerDossier.progress` carries that trainer's `TrainerProgress` (level, XP, XP into/for next level, spent/available talent points, `NeedsRespec`, and the raw `Allocations`/`Modifiers`/`QuestLockedTalentIds` a dossier UI joins against talent tree content — see [Talents](25-talents.md)) — null when it cannot be read, never a failed dossier. |
 | `SetShadowBanAsync(accountId, reason, expiresAtUtc, actor)` | An `expiresAtUtc` already in the past → `InvalidArgument`, because a ban nothing would ever enforce must not be recorded as one the operator will believe is in force. Unknown account → `NotFound`. Idempotent: re-banning updates reason/expiry on the same row rather than creating a second one, and records a second audit entry. Metadata `{"expiresAt":…}`. |
 | `LiftShadowBanAsync(accountId, reason, actor)` | `NotFound` when the account does not exist — saying `NotBanned` would read as confirmation that the operator looked at the right player. Otherwise `NotBanned` for an account with no row, an unflagged row, **or a ban that already lapsed** — an expired ban needs no lifting. |
 | `RemoveListingAsync(listingId, reason, actor)` | Delegates to `IMarketService.AdminRemoveListingAsync`, which owns both the creature transfer and its audit row, and maps `MarketOperationReason` → `ModerationReason`. Exactly **one** `admin_action` row is written, by Market, not two. |
@@ -183,6 +183,7 @@ sets it (and `AdminActorName`) through its environment or secret store, never in
 |---|---|---|---|---|
 | GET | `/players?q=&limit=` | | `PlayerSearchHit[]` | 400 `InvalidSearchTerm` when `q` trims to fewer than 2 characters |
 | GET | `/players/{accountId}` | | `PlayerDossier` | 404 |
+| DELETE | `/players/{accountId}/trainers/{trainerId}` | `ReasonRequest { reason }` | 204 (no body) | 400 `InvalidReason`, 404 (not a live player character of that account: NPC identity, other account, already deleted), 409 `trainer-has-open-listings` (body `{code: "trainer-has-open-listings", error: "requirements_not_met", message}`); audit `DeleteTrainer` (24), metadata `{trainerId, trainerName}` |
 | PUT | `/players/{accountId}/shadow-ban` | `ShadowBanRequest { reason, expiresAt? }` | `AccountModeration` | 400 `InvalidReason`, 404 |
 | DELETE | `/players/{accountId}/shadow-ban` | `ReasonRequest { reason }` | `AccountModeration` | 400 `InvalidReason`, 404, 409 `NotBanned` |
 | POST | `/trainers/{trainerId}/currency` | `AdjustCurrencyRequest { delta, reason }` | `AdjustCurrencyResponse { currencyAfter }` | 400 `InvalidReason`/`InvalidQuantity`, 404, 409 `InsufficientFunds` |
@@ -377,6 +378,16 @@ The two `GET /trainers/{trainerId}/progression` and `/timeline` routes feed the 
 - **`timeline`** merges `stat_event` and `admin_action` rows. The cursor `before` is opaque (`<utc ticks>_<id>`); each source is read in `(occurred_at DESC, id DESC)` order and the merge uses the same order, so events with identical times are neither skipped nor repeated. `nextBefore` is set only when more exist.
 - **Player search** (`GET /players?q=`) ignores NPC trainers and matches by email prefix or trainer-name prefix; new Postgres indexes on `LOWER(trainers.name)` and `LOWER(accounts.email)` (with `text_pattern_ops`) back it.
 - **Indexes.** `admin_action (target_trainer_id, occurred_at DESC, id)` (M13003) and `stat_event (trainer_id, occurred_at DESC, id)` (Stats M9005, see [Stats](08-stats-system.md)).
+
+## Admin delete trainer (2026-10-24)
+
+`DELETE /api/v1/admin/players/{accountId}/trainers/{trainerId}` (`RequireAdmin`, body `{ reason }`) soft-deletes one player character and its inventories. Both ids come from the route.
+
+- **Same domain rule as the player's own delete** (`ITrainerDomainService.DeleteOwnedTrainerAsync`, see [Starter Creature Flow](05-starter-creature-flow.md)): ownership, row lock, then the deletion guards. The Market open-listings guard answers **409 `trainer-has-open-listings`**; the operator removes the listing first (`DELETE /market/listings/{id}`), then retries.
+- **404** for an NPC identity, another account's trainer, or one already deleted. A blank reason is 400 `InvalidReason` before anything is read.
+- **Audit:** `DeleteTrainer` (24) is written after a successful delete with `{trainerId, trainerName}`. The name is read before the delete (null if unreadable). Refusals write nothing.
+- **No idempotency key:** a repeat is simply 404.
+- **Dossier:** `GetPlayerDossierAsync` now lists player characters only, so the Studio Trainers dialog never offers an NPC battle identity. Studio web: [Accounts: Trainers dialog](../admin-web/01-content-editing.md#system---accounts-trainers-dialog-2026-10-24).
 
 ## Story beat admin routes (2026-10-18)
 

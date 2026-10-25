@@ -88,6 +88,16 @@ See `cr-admin-web/src/components/editors/README.md` for the field-by-field API (
 
 Admin-only page with the global **Roaming spawners** switch (flips every spawner between Ambush and Roaming). It is not a content resource: it reads and writes `app_config` through `/api/v1/admin/app-config`. Details in [Roaming Encounters](?page=unity/43-roaming-encounters).
 
+## System -> Accounts: Trainers dialog (2026-10-24)
+
+Each row on System -> Accounts has a **Trainers** button beside Merge into... (disabled when the row has no account id). It opens a dialog "Trainers for <account>" listing that account's player characters from the admin dossier (name, short id, currency; NPC identities are not listed).
+
+- **Show** closes the dialog and deep-links to Live Ops -> Players with that trainer focused (`/live/players?account=<id>&trainer=<id>`).
+- **Delete** needs the `admin` scope (hidden otherwise). It opens a reason dialog (reason required, destructive style) and calls `DELETE /api/v1/admin/players/{accountId}/trainers/{trainerId}`; the action is audited as `DeleteTrainer`. Success toasts "Deleted <name>" and refreshes the list.
+- **404** toasts "Already gone" and refetches. **409 `trainer-has-open-listings`** keeps the reason dialog open with the server's sentence and an "Open Live Ops -> Market" link: remove the listing there, then delete again.
+
+Route, audit and guard details: [Moderation](?page=backend/18-moderation).
+
 ## Conflicts (409)
 
 Resources whose server rows carry a `row_version` (dialogues and quests) send `expectedRowVersion` on save and delete.
