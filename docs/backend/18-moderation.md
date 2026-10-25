@@ -183,7 +183,7 @@ sets it (and `AdminActorName`) through its environment or secret store, never in
 |---|---|---|---|---|
 | GET | `/players?q=&limit=` | | `PlayerSearchHit[]` | 400 `InvalidSearchTerm` when `q` trims to fewer than 2 characters |
 | GET | `/players/{accountId}` | | `PlayerDossier` | 404 |
-| DELETE | `/players/{accountId}/trainers/{trainerId}` | `ReasonRequest { reason }` | 204 (no body) | 400 `InvalidReason`, 404 (not a live player character of that account: NPC identity, other account, already deleted), 409 `trainer-has-open-listings` (body `{error, reason: "requirements_not_met", message}`); audit `DeleteTrainer` (24), metadata `{trainerId, trainerName}` |
+| DELETE | `/players/{accountId}/trainers/{trainerId}` | `ReasonRequest { reason }` | 204 (no body) | 400 `InvalidReason`, 404 (not a live player character of that account: NPC identity, other account, already deleted), 409 `trainer-has-open-listings` (body `{code: "trainer-has-open-listings", error: "requirements_not_met", message}`); audit `DeleteTrainer` (24), metadata `{trainerId, trainerName}` |
 | PUT | `/players/{accountId}/shadow-ban` | `ShadowBanRequest { reason, expiresAt? }` | `AccountModeration` | 400 `InvalidReason`, 404 |
 | DELETE | `/players/{accountId}/shadow-ban` | `ReasonRequest { reason }` | `AccountModeration` | 400 `InvalidReason`, 404, 409 `NotBanned` |
 | POST | `/trainers/{trainerId}/currency` | `AdjustCurrencyRequest { delta, reason }` | `AdjustCurrencyResponse { currencyAfter }` | 400 `InvalidReason`/`InvalidQuantity`, 404, 409 `InsufficientFunds` |
