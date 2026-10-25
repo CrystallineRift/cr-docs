@@ -1,5 +1,45 @@
 # Changelog
 
+## 2026-10-25 — Controller menus: bumpers, triggers, B, one input asset
+
+- **Why:** on a pad the Seeker's Journal opened with nothing focused, LB/RB did nothing and B did
+  not close it. Three causes: the shoulder bindings had been authored into the stale duplicate
+  `InputSystem_Actions.inputactions` while the live `CR_GameInput` carried the arrow keys on the tab
+  actions (keys `UI/Navigate` already owns); Unity 6 ships `Tab` headers `focusable=false`, so
+  focusing the header on open was a silent no-op; `CloseMenu` was unbound and nothing handled Cancel.
+- **cr-api-unity:** `CR_GameInput` is the one input asset (`InputSystem_Actions` deleted, dropped from
+  `preloadedAssets` and from every code fallback; `GameInputBindingsTests` pins it).
+  `UI/NavigateTabsLeft|Right` = LB/RB + q/e; new `UI/NavigateSubTabsLeft|Right` = LT/RT + z/c; dead
+  `CloseMenu`/`Confirm`/`NavigateTabs` removed. `PlayerMenuWindow`: headers focusable (Submit
+  selects), LB/RB step through `TabStepRule` and focus the new header, LT/RT forwarded to the active
+  tab's `ISubTabStrip` (Bag categories, Achievements rail, Talent trees, Storage boxes), B closes,
+  `UiFocusRecovery` on the window, no opening over a shop/market/dialogue, Team/Quests pages are
+  `FocusScrollView`s, LT RT LB RB badges in the title bar (`TabStripHints`, pad/keyboard glyphs by
+  last device; LT/RT only on tabs with a strip). Keyboard q/e/z/c ignored while typing in a field; the
+  Escape that opens the menu is not also its Cancel; `Hide()` blurs focus parked in the menu. Storage
+  swap sheet owns Cancel. Market: LB/RB step Browse/Sell/My Listings. New engine-free rules
+  `TabStepRule`, `LastUsedInputDevice`, `TabHintGlyphs`, `MenuInputGuards`, `StickScrollRule`
+  (`CR.UI.Input.Logic`, tested).
+- **Sticks stay in the page (playtest feedback):** the tab headers are not in the focus ring; LB/RB are
+  the only way to another tab and focus lands on the new page's first control. The right stick is out of
+  `UI/Navigate` and bound to the new `UI/ScrollContent`, which scrolls the list under focus
+  (`StickScroller`; menu and Market; the Map pans itself).
+- **Delete-character confirm was invisible:** modal dialogs are their own UIDocuments on the shared
+  overlay panel, whose sorting order (0) ties the scene panel's, so the confirm drew behind the
+  full-screen character select. New `Resources/UI/ModalPanelSettings` (order 100) via `ModalPanel`;
+  `ChoiceDialog` and `MessageDialog` use it; `ModalPanelTests` pins the ordering.
+- **The confirm's own label was invisible:** `.choice-row-label` used `color: inherit`, which USS has no
+  keyword for, so the label took the theme's light default on the white row. Explicit colour now, and a
+  `ChoiceOption.Destructive` flag draws the row as the danger action (red-50 fill, red border, red-700
+  bold label; `.choice-row--destructive`). The character delete passes it.
+- **Master-detail pages are drivable:** A on a talent / bag row / storage slot / achievements rail entry /
+  squad card moves the controller onto the detail pane's first enabled action (Spend, Use, Learn, Make lead…);
+  B inside the pane returns to the item, not out of the menu (`DetailPaneFocus` + `DetailPaneRule`).
+- **Character select rebuilt** after the Stitch "Character Select Menu" (light): save-slot cards with
+  monogram, lead-creature badge, "Seeker · Level N" and a SELECTED/READY pill; one create card for the next
+  free slot; capacity pill with dots; bottom bar with Delete / Play (A) and an A/B legend; B returns to the
+  title. `CharacterSelectLayout` (pure, tested). unity/19 has the section.
+- **Docs:** unity/10 (Gamepad tip, Input actions table, controls table, Files), 18, 28, 19.
 ## 2026-10-24 — Studio: delete a player's trainer from Accounts
 
 cr-api #97, cr-admin-web #41.

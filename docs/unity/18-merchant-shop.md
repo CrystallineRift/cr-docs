@@ -62,7 +62,11 @@ authority decides whether anything is rolled (see [Restocking](#restocking)).
 ## Gamepad navigation
 
 The shop is navigated control by control: the Buy/Sell tabs, the close button, and per row a
-quantity minus, a plus and a Buy. Six focusable Buttons and **no focusable containers**.
+quantity minus, a plus and a Buy. Six focusable Buttons and **no focusable containers**. B closes the
+shop (`NavigationCancelEvent` on the panel root). The shoulders do **not** step the tabs here yet:
+with Sell a disabled stub there is nothing to step to, and an LB/RB badge that does nothing is worse
+than none — wire `TabStripBumpers` + `TabStripHints` exactly as `MarketScreenHandler` does when Sell
+lands.
 
 :::danger[Fixed: this barely worked at all]
 Two faults, both of which read as "the controller does nothing".
