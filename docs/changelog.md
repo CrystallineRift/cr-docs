@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-10-25 — Controller menus: bumpers, triggers, B, one input asset
+
+- **Why:** on a pad the Seeker's Journal opened with nothing focused, LB/RB did nothing and B did
+  not close it. Three causes: the shoulder bindings had been authored into the stale duplicate
+  `InputSystem_Actions.inputactions` while the live `CR_GameInput` carried the arrow keys on the tab
+  actions (keys `UI/Navigate` already owns); Unity 6 ships `Tab` headers `focusable=false`, so
+  focusing the header on open was a silent no-op; `CloseMenu` was unbound and nothing handled Cancel.
+- **cr-api-unity:** `CR_GameInput` is the one input asset (`InputSystem_Actions` deleted, dropped from
+  `preloadedAssets` and from every code fallback; `GameInputBindingsTests` pins it).
+  `UI/NavigateTabsLeft|Right` = LB/RB + q/e; new `UI/NavigateSubTabsLeft|Right` = LT/RT + z/c; dead
+  `CloseMenu`/`Confirm`/`NavigateTabs` removed. `PlayerMenuWindow`: headers focusable (Submit
+  selects), LB/RB step through `TabStepRule` and focus the new header, LT/RT forwarded to the active
+  tab's `ISubTabStrip` (Bag categories, Achievements rail, Talent trees, Storage boxes), B closes,
+  `UiFocusRecovery` on the window, no opening over a shop/market/dialogue, Team/Quests pages are
+  `FocusScrollView`s, LB/RB badges on the strip (`TabStripHints`, pad/keyboard glyphs by last device).
+  Storage swap sheet owns Cancel. Market: LB/RB step Browse/Sell/My Listings. New engine-free rules
+  `TabStepRule`, `LastUsedInputDevice`, `TabHintGlyphs` (`CR.UI.Input.Logic`, tested).
+- **Docs:** unity/10 (Gamepad tip, Input actions table, controls table, Files), 18, 28.
+
 ## 2026-10-08 — GameSettings replaces game_config.yaml
 
 - **What:** `Assets/CR/Resources/configuration/game_config.yaml` is gone. Runtime configuration is

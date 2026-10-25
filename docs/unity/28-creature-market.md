@@ -178,6 +178,16 @@ text field or a `0` int field searched on. Element names and control names are u
 (`.market-filters` now `align-items: flex-end` so the unlabeled Search button lines up with the
 bottom of the labeled fields) changed.
 
+## Gamepad
+
+The market has no outer tabs, so **LB / RB (`q` / `e`) step Browse → Sell → My Listings**, wrapping,
+with focus following onto the tab button: a `TabStripBumpers` over `UI/NavigateTabsLeft|Right` is
+created in `BuildPanel` (enabled while open, disposed in `Close`/`OnDisable` so the shared actions
+never keep a closed screen alive), and `TabStripHints` puts LB/RB or Q/E badges on `market-tabs`,
+following the last device touched. B closes the screen (`NavigationCancelEvent` on the panel root).
+Every interactive class has a `:focus` rule; the row's `--focus-within` pattern is the one documented
+for the merchant shop.
+
 ## Advanced search (growth values)
 
 Under the filter bar sits a `market-advanced-toggle` **Button** (`▸ Advanced` collapsed, `▾ Advanced`

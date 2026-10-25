@@ -28,6 +28,8 @@ readers map the real v2 categories/criteria/points/board end to end.
 | `Assets/CR/UI/WorldMap/WorldMapTab.cs` | Map tab — stylised world map, discoveries, current area, quest markers. See [World Map](35-world-map.md) |
 | `Assets/CR/UI/Achievements/AchievementsView.cs` | Achievements tab — rail (Summary/categories/Statistics), criteria checklists, search |
 | `Assets/CR/UI/Logic/` | Engine-free rules (`CR.UI.Logic` asmdef) shared by the above, unit tested |
+| `Assets/CR/UI/Input/` | Controller glue: `UiTabActions` (the four tab-stepping action names + the one way to find the UI map), `TabStripBumpers` (forwards LB/RB or LT/RT presses to an owner while enabled), `TabStripHints` (LB/RB · LT/RT · Q/E · Z/C badges on a strip, following the last device touched), `ISubTabStrip` (what a tab implements to be stepped by the triggers) |
+| `Assets/CR/UI/Input/Logic/` | Engine-free rules (`CR.UI.Input.Logic` asmdef): `GameplayInputRule`, `GameplayInputHolds`, `TabStepRule`, `LastUsedInputDevice`, `TabHintGlyphs` — unit tested |
 | `Assets/CR/UI/Resources/PlayerMenuWindow.uxml` | Layout — 7 tabs |
 | `Assets/CR/UI/Resources/PlayerMenuWindow.uss` | Stylesheet — window chrome, Team, Storage, Quests |
 | `Assets/CR/UI/Resources/AchievementsView.uss` | Stylesheet — Achievements tab (`--cr-achievement-*` tokens) |
@@ -36,17 +38,28 @@ readers map the real v2 categories/criteria/points/board end to end.
 ## PlayerMenuWindow
 
 :::tip[Gamepad]
-**LB / RB cycle the tabs**, wrapping at both ends. `q` / `e` do the same on a keyboard.
+**LB / RB cycle the tabs**, wrapping at both ends; `q` / `e` on a keyboard. **LT / RT step the strip
+inside the tab** (Bag categories, Achievements rail, Talent trees, Storage boxes); `z` / `c` on a
+keyboard. **B closes the menu.** The tab strip and the Bag's category strip carry badges naming the
+buttons, switching between pad and keyboard glyphs with whichever device was touched last.
 
-The `NavigateTabsLeft` / `NavigateTabsRight` actions had existed in the asset for some time bound to
-nothing — and bound to the **arrow keys**, which `Navigate` already uses for focus movement. Dormant
-while nothing listened; the moment a handler existed, one arrow press would have both moved focus
-and changed tab. They are now on the shoulder buttons, and the arrows do only what they always
-should have.
+Until 2026-10-25 none of this worked on a pad, for three reasons worth knowing:
 
-Tab changes go through the same path a click takes, so per-tab data reloads happen identically for
-mouse and pad. Presses are ignored while the menu is hidden — silently changing an unseen tab
-surfaces later as the menu "opening on the wrong page".
+1. The shoulder bindings had been authored into `Resources/InputSystem_Actions.inputactions`, a stale
+   **duplicate** of the live `CR_GameInput`, which instead carried the **arrow keys** on the tab
+   actions — keys `Navigate` already owns, so one press moved focus *and* changed tab. The duplicate
+   is deleted and `GameInputBindingsTests` pins the live bindings (and keeps the duplicate deleted).
+2. Unity 6 ships `Tab` headers `focusable = false`, so "focus the selected header on open" was a
+   silent no-op: the menu came up with nothing focused and the d-pad did nothing until the mouse was
+   used. `PlayerMenuWindow.MakeNavigableByPad` makes the headers focusable (Submit selects), and
+   `UiFocusRecovery` re-anchors on the active header whenever focus goes nowhere.
+3. `CloseMenu` was unbound and nothing handled `NavigationCancelEvent`, so B did nothing.
+
+Tab changes go through `TabView.activeTab`, the same path a header click takes, so per-tab data
+reloads happen identically for mouse and pad, and focus moves onto the new header so the next d-pad
+press goes down into that tab. Presses are ignored while the menu is hidden — silently changing an
+unseen tab surfaces later as the menu "opening on the wrong page". The triggers are forwarded only
+to a tab that implements `ISubTabStrip`; on the Map they keep zooming.
 :::
 
 Injected dependencies:
@@ -709,19 +722,24 @@ menu signalled nothing, and the camera kept rotating behind the panel. The gate 
 
 ## Input actions (UI action map)
 
-| Action | Effect |
-|--------|--------|
-| `ToggleMenu` | Opens/closes the menu — bound to `I`, `Escape`, and Gamepad `Start` |
-| `CloseMenu` | Closes when visible (currently unbound; Escape toggles instead) |
-| `Confirm` | Reserved for future use |
+| Action | Bindings | Effect |
+|--------|----------|--------|
+| `ToggleMenu` | `I`, `Escape`, Gamepad `Start` | Opens/closes the menu. Ignored while another menu holds `isMenuOpen` (shop, market, dialogue) |
+| `NavigateTabsLeft` / `NavigateTabsRight` | `LB` / `RB`, `q` / `e` | One tab along the strip, wrapping; focus follows onto the header. The Market uses the same pair for Browse / Sell / My Listings |
+| `NavigateSubTabsLeft` / `NavigateSubTabsRight` | `LT` / `RT`, `z` / `c` | Steps the active tab's `ISubTabStrip`: Bag categories, Achievements rail, Talent trees (wrap), Storage boxes (no wrap, like the ‹ › arrows) |
+| `Cancel` (UI Toolkit `NavigationCancelEvent`) | `B`, `Escape` | Closes the menu — unless an overlay (choice dialog, target picker, storage swap sheet) stops it first |
 
-**The live input asset is `Resources/CR_GameInput.inputactions`** — the same asset `PlayerInputGate`,
-`TrainerMovementController`, and `NpcInteractionBehaviour` use. `Resources/InputSystem_Actions.inputactions`
-is a legacy near-duplicate; do not author new bindings there. `PlayerMenuWindow.ResolveInputActions()`
-does not trust the serialized scene reference blindly: it binds from the first asset that actually
-contains a `UI/ToggleMenu` action (serialized → `CR_GameInput` → `InputSystem_Actions`) and logs an
-error if the scene points at the wrong asset. (A scene mis-wire to `Malbers Inputs` — which has a
-`UI` map but no `ToggleMenu` — previously left the menu silently dead in the overworld.)
+**There is one input asset, `Resources/CR_GameInput.inputactions`** — project-wide actions, the
+EventSystem's `InputSystemUIInputModule`, `PlayerInputGate`, `TrainerMovementController`,
+`NpcInteractionBehaviour` and every menu read it. The legacy near-duplicate
+`InputSystem_Actions.inputactions` was deleted on 2026-10-25 after swallowing its third rebind;
+`GameInputBindingsTests` fails if it reappears, if a tab key overlaps a `Navigate` key, if the
+shoulders/triggers go missing, or if a stale asset is in `preloadedAssets`.
+`PlayerMenuWindow.ResolveInputActions()` still does not trust the serialized scene reference blindly:
+it binds from the first asset that actually contains a `UI/ToggleMenu` action (serialized →
+`CR_GameInput`) and logs an error if the scene points at the wrong asset. (A scene mis-wire to
+`Malbers Inputs` — which has a `UI` map but no `ToggleMenu` — previously left the menu silently dead
+in the overworld.)
 
 Input is enabled/disabled by `UICoordinator` via `IContextAwareScreen.OnContextChanged`. The menu only
 becomes interactive in `UIContext.Overworld`; `ResolveInputActions` also disables the freshly bound
@@ -748,7 +766,9 @@ register **both** `ClickEvent` and `NavigationSubmitEvent`.
 
 | Input | Where | Effect |
 |---|---|---|
-| LB / RB, `q` / `e` | Menu | Cycle tabs (`NavigateTabsLeft` / `NavigateTabsRight` on the UI map) |
+| LB / RB, `q` / `e` | Menu | Cycle tabs (`NavigateTabsLeft` / `NavigateTabsRight` on the UI map); focus lands on the new header |
+| LT / RT, `z` / `c` | Bag tab | Cycle All / Consumables / Key Items / Held Items (`NavigateSubTabsLeft` / `NavigateSubTabsRight`) |
+| B / Escape | Menu | Closes the menu (`NavigationCancelEvent` on the window root); an open picker or sheet takes it first |
 | D-pad / stick / arrows | Anywhere | UI Toolkit `Navigate` — focus movement only |
 | Submit (A / Enter) | Bag row | Selects the item and refreshes the action buttons |
 | Submit (A / Enter) | Use / Equip | Opens the target picker when one is needed |

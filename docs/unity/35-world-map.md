@@ -84,7 +84,8 @@ The header's total counts every node either way.
   `WorldMapDiscoveryRead.Failed`, which the tab renders as its own error state, never a false all-"???" fog.
 - **Navigation**: one focusable button per area. The d-pad/stick picks the nearest area inside a 45° cone
   (`WorldMapNavigator`), and nothing in that direction keeps focus where it is. The bumpers change tab and B closes
-  the menu, as everywhere. Focus starts on the current area. The detail pane follows focus.
+  the menu, as everywhere; the triggers zoom here (the menu forwards LT/RT only to tabs with an `ISubTabStrip`, and the
+  Map has none). Focus starts on the current area. The detail pane follows focus.
 - **States**: loading, loaded, unavailable, no session, and an error ("Couldn't load your map. Reopen the tab to
   retry.") when the read fails or is incomplete. It never shows a false all-"???" fog for an online trainer.
 - **Layout** is computed from the tab's own size (not the panel height), so UI Scale needs no correction. Under
