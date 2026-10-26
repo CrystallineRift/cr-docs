@@ -25,6 +25,8 @@ startup" failure. `EnsureLocalAccountAsync` is **mode-neutral**: it resolves the
 account and sets the session, but does **not** touch `IsPlayingOnline` — the mode is chosen later at the menu.
 If a session already exists, its account (and last mode) is left untouched so Continue can resume.
 
+The menu is held behind the loading screen until `BootSequence.Ready`: `MainMenuController` waits on it before `NavigateToScreen("MainMenu")`. Online entry (Play Online, Link Email) runs behind the same screen as an `OnlineEntry` session. See [Loading Screens](?page=unity/48-loading-screens).
+
 ## Menu (`MainMenuController`)
 
 The live menu is `Assets/MainMenuController.cs` — the existing, scene-wired `IUIScreen` named `"MainMenu"`

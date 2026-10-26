@@ -132,6 +132,10 @@ Unknown colours are reported, never guessed silently.
 3. Re-import: `cr_world_import_map` (or `CR/World/Import World Map`).
 4. Re-check `region-mask-debug.png`, then `cr_world_validate`.
 
+## Loading screens at placement
+
+A placement (not a door or whiteout relocation) runs behind the loading screen: `OpenWorldBootstrap` begins a `WorldEntry` session (Resolve, World, Prologue, Land, WorldInit), hides it before the prologue room is revealed, and shows `WorldReturn` for the placement after the prologue. It waits (bounded by `worldInitWaitSeconds`) for world init before the teleport and hides after the fader reveal. See [Loading Screens](?page=unity/48-loading-screens).
+
 ## Tech-demo areas
 
 Cave, Shore, Crags and Dunes have no place on the map. They stay as their legacy scenes, reachable only from the player menu's

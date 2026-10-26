@@ -2945,6 +2945,26 @@
     },
     "description": "Dungeon scaffold: spec schema, derived files, checks, cr_dungeon_check/scaffold/build, prop-swap convention, registry keys vs definitions"
   },
+  "unity/48-loading-screens": {
+    "docPath": "docs/unity/48-loading-screens.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [
+        "Assets/CR/UI/Loading/**",
+        "Assets/CR/UI/Logic/Loading/**",
+        "Assets/CR/UI/Resources/LoadingScreen.*",
+        "Assets/CR/UI/Title/ParallaxLayerStack.cs",
+        "Assets/CR/UI/Text/LoadingText.cs",
+        "Assets/CR/Core/Boot/**",
+        "Assets/CR/Core/Rendering/**",
+        "Assets/CR/Core/Sync/Logic/ContentSyncProgress.cs",
+        "Assets/CR/Game/OpenWorld/OpenWorldBootstrap.cs",
+        "Assets/CR/Game/World/IWorldInitProgress.cs",
+        "Assets/CR/Game/World/WorldInitProgress.cs"
+      ]
+    },
+    "description": "Loading screens: plans/phases/progress model, boot sequence and timeouts, online entry, world entry, shader warm-up recording (variants + PSO traces), adding a phase"
+  },
   "content/02-world-fill": {
     "docPath": "docs/content/02-world-fill.md",
     "repos": {

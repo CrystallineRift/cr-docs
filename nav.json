@@ -473,5 +473,10 @@
     "section": "Unity",
     "title": "Dungeon Scaffold",
     "path": "unity/47-dungeon-scaffold"
+  },
+  {
+    "section": "Unity",
+    "title": "Loading Screens",
+    "path": "unity/48-loading-screens"
   }
 ]
