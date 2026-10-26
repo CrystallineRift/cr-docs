@@ -90,6 +90,8 @@ Only placements show the screen; door and whiteout relocations do not.
 
 Other files: `ShaderWarmupPaths.cs`, `ShaderWarmupSummary.cs`, `PsoTraceRecorder.cs`, `Editor/ShaderVariantCommands.cs`, `UI/Logic/Loading/ShaderWarmupProgress.cs`, `ShaderWarmupGate.cs`.
 
+**Build-time variant stripping** (`Editor/ShaderVariantStripper.cs`, an `IPreprocessShaders`; rules in `ShaderVariantStripPolicy.cs`). For every shader the recorded collection covers, keyworded variants the game was never seen to use are dropped from the player: less to compile on first launch, smaller build, and a shipped set that no longer drifts between builds. Shaders the recording never saw are left whole, and the keyword-less variant is always kept. It is **report-only by default**: every build logs one `[ShaderStrip]` line ("would strip N of M variants across K shaders") plus the heaviest shaders; set `CR_SHADER_STRIP=1` in the build environment to strip for real. Turn it on only after a recording that covers the title, the world, a battle and the interiors, otherwise a biome or an effect the recording missed ships pink.
+
 ## Adding a phase
 
 1. Add a key constant and a `LoadingPhase(key, weight)` to the right plan in `UI/Logic/Loading/LoadingPlans.cs`. Weights are relative within the plan.
