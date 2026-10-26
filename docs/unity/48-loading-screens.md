@@ -81,12 +81,14 @@ Only placements show the screen; door and whiteout relocations do not.
 
 ## Shader warm-up
 
-`Core/Rendering/ShaderWarmup.cs` runs during boot behind the screen, progressively and with an adaptive per-frame batch (`ShaderWarmupBudget`). It uses two sources:
+`Core/Rendering/ShaderWarmup.cs` compiles the shaders the game is known to use before they are first drawn. It starts at boot (its own `Start` calls `Begin()`), runs once per launch, and publishes `ShaderWarmupProgress` (`Done`/`Total`, `ProgressChanged`, `Completion`). Two sources, two mechanisms:
 
-1. **ShaderVariantCollection** at `Resources/Shaders/CrShaderVariants`. Record in the Editor: play through the game, then `unity cmd --project-path <proj> cr_shader_variants_save`, or menu CR / Rendering / Save Tracked Shader Variants. Also `cr_shader_variants_status` and `cr_shader_variants_clear`.
-2. **Unity 6 GraphicsStateCollection** traces per platform and graphics API, at `StreamingAssets/CR/Shaders/pso-<Platform>-<API>.graphicsstate`. Record: launch a player with `-crPsoTrace` (or env `CR_PSO_TRACE=1`), play, quit. The trace lands in `persistentDataPath/Shaders/...`. Import with `cr_pso_import --args <absolute path>`.
+1. **Unity 6 GraphicsStateCollection** traces per platform and graphics API, at `StreamingAssets/CR/Shaders/pso-<Platform>-<API>.graphicsstate`. These warm through Unity's warm-up **job** (`GraphicsStateCollection.WarmUp()` returns a `JobHandle`): worker threads do the pipeline creation, the main thread only polls `completedWarmupCount` once a frame. Record: launch a player with `-crPsoTrace` (or env `CR_PSO_TRACE=1`), play the title, the world and a battle, quit (the file lands in `persistentDataPath/Shaders/`), then `unity cmd --project-path <proj> cr_pso_import --args <path>`. A trace is only used when its platform and API match the running player.
+2. **ShaderVariantCollection** at `Resources/Shaders/CrShaderVariants`, the fallback where no trace ships. Unity has no job for it, so it is sliced across frames with an adaptive batch (`ShaderWarmupBudget`). Record in the Editor: play through the game, then `cr_shader_variants_save` (or menu CR / Rendering / Save Tracked Shader Variants; `cr_shader_variants_status`, `cr_shader_variants_clear`).
 
-Other files: `ShaderWarmupPaths.cs`, `ShaderWarmupSummary.cs`, `PsoTraceRecorder.cs`, `Editor/ShaderVariantCommands.cs`.
+**Explicit first run, background afterwards** (`ShaderWarmupGate`, pure, tested). The first launch of a build on a given GPU/API holds the boot splash on "Compiling shaders n/m" until the run ends, capped at `HoldCapSeconds` (90 s). A complete run writes a PlayerPrefs marker keyed by build version + API + device; a stalled or skipped run does not, so the next launch repeats the explicit step. Every later launch starts the same run in the background and shows the menu at once; the title screen carries the counter (`shader-status` label, `ui.loading.shaders-counter`) until it finishes. This mirrors what Steam does outside the process with its Vulkan shader pre-caching (Fossilize replay before launch): the game cannot upload to that system, it only benefits from shipping Vulkan on Linux and keeping variants stable between builds.
+
+Other files: `ShaderWarmupPaths.cs`, `ShaderWarmupSummary.cs`, `PsoTraceRecorder.cs`, `Editor/ShaderVariantCommands.cs`, `UI/Logic/Loading/ShaderWarmupProgress.cs`, `ShaderWarmupGate.cs`.
 
 ## Adding a phase
 
