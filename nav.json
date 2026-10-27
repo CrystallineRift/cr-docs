@@ -478,5 +478,10 @@
     "section": "Unity",
     "title": "Loading Screens",
     "path": "unity/48-loading-screens"
+  },
+  {
+    "section": "Unity",
+    "title": "World Navigability",
+    "path": "unity/49-world-navigability"
   }
 ]

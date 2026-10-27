@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-27 — World navigability: nav probe, mesh-accurate colliders, dungeon clearance
+
+- **Why:** 10 of 35 interiors (the mine beside the meadow among them) had 0% walkable floor, dungeon gates never opened, and about 82 overworld pickups/zones/NPCs stood on cliffs or islands. Causes: `EnsureCollider` put one box over the whole bounds of every collider-less prefab (a 57 m box for `RockCave`); dungeon event rows were lifted twice and floated half a room above the floor; overworld rows were placed at hand-picked x/z with only y snapped.
+- **cr-api-unity:** `cr_nav_probe` / `_status` / `_cancel` (walk graph with the 0.35 m x 1.7 m capsule, slope 50 degrees, step 0.4 m; target reachability with reason codes; camera pinch; geometry audit; what-if pass), `cr_nav_repair` (swap old boxes in saved scenes), `cr_nav_snap_rows` + `nav-snap-ledger.json`, `cr_dress_cells`. `EnsureCollider` now plans mesh colliders (pack `*_Collider` proxy first), box only for thin flat or skinned pieces. `DungeonClearanceChecks` in `cr_dungeon_check` (2.5 m clearance); event rows at y 0; `cr_dungeon_build` seeds the story section before the interior build. Pure rules in `CR.Core.NavProbe.Logic` with tests.
+- **Docs:** new [World Navigability](?page=unity/49-world-navigability); [Dungeon Scaffold](?page=unity/47-dungeon-scaffold), [Open World](?page=unity/37-open-world), [Side Content Packets](?page=unity/46-side-content-packets) and [World Fill Content](?page=content/02-world-fill) link to it.
+- **Later in the same work:** terrain repair pads with `afterSolve` (`HeightPad` / `HeightPatch.ConstrainsSolve`; not a fixed node of the harmonic solve, so only the cells under the pad rewrite; six pads in `regions/12.json` and `13.json`, recorded in the `pads` array of `nav-snap-ledger.json`). Camera trim: minor town trim colliders move to the `CameraIgnore` layer (user layer 8) via `NavCameraTrimRules` / `ApplyCameraTrim` because the rig's obstacle avoidance sees Default only and the Malbers ground check also needs walkable pieces on Default; `cr_nav_repair` now applies it and the probe models `CameraMask`. Player-build safety: `cr_collider_mesh_audit` (+ `fix=true`), `readable-collider-models.json` with `ColliderMeshReadablePostprocessor`, `MeshColliderPlayerBuildTests`; `bakeCollisionMeshes` stays 0.
+- **Open:** `TownWallGround` (wall pieces seated on the lowest of 5 ground samples) is in the code but the Mirandale rebuild has not run, so saved walls keep the old heights. `ci/build.sh` does not yet fail a build log containing "doesn't have Read/Write enabled".
+
 ## 2026-10-25 — Controller menus: bumpers, triggers, B, one input asset
 
 - **Why:** on a pad the Seeker's Journal opened with nothing focused, LB/RB did nothing and B did
