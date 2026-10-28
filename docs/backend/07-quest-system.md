@@ -1318,9 +1318,19 @@ what to do next, and how far along it is. Added 2026-09-26.
   1.6% of the panel height (11–36px; ~13px on the 800px reference, 17px at 1080p), card width 16× that. The
   height passed in is `UIDocument.EffectivePanelHeight(...)` so the player's **UI Scale** grows the cards
   instead of cancelling out.
+- **Tracked quest (2026-10-28):** the journal's **Track** button picks one tracked quest (a display preference stored per trainer, never sent to the server). `QuestTrackerSelector` takes an optional tracked instance id and puts that card first with a pin; the objective rule is shared as `NextRequired` with the Quest helpers. See [Quest Helpers](?page=unity/50-quest-helpers).
 - **Tests:** `QuestTrackerSelectorTests`, `QuestTrackerLayoutTests` (`CR.UI.Logic.Tests`);
   `QuestStatusValuesTests` pins the mirrored `QuestStatus` ints against the real enum and
   `QuestTrackerResourcesTests` the Resources names (Assembly-CSharp-Editor).
+
+## Objective helper marker (2026-10-28)
+
+An objective can carry an optional **helper marker**: presentation data that tells the client's Quest helpers where to point the player. The server stores and returns it and never reads it for any outcome.
+
+- **Model:** `QuestObjectiveHelperMarker { sceneKey, x, y, z, radius, targetKey }` (`Quests/**/QuestObjectiveHelperMarker*.cs`). `radius` is the area for capture or defeat objectives; `targetKey` is the optional content key of the thing to interact with.
+- **Storage:** nullable column `quest_objective_template.helper_marker` (TEXT, JSON), added by migration `M17007` for both Postgres and SQLite.
+- **REST:** the objective field `helperMarker` on `PUT /api/v1/quests/templates/bulk` and on template reads.
+- **Upsert semantics:** `null` keeps the stored marker; a marker with an empty `sceneKey` clears it; anything else replaces it. Studio therefore always sends the field (see [Quest authoring](?page=unity/50-quest-helpers)).
 
 ## DI Registration
 
@@ -1374,6 +1384,7 @@ server-side accept heals on the next read.
 ## Related Pages
 
 - [Progress Dispatcher](?page=backend/23-progress-dispatcher)
+- [Quest Helpers](?page=unity/50-quest-helpers) - the client setting, Track button and authored helper markers
 - [Stats and Lifetime Tracking](?page=backend/08-stats-system) — the Stats domain that `RecordProgressEventAsync` writes to as a side-effect
 - [NPC System](?page=backend/02-npc-system) — NPCs are the quest givers; `giver_npc_content_key` links templates to NPC content keys
 - [Backend Architecture](?page=backend/01-architecture) — DI registration patterns, dual-DB, keyed/non-keyed repos
