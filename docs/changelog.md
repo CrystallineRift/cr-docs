@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-27 — System tab: offline Gameplay rules (roaming spawns, battle system)
+
+- **Why:** the two server settings that shape play, `roaming_spawners` and `ability_cost_mode`, could only be forced from the Editor, so an offline player on a shipped build had no way to see or change them.
+- **cr-api-unity:** System → **Gameplay rules** section with a **Roaming Spawns** checkbox and a **Battle System** dropdown (Free, Builder / Spender, Energy, Turn pool, Power points). Offline only: the section is hidden while playing online, where the server decides. `GameplayRulesSettingsView` (UI) hands each pick to `IRoamingSpawnersFlag.SetOfflineChoiceAsync` / `IAbilityCostModeSetting.SetOfflineChoice`; picks live in player data (`offline_roaming_spawners`, `offline_ability_cost_mode`) and reach the offline domain services through the existing `app_config` row / overlay. Editor overrides still win. No server change; the client sends intents only.
+- **Docs:** [Roaming Encounters](?page=unity/43-roaming-encounters) precedence tables.
+
 ## 2026-10-27 — World navigability: nav probe, mesh-accurate colliders, dungeon clearance
 
 - **Why:** 10 of 35 interiors (the mine beside the meadow among them) had 0% walkable floor, dungeon gates never opened, and about 82 overworld pickups/zones/NPCs stood on cliffs or islands. Causes: `EnsureCollider` put one box over the whole bounds of every collider-less prefab (a 57 m box for `RockCave`); dungeon event rows were lifted twice and floated half a room above the floor; overworld rows were placed at hand-picked x/z with only y snapped.

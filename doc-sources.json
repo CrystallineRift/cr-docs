@@ -2658,7 +2658,9 @@
         "Assets/CR/**/CreatureWorldAnimat*.cs",
         "Assets/CR/Tests/Editor/Roam*Tests.cs",
         "Assets/CR/Core/Configuration/AbilityCostMode*.cs",
-        "Assets/CR/Core/Configuration/OverlayAppConfigRepository.cs"
+        "Assets/CR/Core/Configuration/OverlayAppConfigRepository.cs",
+        "Assets/CR/UI/GameplayRulesSettingsView.cs",
+        "Assets/CR/Tests/Editor/GameplayRulesSettingsViewTests.cs"
       ],
       "cr-admin-web": [
         "src/pages/system/GameConfigPage.tsx",
