@@ -3,7 +3,7 @@
 One spec file produces one **hosted room behind a 1-plot gatehouse**: the gate town, the interior, the story rows and the registry keys. The scaffold
 allocates registry **keys**, not definitions; NPC, trainer, arena and quest definitions come from [Side Content Packets](?page=unity/46-side-content-packets).
 
-Related: [Open World](?page=unity/37-open-world) (towns, interiors, story rows), [Content Pipeline](?page=unity/17-content-pipeline).
+Related: [Open World](?page=unity/37-open-world) (towns, interiors, story rows), [Content Pipeline](?page=unity/17-content-pipeline), [World Navigability](?page=unity/49-world-navigability) (clearance rule, nav probe, collider rule).
 
 ## Where things live
 
@@ -58,6 +58,7 @@ is an authored world location (`cr-world-locations` skill, `cr_world_locations_p
 - Trainers need `interior.arenaKey`.
 - Gauntlet host / stages / healer exist with the right roles.
 - Events toggle known props / npcs; enable targets start disabled; disable targets start enabled; a disabled prop/npc is enabled by some event.
+- **Clearance (`DungeonClearanceChecks`).** No prop footprint within 2.5 m of the arrival point, the exit door or any pickup, npc or readable (dressing <= 1.5 m may stand beside a target but not within 0.6 m of it; a prop hanging >= 2 m above the floor is exempt). Footprints are measured from the prefab renderer bounds by `DungeonPrefabFootprints` with the spec's x/z/yaw/scale. Details and typical offenders (`Column`, `Piller`, `Statue`, `RockCave`, `Bridge`, `Chain_*`, `Steps`, tents) in [World Navigability](?page=unity/49-world-navigability#dungeon-rules).
 
 ## Commands
 
@@ -71,7 +72,9 @@ is an authored world location (`cr-world-locations` skill, `cr_world_locations_p
 
 Headless: `-executeMethod CR.Game.OpenWorld.Editor.DungeonCommands.ScaffoldBatch|CheckBatch|BuildBatch -dungeonArgs "<key>"` (exit 1 on failure).
 
-**Build chain.** scaffold (files + keys) then town build, interior build, interior check, world validate, dungeon check. Afterwards push content with Studio as usual and run the rebuild hygiene from [Open World](?page=unity/37-open-world) (`cr_dress_cell_npcs`, body-count check).
+**Build chain.** scaffold (files + keys), **compile the story rows** (`cr_world_seed_corridor --args "layout=Continent,section=story"`), then town build, interior build, interior check, world validate, dungeon check. The interior build reads story rows from the compiled `Continent.asset`, not from `regions/<n>.json`, so `cr_dungeon_build` runs the seed itself; when you run the steps by hand, seed after the scaffold and before `cr_interior_build` or the room is built from the previous rows. Afterwards push content with Studio as usual and run the rebuild hygiene from [Open World](?page=unity/37-open-world) (`cr_dress_cell_npcs`, body-count check).
+
+**Keep the room walkable.** After every build run `cr_nav_probe --args "scene=Interior_<key> out=<dir> ignore=<names of the props the events disable>"` and `cr_nav_probe_status`. It must report reach >= 65% of the floor, 0 unreachable targets (judged in the `whatIf` pass, which removes the event-controlled barriers) and no pinch clusters. See [World Navigability](?page=unity/49-world-navigability).
 
 ## Prop-swap convention (`kind: "propSwap"`)
 
@@ -84,4 +87,5 @@ A swap is a `OneShotWorldEvent` in the room (a story event row) with `requiredQu
 | When it plays | Only while the quest is in progress and that objective is not completed. The scaffold also sets `playIfQuestCompleted: true` (and `waitForQuestActive`), so a player who finished the objective before entering still sees the swap once. |
 | Re-evaluation | Asked when the player enters the event box, and again on every quest objective / quest-completed signal while inside (a busy dialogue/battle is waited out, up to 2 minutes). The box covers the whole room. Not evaluated on a quest change while outside; it plays on the next entry. |
 | Persistence | On play the toggles run and the local story flag `event.<dungeon>-<id>` is set (per trainer). Every scene load (`Start`) and trainer switch re-applies the toggles' end state without replaying, so it stays done after the quest completes. A trainer who has not seen it gets the authored state back. |
+| Event row height | An event row's `localPosition.y` is **0**. The interior build adds `StoryRowPlacer.PivotLift` (half the box height) itself; the scaffold once wrote `height / 2` as well, so the box floated half a room above the floor and the player never entered it (gates stayed shut, pickups stayed sealed). Dungeons built before the fix need a scaffold, the story seed and an interior rebuild. |
 | Authoring rule | The prop that appears starts `startDisabled: true` and is in `enable`; the prop that goes away starts enabled and is in `disable`. Same x/z for a swap pair. The checks enforce both. |

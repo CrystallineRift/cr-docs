@@ -6,7 +6,7 @@ locations, idempotently. No C# per quest.
 **Server authority.** A packet never reports an outcome. Quests it makes are ordinary quest rows; the authority (the server online, the local cr-api
 domain services offline) advances objectives and pays rewards. The tool only writes content definitions and registry keys.
 
-Related: [Dungeon Scaffold](?page=unity/47-dungeon-scaffold), [Dialogue Authoring](?page=unity/32-dialogue-authoring), [Content Pipeline](?page=unity/17-content-pipeline), [Open World](?page=unity/37-open-world).
+Related: [Dungeon Scaffold](?page=unity/47-dungeon-scaffold), [Dialogue Authoring](?page=unity/32-dialogue-authoring), [Content Pipeline](?page=unity/17-content-pipeline), [Open World](?page=unity/37-open-world), [World Navigability](?page=unity/49-world-navigability) (zones, pickups and readables a packet places must stand on reachable ground; `cr_nav_snap_rows`).
 
 ## Where things live
 
