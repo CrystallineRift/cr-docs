@@ -211,7 +211,9 @@
         "Quests/CR.Quests.Domain.Services/Implementation/StoryBeatProjector.cs",
         "Stats/**/StatKey*.cs",
         "Quests/CR.Quests.Domain.Services/Implementation/ProgressOutcomeObjectiveMap.cs",
-        "Quests/CR.Quests.Domain.Services/Implementation/QuestObjectiveProjector.cs"
+        "Quests/CR.Quests.Domain.Services/Implementation/QuestObjectiveProjector.cs",
+        "Quests/CR.Quests.Data.Migration/M17007*.cs",
+        "Quests/**/QuestObjectiveHelperMarker*.cs"
       ],
       "cr-data": [
         "Assets/CR/Core/Data/Logic/QuestObjectiveValidation.cs",
@@ -239,7 +241,11 @@
         "Assets/CR/Tests/Editor/QuestRouterRig.cs",
         "Assets/CR/Tests/Editor/QuestSqliteFixtureBase.cs",
         "Assets/CR/Tests/Editor/QuestTrackerTurnInTests.cs",
-        "Assets/CR/Game/World/Editor/QuestEditorSyncHelper.cs"
+        "Assets/CR/Game/World/Editor/QuestEditorSyncHelper.cs",
+        "Assets/CR/UI/Quests/QuestHelper*",
+        "Assets/CR/UI/Logic/QuestHelper*",
+        "Assets/CR/Core/Feedback/Logic/QuestHelper*",
+        "Assets/CR/Core/Data/Editor/QuestHelperMarker*"
       ]
     },
     "description": "Quest system: templates, objectives, rewards, instances, progress events, requirements, condition evaluation; grant mode / reward claim mode (M7017), AcceptQuestAsync restarts an abandoned/failed instance, content:write on template PUT/DELETE, objectives upserted by sort_order and the re-parenting risk"
@@ -957,7 +963,8 @@
         "Assets/CR/Tests/Editor/RuntimePanelLayoutHarness.cs",
         "Assets/CR/Tests/Editor/SystemTabLayoutTests.cs",
         "Assets/CR/Tests/Editor/StartupFlowStyleTests.cs",
-        "Assets/CR/UI/Resources/StartupFlow.uss"
+        "Assets/CR/UI/Resources/StartupFlow.uss",
+        "Assets/CR/Core/Feedback/Logic/QuestHelper*"
       ]
     },
     "description": "Player menu UI: 8-tab overlay (Team/Bag/Storage/Quests/Map/Talents/Achievements/System) wired to real domain data — PlayerTeamView squad sheet, BagScreenHandler backpack with BagItemPolicy filtering, QuestJournalView active/completed quests, AchievementsView rail (Summary/categories/Statistics) over AchievementBoardProjection, CR.UI.Logic pure rules, input wiring via UICoordinator; Quests tab 'Return to {giver}' status for a ReturnToGiver quest awaiting the player; the System page layout (FocusScrollView, flex-shrink 0 rows, compact buttons, RuntimePanelLayoutHarness + SystemTabLayoutTests)"
@@ -3009,5 +3016,23 @@
       ]
     },
     "description": "World navigability: nav probe commands and reason codes, release gate, EnsureCollider mesh/box rule, camera trim (CameraIgnore layer), Player-build mesh collider audit and readable list, town wall ground sampling, dungeon clearance and reach rules, seed-before-build, event row y=0, overworld row placement, afterSolve terrain repair pads and nav-snap ledger"
+  },
+  "unity/50-quest-helpers": {
+    "docPath": "docs/unity/50-quest-helpers.md",
+    "repos": {
+      "cr-api": [
+        "Quests/**/QuestObjectiveHelperMarker*.cs",
+        "Quests/CR.Quests.Data.Migration/M17007*.cs"
+      ],
+      "cr-data": [
+        "Assets/CR/UI/Quests/QuestHelper*",
+        "Assets/CR/UI/Logic/QuestHelper*",
+        "Assets/CR/Core/Feedback/Logic/QuestHelper*",
+        "Assets/CR/Core/Data/Editor/QuestHelperMarker*",
+        "Assets/CR/Core/Data/Logic/QuestHelperMarkerRules.cs",
+        "Assets/CR/Core/Data/Registry/Definitions/QuestHelperMarker.cs"
+      ]
+    },
+    "description": "Quest helpers: Gameplay toggle, Track button, HUD pin, authored objective helper markers, world beam/ring/glow, map-node pulse"
   }
 }

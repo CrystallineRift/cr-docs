@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-28 — Quest helpers: track a quest, see where the next step is
+
+- **Why:** vague steps (after the mudcalves, "read the signs" in Mirandale) left players lost. An optional helper points at the next step of the quest you track.
+- **cr-api:** optional `helperMarker` on quest objectives (`QuestObjectiveHelperMarker { sceneKey, x, y, z, radius, targetKey }`), column `quest_objective_template.helper_marker` (M17007), upsert null = keep, empty `sceneKey` = clear. Presentation data only. See [Quest System](?page=backend/07-quest-system).
+- **cr-api-unity:** Settings > Gameplay **Quest helpers** toggle (default off, per trainer, online and offline); Track button in the journal (one quest), pinned first on the HUD tracker; helper = next required objective that has a marker, none when ready to turn in; world beam, ring and glow plus a map-node pulse. Quest inspector gets a Helper marker block per objective; Studio Push always sends `helperMarker`.
+- **Docs:** new [Quest Helpers](?page=unity/50-quest-helpers); [Player Menu UI](?page=unity/10-player-menu-ui) settings table.
+
 ## 2026-10-27 — System tab: offline Gameplay rules (roaming spawns, battle system)
 
 - **Why:** the two server settings that shape play, `roaming_spawners` and `ability_cost_mode`, could only be forced from the Editor, so an offline player on a shipped build had no way to see or change them.

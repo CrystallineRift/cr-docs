@@ -483,5 +483,10 @@
     "section": "Unity",
     "title": "World Navigability",
     "path": "unity/49-world-navigability"
+  },
+  {
+    "section": "Unity",
+    "title": "Quest Helpers",
+    "path": "unity/50-quest-helpers"
   }
 ]

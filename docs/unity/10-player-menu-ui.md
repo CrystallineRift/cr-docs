@@ -547,6 +547,7 @@ encrypted prefs store) under a `GameConfigurationKeys` constant and is pushed li
 | Game | **Reduced Motion** toggle (`reduced-motion-toggle`) | `ReducedMotion` | `IFeelSettings`: the feedback director, the battle camera shake; `IReducedMotionSetting`: the story beats' flicker, lightning and lights-out ([Pillar Cutscene](?page=unity/42-pillar-cutscene)) |
 | Game | **Screen Shake** dropdown (`screen-shake-dropdown`, 100% / 50% / Off) | `ScreenShake` (the `ScreenShakeLevel` number, 0 = Full) | `IFeelSettings`: `BattleCameraShakeResponder`, camera-motion Feel moments |
 | Game | **Rumble** toggle (`rumble-toggle`) | `RumbleDisabled` | `IFeelSettings`: `HapticsResponder` |
+| Game | **Quest helpers** toggle | `quest_helpers_enabled.<trainerId>` (client preference, default off, stored per trainer) | `IQuestHelperSettings`: the world marker and map pulse for the tracked quest; shown online and offline ([Quest Helpers](?page=unity/50-quest-helpers)) |
 
 The tracker key stores the **hidden** flag, not "shown": the tracker is on by default and
 `TryGet<bool>` cannot tell "never written" from `false`, so an absent key has to mean the default.
