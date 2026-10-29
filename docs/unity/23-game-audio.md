@@ -57,6 +57,40 @@ from the battle arena a hundred units out it played at about 1% and read as sile
 `cr_setup_audio` repairs a scene built before the flag existed (`buses pinned to 2D [...]`).
 :::
 
+## Player volume (Master / Music / Effects)
+
+System → Game has three 0–100% sliders (default 100%). They are a **device preference**: one value per install, shared by every
+trainer and by online and offline play, kept under `master_volume` / `music_volume` / `effects_volume` as percent + 1 (so an
+unset key reads as 100%). Nothing is sent to a server.
+
+```
+AudioVolumeStore (IAudioVolumeSettings)  ← the menu's SliderInts (AudioVolumeSettingsView)
+   │  Changed                               persistence: GameDataAudioVolumePersistence
+   ▼
+AudioVolumeApplier (NonLazy, IInitializable)  → IGameAudio.SetBusVolume(bus, level)
+```
+
+`AudioVolumeApplier` applies the saved mix in `Initialize` (startup, before the menu is ever opened) and on every `Changed`, so the sliders are
+live. Which slider moves which bus is one pure function, `AudioVolumeMixExtensions.ToBusLevels` (unit-tested without an engine):
+
+| Slider | Bus | What `MasterAudioBackend` sets | What it reaches |
+|---|---|---|---|
+| Master | `Master` | `AudioListener.volume` | **Everything**, including sounds played outside Master Audio |
+| Music | `Music` | `MasterAudio.PlaylistMasterVolume` and the `Music` bus | Area and battle playlists; plus the region soundtrack clips (`RegionAudioDirector` applies the Music level to its own `AudioSource`s) |
+| Effects | `Sfx`, `Ambience` | `MasterAudio.SetBusVolumeByName` | Sound Groups on those buses; plus `FeedbackDirector` and `BattleAbilityFxResponder` clips (`PlayClipAtPoint` with the Effects level) |
+| (none) | `Ui` | never driven | Menu sounds stay audible when Effects is 0; only Master turns them down |
+
+Why Master is `AudioListener.volume` and not `MasterAudio.MasterVolumeLevel`: Master Audio documents `MasterVolumeLevel` as scaling Sound Groups
+"not Playlist Controller songs though", so it would leave the music at full and miss every sound CR plays outside Master Audio
+(`AudioSource.PlayClipAtPoint` feedback and ability sound, creature cries, region soundtrack clips, story sources). The backend is the only writer of
+these engine levels (`AudioVolumeApplierTests.Only_the_backend_writes_the_engine_volumes…` scans the game code for any other).
+
+Bus levels asked for before the MasterAudio prefab is in the scene are held and applied just before the first sound plays. A bus missing
+from the scene (re-run `cr_setup_audio`) logs one warning instead of failing silently.
+
+**Not yet covered by Effects** (they follow Master only): creature cries on the battle presenter's own `AudioSource`, and the story
+beats' own sources (`RoarOneShots`, `SkyStorm`). Route them through the Effects level when they are next touched.
+
 ## Per-area music and ambience
 
 `AreaAudio` is the audio counterpart to `AreaEnvironment`, and sits on the same area root:

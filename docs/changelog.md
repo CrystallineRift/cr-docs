@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-28 — Master / Music / Effects volume sliders
+
+- **Why:** the System tab's Master Volume row was an empty placeholder and there was no way to turn the music down.
+- **cr-api-unity:** three 0–100% sliders in System → Game (Master, Music, Effects), a per-install device preference (not per trainer), default 100%, shown online and offline. Pure model in `CR.Core.Audio.Logic` (`AudioVolumeSnapshot`, `AudioVolumeStore`, `AudioVolumeMixExtensions`), stored by `GameDataAudioVolumePersistence` (`master_volume` / `music_volume` / `effects_volume`, percent + 1), pushed to the audio backend at startup and live by `AudioVolumeApplier`. Master is `AudioListener.volume` (everything), Music is the Master Audio playlist volume plus the region soundtrack clips, Effects is the Sfx and Ambience buses plus the feedback and ability-fx clips; the Ui bus is never turned down by Effects. No server change; presentation only.
+- **Docs:** [Game Audio → Player volume](?page=unity/23-game-audio), [Player Menu UI](?page=unity/10-player-menu-ui) settings table.
+
 ## 2026-10-28 — Quest helpers: track a quest, see where the next step is
 
 - **Why:** vague steps (after the mudcalves, "read the signs" in Mirandale) left players lost. An optional helper points at the next step of the quest you track.
