@@ -964,7 +964,9 @@
         "Assets/CR/Tests/Editor/SystemTabLayoutTests.cs",
         "Assets/CR/Tests/Editor/StartupFlowStyleTests.cs",
         "Assets/CR/UI/Resources/StartupFlow.uss",
-        "Assets/CR/Core/Feedback/Logic/QuestHelper*"
+        "Assets/CR/Core/Feedback/Logic/QuestHelper*",
+        "Assets/CR/UI/AudioVolumeSettingsView.cs",
+        "Assets/CR/Tests/Editor/AudioVolumeSettingsViewTests.cs"
       ]
     },
     "description": "Player menu UI: 8-tab overlay (Team/Bag/Storage/Quests/Map/Talents/Achievements/System) wired to real domain data — PlayerTeamView squad sheet, BagScreenHandler backpack with BagItemPolicy filtering, QuestJournalView active/completed quests, AchievementsView rail (Summary/categories/Statistics) over AchievementBoardProjection, CR.UI.Logic pure rules, input wiring via UICoordinator; Quests tab 'Return to {giver}' status for a ReturnToGiver quest awaiting the player; the System page layout (FocusScrollView, flex-shrink 0 rows, compact buttons, RuntimePanelLayoutHarness + SystemTabLayoutTests)"
@@ -1474,10 +1476,16 @@
       "cr-data": [
         "Assets/CR/Core/Audio/**",
         "Assets/CR/Game/Areas/AreaAudio.cs",
-        "Assets/CR/UI/Battle/BattleHUD.cs"
+        "Assets/CR/UI/Battle/BattleHUD.cs",
+        "Assets/CR/Game/Audio/**",
+        "Assets/CR/Core/DI/GameAudioVolumeBindingsExtensions.cs",
+        "Assets/CR/Game/OpenWorld/AudioSourceMusicVoice.cs",
+        "Assets/CR/Game/OpenWorld/RegionAudioDirector.cs",
+        "Assets/CR/Game/Battle/Presentation/BattleAbilityFxResponder.cs",
+        "Assets/CR/Tests/Editor/AudioVolume*.cs"
       ]
     },
-    "description": "IGameAudio seam over Master Audio, mixer buses, per-area music/ambience with transition rules, menu sound keys, and the Unity 6 vendor patch"
+    "description": "IGameAudio seam over Master Audio, mixer buses, per-area music/ambience with transition rules, menu sound keys, the player's Master/Music/Effects volume sliders (AudioVolumeApplier), and the Unity 6 vendor patch"
   },
   "unity/24-battle-extensions": {
     "docPath": "docs/unity/24-battle-extensions.md",

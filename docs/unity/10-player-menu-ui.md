@@ -547,6 +547,7 @@ encrypted prefs store) under a `GameConfigurationKeys` constant and is pushed li
 | Game | **Reduced Motion** toggle (`reduced-motion-toggle`) | `ReducedMotion` | `IFeelSettings`: the feedback director, the battle camera shake; `IReducedMotionSetting`: the story beats' flicker, lightning and lights-out ([Pillar Cutscene](?page=unity/42-pillar-cutscene)) |
 | Game | **Screen Shake** dropdown (`screen-shake-dropdown`, 100% / 50% / Off) | `ScreenShake` (the `ScreenShakeLevel` number, 0 = Full) | `IFeelSettings`: `BattleCameraShakeResponder`, camera-motion Feel moments |
 | Game | **Rumble** toggle (`rumble-toggle`) | `RumbleDisabled` | `IFeelSettings`: `HapticsResponder` |
+| Game | **Master / Music / Effects Volume** sliders (`master-volume-slider`, `music-volume-slider`, `effects-volume-slider`; `SliderInt` 0–100, value label `NN%`) | `MasterVolume`, `MusicVolume`, `EffectsVolume` (int, **percent + 1**; unset or 0 = 100%; one value per install, **not** per trainer) | `IAudioVolumeSettings` (`AudioVolumeSettingsView`) → `AudioVolumeApplier` → `IGameAudio.SetBusVolume`; applied at startup and live; shown online and offline ([Game Audio → Player volume](?page=unity/23-game-audio)) |
 | Game | **Quest helpers** toggle | `quest_helpers_enabled.<trainerId>` (client preference, default off, stored per trainer) | `IQuestHelperSettings`: the world marker and map pulse for the tracked quest; shown online and offline ([Quest Helpers](?page=unity/50-quest-helpers)) |
 
 The tracker key stores the **hidden** flag, not "shown": the tracker is on by default and
@@ -555,7 +556,14 @@ The checkbox shows the positive. The three game-feel rows go through `IFeelSetti
 (see [Game Feel](?page=unity/41-game-feel)) and follow the same rule: Reduced Motion is a flag (off), Screen
 Shake is stored as the `ScreenShakeLevel` number so that an unset key (0) is Full, and Rumble is stored as
 "disabled" so that an unset key is on. **Language** (dropdown + *Open folder*, with a help line) is real too
-([Localization → packs](?page=unity/06-localization)); Master Volume and Notifications are still decorative.
+([Localization → packs](?page=unity/06-localization)); Notifications is still decorative.
+
+The three volume sliders sit outside the offline-only Gameplay rules section, so they show online and offline alike (a device
+preference, like Reduced Motion). `AudioVolumeSettingsView.Wire` is handed the `IAudioVolumeSettings` (optional inject; without it the rows are
+disabled), shows the stored value without writing it back (`SetValueWithoutNotify`), calls the matching setter on change and
+re-reads on every `Show()`. The sliders are plain `SliderInt`s on the existing `.settings-slider` / `.settings-row-value` classes, focusable,
+so a controller reaches them like the UI Scale slider. Storage is percent + 1 because `TryGet<int>` reads a never-written key as 0 and the default is
+100%: a stored 0 means "never chosen", 1 is a deliberate mute.
 
 ### Layout: the page scrolls and nothing on it shrinks
 
@@ -863,9 +871,9 @@ as a cancel, so no path leaves an item half-used or a modal stranded.
 
 - `TeamManagementView` is **not** used by `PlayerMenuWindow`. It is still used by
   `GameDataManagerController` and must not be deleted.
-- The System tab's Master Volume / Notifications rows are still static
+- The System tab's Notifications row is still static
   decoration; Look Sensitivity, Invert X/Y, UI Scale, Quest Tracker, Combat Speed, Story Camera, Text Effects, Dialogue
-  Text Speed, Reduced Motion, Screen Shake, Rumble and Language are real and persist via `IGameDataRepository`.
+  Text Speed, Reduced Motion, Screen Shake, Rumble, Language and the Master / Music / Effects volumes are real and persist via `IGameDataRepository`.
 - `MenuInputBlocked` (the open key is ignored; closing is never blocked) is true in the prologue room **and** while a
   skippable story beat holds `IStoryBeatGate`: Esc is the beat's hold-to-skip as well as the menu key.
 - The `.evo-*` and `.friend-*` rules in `PlayerMenuWindow.uss` are now unused; they are kept so the
