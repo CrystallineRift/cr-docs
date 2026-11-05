@@ -2001,11 +2001,14 @@
         "Convenience/CR.Data.Migrations.Test/TalentSeedSample/**/*.cs",
         "Game/CR.Game.Domain.Services/Implementation/Battle/BattleDomainService.cs",
         "Pickups/CR.Pickups.Domain.Services/Implementation/PickupDomainService.cs",
-        "Convenience/CR.Data.Migrations.Test/TalentContentSeed*Tests.cs"
+        "Convenience/CR.Data.Migrations.Test/TalentContentSeed*Tests.cs",
+        "Talents/CR.Talents.Data.Migration/M15201CreateWorldMapTable.cs",
+        "Talents/CR.Talents.Service.REST/Endpoints/WorldMap*.cs",
+        "Convenience/CR.Api.IntegrationTests/ContentRouteLockdownHttpTests.cs"
       ],
       "cr-data": []
     },
-    "description": "Trainer progression: Talents domain (world_location, trainer_level_requirement, trainer_xp_rule, trainer_location_discovery ledger, M15001-M15003 + M15010-M15011), the XP funnel and sources, derived level readers, trainerProgress on results, routes, admin XP grant, floor seed, TalentDatabase connection string (falls back to StatDatabase); location discovery XP/quest and the ledger gate now live in backend/24-location-discoveries"
+    "description": "Trainer progression: Talents domain (world_map Studio document M15201 + GET/PUT /api/v1/world-map/{scope}, world_location, trainer_level_requirement, trainer_xp_rule, trainer_location_discovery ledger, M15001-M15003 + M15010-M15011), the XP funnel and sources, derived level readers, trainerProgress on results, routes, admin XP grant, floor seed, TalentDatabase connection string (falls back to StatDatabase); location discovery XP/quest and the ledger gate now live in backend/24-location-discoveries"
   },
   "backend/24-location-discoveries": {
     "docPath": "docs/backend/24-location-discoveries.md",
