@@ -104,6 +104,26 @@ raw-counted players to repair.
   the `StatDatabase` connection string (one `[startup]` log line says so); set it only to point the
   Talents tables somewhere else.
 
+## World map document (Studio)
+
+The Studio web world-map editor stores one JSON document per scope in `world_map` (M15201, Talents domain, same
+`TalentDatabase` connection as `world_location`). It is authoring data only: the game client never reads it and no
+game rule depends on it.
+
+| Route | Policy | Result |
+|---|---|---|
+| `GET /api/v1/world-map/{scope}` | content-write | 200 `{ scope, document, rowVersion, updatedAt }`; 404 when no live row |
+| `PUT /api/v1/world-map/{scope}` | content-write | body `{ document, expectedRowVersion }`; 200 with the same shape; 409 `row-version-conflict` |
+
+`expectedRowVersion` follows the shared contract ([Optimistic Concurrency](?page=backend/28-optimistic-concurrency)): `0` creates,
+`n` must match, `null` overwrites unconditionally (logged as a Warning with the caller, or 400
+`expected_row_version_required` when `Studio:RequireExpectedRowVersion` is `true`). `scope` matches
+`^[a-z0-9][a-z0-9-]{0,63}$`. The server validates the document on every write (400 `invalid_document` with a message naming the
+bad field; unknown extra fields are kept): `version` is `1`, `aspect` > 0, optional string `backgroundAddress` /
+`unknownAreaDisplay` / `nodeDisplay`, at most 500 `nodes` (`areaKey` non-empty and unique case-insensitively, `displayName`,
+`x`/`y` 0..1, `width`/`height` 0.04..1, `style` one of grassland/settlement/highland/cave/desert/coast, optional
+`artAddress`), and `routes` (`from`/`to` must name nodes, no self routes, no duplicate undirected pair); at most 256 KB.
+
 ## Admin web (World Locations)
 
 The cr-admin-web **World Locations** editor reads the server's locations and can tweak names,

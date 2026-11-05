@@ -55,6 +55,11 @@
     "path": "admin-web/10-quest-flow-editor"
   },
   {
+    "section": "Admin Web",
+    "title": "World Map Editor",
+    "path": "admin-web/11-world-map-editor"
+  },
+  {
     "section": "Backend",
     "title": "Backend Architecture",
     "path": "backend/01-architecture"
