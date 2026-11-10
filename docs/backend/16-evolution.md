@@ -290,9 +290,13 @@ authoring it. Guarding the requirement insert on the level alone would strand a 
 | Cindris | Cindralis | `MinLevel 8` |
 | Cindralis | Cindrakar | `MinLevel 20` |
 
-The last two are the Cindris line, seeded by **M13004** (`SeedCindraLine`). Cindralis shares Dragon
-Fire's model (`creatures/dragonfire`) rather than carrying art of its own; each species still has its
-own portrait, because a portrait is what tells two species sharing a model apart on a team card.
+The last two are the Cindris line, seeded by **M13004** (`SeedCindraLine`). Cindralis and Cindrakar
+began on placeholder models (`creatures/dragonfire`, `creatures/dragoninferno`); **M21009** points
+them at their own (`creatures/cindralis`, `creatures/cindrakar`). Each species has its own portrait.
+
+The Zephlet line (Zephlet -> Zephryne, `MinLevel 14`, Wind) is seeded by **M21009** (species),
+**M21010** (learn list `line_zephlet` and species default) and **M21011** (the evolution rule); the
+species seed sits below the rule for the reason below. Covered in `ZephletLineSeedSqliteTests`.
 
 :::danger The species seed must run before the rules seed
 The rule insert is guarded on **both** species already existing — a rule pointing at an absent
