@@ -11,6 +11,14 @@ domain DLLs' on local SQLite offline. The client only groups and draws it.
 > trainerId)` — one memoised fetch answers both the map and the "Discovered:" toast. P1's stand-in,
 > `EmptyWorldMapDiscoveryReader` (every area "???", header "Areas 0/6"), is deleted.
 
+## Editing in Studio
+
+The web Studio has a **World map** editor (Content → World map, see [World Map Editor](../admin-web/11-world-map-editor.md)) that
+edits a **server copy** of this layout (`GET`/`PUT /api/v1/world-map/main`): the same nodes, routes and region styles, with
+`x`/`y` as node centres exactly as in `WorldMapArea`. The Studio edits that server copy only. The Unity `WorldMapDefinition`
+SO remains the source the client reads until a follow-up moves it over, so an edit in the browser does not change the game yet.
+The Studio's *Load Unity starter layout* seeds the editor from the six areas in `WorldMap.asset`.
+
 ## Where things live
 
 | Path | What |
