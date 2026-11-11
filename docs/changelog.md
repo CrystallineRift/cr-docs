@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-11 — Linux Vulkan-first and Steam Deck test tooling
+
+- Linux players are built Vulkan-first (`[Vulkan, OpenGLCore]`) at build time, restored afterwards so `ProjectSettings.asset` is untouched. Override: `-crLinuxGraphics vulkan|gl|auto` or `CR_LINUX_GRAPHICS`. `-force-glcore` remains the launch-time escape hatch. Branch `feat/linux-vulkan-first`.
+- `[Perf]` frame-rate lines (10 s windows and a session total) from `HitchRecorder`.
+- Player.log report (`cr_deck_log_report`, and "Report on this log" in the Deploy window): PASS / WARN / FAIL for build stamp, graphics API, boot, the v0.2.19 fixes, shader warm-up, PSO trace, SQLite pool and frame rate.
+- "Fetch PSO trace from the Deck" in the Deploy window, and `cr_pso_import` now refuses files not named `pso-<Platform>-<GraphicsApi>.graphicsstate`.
+- Headless `ci/deck-deploy.sh`, `ci/deck-fetch-log.sh`, `ci/deck-pso-fetch.sh` (each with `--dry-run`) and the self-test `ci/tests/deck-scripts-test.sh`. Branch `feat/deck-test-tooling`.
+- Review fixes: Linux graphics override also wraps the Addressables content build, never fails a build on restore, accepts `-crLinuxGraphics=gl`; the Player.log report judges every line, never passes without evidence (mid-session tail, recorder off, empty log), validates stamp/pipeline lines, takes `--expect <version>` and a target-relative frame-rate rule; deploy folder guard (4+ components, no dots/metacharacters), build-folder guard, atomic `ci/deck-fetch-log.sh`.
+- **Docs:** [Standalone Builds, Linux graphics APIs](?page=unity/21-standalone-builds#linux-graphics-apis-vulkan-first) and [Testing on the Steam Deck](?page=unity/21-standalone-builds#testing-on-the-steam-deck-frame-rate-log-report-scripts), [Loading Screens, Recording the Steam Deck's Vulkan PSO trace](?page=unity/48-loading-screens#recording-the-steam-decks-vulkan-pso-trace).
+
 ## 2026-11-11 — Creature showcase scene
 
 - **Why:** the seven creatures swapped to real rigged models (Mudcalf, Gaterbear, Cindris, Cindralis, Cindrakar, Zephlet, Zephryne) had never been watched in Play mode, and reaching an evolution in the real game meant levelling a creature by hand.

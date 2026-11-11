@@ -1422,7 +1422,9 @@
         "ci/build.sh",
         "ci/publish.sh",
         "ci/builds-index.sh",
-        "Assets/CR/Core/Data/Editor/Build/CiBuild.cs"
+        "Assets/CR/Core/Data/Editor/Build/CiBuild.cs",
+        "ci/deck-*.sh",
+        "ci/tests/deck-scripts-test.sh"
       ]
     },
     "description": "Standalone desktop builds: Unity 6 build profiles (CR_Game_macOS / CR_Game_Windows / CR_Game_Linux_SteamDeck, BuildProfileSetupTool reflection factory), CR > Build > Build Players… sequential multi-target window (PlayerBuildPlan pure logic + tests), per-platform e_sqlite3 natives bundled by build-packages.sh, Addressables built with player, game-data.bytes floor, Mono-only Windows cross-build; CR > Build > Deploy to Steam Deck… one-step Linux build + rsync-over-SSH push to a fixed folder on the Deck (SteamDeckDeployPlan pure logic + tests)"
@@ -2981,7 +2983,9 @@
         "Assets/CR/Core/Sync/Logic/ContentSyncProgress.cs",
         "Assets/CR/Game/OpenWorld/OpenWorldBootstrap.cs",
         "Assets/CR/Game/World/IWorldInitProgress.cs",
-        "Assets/CR/Game/World/WorldInitProgress.cs"
+        "Assets/CR/Game/World/WorldInitProgress.cs",
+        "Assets/CR/Core/Data/Editor/Build/SteamDeck/Logic/SteamDeckPsoFetchPlan.cs",
+        "ci/deck-pso-fetch.sh"
       ]
     },
     "description": "Loading screens: plans/phases/progress model, boot sequence and timeouts, online entry, world entry, shader warm-up recording (variants + PSO traces), adding a phase"

@@ -26,6 +26,28 @@ the tool calls the internal `BuildProfile.CreateInstance` factory via reflection
 upgrade breaks the reflection, the tool logs it and the fallback is the Build Profiles window's
 **Add Build Profile** button.
 
+### Linux graphics APIs (Vulkan first)
+
+Linux players are built with the graphics API list `[Vulkan, OpenGLCore]`. Unity uses the first API the machine supports, so the Steam Deck runs Vulkan and a machine without Vulkan falls back to OpenGL Core. Before this change the Linux target used Unity's automatic list and the Deck ran OpenGL Core (`Creating GLContext ... OpenGL Core 4.5` in Player.log), where the PSO trace does nothing (see the Loading Screens page).
+
+The list is applied **at build time only**. `PlayerBuildRunner.Run` (the one place CI's `CiBuild` and both Editor windows go through) wraps `BuildPipeline.BuildPlayer` in `LinuxGraphicsOverride`, which sets the StandaloneLinux64 list, builds, and puts `PlayerSettings` back in a `finally`. `ProjectSettings/ProjectSettings.asset` is never edited by a build, and Windows and macOS builds are untouched. The build log prints the list used: `[BuildPlayers] Linux graphics APIs: Vulkan, OpenGLCore`.
+
+Choose a different list with the command-line argument `-crLinuxGraphics <value>` or the environment variable `CR_LINUX_GRAPHICS` (the argument wins):
+
+| Value | Linux graphics APIs |
+|---|---|
+| `vulkan` (also the default when nothing is set) | Vulkan, OpenGLCore |
+| `gl` | OpenGLCore only |
+| `auto` | Unity's own list, untouched (the behaviour before this change) |
+
+An unknown value falls back to the default and logs a warning that names the bad value. CI example: `CR_LINUX_GRAPHICS=gl ci/build.sh 0.2.20 StandaloneLinux64` (the Unity process inherits the environment); the argument form is for running Unity by hand, for example `-executeMethod CR.Core.Data.Editor.Build.CiBuild.Run -crTargets Linux -crLinuxGraphics gl`.
+
+The content (Addressables) build for a Linux target runs under the same override as the player build (`CiBuild` and the Content Deploy tool when the active target is Linux), so bundles and player always agree; the same `[BuildPlayers] Linux graphics APIs: ...` line is logged for that step. If restoring the settings after a build ever fails, the build still succeeds and the log carries an error saying how to restore by hand. `-crLinuxGraphics gl` and `-crLinuxGraphics=gl` are equivalent; a flag with no value, or whose value starts with `-`, logs a warning and is ignored.
+
+**Player-side escape hatch.** A Vulkan build can still be forced onto OpenGL Core at launch without rebuilding: add `-force-glcore` to the Steam launch options (`-force-vulkan` forces the other way). These are Unity's own player arguments; nothing in the game parses or rejects them. Use it if a Deck's Vulkan driver misbehaves, and expect the PSO trace to be skipped while on OpenGL Core.
+
+The pure policy is `CR.Core.PlayerBuild.Logic.LinuxGraphicsPolicy` (tests in `LinuxGraphicsPolicyTests`); the apply-and-restore scope is tested by `LinuxGraphicsOverrideTests`.
+
 ## Scene list
 
 Players boot into **scene 0 of the global scene list** (`ProjectSettings/EditorBuildSettings.asset`),
@@ -336,8 +358,58 @@ and the first frame agree with the policy.
 should print `vSyncCount=1 targetFrameRate=-1`. If the Deck is set to 40 Hz in the Quick Access menu
 the game locks to 40 fps; that is expected and smooth. For raw performance (not pacing) also note the
 Linux profile builds **Development + script debugging** (`Starting managed debugger on port …` in the
-log) and the player picks **OpenGL Core**, not Vulkan — both cost frame time and are worth turning
-off / switching when measuring.
+log), and Deck builds made before Linux became Vulkan-first (see [Linux graphics APIs](#linux-graphics-apis-vulkan-first)) ran
+**OpenGL Core**, not Vulkan — both cost frame time and are worth turning off / switching when measuring.
+
+### Testing on the Steam Deck: frame rate, log report, scripts
+
+**`[Perf]` lines.** `HitchRecorder` (on in the Editor and development builds, otherwise with `-crHitchLog` or `CR_HITCH_LOG=1`) logs a frame-rate line every 10 seconds of frame time and one for the whole session at quit:
+
+```
+[Perf] 10 s | avg 57.8 fps | 1% low 41.0 fps | worst 87 ms | frames 578
+[Perf] session | avg 55.0 fps | 1% low 30.0 fps | worst 900 ms | frames 5000
+```
+
+`1% low` is the frame rate at the 99th-percentile frame time (accurate to 0.1 ms; the figures come from a fixed histogram, so logging allocates nothing per frame). Boot and loading windows are logged too; readers should ignore the first minute, as the report does.
+
+**Player.log report.** `cr_deck_log_report --args "<path to a Player.log> [--expect <version>]"` (an Editor CLI command; `--expect 0.2.21-deck1` makes the build-stamp check FAIL when the log's stamp has another version), or **Report on this log** in the Deploy window after **Fetch Player.log from the Deck**, prints one PASS / WARN / FAIL line per check, each with the log line it was decided on:
+
+| Check | Verdict |
+|---|---|
+| Build stamp | PASS only for a parsed stamp (`vX.Y.Z · commit · date`), shown with its version; `no stamp at` is WARN, `is not a build stamp` / `could not read the stamp` are FAIL; with `--expect`, a different version or no stamp is FAIL |
+| Graphics API | PASS for Vulkan, WARN for OpenGL Core |
+| Render pipeline | PASS only on `Steam Deck detected; render pipeline set to ...`; `no Deck pipeline asset` and `could not select Deck pipeline` are FAIL |
+| Frame pacing | PASS when the `[FramePacing]` line is present; its refresh rate gives the target fps for the frame-rate check |
+| Boot timings | db, content, shaders and total from the `[Boot]` line; WARN when the menu opened while shaders were still compiling, or on `Database gate not ready` / `faulted`, `Shader first-run check failed` |
+| database is locked | FAIL if any, on any line whatever its tag (the v0.2.19 fix: must be 0; the v0.2.18 baseline has 10) |
+| Hitches | worst and count; FAIL at 30 000 ms or more, WARN at 1 000 ms or more, WARN when 20 or more hitches are 250 ms or more |
+| Spawner-sync hitches | FAIL at 10 or more hitches of 100 to 190 ms between `[ContentSync] Syncing N spawners` and the next `[ContentSync]` line (v0.2.19 fix); the window ends at the next `[ContentSync]` line, or after 5000 log lines if none follows |
+| Null shader errors, Shader.Find nulls | FAIL if any, including `[Shaders] Resources/... is missing` (v0.2.19 fix: must be 0) |
+| Shader warm-up | variant and graphics-state counts from `[ShaderWarmup] warm-up done`; WARN when it ended early or never ran |
+| PSO trace load | WARN with the reason for `no PSO trace at`, `PSO trace skipped` or `has no PSO trace support` |
+| PSO trace recording | PASS with `saved N graphics states`; WARN when recording started but nothing was saved; FAIL on `could not` |
+| SQLite pool | counts from the `[SqlitePool]` quit line (v0.2.20); WARN when absent or switched off |
+| Frame rate | median average fps and lowest 1 % low over the `[Perf]` windows after the first 60 s; relative to the target fps from `[FramePacing]` (fallback 60): FAIL below 50 % of target, WARN below 90 %, and WARN when the lowest 1 % low is below 50 % of target; the output states the numbers |
+
+**A check never passes without evidence.** Checks that pass because nothing bad was seen turn into WARN when the log starts mid-session (a tail fetch), and the hitch checks turn into WARN when the hitch recorder was off (no `[Hitch]` or `[Perf]` line; launch with `-crHitchLog`). An empty log passes nothing. A problem that is found still FAILs in a tail.
+
+The Deploy window fetches only the last 2000 lines, so a long session's start-up lines may be missing; the report then says it read only the tail and start-up checks may WARN for that reason. `ci/deck-fetch-log.sh` fetches the whole file (it writes to a temp file and replaces `--out` only when ssh succeeded and the log is not empty).
+
+The Vulkan wording Unity itself prints has not been captured from a Deck yet. The analyser recognises Vulkan from Unity's usual lines, the Mesa `RADV` driver name and the game's own PSO messages; if the check says "no graphics-API line", read the first Vulkan log and extend `DeckLogAnalyzer.VulkanMarkers`.
+
+**PSO trace.** See "Recording the Steam Deck's Vulkan PSO trace" in the Loading Screens page. The Deploy window button **Fetch PSO trace from the Deck** copies it with `scp -O` (the classic protocol, so the Deck's shell expands `$HOME` and honours the quotes around the space in `Crystalline Rift`; needs OpenSSH 8.7 or newer on the Mac).
+
+**Deploy folder and build folder guards** (Deploy window and `ci/deck-deploy.sh` alike): the folder on the Deck must be absolute, have no `.` or `..` segments, no whitespace, quotes or shell metacharacters, and at least 4 path components (`/home/deck/Games/cr` passes; `/home/deck` and `/home/deck/Games` are refused), because `rsync --delete` runs against it. The local build folder must not be empty or `/`, and must contain `CrystallineRift.x86_64` before anything is copied.
+
+**Headless scripts** (bash, run from the project root, each takes `--dry-run` to print the exact commands and `-h` for usage):
+
+| Script | Does |
+|---|---|
+| `ci/deck-deploy.sh <host> [--user deck] [--dest /home/deck/Games/CrystallineRift] [--build-dir Builds/Linux] [--no-delete]` | `mkdir -p` on the Deck, rsync with the Deploy window's flags and excludes, then reads `build-stamp.txt` back and compares it with the local one; exits 1 on a mismatch |
+| `ci/deck-fetch-log.sh <host> [--user deck] [--out <file>]` | copies the whole Player.log to `DeckLogs/Player-<time>.log` |
+| `ci/deck-pso-fetch.sh <host> [--user deck] [--api Vulkan] [--platform LinuxPlayer]` | copies the trace into `Assets/StreamingAssets/CR/Shaders/` of the checkout it runs from, refusing any name that is not `pso-<Platform>-<GraphicsApi>.graphicsstate`, and prints the next steps |
+
+`ci/tests/deck-scripts-test.sh` runs each script against a fake host with `--dry-run` and checks the printed commands and the refusals; it puts shims for `ssh`, `scp` and `rsync` first on `PATH` and fails if any was started.
 
 ### Design notes
 
