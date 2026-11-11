@@ -65,6 +65,8 @@ Play on Core directly — looked fine. If a build ever shows the cylinders again
 Test UI also must not be open alongside Core in the Editor: both carry a full UI stack and an
 EventSystem, and two of each means the menu stops taking input.
 
+**Open-world cells are not all in this list.** Cells named in `WorldLayout.addressableCells` ship as Addressables bundles (group `WorldCells`) instead of Build Settings entries. Since 2026-11-11 that is `World_c7_r1` and `World_c7_r4`; the list above plus those bundles is what a player carries. A scene ships exactly one way: `cr_world_validate` reports a built cell that is in both or in neither. Anything that needs "the scenes that ship" calls `ShippedScenes.AllPaths()` rather than reading `EditorBuildSettings.scenes`. See [Open World → Cells from Addressables](?page=unity/37-open-world#cells-from-addressables-pilot-2026-11-11). `ci/build.sh` needs nothing new: `BuildAddressablesWithPlayerBuild` builds the `WorldCells` bundles before the player, and with Local paths they land in the player's StreamingAssets with the other groups.
+
 ## SQLite natives (per platform)
 
 `Microsoft.Data.Sqlite` needs a platform-native `e_sqlite3` next to the managed DLLs.
@@ -120,6 +122,22 @@ floor, streamed deltas):
 3. Players check the remote catalog at startup (`AddressablesCatalogUpdater`), download only
    changed bundles into cache, and load everything else from the baked copy. If the CDN is
    unreachable, the baked catalog is used — builds never hard-fail on it.
+
+### Moving WorldCells to remote hosting (not enabled)
+
+> **Not enabled.** Nothing below is switched on. `WorldCells` is Local, Build Remote Catalog is off, and every player (Steam, offline, Deck, CI) carries its cells. This section records what flipping the group would take, so the pilot is a known size of work and not a surprise.
+
+What is already in place: the group is one bundle per cell with retry count 3; the loader (`AddressablesCellSceneLoader`) fails a missing bundle like any failed cell load, and the streamer retries and gives up as it does today; `CellPrefetcher` fetches the bundles of addressable cells just past the Dormant ring in the direction of travel (`Addressables.DownloadDependenciesAsync`, one in flight, handle released) and does nothing while bundles are local.
+
+What flipping needs, in order:
+
+1. **Profile.** Point the group's build and load paths at `Remote.BuildPath` (`ServerData/[BuildTarget]`) and `Remote.LoadPath` (`https://content.crystallinerift.com/content/[BuildTarget]`, which `CiBuild` already sets from `CONTENT_URL`). In the group's schema, change the two path dropdowns from Local to Remote. Keep Pack Separately, LZ4 and the retry count. `WorldCellsGroup.Configure` and the `WorldCellsContentTests` schema test pin Local today and must change with it.
+2. **Remote catalog.** Turn **Build Remote Catalog** on (`m_BuildRemoteCatalog`) with the catalog's load path on the content host. Today it is off, which is why the player never asks the CDN for a catalog. With it on, every group's `Remote.*` assets stream, and every other group must stay Local and Cannot Change Post Release so the rest of the game still comes from the player. Players already run `AddressablesCatalogUpdater` at startup; if the CDN is unreachable the baked catalog is used.
+3. **Build and publish.** `ci/build.sh` then writes the remote group's bundles and catalog to `ServerData/<BuildTarget>/`. `ci/publish.sh` already syncs `ServerData/<T>/` to `content/<T>/` (bundles immutable with a one-year cache header, `.hash` and `.json` no-cache) and invalidates `/content/*`; it skips the step only while no `ServerData/` exists. Confirm the CloudFront behaviour for `/content/*` stays unsigned, since players fetch bundles without a signature (the player zips under `/builds/` are the signed ones).
+4. **Offline and Steam builds stay local.** The bundle location is baked into each player's catalog, so one project cannot ship both without a second profile. For builds that must run without a network (the Steam release, offline play), keep a profile where `WorldCells` is Local and build those players with it; hosted builds use the Remote profile. The loader code is the same either way. The Editor's Use Asset Database mode is unaffected.
+5. **Content updates.** After a release with remote cells, a changed cell is shipped with **Check for Content Update Restrictions** and **Update a Previous Build** against that release's `addressables_content_state.bin` (the file the CI build dirties; keep it per release), then `ci/publish.sh`.
+
+**First visit versus the edge hold.** A cell whose bundle is not on the device yet has to be downloaded before it can load. With no prefetch that wait lands inside the load: the streamer's load takes seconds instead of a few frames, `WorldEdgeHold` covers the screen and gates input while a built cell within about 4 m is not Active (and toasts "still loading" after 5 s), and the load's retry and give-up logic runs against download time. The prefetcher exists to move that download ahead of the player: it fetches the cells one band past the Dormant ring in the direction of travel, so on a normal walk the bundle is cached before the cell enters the Dormant ring. A player who teleports (a wagon ride) or outruns the fetch still meets the hold. Measure on the Deck over a real connection before moving more than the pilot cells: first-visit time per cell, how often the edge hold shows, bundle sizes per cell (shared dependencies such as terrain layers and materials are duplicated into each Pack Separately bundle unless a shared group holds them; run Addressables Analyze before moving the next cells).
 
 ## Offline data floor
 

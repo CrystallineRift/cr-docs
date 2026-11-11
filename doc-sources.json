@@ -1424,7 +1424,14 @@
         "ci/builds-index.sh",
         "Assets/CR/Core/Data/Editor/Build/CiBuild.cs",
         "ci/deck-*.sh",
-        "ci/tests/deck-scripts-test.sh"
+        "ci/tests/deck-scripts-test.sh",
+        "Assets/CR/Game/OpenWorld/Editor/ShippedScenes.cs",
+        "Assets/CR/Game/OpenWorld/Editor/WorldCellsGroup.cs",
+        "Assets/CR/Game/OpenWorld/AddressablesCellSceneLoader.cs",
+        "Assets/CR/Game/OpenWorld/CellPrefetcher.cs",
+        "Assets/AddressableAssetsData/AssetGroups/WorldCells.asset",
+        "Assets/AddressableAssetsData/AssetGroups/Schemas/WorldCells_*.asset",
+        "ProjectSettings/EditorBuildSettings.asset"
       ]
     },
     "description": "Standalone desktop builds: Unity 6 build profiles (CR_Game_macOS / CR_Game_Windows / CR_Game_Linux_SteamDeck, BuildProfileSetupTool reflection factory), CR > Build > Build Players… sequential multi-target window (PlayerBuildPlan pure logic + tests), per-platform e_sqlite3 natives bundled by build-packages.sh, Addressables built with player, game-data.bytes floor, Mono-only Windows cross-build; CR > Build > Deploy to Steam Deck… one-step Linux build + rsync-over-SSH push to a fixed folder on the Deck (SteamDeckDeployPlan pure logic + tests)"
@@ -2259,7 +2266,16 @@
         "Assets/CR/Content/Defs/Quests/**",
         "Assets/CR/Game/OpenWorld/Data/Map/region-bands.json",
         "Assets/CR/Game/OpenWorld/Editor/WildZones/WildSpawnerSeeder.cs",
-        "Assets/CR/Tests/Editor/WorldContentLintTests.cs"
+        "Assets/CR/Tests/Editor/WorldContentLintTests.cs",
+        "Assets/CR/Game/OpenWorld/AddressablesCellSceneLoader.cs",
+        "Assets/CR/Game/OpenWorld/CompositeCellSceneLoader.cs",
+        "Assets/CR/Game/OpenWorld/CellPrefetcher.cs",
+        "Assets/CR/Game/OpenWorld/Logic/CellSceneRoute.cs",
+        "Assets/CR/Game/OpenWorld/Logic/CellPrefetchPlanner.cs",
+        "Assets/CR/Game/OpenWorld/Editor/CellAddressableTool.cs",
+        "Assets/CR/Game/OpenWorld/Editor/WorldCellsGroup.cs",
+        "Assets/CR/Game/OpenWorld/Editor/ShippedScenes.cs",
+        "Assets/AddressableAssetsData/AssetGroups/WorldCells.asset"
       ]
     },
     "description": "Open world (P5: six side towns, wagon/boat vehicles, requiresQuestActive rides, line-side quests, side readables and barks, road spurs, smoke side; P4: the Blight, Crow's Gate, Volcanic Town and tower, two-stage false king via StoryNpcRow.startDisabled and initialise-on-enable, credits/relight sequence, epilogue, Act 5 quest line, road-32 re-route, smoke act5; P3: the Coliseum and the Capital, Act 4 quest line, story rows inside interiors, gatehouse kit role, smoke runner sections; P2: the three Act 3 spokes, crystal set piece, roads, tent/awning kit roles, plot tint, healer leaf region key; P1b: Mirandale/Bridgeford, startDisabled, story pickups, arenaKey, cr_town_remove): streamed 256 m cells, region mask, Dormant/Active rings, region identity, world_mode switch, Editor tools and cr_world_* CLI, regions.json, tech-demo areas; the Act 1 corridor builder (layout asset, steps, containers, idempotency, overrides, revert, checks, edge guards), terrain proxies, sun override, vendor-LOD guard, resume ground lift, Deck budget"

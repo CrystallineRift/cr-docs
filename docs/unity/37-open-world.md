@@ -86,6 +86,7 @@ Menu `CR/World/...`; every CLI command is `cr_world_*` and takes **one string** 
 | `cr_world_build_backdrop` | none | Builds the ocean plane + mountain ring blockout prefab (`OpenWorld/WorldBackdrop`), instanced in `World.unity`; skips ring cubes over built cells and adds the `VistaGround` (land mesh of unbuilt cells near Mirandale, `M_VistaGround.mat`). |
 | `cr_world_*_corridor` | see below | Corridor builder: seed, build, check, render, revert (section "Terrain and the corridor builder" below). |
 | `cr_world_seed_profiles` | none | Creates/refreshes `RegionProfiles.asset` from the legacy area scenes' audio + environment. Idempotent. |
+| `cr_cell_addressable` | `"World_cX_rY on\|off"` | Moves a built cell between Build Settings and the `WorldCells` Addressables group together with `WorldLayout.addressableCells`; idempotent; refuses unknown or unbuilt cells; prints the cell's resulting state (see [Cells from Addressables](?page=unity/37-open-world#cells-from-addressables-pilot-2026-11-11)). `cr_world_validate` now also checks that each built cell ships exactly one way. |
 
 Menu only: Import World Map, Create Cell, Validate World, Migrate Legacy Area (wizard), and the Scene-view Region overlay (borders, roads, cell lines, "you are in 2b" readout).
 
@@ -106,6 +107,94 @@ location triggers, arenas and Animators into `CellActivator.SetActivatables`. Ru
 Battle arenas are looked up by the encounter's own arena content key (spawner `_battleArenaKey` / trainer battle `battleArenaKey`),
 through `ArenaKeyTable`, so two areas migrated into one cell keep distinct arenas (Meadow `meadow-arena`, Village `starter-wild-zone`).
 Same-key unregister no longer drops a sibling's arena.
+
+## Cells from Addressables (pilot, 2026-11-11)
+
+> **Status: pilot on branch `feat/cells-addressables-pilot`.** Two cells load from Addressables bundles; the other 44 cells, every interior and the legacy areas load as before. The bundles are **local** (built into the player). No remote hosting is enabled and no catalog setting changed; the steps to flip it are in [Standalone Builds → Moving WorldCells to remote hosting (not enabled)](?page=unity/21-standalone-builds#moving-worldcells-to-remote-hosting-not-enabled).
+
+Why: all 46 cell scenes and about 114 MB of TerrainData are in Build Settings. Cells in bundles can later shrink the install and be fetched ahead of the player (the ring beyond the Dormant radius). The pilot builds the loading path and proves it on two cells before any cell is hosted.
+
+### How a cell is routed
+
+| Piece | What |
+|---|---|
+| `WorldLayout.addressableCells` | Scene names (a subset of `builtCells`) that load from Addressables. Empty means every cell loads from Build Settings, as before. |
+| `CellSceneRoute` (`CR.Game.OpenWorld.Logic`) | Pure: `IsAddressable(sceneName)` and the address `cells/<SceneName>`, e.g. `cells/World_c7_r1`. Names match exactly (case matters). |
+| `CompositeCellSceneLoader` | The bound `ICellSceneLoader`. Sends each `LoadAsync` / `UnloadAsync` / `IsLoaded` to `AddressablesCellSceneLoader` when the name is routed, otherwise to `UnitySceneLoader` with the same arguments. Cells and hosted interiors both go through it; interiors are never listed, so they are untouched. |
+| `AddressablesCellSceneLoader` | `Addressables.LoadSceneAsync(address, Additive, activateOnLoad: false)`; waits until the scene is read; claims the shared `SceneActivationGate` (one scene activates per frame, the same gate `UnitySceneLoader` uses); then `SceneInstance.ActivateAsync()`. One handle per scene, kept from the start of the load to the end of the unload. |
+| `IAddressableSceneApi` | The few Addressables / SceneManager calls the loader makes, so its state machine is tested against a fake. Real implementation: `AddressablesSceneApi`. |
+
+Behaviour worth knowing:
+
+- **Scene name.** The scene file stays `World_cX_rY`, so `SceneManager.GetSceneByName(cell.SceneName)` (what `WorldStreamer` uses to find the `CellActivator`) keeps working.
+- **`IsLoaded`** is true from the moment a load completes until its unload completes. It is also true for a scene of that name somebody else opened, such as a cell open in the Editor when Play starts, which the streamer adopts like any other cell.
+- **Failure.** A load that fails (missing bundle, activation error) releases its handle and throws. `WorldStreamerCore` retries with its usual backoff and gives up after three attempts exactly as it does for a Build Settings cell; nothing in the retry logic is Addressables-specific. A failed unload keeps the scene tracked so the streamer retries it.
+- **Cancellation.** Like `UnitySceneLoader`, a load is not cancelled half way: the scene lands, stays tracked, and the caller then sees the cancellation.
+- **Builds without Addressables.** The loader code compiles under `CR_ADDRESSABLES` (set for the Standalone targets). Without it the factory binds `UnitySceneLoader` for every scene, whatever the layout lists.
+
+### The `WorldCells` group
+
+Addressables group `WorldCells` (`Assets/AddressableAssetsData/AssetGroups/WorldCells.asset`): **Local** build and load paths, LZ4, bundle mode **Pack Separately** (one bundle per cell), retry count 3, entries addressed `cells/<SceneName>`. The group and its schema settings are created by code (`WorldCellsGroup.Ensure`), so the tool and the tests agree on them.
+
+### `cr_cell_addressable`: moving a cell
+
+CLI `cr_cell_addressable --args "<SceneName> on|off"` (menu `CR/World/Cell Addressable/...` acts on the selected cell scene).
+
+- `on`: adds the `WorldCells` entry (address `cells/<SceneName>`), removes the Build Settings entry and adds the name to `WorldLayout.addressableCells`.
+- `off`: the reverse. The Build Settings entry comes back at the end of the list.
+- It refuses a name that does not parse, is not in `builtCells`, or has no scene file. It makes no change when the cell is already in the requested state (reported as `unchanged`). If a step fails the earlier steps are undone.
+- It prints the resulting state, for example `World_c7_r1: ships from Addressables (group WorldCells entry: cells/World_c7_r1, addressableCells: listed, Build Settings: no)`.
+
+A scene ships one way only. `CreateCellTool` is unchanged: a new cell goes to Build Settings and is moved afterwards.
+
+### Pilot cells
+
+Chosen as built cells far from the start spawn (208, 30.1, 1105), with no hosted interior and no story content. Distance is from the spawn to the cell's nearest edge.
+
+| Cell | Distance | Scene size | Contents | Verdict |
+|---|---|---|---|---|
+| `World_c7_r0` | 1797 m | 1.5 MB | hosts `Interior_admiral-hall`; Fathamore quay wagon stop | no (interior) |
+| **`World_c7_r1`** | **1691 m** | 113 KB | terrain, border walls, rocks, empty containers | **pilot** |
+| `World_c7_r2` | 1619 m | 1.8 MB | Volcanic Town; hosts two interiors | no |
+| `World_c7_r5` | 1594 m | 237 KB | terrain, border walls, rocks | eligible, next to `c7_r4` |
+| `World_c7_r3` | 1586 m | 960 KB | Act 5 story rows (barks, locations, wild zones) | no (story content) |
+| **`World_c7_r4`** | **1584 m** | 159 KB | terrain, border walls, rocks, empty containers | **pilot** |
+| `World_c6_r1` | 1454 m | 752 KB | Act 4/5 wild zones and story rows | no |
+| `World_c6_r2`, `c6_r3`, `c6_r4` | 1328 to 1370 m | 1.5 to 2.4 MB | towns with hosted interiors | no |
+| `World_c6_r5`, `World_c5_r1` | 1339 m, 1225 m | 168 KB, 126 KB | empty containers (`[Continent Story]` holds nothing) | eligible, nearer |
+
+`World_c7_r1` and `World_c7_r4` are the two farthest cells with nothing in them but terrain, so the player reaches them late (the east edge of the map, next to the Volcanic Town cell) and a load failure costs no content. They are not adjacent, so each is its own streaming event. Their scenes carry the same `SceneContext`, `CellActivator` and `AreaWorldInitializer` as every cell, so the load, activation and `GetSceneByName` path is the real one. No JSON data (story rows, wild zones, wagon stops, roads) places anything inside either cell.
+
+**Bundles** (StandaloneOSX content build, Library/com.unity.addressables/aa/OSX/StandaloneOSX, one per cell):
+
+| Bundle | Size |
+|---|---|
+| `worldcells_scenes_cells_world_c7_r1_<hash>.bundle` | 41.7 MB (39.8 MiB) |
+| `worldcells_scenes_cells_world_c7_r4_<hash>.bundle` | 47.6 MB (45.4 MiB) |
+
+**Known cost: the pilot makes the install bigger, not smaller.** A cell scene is 113 to 159 KB and its TerrainData about 2 MB, but each bundle is about 40 MB: Addressables copies every implicit dependency into each Pack Separately bundle, and these cells reference the same tree, bark, terrain-layer and foliage textures as every other cell (the largest are 5 to 10 MB source textures). Those textures also stay in the player's own data because the other 44 cells are still in Build Settings, and the two bundles hold their own copies besides. The size win only comes after most cells have moved and the shared assets sit in one group that the cell bundles depend on (Addressables Analyze, "Check Duplicate Bundle Dependencies", shows the list). Do that before moving more cells.
+
+### Validation and the list of shipped scenes
+
+`cr_world_validate` reports an error for a built cell that ships neither way, both ways, or half of the Addressables way (listed without a group entry, a group entry without the list, wrong address), and for a name in `addressableCells` that is not a built cell. Rule: in Build Settings, or in `addressableCells` and the `WorldCells` group, never both.
+
+Anything that needs "the scenes that ship" calls `ShippedScenes.AllPaths()` (Build Settings plus the scenes in Addressables groups) instead of reading `EditorBuildSettings.scenes`: the NPC scene scan job and the shipped-content tests (`StoryGateSceneTests`, `ParkedContentShipsNowhereTests`) do.
+
+### Prefetch (dormant while bundles are local)
+
+`CellPrefetchPlanner` (pure) picks the addressable cells whose nearest edge is past the Dormant radius and within one cell of it, whose centre is within 60 degrees of the player's heading, nearest first, at most two. No heading, no plan. `PlayerHeadingTracker` derives the heading from the 4 Hz position samples (a step needs 4 m; a jump over 64 m is a teleport and clears it). `CellPrefetcher`, ticked by `WorldStreamer`, keeps one fetch in flight (`Addressables.DownloadDependenciesAsync` after a check that the address exists), releases each handle when it is read, fetches a cell once, and retries a failed one after 30 s. It is only created when the layout lists addressable cells. With local bundles a fetch finishes at once and downloads nothing. A tick costs about half a microsecond and runs 4 times a second.
+
+### Editor Play mode
+
+The project uses Addressables' default play mode script, **Use Asset Database** (`BuildScriptFastMode`). Cells load from their scene files with no content build. Switch to **Use Existing Build** (after Build > New Build > Default Build Script) to load from the real bundles.
+
+### Rollback
+
+Run `cr_cell_addressable --args "World_c7_r1 off"` (and `World_c7_r4 off`): the cell goes back into Build Settings and out of the list and the group. To roll the whole pilot back by hand: empty `WorldLayout.addressableCells`, put the two scenes back into Build Settings, delete the `WorldCells` group. With an empty list nothing else in the loading path changes.
+
+### Tests
+
+`AddressablesCellSceneLoaderTests` (state machine against a fake Addressables seam), `CompositeCellSceneLoaderTests` and `StreamerThroughCompositeLoaderTests` (routing; an empty list makes the same calls as the Build Settings loader alone; retry and give-up through the Addressables loader), `CellPrefetcherTests`, `CellPrefetchPlannerTests`, `CellSceneRouteTests`, `CellShippingRuleTests`, `CellAddressableRuleTests`, `ShippedScenesTests`, `WorldValidationRulesTests`, and `WorldCellsContentTests` (the real project: each listed cell has its scene, a `cells/<name>` entry and no Build Settings entry; every built cell ships one way; the group is local, LZ4, pack separately). PlayMode (`Assets/CR/Tests/PlayMode`): `WorldCellAddressablesPlayTests` loads a pilot cell through real Addressables, activates it, checks `GetSceneByName`, unloads, loads it again, and checks that `DownloadDependenciesAsync` on a local cell succeeds without a frame hitch and that an unknown address reports "nothing found" instead of throwing. `ProductionCellLoaderPlayTests` drives the game's own `AddressablesCellSceneLoader` and `AddressablesBundleFetcher` (by reflection, since the PlayMode assembly cannot reference the game assembly). Activating a cell outside the game logs a Zenject exception (the cell's `SceneContext` wants the Core scene's `CoreContext` as parent); the tests tolerate it. They pass in both play mode script modes: Use Asset Database, and Use Existing Build after an Addressables content build. Run by hand: `Unity -batchmode -projectPath <project> -runTests -testPlatform PlayMode -testFilter "WorldCellAddressablesPlayTests;ProductionCellLoaderPlayTests" -testResults <xml> -logFile <log>` with the Editor closed. Measured in batch mode on a Mac: with the bundles local, a fetch of a pilot cell finishes in 1 frame under Use Asset Database and in about 125 ms wall (longest frame 10 ms) under Use Existing Build, where the bundle is read asynchronously.
 
 ## `regions.json`
 
