@@ -40,3 +40,7 @@ A creature whose prefab cannot be resolved is listed as "(no prefab)" and cannot
 ## Naming the playing state
 
 The read-out names the playing state from the names baked into the scene for the creature plus every state a beat can resolve to (`ShowcaseBeats.AllResolvableStates`, which includes Hit, HeavyHit and Faint), so a controller that gains a state needs no scene rebuild. Beat expectations follow the production `ReactionFallbacks` chain against the states the controller actually has.
+
+## A beat after Faint stands the creature back up
+
+Faint is held on screen until the next beat. In a real battle a fainted creature only animates again when it is bound afresh (sent out again), and the presenter may refuse to animate it until then. The showcase does the same: the first beat after Faint re-binds the presenter (its entrance plays) and then plays the beat, so Victory, Attack, Hit and the rest work after a Faint. This behaves the same with and without a presenter that holds fainted creatures down.
