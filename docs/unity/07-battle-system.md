@@ -564,6 +564,10 @@ You do **not** build a controller per creature by hand, and you do **not** wire 
 
 For each creature `CreatureBattleControllerBuilder` finds its clips (in its current controller's folder), creates `<Creature>_Battle.controller` with the convention states, maps each to the best name-matched clip (e.g. `Attack`→`Slash Attack`, `Hit`→`Take Damage`, `Faint`→`Die`), adds the one-shot → Idle returns, and assigns it back to the prefab. States with no matching clip (often `Appear`/`Win`/`HeavyAttack`) are skipped — drop a clip into the creature's folder and re-run to fill them. The generator is re-runnable; just make sure each creature's `Idle` clip has **Loop Time** enabled in its import settings.
 
+#### A fainted creature stays down
+
+`CreatureBattlePresenter` remembers that its creature fainted (the flag is set when the Faint beat plays) and drives no Animator state for it afterwards: the turn-end Idle, Ready, Win, Level up and any hit still queued for that frame are ignored. A creature that faints to a status tick on the final blow (the plan is Tick, Faint, TurnEnd for the same creature) therefore does not stand back up. Sound, VFX and feedback of those beats still play. The flag clears when the creature is bound again: `Bind`, which the stager calls on spawn, resets it before the spawn beat plays. The `TurnEnded` event itself is still raised for other listeners. Creatures faint or are recalled; this is presentation only and changes no battle outcome.
+
 ### `BattleAbilityFxResponder` (the move's VFX/SFX)
 
 The ability's effects flow from `AbilityConfig` (`useVfx`/`travelVfx`/`hitVfx`, `useSfx`/`hitSfx`/`missSfx` — Addressables `AssetReference`s with synced string keys). Those keys ride the battle `outcome`, and `BattleCoordinator.FireOutcomeEvents` packs them — with the caster and target ids it already has — into a single positioned **`AbilityFxCue`** (`BattleEvents.AbilityFx`). This replaced the old scattered, position-less `Sfx/VfxRequested` raises for the attack.

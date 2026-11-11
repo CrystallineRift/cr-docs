@@ -234,7 +234,7 @@ The counts are the vertices the engine draws, with UV seams split. The object, b
 | Test | Checks |
 |---|---|
 | `The_seven_rigged_creatures_are_found` | The seven prefabs above are all picked up, so a renamed or moved prefab cannot silently drop out of the other checks. |
-| `Every_rigged_creature_mesh_is_within_the_vertex_budget` | Total vertices are at most 40,000 per prefab. The failure message lists the offending model and its count. |
+| `Every_rigged_creature_mesh_is_within_the_vertex_budget` | Vertices summed over every `SkinnedMeshRenderer` and every plain `MeshFilter` mesh on the prefab are at most 40,000, so an extra unskinned mesh cannot dodge the budget. The failure message lists the offending model and its count. |
 | `Every_rigged_creature_still_binds_to_its_model` | Each skinned mesh has a mesh, bones that are all bound, as many bones as bind poses, and no missing material; the mesh is not Read/Write; the root has an Animator with a valid avatar and a battle controller, a `CreatureBattlePresenter`, and a `CreatureWorldAnimation` with a world controller. |
 | `Every_rigged_creature_deforms_when_animated` | The Idle pose and a mid-Attack pose differ by at least 5 % of the creature's height. A prefab whose bones no longer match a re-exported FBX bakes the same bind pose for both and fails. |
 

@@ -35,7 +35,8 @@
 - **Why:** in battle the game cross-fades Animator states by name; the rigged creatures had no `Hit` or `Faint` state, so those beats fell back to Idle. Creatures faint or are recalled, they never die, so `Faint` is a slump with a held end pose, not a death.
 - **Rigging skill (animating-quadrupeds):** two new clips for quadrupeds (bear, big cat and calf styles) and birds, wired into the build, check and Unity verify steps. Existing clips are unchanged (a rebuild of Idle, Walk, Roar, Attack and Jump_Attack on Mudcalf, and of all seven clips on Zephryne, matches the old keys exactly).
 - **Assets:** `Hit` and `Faint` added to the Mudcalf, Cindralis, Cindraker and Zephryne FBX exports, Cindris, Zephlet and the gator-bear. The Animator controller treats `Hit` like any one-shot and `Faint` as a held state.
-- **Docs:** [Battle System, Hit and Faint clips](?page=unity/07-battle-system).
+- **cr-api-unity:** `CreatureBattlePresenter` keeps a fainted creature down: after the Faint beat it drives no Animator state (turn-end Idle, Ready, Win, Level up, queued hits) until the creature is bound again, so a faint on a status tick no longer stands the creature back up. Covered by `CreatureBattlePresenterFaintTests`.
+- **Docs:** [Battle System, Hit and Faint clips](?page=unity/07-battle-system) and [A fainted creature stays down](?page=unity/07-battle-system#a-fainted-creature-stays-down).
 
 ## 2026-11-11 — Lighter rigged creature meshes (about 30,000 vertices)
 
