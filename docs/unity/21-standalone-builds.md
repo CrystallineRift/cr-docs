@@ -394,22 +394,23 @@ log), and Deck builds made before Linux became Vulkan-first (see [Linux graphics
 
 | Check | Verdict |
 |---|---|
-| Build stamp | PASS only for a parsed stamp (`vX.Y.Z · commit · date`), shown with its version; `no stamp at` is WARN, `is not a build stamp` / `could not read the stamp` are FAIL; with `--expect`, a different version or no stamp is FAIL |
-| Graphics API | PASS for Vulkan, WARN for OpenGL Core |
-| Render pipeline | PASS only on `Steam Deck detected; render pipeline set to ...`; `no Deck pipeline asset` and `could not select Deck pipeline` are FAIL |
-| Frame pacing | PASS when the `[FramePacing]` line is present; its refresh rate gives the target fps for the frame-rate check |
-| Boot timings | db, content, shaders and total from the `[Boot]` line; WARN when the menu opened while shaders were still compiling, or on `Database gate not ready` / `faulted`, `Shader first-run check failed` |
-| database is locked | FAIL if any, on any line whatever its tag (the v0.2.19 fix: must be 0; the v0.2.18 baseline has 10) |
-| Hitches | worst and count; FAIL at 30 000 ms or more, WARN at 1 000 ms or more, WARN when 20 or more hitches are 250 ms or more |
-| Spawner-sync hitches | FAIL at 10 or more hitches of 100 to 190 ms between `[ContentSync] Syncing N spawners` and the next `[ContentSync]` line (v0.2.19 fix); the window ends at the next `[ContentSync]` line, or after 5000 log lines if none follows |
-| Null shader errors, Shader.Find nulls | FAIL if any, including `[Shaders] Resources/... is missing` (v0.2.19 fix: must be 0) |
-| Shader warm-up | variant and graphics-state counts from `[ShaderWarmup] warm-up done`; WARN when it ended early or never ran |
-| PSO trace load | WARN with the reason for `no PSO trace at`, `PSO trace skipped` or `has no PSO trace support` |
-| PSO trace recording | PASS with `saved N graphics states`; WARN when recording started but nothing was saved; FAIL on `could not` |
-| SQLite pool | counts from the `[SqlitePool]` quit line (v0.2.20); WARN when absent or switched off |
-| Frame rate | median average fps and lowest 1 % low over the `[Perf]` windows after the first 60 s; relative to the target fps from `[FramePacing]` (fallback 60): FAIL below 50 % of target, WARN below 90 %, and WARN when the lowest 1 % low is below 50 % of target; the output states the numbers |
+| Build stamp | PASS for a parsed stamp (`vX.Y.Z · commit · date`), shown with its version. `no stamp at` is WARN; `is not a build stamp` and `could not read the stamp` are FAIL; no `[BuildStamp]` line is WARN. With `--expect <version>` (a leading `v` is ignored), a stamp of another version is FAIL and a missing `[BuildStamp]` line is FAIL |
+| Graphics API | WARN when any OpenGL line is present (`Creating GLContext`, `OpenGL Core 4`, `OPENGL LOG:`), checked before Vulkan; PASS for Vulkan; WARN when neither is found |
+| Render pipeline | PASS only on `[DeckRender] Steam Deck detected; render pipeline set to ...`; `no Deck pipeline asset` and `could not select Deck pipeline` are FAIL; no `[DeckRender]` line is WARN |
+| Frame pacing | PASS when the `[FramePacing]` line is present (its refresh rate, vsync count and frame cap give the target fps used by the frame-rate check); WARN when absent |
+| Boot timings | PASS with the db, content, shaders and total times from the `[Boot]` line. WARN when no timings line follows, when `Database gate not ready` / `faulted` / `wait failed`, `Shader first-run check failed`, `Shader warm-up failed` or `Boot sequence failed` was logged, or when the menu opened while shaders were still compiling (`shader compile still running`) |
+| database is locked | FAIL if any line contains it, whatever its tag (the v0.2.19 fix: must be 0; the v0.2.18 baseline has 10); PASS at 0 |
+| Hitches | PASS with no `[Hitch]` lines. FAIL for any hitch of 30 000 ms or more; WARN for a worst hitch of 1 000 ms or more; WARN for 20 or more hitches of 250 ms or more; otherwise PASS. Shows the worst and the count |
+| Spawner-sync hitches | WARN when no `[ContentSync] Syncing N spawners` line is in the log. Counts hitches of 100 to 190 ms between that line and the next `[ContentSync]` line (or 5000 log lines if none follows): FAIL at 10 or more (the v0.2.19 fix removes this run), WARN for 1 to 9, PASS for none |
+| Null shader errors | FAIL on any `Parameter name: shader` or `(Parameter 'shader')` line (v0.2.19 fix: must be 0); PASS at 0 |
+| Shader.Find nulls | FAIL on any `[Shaders] Shader.Find(...) is null` line or `[Shaders] Resources/... is missing` line (v0.2.19 fix: must be 0); PASS at 0 |
+| Shader warm-up | PASS with variant and graphics-state counts from `[ShaderWarmup] warm-up done`; WARN when it ended early, was cut short, or never ran |
+| PSO trace load | PASS when the warm-up warmed one or more graphics states. WARN, with the reason, for `no PSO trace at`, `PSO trace skipped` (recorded for another platform or API) or `has no PSO trace support`; WARN when no trace was warmed |
+| PSO trace recording | PASS with `saved N graphics states`, or PASS as "not a recording session" when `-crPsoTrace` was not used; WARN when recording started but nothing was saved; FAIL on `[PsoTrace] could not` |
+| SQLite pool | PASS with the counts from the `[SqlitePool]` quit line (v0.2.20); WARN when the pool was switched off, the line is absent, or it never reused a connection (hits 0) |
+| Frame rate | Median average fps and lowest 1 % low over the `[Perf]` windows that start after the first 60 s. The target is the frame cap, else the refresh rate divided by the vsync count, from `[FramePacing]` (fallback 60). FAIL below 50 % of target (median); WARN below 90 % (median) or when the lowest 1 % low is below 50 % of target; otherwise PASS. WARN when there are no `[Perf]` lines or every window is inside the first 60 s. The output states the numbers |
 
-**A check never passes without evidence.** Checks that pass because nothing bad was seen turn into WARN when the log starts mid-session (a tail fetch), and the hitch checks turn into WARN when the hitch recorder was off (no `[Hitch]` or `[Perf]` line; launch with `-crHitchLog`). An empty log passes nothing. A problem that is found still FAILs in a tail.
+**A check never passes without evidence.** An empty log turns every check into WARN. A log with no `Initialize engine version` line starts mid-session (a tail fetch), and then the checks that pass only because nothing bad was seen (database is locked, Hitches, Spawner-sync hitches, both shader-null checks, PSO trace recording) turn into WARN. Hitches and Spawner-sync hitches also turn into WARN when the hitch recorder was off (no `[Hitch]` or `[Perf]` line; launch with `-crHitchLog`). A problem that is found still FAILs in a tail.
 
 The Deploy window fetches only the last 2000 lines, so a long session's start-up lines may be missing; the report then says it read only the tail and start-up checks may WARN for that reason. `ci/deck-fetch-log.sh` fetches the whole file (it writes to a temp file and replaces `--out` only when ssh succeeded and the log is not empty).
 
