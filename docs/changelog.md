@@ -1,11 +1,12 @@
 # Changelog
 
-## 2026-11-11 — Mesh Read/Write off for static model families
+## 2026-11-11 — Mesh Read/Write off for static model families (cr-api-unity #185)
 
 - Mesh Read/Write is now off for the static environment and placeholder-creature model families (Fantastic Ancient Forest, City, Interior and Village packs, LeartesStudios, Monsters Ultimate Pack 02 Cute Series, NOT_Lonely/HQ_RetroFarmhouse, PurePoly/Mining_Pack). The policy is `model-readwrite-policy.json`, applied on import by `ColliderMeshReadablePostprocessor` (version 2); models on `readable-collider-models.json` stay readable. Six Fantastic Village collision models were added to that list. Every machine re-imports all models once (about 5 minutes here).
-- `ci/build.sh` now fails a build whose Unity log contains `doesn't have Read/Write enabled` (`ci/check-build-log.sh`, tested by `ci/tests/build-log-rules-test.sh`).
+- New build gate `ColliderMeshBuildGate`: before every Player build, and up front in CiBuild (exit 5), the collider audit (scenes plus Addressables and Resources prefabs) must find no mesh collider that would have no collision in a Player (about 10 s). Headless `AuditBatch` exits 1 while one remains.
+- `ci/build.sh` also fails when the log contains Unity's MeshCollider Read/Write warning (`ci/check-build-log.sh`); it was never seen to fire in a positive control, so it is an extra, not the gate.
 - New: `cr_model_readwrite_report` (inventory), headless `ColliderMeshAuditRunner.AuditBatch`.
-- **Docs:** [World Navigability, Model Read/Write policy](?page=unity/49-world-navigability#model-readwrite-policy); the collider-mesh section now says `bakeCollisionMeshes` is 1.
+- **Docs:** [World Navigability, Model Read/Write policy](?page=unity/49-world-navigability#model-readwrite-policy) and [Mesh colliders in a Player build](?page=unity/49-world-navigability#mesh-colliders-in-a-player-build); the section now says `bakeCollisionMeshes` is 1 and describes the build gate.
 
 ## 2026-11-11 — Open-world cells from Addressables (pilot, two cells, bundles still local)
 
