@@ -96,6 +96,35 @@ Other files: `ShaderWarmupPaths.cs`, `ShaderWarmupSummary.cs`, `PsoTraceRecorder
 
 **Build-time variant stripping** (`Editor/ShaderVariantStripper.cs`, an `IPreprocessShaders`; rules in `ShaderVariantStripPolicy.cs`). For every shader the recorded collection covers, keyworded variants the game was never seen to use are dropped from the player: less to compile on first launch, smaller build, and a shipped set that no longer drifts between builds. Shaders the recording never saw are left whole, and the keyword-less variant is always kept. It is **report-only by default**: every build logs one `[ShaderStrip]` line ("would strip N of M variants across K shaders") plus the heaviest shaders; set `CR_SHADER_STRIP=1` in the build environment to strip for real. Turn it on only after a recording that covers the title, the world, a battle and the interiors, otherwise a biome or an effect the recording missed ships pink.
 
+### Recording the Steam Deck's Vulkan PSO trace
+
+A PSO trace is only recorded, and only used, when the player runs Vulkan. A Linux player built from `feat/linux-vulkan-first` onward is Vulkan-first (see "Linux graphics APIs" in the Standalone Builds page), so the Deck now qualifies. Before that change the Deck ran OpenGL Core and the warm-up logged `OpenGLCore has no PSO trace support`.
+
+**Record**
+
+1. Deploy a build to the Deck (CR > Build > Deploy to Steam Deck…). Check the Deck's Player.log says it is on Vulkan; the log report's "Graphics API" line shows this.
+2. In Steam, open the game's Properties > Launch Options and set `-crPsoTrace` (the environment variable `CR_PSO_TRACE=1` does the same). Add `-crHitchLog` if the build is not a development build and you also want the `[Perf]` lines.
+3. Launch from Game Mode. On the first launch with a new graphics API the boot splash holds on "Compiling shaders" (up to 90 s). Let it finish.
+4. Play what the trace should cover: the title screen, walk each area, open the bag and party screens, and start a battle with each kind of attack effect. Any pipeline not drawn during the session is not in the trace and will compile (and hitch) the first time a player meets it.
+5. Quit cleanly: Steam menu > Exit Game, or the in-game quit. Killing the process or letting the Deck sleep and then force-closing means the trace is never written.
+6. Check Player.log for `[PsoTrace] recording; will write '...pso-LinuxPlayer-Vulkan.graphicsstate' on quit.` near the start and `[PsoTrace] saved N graphics states, M variants to '...'` at the end. No `saved` line means no file.
+
+The file is written to `~/.config/unity3d/CR/Crystalline Rift/Shaders/pso-LinuxPlayer-Vulkan.graphicsstate` on the Deck.
+
+**Fetch and import**
+
+- In the Editor: CR > Build > Deploy to Steam Deck…, then **Fetch PSO trace from the Deck**. It copies the file with `scp -O` to a temporary folder, then imports it through `cr_pso_import` into `Assets/StreamingAssets/CR/Shaders/`.
+- Headless: `ci/deck-pso-fetch.sh <deck-ip>` from the project root does the same and prints the next steps. Add `--dry-run` to see the exact commands without running anything.
+- By hand: `unity cmd --project-path <proj> cr_pso_import --args <path to the file>`.
+
+`cr_pso_import` and both fetch paths accept only a file named `pso-<Platform>-<GraphicsApi>.graphicsstate` (for example `pso-LinuxPlayer-Vulkan.graphicsstate`); any other name is refused. An EditMode test (`PsoTraceFilesTests`) fails if a badly named `.graphicsstate` file is ever left in `Assets/StreamingAssets/CR/Shaders`.
+
+**Ship it.** Let Unity import the file (it writes the `.meta`), commit both, and rebuild the Linux player. The next Deck log should show `[ShaderWarmup] warm-up done: N/N variants, M/M graphics states` with M above zero and no `no PSO trace` warning.
+
+**Caveat: the warm-up marker.** The "completed a warm-up" marker (`ShaderWarmupGate.MarkerKey`) is keyed by the warm-up set (Unity version plus shader and variant counts), the graphics API and the device. It does not include the trace. A device that already finished a warm-up for that set and API will therefore not hold the boot splash again when a trace is added to a later build; the trace is still warmed, but in the background behind the menu. To see the explicit first-run splash again on a test Deck, delete the `cr.shaders.warmed.*` keys from the game's PlayerPrefs file (`~/.config/unity3d/CR/Crystalline Rift/prefs`) or test on a fresh install.
+
+**Reading the result.** `ci/deck-fetch-log.sh <deck-ip>` copies the whole Player.log to `DeckLogs/`; `cr_deck_log_report --args <file>` then prints PASS / WARN / FAIL lines for the shader checks (see "Testing on the Steam Deck" in the Standalone Builds page).
+
 ## Adding a phase
 
 1. Add a key constant and a `LoadingPhase(key, weight)` to the right plan in `UI/Logic/Loading/LoadingPlans.cs`. Weights are relative within the plan.

@@ -469,6 +469,19 @@ A `ScriptableObject` created via `Assets > Create > CR > Battle > Creature Anima
 
 > **Note:** As of the presentation-orchestrator refactor, the `Strike` beat in `BattlePresentationSequencer` raises `CreatureAttacking` with the hard-coded `"Attack"` clip (the serialized anim-config fields on `BattleCoordinator` were removed along with `FireOutcomeEvents`). These `ScriptableObject` types still exist; re-wiring per-ability clip overrides through the sequencer (`BattleAnimationConfig.attackClipOverride` → `CreatureAnimationProfile.defaultAttackClip` → `"Attack"`) is a future enhancement.
 
+### Hit and Faint clips
+
+Every creature rigged with the animating-quadrupeds pipeline (quadrupeds and birds) now ships two more clips next to Idle, Walk, Run, Attack, Jump_Attack, Attack_Bite and Roar (birds: Idle, Walk, Run, Fly, Attack, Attack_Peck, Roar): `Hit` and `Faint`. They are the clip names `CreatureAnimationProfile.hitClip` and `faintClip` default to, so no profile change is needed for the rigged creatures to stop falling back to Idle on those beats.
+
+| Clip | Length (24 fps) | Loops | Ends | Notes |
+|------|-----------------|-------|------|-------|
+| `Hit` | 0.5 to 0.63 s (12 to 15 frames) | no | on the Idle frame-1 pose | A flinch from a blow to the front on planted paws: body shoved back and down, head snaps away and ducks, a short yelp, tail lashes. The controller returns to Idle after it, as for every other one-shot. |
+| `Faint` | 1.67 to 1.83 s (40 to 44 frames) | no | **held**: the last 8 or 9 frames are one frozen pose | Passing out, never dying: a wobble, the legs give way, the body sinks onto its belly (a bird onto its breast with its wings drooping on the ground), the head lowers last, the tail goes limp, the mouth shuts. Nothing rolls onto its back. |
+
+`Faint` must not have a transition back to Idle in the Animator controller: the state plays through and stays on its last frame until the battle removes the visual. The preview controller generated for each creature follows this (every other clip returns to Idle on exit time; `Faint` has no exit transition, and the Inspector's Idle button cross-fades out of it).
+
+The poses differ per movement style (bear: heavy and grudging; big cat: arched spine, crouch and a quick snap back, a controlled slump; calf: a startled hop of the front hooves, a wobbly slump with the head on its paws; bird: knocked back half a hop with the wings flaring, a faint with the wings spread on the ground), but the clip names, the Idle start pose and the held end pose are the same for all of them.
+
 ## Battle presentation: creature body vs. ability signature
 
 Performance splits along ownership, and the two halves are sourced and played independently:
@@ -550,6 +563,10 @@ You do **not** build a controller per creature by hand, and you do **not** wire 
 - **`CR → Battle → Build Battle Controllers (All CR Creatures)`** — every prefab under `Assets/CR/Prefabs/Creatures`.
 
 For each creature `CreatureBattleControllerBuilder` finds its clips (in its current controller's folder), creates `<Creature>_Battle.controller` with the convention states, maps each to the best name-matched clip (e.g. `Attack`→`Slash Attack`, `Hit`→`Take Damage`, `Faint`→`Die`), adds the one-shot → Idle returns, and assigns it back to the prefab. States with no matching clip (often `Appear`/`Win`/`HeavyAttack`) are skipped — drop a clip into the creature's folder and re-run to fill them. The generator is re-runnable; just make sure each creature's `Idle` clip has **Loop Time** enabled in its import settings.
+
+#### A fainted creature stays down
+
+`CreatureBattlePresenter` remembers that its creature fainted (the flag is set when the Faint beat plays) and drives no Animator state for it afterwards: the turn-end Idle, Ready, Win, Level up and any hit still queued for that frame are ignored. A creature that faints to a status tick on the final blow (the plan is Tick, Faint, TurnEnd for the same creature) therefore does not stand back up. Sound, VFX and feedback of those beats still play. The flag clears when the creature is bound again: `Bind`, which the stager calls on spawn, resets it before the spawn beat plays. The `TurnEnded` event itself is still raised for other listeners. Creatures faint or are recalled; this is presentation only and changes no battle outcome.
 
 ### `BattleAbilityFxResponder` (the move's VFX/SFX)
 

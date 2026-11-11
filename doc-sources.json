@@ -521,7 +521,8 @@
         "Assets/CR/Game/Battle/Logic/BattleBeatPlan.cs",
         "Assets/CR/Game/Battle/Logic/BattleResource*.cs",
         "Assets/CR/UI/Logic/BattleResource*.cs",
-        "Assets/CR/UI/Battle/BattleCardResources.cs"
+        "Assets/CR/UI/Battle/BattleCardResources.cs",
+        "Assets/CR/Prefabs/*_Preview.controller"
       ]
     },
     "description": "BattleCoordinator simultaneous-round loop (one intent per round, server-ordered steps played back in order) with battle-scoped CancellationToken, BattleHttpDomainAdapter + OnlineOfflineBattleDomainService stack, BattleEvents static events (incl. StagingFailed), Arena system with IBattleStager returning BattleStagingResult (player teleport + creature visual spawn at PlayerCreaturePosition/OpponentCreaturePosition), self-registering BattleArenaRegistry, reactive Cinemachine 3 cinematic camera (BattleCinematicDirector conductor driven by CameraCue*/TurnStarted, editor-authored BattleCameraRig role vCams + BattleCameraProfile feel SO + decoupled BattleCameraShakeResponder via BattleCameraRigContext, BattleFormation slot model for 1v1->NvN, one-click rig builder + beat simulator), per-creature CreatureBattlePresenter (added to creature prefabs; the stager resolves the creature's shared CreatureReactionProfile from its CreatureDefinition by content key, flattens any base→variant inheritance via Resolve(), and hands the result to Bind; subscribes to BattleEvents and plays the creature's own body — animation+cry+feedback — per beat, with a standard Animator state-name convention in CreatureReactionDefaults and HasState-guarded fallbacks), ability VFX/SFX sourced from AbilityConfig keys on the outcome and played positionally by BattleAbilityFxResponder via a single positioned AbilityFxCue + BattleVisualRegistry (id→transform), BattleHUD with Guid-typed creature IDs and HP cache replay, BattleSync SOAP bridge, StartNpcBattle/StartWildBattle, NpcBattleRequest.BattleArenaKey, SpawnerEncounterBehaviour with encounter delay; trainer battles: bark-then-challenge flow (TrainerChallenged banner, Run hidden, RunRefused log, OpponentItemUsed), shared RunTurnLoopAsync with trainer AI decider + NPC item turns, TrainerBattleDefinition SO + Trainer Battle Author window (spawner plumbing hidden, deterministic md5 ids, bark conversation + scene stamp); Trainer Battle Author rebuilt as the project's first UXML/USS editor window (roster rail + dossier, readiness meter, checklist cards, plain-language copy); dev-only BattleDebugStatsOverlay (F3, Editor/DEVELOPMENT_BUILD only) rendering per-creature stat/status/ability/held-item/stat-modifier panels beside BattleHUD's cards, sourced from the same BattleEvents bus + TeamSync; Simultaneous rounds client side: StepTurnCue per step for both sides, Interrupted and ConditionTick playback, swap-only round, PendingSwap, ResyncAsync with lastRoundSteps, draw as loss, BattleLogQueue, IBattleCoinFlip binding"
@@ -1206,7 +1207,11 @@
         "Assets/CR/Core/Data/Editor/ContentStudioTool.PushAll.cs",
         "Assets/CR/Core/Data/Logic/PushRunLedger.cs",
         "Assets/CR/Tests/Editor/CreatureContentAddressTests.cs",
-        "Assets/CR/Tests/Editor/GaterbearPlaceholderTests.cs"
+        "Assets/CR/Tests/Editor/GaterbearPlaceholderTests.cs",
+        "Assets/CR/Tests/Editor/RiggedCreatureModelTests.cs",
+        "Assets/CR/Tests/Editor/RiggedCreatureDeformationTests.cs",
+        "Assets/CR/Tests/Editor/DeformationTruthFile.cs",
+        "Assets/CR/Prefabs/*.deform_truth.bytes"
       ]
     },
     "description": "Two-database content pipeline: game-data DB (global authored content, read-only) vs player-data DB (per-trainer saves, mutable); build-time game-data.bytes artifact from CR.Data.Migrations.Tool + build-packages.sh with 12 referential-integrity checks; ships as Addressable + StreamingAssets first-run floor; cold-start adopt (atomic copy + fail-closed schema-version gate); content patched via Addressables, player-data migrated in place; content-vs-player taxonomy"
@@ -1421,7 +1426,18 @@
         "ci/build.sh",
         "ci/publish.sh",
         "ci/builds-index.sh",
-        "Assets/CR/Core/Data/Editor/Build/CiBuild.cs"
+        "Assets/CR/Core/Data/Editor/Build/CiBuild.cs",
+        "ci/deck-*.sh",
+        "ci/tests/deck-scripts-test.sh",
+        "Assets/CR/Game/OpenWorld/Editor/ShippedScenes.cs",
+        "Assets/CR/Game/OpenWorld/Editor/WorldCellsGroup.cs",
+        "Assets/CR/Game/OpenWorld/AddressablesCellSceneLoader.cs",
+        "Assets/CR/Game/OpenWorld/CellPrefetcher.cs",
+        "Assets/AddressableAssetsData/AssetGroups/WorldCells.asset",
+        "Assets/AddressableAssetsData/AssetGroups/Schemas/WorldCells_*.asset",
+        "ProjectSettings/EditorBuildSettings.asset",
+        "Assets/CR/Game/OpenWorld/Logic/CellShippingGuard.cs",
+        "Assets/CR/Game/OpenWorld/Editor/CellShippingBuildGuard.cs"
       ]
     },
     "description": "Standalone desktop builds: Unity 6 build profiles (CR_Game_macOS / CR_Game_Windows / CR_Game_Linux_SteamDeck, BuildProfileSetupTool reflection factory), CR > Build > Build Players… sequential multi-target window (PlayerBuildPlan pure logic + tests), per-platform e_sqlite3 natives bundled by build-packages.sh, Addressables built with player, game-data.bytes floor, Mono-only Windows cross-build; CR > Build > Deploy to Steam Deck… one-step Linux build + rsync-over-SSH push to a fixed folder on the Deck (SteamDeckDeployPlan pure logic + tests)"
@@ -2256,7 +2272,20 @@
         "Assets/CR/Content/Defs/Quests/**",
         "Assets/CR/Game/OpenWorld/Data/Map/region-bands.json",
         "Assets/CR/Game/OpenWorld/Editor/WildZones/WildSpawnerSeeder.cs",
-        "Assets/CR/Tests/Editor/WorldContentLintTests.cs"
+        "Assets/CR/Tests/Editor/WorldContentLintTests.cs",
+        "Assets/CR/Game/OpenWorld/AddressablesCellSceneLoader.cs",
+        "Assets/CR/Game/OpenWorld/CompositeCellSceneLoader.cs",
+        "Assets/CR/Game/OpenWorld/CellPrefetcher.cs",
+        "Assets/CR/Game/OpenWorld/Logic/CellSceneRoute.cs",
+        "Assets/CR/Game/OpenWorld/Logic/CellPrefetchPlanner.cs",
+        "Assets/CR/Game/OpenWorld/Editor/CellAddressableTool.cs",
+        "Assets/CR/Game/OpenWorld/Editor/WorldCellsGroup.cs",
+        "Assets/CR/Game/OpenWorld/Editor/ShippedScenes.cs",
+        "Assets/AddressableAssetsData/AssetGroups/WorldCells.asset",
+        "Assets/CR/Game/OpenWorld/Logic/CellShippingGuard.cs",
+        "Assets/CR/Game/OpenWorld/Editor/CellShippingBuildGuard.cs",
+        "Assets/CR/Game/OpenWorld/CellSceneLoaderFactory.cs",
+        "Assets/CR/Tests/Editor/CellShippingBuildGuardTests.cs"
       ]
     },
     "description": "Open world (P5: six side towns, wagon/boat vehicles, requiresQuestActive rides, line-side quests, side readables and barks, road spurs, smoke side; P4: the Blight, Crow's Gate, Volcanic Town and tower, two-stage false king via StoryNpcRow.startDisabled and initialise-on-enable, credits/relight sequence, epilogue, Act 5 quest line, road-32 re-route, smoke act5; P3: the Coliseum and the Capital, Act 4 quest line, story rows inside interiors, gatehouse kit role, smoke runner sections; P2: the three Act 3 spokes, crystal set piece, roads, tent/awning kit roles, plot tint, healer leaf region key; P1b: Mirandale/Bridgeford, startDisabled, story pickups, arenaKey, cr_town_remove): streamed 256 m cells, region mask, Dormant/Active rings, region identity, world_mode switch, Editor tools and cr_world_* CLI, regions.json, tech-demo areas; the Act 1 corridor builder (layout asset, steps, containers, idempotency, overrides, revert, checks, edge guards), terrain proxies, sun override, vendor-LOD guard, resume ground lift, Deck budget"
@@ -2980,7 +3009,9 @@
         "Assets/CR/Core/Sync/Logic/ContentSyncProgress.cs",
         "Assets/CR/Game/OpenWorld/OpenWorldBootstrap.cs",
         "Assets/CR/Game/World/IWorldInitProgress.cs",
-        "Assets/CR/Game/World/WorldInitProgress.cs"
+        "Assets/CR/Game/World/WorldInitProgress.cs",
+        "Assets/CR/Core/Data/Editor/Build/SteamDeck/Logic/SteamDeckPsoFetchPlan.cs",
+        "ci/deck-pso-fetch.sh"
       ]
     },
     "description": "Loading screens: plans/phases/progress model, boot sequence and timeouts, online entry, world entry, shader warm-up recording (variants + PSO traces), adding a phase"
@@ -3023,7 +3054,21 @@
         "Assets/CR/Tests/Editor/MeshColliderPlayerBuildTests.cs",
         "Assets/CR/Tests/Editor/TownCameraTrimTests.cs",
         "ProjectSettings/TagManager.asset",
-        "ci/build.sh"
+        "ci/build.sh",
+        "Assets/CR/Core/Data/Editor/Build/CrModelReadWriteCommands.cs",
+        "Assets/CR/Core/Data/Logic/ModelReadWrite*.cs",
+        "Assets/CR/Core/Data/Logic/ModelFamily*.cs",
+        "Assets/CR/Core/Data/Logic/ModelMeshReference*.cs",
+        "Assets/CR/Tests/Editor/ModelReadWriteImportTests.cs",
+        "ci/check-build-log.sh",
+        "ci/tests/build-log-rules-test.sh",
+        "ProjectSettings/ProjectSettings.asset",
+        "Assets/CR/Core/Data/Editor/Build/ColliderMeshAudit/*.cs",
+        "Assets/CR/Core/Data/Editor/Build/ColliderMeshBuildGate.cs",
+        "Assets/CR/Core/Data/Editor/Build/CiBuild.cs",
+        "Assets/CR/Core/Data/Logic/ColliderBuildGate.cs",
+        "Assets/CR/Core/Data/Logic/BrokenColliderFact.cs",
+        "Assets/CR/Tests/Editor/ColliderMeshBuildGateTests.cs"
       ]
     },
     "description": "World navigability: nav probe commands and reason codes, release gate, EnsureCollider mesh/box rule, camera trim (CameraIgnore layer), Player-build mesh collider audit and readable list, town wall ground sampling, dungeon clearance and reach rules, seed-before-build, event row y=0, overworld row placement, afterSolve terrain repair pads and nav-snap ledger"
@@ -3045,5 +3090,29 @@
       ]
     },
     "description": "Quest helpers: Gameplay toggle, Track button, HUD pin, authored objective helper markers, world beam/ring/glow, map-node pulse"
+  },
+  "unity/51-creature-showcase": {
+    "docPath": "docs/unity/51-creature-showcase.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [
+        "Assets/CR/Game/Creatures/Debug/CreatureShowcase.cs",
+        "Assets/CR/Game/Creatures/Editor/CreatureShowcaseSceneBuilder.cs",
+        "Assets/CR/Game/Creatures/Editor/DevGrantLevelsCommand.cs",
+        "Assets/CR/Game/Creatures/Logic/*.cs",
+        "Assets/CR/Game/Evolution/Logic/EvolutionBlendScale.cs",
+        "Assets/CR/Game/Evolution/Presentation/EvolutionStageScaling.cs",
+        "Assets/CR/Game/Evolution/Presentation/EvolutionStageDirector.cs",
+        "Assets/CR/Scenes/Debug/CreatureShowcase.unity",
+        "Assets/CR/Tests/Editor/CreatureShowcaseTests.cs",
+        "Assets/CR/Tests/Editor/DevGrantLevelsCommandTests.cs",
+        "Assets/CR/Game/Creatures/Editor/CreatureCapture.cs",
+        "Assets/CR/Game/Creatures/Editor/CreatureCaptureFacts.cs",
+        "Assets/CR/Game/Creatures/Logic/CapturePlan.cs",
+        "Assets/CR/Tests/Editor/CreatureCaptureTests.cs",
+        "ci/creature-capture-sheets.py"
+      ]
+    },
+    "description": "Creature Showcase: dev-only scene (not in Build Settings) for watching creatures in Play mode in world, battle and evolution modes; CreatureShowcase component, Logic helpers (picker order, evolution lines, beat table), scene builder, offline Grant Levels To Lead Creature command (cr_dev_grant_levels), EvolutionBlendScale / EvolutionStageScaling shared with the evolution stage director"
   }
 }

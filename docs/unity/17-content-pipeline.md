@@ -215,6 +215,84 @@ success, writes nothing, and the pool silently stays as it was. Always read the 
 after a seed migration rather than trusting that it ran.
 :::
 
+## Rigged creature models: the vertex budget
+
+Seven creatures use our own rigged models instead of the placeholder packs: Mudcalf, Gaterbear, Cindris, Cindralis, Cindrakar, Zephlet and Zephryne. Each prefab under `Assets/CR/Prefabs/Creatures` is a variant of an FBX under `Assets/CR/Prefabs`.
+
+Three of these models first shipped straight from the mesh generator at hundreds of thousands of vertices, and two of them roam the starting meadow in numbers. They were re-exported at about 30,000 vertices each. The other four models were already between 8,000 and 13,000.
+
+| Model | Vertices before | Vertices now (as Unity imports them) | FBX size before | FBX size now |
+|---|---|---|---|---|
+| `gatorbear` (Gaterbear) | 382,929 | 30,783 | 37.3 MB | 3.6 MB |
+| `cindris_firecat` (Cindris) | 168,676 | 30,636 | 15.3 MB | 3.5 MB |
+| `zephlet` (Zephlet) | 161,039 | 30,674 | 14.7 MB | 3.8 MB |
+
+The counts are the vertices the engine draws, with UV seams split. The object, bone, material and clip names did not change, so the `.fbx.meta` files, prefabs and controllers needed no edits. The Gaterbear and Zephlet also needed a new texture (below); `gatorbear_albedo.png` and `zephlet_albedo.jpg` keep their names, format and size, and the Zephlet texture file shrank from 11.1 MB to 2.3 MB. Both FBX files carry all nine takes (the seven original clips plus Hit and Faint), so the same file serves the Hit and Faint branch.
+
+**The budget is 40,000 vertices per creature**, summed over every `SkinnedMeshRenderer` and every plain `MeshFilter` mesh on the prefab (an extra unskinned mesh does not escape the count). It is enforced by `RiggedCreatureModelTests` (EditMode, `Assets/CR/Tests/Editor/`), which runs over every prefab in `Assets/CR/Prefabs/Creatures` that is a variant of an `.fbx` in `Assets/CR/Prefabs`:
+
+| Test | Checks |
+|---|---|
+| `The_seven_rigged_creatures_are_found` | The seven prefabs above are all picked up, so a renamed or moved prefab cannot silently drop out of the other checks. |
+| `Every_rigged_creature_mesh_is_within_the_vertex_budget` | Vertices summed over every `SkinnedMeshRenderer` and every plain `MeshFilter` mesh on the prefab are at most 40,000, so an extra unskinned mesh cannot dodge the budget. The failure message lists the offending model and its count. |
+| `Every_rigged_creature_still_binds_to_its_model` | Each skinned mesh has a mesh, bones that are all bound, as many bones as bind poses, and no missing material; the mesh is not Read/Write; the root has an Animator with a valid avatar and a battle controller, a `CreatureBattlePresenter`, and a `CreatureWorldAnimation` with a world controller. |
+| `Every_rigged_creature_deforms_when_animated` | The Idle pose and a mid-Attack pose differ by at least 5 % of the creature's height. A prefab whose bones no longer match a re-exported FBX bakes the same bind pose for both and fails. |
+
+The budget sits above the lightened exports and the models that arrived light, and below a raw generator mesh. Do not raise it to make a heavy model pass; lighten the model.
+
+**Lightening on export.** The rigging skill (`animating-quadrupeds`) can write a lighter mesh while exporting, without touching the rigged `.blend`. It has two modes, set with environment variables when running `q_export_fbx.py` or with keys under `"export"` in the model's `<file>.quadruped.json` config (the environment variable wins; nothing set means the export is unchanged):
+
+- **Keep the UVs:** `DECIMATE=30000` (config `"decimate_verts": 30000`). The mesh is cut open along the UV island borders, decimated, and the cracks that opens are snapped shut. This is only good when the texture atlas is tidy.
+- **Re-bake:** `REBAKE=1 DECIMATE=31000` (config `"rebake": true`). The mesh is simplified as one welded surface, given a new UV layout, and the original colours are painted into a new texture. Use this when the atlas is fragmented.
+
+`DECIMATE` counts the vertices the engine draws (after UV-seam splits), not Blender's count; aim for 28,000 to 33,000.
+
+**Why the Gaterbear and Zephlet were re-baked.** The first lightened versions (keep-the-UVs mode) showed hairline cracks and dark specks in Unity: on the Gaterbear's head, brow, snout, neck and around the spikes, and on the Zephlet's beak and plume. The source atlas is cut into so many islands that 16,246 of the Gaterbear's 29,936 vertices were seam copies. Each island was simplified on its own, so the seams opened, and island edges sampled the atlas background (black on the Gaterbear). The re-bake does this instead:
+
+1. Simplify the welded surface (no seam splitting).
+2. Lay out new UVs with wide gutters between islands (17 px at 2048, 34 px at 4096, because each mip level halves them), with the head islands enlarged.
+3. Transfer the original colours into a new texture with the same name, format and size, never re-lit, and fill the whole background so no mip level can sample a background colour.
+4. Take skin weights from the original surface, keep the skull and ground-contact vertices, and fit the weights to the four bones Unity keeps (see the next section).
+
+The texture keeps its name, format and size, so the existing `.fbx.meta` and material wiring keep working when the files are dropped over the old ones. Cindris was not re-baked and is unchanged.
+
+**How to judge a lightened model.** When the atlas is fragmented, re-bake. Whole-model renders are not acceptance evidence, because cracks and specks are only a few pixels wide: judge zoomed captures of the head, mouth, spikes and beak taken in Unity (the original, the previous version and the new one side by side, textured and plain grey), at mip levels 1 to 3 as well as full size. The export also writes `<name>.export.json` with a `lighten.health` block: open and non-manifold edges must equal the original's and zero-area triangles must be 0.
+
+## Rigged creature models: four bone influences, and the Blender-versus-Unity test
+
+**The defect.** Blender skins a vertex with every bone that has weight on it. Unity keeps the four largest weights per vertex and renormalises them. A rig with more than four influences on some vertices therefore looks right in Blender and deforms differently in the game: shoulders, chest and belly swell or sag, and a hand-weighted jaw tears. It was found on three creatures:
+
+| Model | Vertices with more than four influences (most influences) | Result in Unity |
+|---|---|---|
+| Cindralis | 1,729 (8) | shoulders, belly and front legs off the rig |
+| Cindrakar | 1,386 (8) | shoulders, chest and head off the rig |
+| Mudcalf | 781 (8) | same cause |
+
+The game shape was up to 9 % of the body height away from the rig. Bone scale was ruled out (no bone in these rigs is scaled), so the cause is the cut to four weights alone.
+
+**The rule.** Export with weights fitted to four bones: the fit keeps the skinned position of the original weights over every frame of every clip, and roughly halves the error that plain truncation would leave. The rigging skill's exporter (`q_export_fbx.py`) does this by itself when a vertex still has more than four influences (`LIMIT_INFLUENCES=0` skips it), and refuses to export a rig that has bone scale keys, a bone whose scale inheritance is not Full, or a non-uniform object scale, because FBX and Unity cannot express those the way Blender does. The re-baked Gaterbear and Zephlet were fitted the same way.
+
+**The regression test.** `RiggedCreatureDeformationTests` (EditMode, `Assets/CR/Tests/Editor/`, with the parser and matcher in `DeformationTruthFile.cs`) compares Unity's skinned mesh with positions exported from Blender. For every `Assets/CR/Prefabs/<model>.deform_truth.bytes` it:
+
+1. loads `<model>.fbx`, instantiates it in a scratch scene and sets the renderer to four bone weights (`SkinQuality.Bone4`), so the test does not depend on the quality level;
+2. finds each truth vertex among Unity's bind-pose vertices (within 1e-4 of the model's height; at least 98 % must be found, otherwise the scale, axes or mesh changed). Where several Unity vertices sit at one bind position (UV-seam copies, or the two layers of a feather) the one that agrees best with Blender over all poses is measured, not the worst of them;
+3. samples the clip at `(frame - 1) / 24` seconds, because the FBX takes are 24 fps and start on frame 1, so Blender frame f is clip time (f-1)/24;
+4. fails when the worst vertex is 0.5 % of the height or more away from Blender, or the 99th percentile is 0.1 % or more. The message names the model, clip, frame and clip time, and the body region (the bone that owns the vertex).
+
+A truth file holds 400 vertices and 16 poses, about 83 KB, chosen where the skin is most sensitive to the cut to four weights. Other tests check that the expected truth files exist (so an empty folder cannot pass), that each truth file has its FBX and stays under 150 KB, and the parser, the frame-to-time mapping and the deviation arithmetic. It currently covers `cindralis_firecat`, `cindraker_firecat`, `mudcalf_anim`, `gatorbear` and `zephlet`.
+
+- **Adding a model:** put its `<model>.deform_truth.bytes` next to the FBX in `Assets/CR/Prefabs/` (Unity makes the `.meta`; commit it) and add the model's base name to `ExpectedTruthModels` in the test.
+- **Re-exporting a model:** the truth belongs to one mesh and one set of weights. Any re-export that changes either (a different `DECIMATE`, a re-weight) must regenerate the `.deform_truth.bytes` in the same change. The exporter writes it next to the FBX by default (`COMPACT_TRUTH=0` skips it). For a model with a full `.deform_truth.bin` and no compact file, `python3 -I compact_truth.py <name>.deform_truth.bin <name>.deform_truth.bytes` (in the skill's `scripts/`) makes one, with a weaker vertex choice.
+- **Running it:** `Unity -batchmode -projectPath <project> -runTests -testPlatform EditMode -testFilter "CR.Tests.Editor.RiggedCreatureDeformationTests;CR.Tests.Editor.DeformationTruthFileTests" -testResults <xml> -logFile <log>` (no `-quit`).
+
+The test samples 400 vertices and 16 poses, so it catches defects of several percent across a region with a wide margin, but a defect on a handful of vertices elsewhere could slip through.
+
+**Other model fixes made with it.** Mudcalf: a squared tube of leftover geometry jutted out of the left shoulder (the shoulder flap) and was cut away with the surface closed; the mouth cut ran through the nose bridge instead of the lip line, which showed as a ridge across the muzzle, so it was re-cut along the lips, and the mouth now stays closed in all nine clips (the model has no mouth cavity). Cindrakar: the jaw bone owned only a thin row of lower teeth while the chin stayed on the head bone, so the teeth tore away from the jaw; the lower jaw is re-weighted to the jaw bone and the rest pose now closes the mouth.
+
+Cindralis: the step that turns the posed sculpt into a square neutral stance read the body's heading from short chest bones whose landmarks sat off-axis, and turned the chest 19.7 degrees against the hips. Front feet, shoulders and elbows ended up to 15 % of the body height from their mirror positions, so the body looked contorted. The stance was rebuilt from the sculpt: the heading comes from the skin's centre line, the spine joints sit on one line, shoulders and hips are mirrored, left and right legs have equal lengths, and the skin in the blend zones is relaxed after un-posing. All nine clips were rebuilt on the new body with the same take names and frame ranges, the weights are fitted to four bones, and the truth file was regenerated. The shoulder line against the hips went from 19.1 to 0.6 degrees; the textures are unchanged.
+
+**Stance check.** The rigging skill's `q_check` has a stance check (straightness seen from above, and left/right symmetry of shoulders, hips, elbows, knees and feet), and a model must pass it before export. Judge stance on Unity captures taken from above, from the front and from both sides (see Creature Showcase, Capturing creatures as Unity draws them), not on the Blender render.
+
 ## Pushing Studio content from the CLI
 
 Studio's **Push All Content** button has a headless twin for the open Editor, so a push no longer needs the window or a modal. Both call the same method (`ContentStudioTool.QueueAllContentPush`), so the order (creatures first, trainer battles last, then the achievements catalog), the per-asset saves and the `ContentPushLog` stamps are identical. The stamps are what clear the **Push N Edits** pill.

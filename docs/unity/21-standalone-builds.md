@@ -26,6 +26,28 @@ the tool calls the internal `BuildProfile.CreateInstance` factory via reflection
 upgrade breaks the reflection, the tool logs it and the fallback is the Build Profiles window's
 **Add Build Profile** button.
 
+### Linux graphics APIs (Vulkan first)
+
+Linux players are built with the graphics API list `[Vulkan, OpenGLCore]`. Unity uses the first API the machine supports, so the Steam Deck runs Vulkan and a machine without Vulkan falls back to OpenGL Core. Before this change the Linux target used Unity's automatic list and the Deck ran OpenGL Core (`Creating GLContext ... OpenGL Core 4.5` in Player.log), where the PSO trace does nothing (see the Loading Screens page).
+
+The list is applied **at build time only**. `PlayerBuildRunner.Run` (the one place CI's `CiBuild` and both Editor windows go through) wraps `BuildPipeline.BuildPlayer` in `LinuxGraphicsOverride`, which sets the StandaloneLinux64 list, builds, and puts `PlayerSettings` back in a `finally`. `ProjectSettings/ProjectSettings.asset` is never edited by a build, and Windows and macOS builds are untouched. The build log prints the list used: `[BuildPlayers] Linux graphics APIs: Vulkan, OpenGLCore`.
+
+Choose a different list with the command-line argument `-crLinuxGraphics <value>` or the environment variable `CR_LINUX_GRAPHICS` (the argument wins):
+
+| Value | Linux graphics APIs |
+|---|---|
+| `vulkan` (also the default when nothing is set) | Vulkan, OpenGLCore |
+| `gl` | OpenGLCore only |
+| `auto` | Unity's own list, untouched (the behaviour before this change) |
+
+An unknown value falls back to the default and logs a warning that names the bad value. CI example: `CR_LINUX_GRAPHICS=gl ci/build.sh 0.2.20 StandaloneLinux64` (the Unity process inherits the environment); the argument form is for running Unity by hand, for example `-executeMethod CR.Core.Data.Editor.Build.CiBuild.Run -crTargets Linux -crLinuxGraphics gl`.
+
+The content (Addressables) build for a Linux target runs under the same override as the player build (`CiBuild` and the Content Deploy tool when the active target is Linux), so bundles and player always agree; the same `[BuildPlayers] Linux graphics APIs: ...` line is logged for that step. If restoring the settings after a build ever fails, the build still succeeds and the log carries an error saying how to restore by hand. `-crLinuxGraphics gl` and `-crLinuxGraphics=gl` are equivalent; a flag with no value, or whose value starts with `-`, logs a warning and is ignored.
+
+**Player-side escape hatch.** A Vulkan build can still be forced onto OpenGL Core at launch without rebuilding: add `-force-glcore` to the Steam launch options (`-force-vulkan` forces the other way). These are Unity's own player arguments; nothing in the game parses or rejects them. Use it if a Deck's Vulkan driver misbehaves, and expect the PSO trace to be skipped while on OpenGL Core.
+
+The pure policy is `CR.Core.PlayerBuild.Logic.LinuxGraphicsPolicy` (tests in `LinuxGraphicsPolicyTests`); the apply-and-restore scope is tested by `LinuxGraphicsOverrideTests`.
+
 ## Scene list
 
 Players boot into **scene 0 of the global scene list** (`ProjectSettings/EditorBuildSettings.asset`),
@@ -42,6 +64,8 @@ UI sat at slot 0, so every player build opened the old scene while the Editor �
 Play on Core directly — looked fine. If a build ever shows the cylinders again, check slot 0.
 Test UI also must not be open alongside Core in the Editor: both carry a full UI stack and an
 EventSystem, and two of each means the menu stops taking input.
+
+**Open-world cells are not all in this list.** Cells named in `WorldLayout.addressableCells` ship as Addressables bundles (group `WorldCells`) instead of Build Settings entries. Since 2026-11-11 that is `World_c7_r1` and `World_c7_r4`; the list above plus those bundles is what a player carries. A scene ships exactly one way: `cr_world_validate` reports a built cell that is in both or in neither. Anything that needs "the scenes that ship" calls `ShippedScenes.AllPaths()` rather than reading `EditorBuildSettings.scenes`. See [Open World → Cells from Addressables](?page=unity/37-open-world#cells-from-addressables-pilot-2026-11-11). `ci/build.sh` needs no new arguments: `BuildAddressablesWithPlayerBuild` builds the `WorldCells` bundles before the player, and with Local paths they land in the player's StreamingAssets with the other groups. It now refuses (exit code 6) to build a player when `-crSkipAddressables 1` is used while cells are listed, when the content catalog lacks a listed `cells/<SceneName>`, or when the target does not define `CR_ADDRESSABLES` (only the Standalone targets do); see Open World → Build guards. **Measured (StandaloneOSX player built by `ci/build.sh`, 2026-11-11, cr-api-unity #184):** the two cell bundles sit in the app at `Contents/Resources/Data/StreamingAssets/aa/StandaloneOSX/` (`worldcells_scenes_cells_world_c7_r1_...bundle` 41,734,516 bytes, `..._c7_r4_...bundle` 47,589,459 bytes); the catalog `aa/catalog.bin` holds `cells/World_c7_r1` and `cells/World_c7_r4`; the two scenes are not in the player's scene list while their neighbours are. The app is 2,488,598,528 bytes on disk and the Mac zip 933,451,987 bytes, against 852,971,858 bytes for the published v0.2.20 Mac zip (+80.5 MB, +9.4%; the baseline is a different commit, so part of the difference is other work, but the two bundles account for 89.3 MB uncompressed). The pilot grows the install; see Open World → Cells from Addressables, "Known cost".
 
 ## SQLite natives (per platform)
 
@@ -98,6 +122,23 @@ floor, streamed deltas):
 3. Players check the remote catalog at startup (`AddressablesCatalogUpdater`), download only
    changed bundles into cache, and load everything else from the baked copy. If the CDN is
    unreachable, the baked catalog is used — builds never hard-fail on it.
+
+### Moving WorldCells to remote hosting (not enabled)
+
+> **Not enabled.** Nothing below is switched on. `WorldCells` is Local, Build Remote Catalog is off, and every player (Steam, offline, Deck, CI) carries its cells. This section records what flipping the group would take, so the pilot is a known size of work and not a surprise.
+
+What is already in place: the group is one bundle per cell with retry count 3; the loader (`AddressablesCellSceneLoader`) fails a missing bundle like any failed cell load, and the streamer retries and gives up as it does today; `CellPrefetcher` fetches the bundles of addressable cells just past the Dormant ring in the direction of travel (`Addressables.DownloadDependenciesAsync`, one in flight, handle released) and does nothing while bundles are local.
+
+What flipping needs, in order:
+
+1. **Profile.** Point the group's build and load paths at `Remote.BuildPath` (`ServerData/[BuildTarget]`) and `Remote.LoadPath` (`https://content.crystallinerift.com/content/[BuildTarget]`, which `CiBuild` already sets from `CONTENT_URL`). In the group's schema, change the two path dropdowns from Local to Remote. Keep Pack Separately, LZ4 and the retry count. `WorldCellsGroup.Configure` and the `WorldCellsContentTests` schema test pin Local today and must change with it.
+2. **Remote catalog.** Turn **Build Remote Catalog** on (`m_BuildRemoteCatalog`) with the catalog's load path on the content host. Today it is off, which is why the player never asks the CDN for a catalog. With it on, every group's `Remote.*` assets stream, and every other group must stay Local and Cannot Change Post Release so the rest of the game still comes from the player. Players already run `AddressablesCatalogUpdater` at startup; if the CDN is unreachable the baked catalog is used.
+3. **Build and publish.** `ci/build.sh` then writes the remote group's bundles and catalog to `ServerData/<BuildTarget>/`. `ci/publish.sh` already syncs `ServerData/<T>/` to `content/<T>/` (bundles immutable with a one-year cache header, `.hash` and `.json` no-cache) and invalidates `/content/*`; it skips the step only while no `ServerData/` exists. Confirm the CloudFront behaviour for `/content/*` stays unsigned, since players fetch bundles without a signature (the player zips under `/builds/` are the signed ones).
+4. **Offline and Steam builds stay local.** The bundle location is baked into each player's catalog, so one project cannot ship both without a second profile. For builds that must run without a network (the Steam release, offline play), keep a profile where `WorldCells` is Local and build those players with it; hosted builds use the Remote profile. The loader code is the same either way. The Editor's Use Asset Database mode is unaffected.
+5. **Content updates.** After a release with remote cells, a changed cell is shipped with **Check for Content Update Restrictions** and **Update a Previous Build** against that release's `addressables_content_state.bin` (the file the CI build dirties; keep it per release), then `ci/publish.sh`.
+6. **Older players.** Turning a remote catalog on later can break players that shipped earlier: their local cell bundles carry different hashes than the new catalog expects, so a cell that loaded from a local bundle may be re-downloaded or fail to match. Test an old build against the new catalog before publishing.
+
+**First visit versus the edge hold.** A cell whose bundle is not on the device yet has to be downloaded before it can load. With no prefetch that wait lands inside the load: the streamer's load takes seconds instead of a few frames, `WorldEdgeHold` covers the screen and gates input while a built cell within about 4 m is not Active (and toasts "still loading" after 5 s), and the load's retry and give-up logic runs against download time. The prefetcher exists to move that download ahead of the player: it fetches the cells one band past the Dormant ring in the direction of travel, so on a normal walk the bundle is cached before the cell enters the Dormant ring. A player who teleports (a wagon ride) or outruns the fetch still meets the hold. Measure on the Deck over a real connection before moving more than the pilot cells: first-visit time per cell, how often the edge hold shows, bundle sizes per cell (shared dependencies such as terrain layers and materials are duplicated into each Pack Separately bundle unless a shared group holds them; run Addressables Analyze before moving the next cells).
 
 ## Offline data floor
 
@@ -336,8 +377,59 @@ and the first frame agree with the policy.
 should print `vSyncCount=1 targetFrameRate=-1`. If the Deck is set to 40 Hz in the Quick Access menu
 the game locks to 40 fps; that is expected and smooth. For raw performance (not pacing) also note the
 Linux profile builds **Development + script debugging** (`Starting managed debugger on port …` in the
-log) and the player picks **OpenGL Core**, not Vulkan — both cost frame time and are worth turning
-off / switching when measuring.
+log), and Deck builds made before Linux became Vulkan-first (see [Linux graphics APIs](#linux-graphics-apis-vulkan-first)) ran
+**OpenGL Core**, not Vulkan — both cost frame time and are worth turning off / switching when measuring.
+
+### Testing on the Steam Deck: frame rate, log report, scripts
+
+**`[Perf]` lines.** `HitchRecorder` (on in the Editor and development builds, otherwise with `-crHitchLog` or `CR_HITCH_LOG=1`) logs a frame-rate line every 10 seconds of frame time and one for the whole session at quit:
+
+```
+[Perf] 10 s | avg 57.8 fps | 1% low 41.0 fps | worst 87 ms | frames 578
+[Perf] session | avg 55.0 fps | 1% low 30.0 fps | worst 900 ms | frames 5000
+```
+
+`1% low` is the frame rate at the 99th-percentile frame time (accurate to 0.1 ms; the figures come from a fixed histogram, so logging allocates nothing per frame). Boot and loading windows are logged too; readers should ignore the first minute, as the report does.
+
+**Player.log report.** `cr_deck_log_report --args "<path to a Player.log> [--expect <version>]"` (an Editor CLI command; `--expect 0.2.21-deck1` makes the build-stamp check FAIL when the log's stamp has another version), or **Report on this log** in the Deploy window after **Fetch Player.log from the Deck**, prints one PASS / WARN / FAIL line per check, each with the log line it was decided on:
+
+| Check | Verdict |
+|---|---|
+| Build stamp | PASS for a parsed stamp (`vX.Y.Z · commit · date`), shown with its version. `no stamp at` is WARN; `is not a build stamp` and `could not read the stamp` are FAIL; no `[BuildStamp]` line is WARN. With `--expect <version>` (a leading `v` is ignored), a stamp of another version is FAIL and a missing `[BuildStamp]` line is FAIL |
+| Graphics API | WARN when any OpenGL line is present (`Creating GLContext`, `OpenGL Core 4`, `OPENGL LOG:`), checked before Vulkan; PASS for Vulkan; WARN when neither is found |
+| Render pipeline | PASS only on `[DeckRender] Steam Deck detected; render pipeline set to ...`; `no Deck pipeline asset` and `could not select Deck pipeline` are FAIL; no `[DeckRender]` line is WARN |
+| Frame pacing | PASS when the `[FramePacing]` line is present (its refresh rate, vsync count and frame cap give the target fps used by the frame-rate check); WARN when absent |
+| Boot timings | PASS with the db, content, shaders and total times from the `[Boot]` line. WARN when no timings line follows, when `Database gate not ready` / `faulted` / `wait failed`, `Shader first-run check failed`, `Shader warm-up failed` or `Boot sequence failed` was logged, or when the menu opened while shaders were still compiling (`shader compile still running`) |
+| database is locked | FAIL if any line contains it, whatever its tag (the v0.2.19 fix: must be 0; the v0.2.18 baseline has 10); PASS at 0 |
+| Hitches | PASS with no `[Hitch]` lines. FAIL for any hitch of 30 000 ms or more; WARN for a worst hitch of 1 000 ms or more; WARN for 20 or more hitches of 250 ms or more; otherwise PASS. Shows the worst and the count |
+| Spawner-sync hitches | WARN when no `[ContentSync] Syncing N spawners` line is in the log. Counts hitches of 100 to 190 ms between that line and the next `[ContentSync]` line (or 5000 log lines if none follows): FAIL at 10 or more (the v0.2.19 fix removes this run), WARN for 1 to 9, PASS for none |
+| Null shader errors | FAIL on any `Parameter name: shader` or `(Parameter 'shader')` line (v0.2.19 fix: must be 0); PASS at 0 |
+| Shader.Find nulls | FAIL on any `[Shaders] Shader.Find(...) is null` line or `[Shaders] Resources/... is missing` line (v0.2.19 fix: must be 0); PASS at 0 |
+| Shader warm-up | PASS with variant and graphics-state counts from `[ShaderWarmup] warm-up done`; WARN when it ended early, was cut short, or never ran |
+| PSO trace load | PASS when the warm-up warmed one or more graphics states. WARN, with the reason, for `no PSO trace at`, `PSO trace skipped` (recorded for another platform or API) or `has no PSO trace support`; WARN when no trace was warmed |
+| PSO trace recording | PASS with `saved N graphics states`, or PASS as "not a recording session" when `-crPsoTrace` was not used; WARN when recording started but nothing was saved; FAIL on `[PsoTrace] could not` |
+| SQLite pool | PASS with the counts from the `[SqlitePool]` quit line (v0.2.20); WARN when the pool was switched off, the line is absent, or it never reused a connection (hits 0) |
+| Frame rate | Median average fps and lowest 1 % low over the `[Perf]` windows that start after the first 60 s. The target is the frame cap, else the refresh rate divided by the vsync count, from `[FramePacing]` (fallback 60). FAIL below 50 % of target (median); WARN below 90 % (median) or when the lowest 1 % low is below 50 % of target; otherwise PASS. WARN when there are no `[Perf]` lines or every window is inside the first 60 s. The output states the numbers |
+
+**A check never passes without evidence.** An empty log turns every check into WARN. A log with no `Initialize engine version` line starts mid-session (a tail fetch), and then the checks that pass only because nothing bad was seen (database is locked, Hitches, Spawner-sync hitches, both shader-null checks, PSO trace recording) turn into WARN. Hitches and Spawner-sync hitches also turn into WARN when the hitch recorder was off (no `[Hitch]` or `[Perf]` line; launch with `-crHitchLog`). A problem that is found still FAILs in a tail.
+
+The Deploy window fetches only the last 2000 lines, so a long session's start-up lines may be missing; the report then says it read only the tail and start-up checks may WARN for that reason. `ci/deck-fetch-log.sh` fetches the whole file (it writes to a temp file and replaces `--out` only when ssh succeeded and the log is not empty).
+
+The Vulkan wording Unity itself prints has not been captured from a Deck yet. The analyser recognises Vulkan from Unity's usual lines, the Mesa `RADV` driver name and the game's own PSO messages; if the check says "no graphics-API line", read the first Vulkan log and extend `DeckLogAnalyzer.VulkanMarkers`.
+
+**PSO trace.** See "Recording the Steam Deck's Vulkan PSO trace" in the Loading Screens page. The Deploy window button **Fetch PSO trace from the Deck** copies it with `scp -O` (the classic protocol, so the Deck's shell expands `$HOME` and honours the quotes around the space in `Crystalline Rift`; needs OpenSSH 8.7 or newer on the Mac).
+
+**Deploy folder and build folder guards** (Deploy window and `ci/deck-deploy.sh` alike): the folder on the Deck must be absolute, have no `.` or `..` segments, no whitespace, quotes or shell metacharacters, and at least 4 path components (`/home/deck/Games/cr` passes; `/home/deck` and `/home/deck/Games` are refused), because `rsync --delete` runs against it. The local build folder must not be empty or `/`, and must contain `CrystallineRift.x86_64` before anything is copied.
+
+**Headless scripts** (bash, run from the project root, each takes `--dry-run` to print the exact commands and `-h` for usage):
+
+| Script | Does |
+|---|---|
+| `ci/deck-deploy.sh <host> [--user deck] [--dest /home/deck/Games/CrystallineRift] [--build-dir Builds/Linux] [--no-delete]` | `mkdir -p` on the Deck, rsync with the Deploy window's flags and excludes, then reads `build-stamp.txt` back and compares it with the local one; exits 1 on a mismatch |
+| `ci/deck-fetch-log.sh <host> [--user deck] [--out <file>]` | copies the whole Player.log to `DeckLogs/Player-<time>.log` |
+| `ci/deck-pso-fetch.sh <host> [--user deck] [--api Vulkan] [--platform LinuxPlayer]` | copies the trace into `Assets/StreamingAssets/CR/Shaders/` of the checkout it runs from, refusing any name that is not `pso-<Platform>-<GraphicsApi>.graphicsstate`, and prints the next steps |
+
+`ci/tests/deck-scripts-test.sh` runs each script against a fake host with `--dry-run` and checks the printed commands and the refusals; it puts shims for `ssh`, `scp` and `rsync` first on `PATH` and fails if any was started.
 
 ### Design notes
 
