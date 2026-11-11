@@ -110,7 +110,7 @@ Same-key unregister no longer drops a sibling's arena.
 
 ## Cells from Addressables (pilot, 2026-11-11)
 
-> **Status: pilot on branch `feat/cells-addressables-pilot`.** Two cells load from Addressables bundles; the other 44 cells, every interior and the legacy areas load as before. The bundles are **local** (built into the player). No remote hosting is enabled and no catalog setting changed; the steps to flip it are in [Standalone Builds → Moving WorldCells to remote hosting (not enabled)](?page=unity/21-standalone-builds#moving-worldcells-to-remote-hosting-not-enabled).
+> **Status: pilot (cr-api-unity #184).** Two cells load from Addressables bundles; the other 44 cells, every interior and the legacy areas load as before. The bundles are **local** (built into the player). No remote hosting is enabled and no catalog setting changed; the steps to flip it are in [Standalone Builds → Moving WorldCells to remote hosting (not enabled)](?page=unity/21-standalone-builds#moving-worldcells-to-remote-hosting-not-enabled).
 
 Why: all 46 cell scenes and about 114 MB of TerrainData are in Build Settings. Cells in bundles can later shrink the install and be fetched ahead of the player (the ring beyond the Dormant radius). The pilot builds the loading path and proves it on two cells before any cell is hosted.
 
@@ -128,7 +128,7 @@ Behaviour worth knowing:
 
 - **Scene name.** The scene file stays `World_cX_rY`, so `SceneManager.GetSceneByName(cell.SceneName)` (what `WorldStreamer` uses to find the `CellActivator`) keeps working.
 - **`IsLoaded`** is true from the moment a load completes until its unload completes. It is also true for a scene of that name somebody else opened, such as a cell open in the Editor when Play starts, which the streamer adopts like any other cell.
-- **Failure.** A load that fails (missing bundle, activation error) releases its handle and throws. `WorldStreamerCore` retries with its usual backoff and gives up after three attempts exactly as it does for a Build Settings cell; nothing in the retry logic is Addressables-specific. A failed unload keeps the scene tracked so the streamer retries it.
+- **Failure.** A load that fails (missing bundle, activation error) releases its handle and throws. `WorldStreamerCore` retries with its usual backoff and gives up after three attempts exactly as it does for a Build Settings cell; nothing in the retry logic is Addressables-specific. A failed unload keeps the scene tracked so the streamer retries it. A load requested while the scene is unloading waits for the unload and then loads afresh; several such waiters share one new load and one handle.
 - **Cancellation.** Like `UnitySceneLoader`, a load is not cancelled half way: the scene lands, stays tracked, and the caller then sees the cancellation.
 - **Builds without Addressables.** The loader code compiles under `CR_ADDRESSABLES` (set for the Standalone targets). Without it the factory binds `UnitySceneLoader` for every scene, whatever the layout lists.
 
@@ -143,6 +143,7 @@ CLI `cr_cell_addressable --args "<SceneName> on|off"` (menu `CR/World/Cell Addre
 - `on`: adds the `WorldCells` entry (address `cells/<SceneName>`), removes the Build Settings entry and adds the name to `WorldLayout.addressableCells`.
 - `off`: the reverse. The Build Settings entry comes back at the end of the list.
 - It refuses a name that does not parse, is not in `builtCells`, or has no scene file. It makes no change when the cell is already in the requested state (reported as `unchanged`). If a step fails the earlier steps are undone.
+- It saves only the assets it changed (layout, Addressables settings, the group and its schemas), not every dirty asset in an open Editor. Unity may zero `m_currentHash` in `AddressableAssetSettings.asset` when the group changes; do not commit that line (the group reference line is the intended change).
 - It prints the resulting state, for example `World_c7_r1: ships from Addressables (group WorldCells entry: cells/World_c7_r1, addressableCells: listed, Build Settings: no)`.
 
 A scene ships one way only. `CreateCellTool` is unchanged: a new cell goes to Build Settings and is moved afterwards.
@@ -174,6 +175,14 @@ Chosen as built cells far from the start spawn (208, 30.1, 1105), with no hosted
 
 **Known cost: the pilot makes the install bigger, not smaller.** A cell scene is 113 to 159 KB and its TerrainData about 2 MB, but each bundle is about 40 MB: Addressables copies every implicit dependency into each Pack Separately bundle, and these cells reference the same tree, bark, terrain-layer and foliage textures as every other cell (the largest are 5 to 10 MB source textures). Those textures also stay in the player's own data because the other 44 cells are still in Build Settings, and the two bundles hold their own copies besides. The size win only comes after most cells have moved and the shared assets sit in one group that the cell bundles depend on (Addressables Analyze, "Check Duplicate Bundle Dependencies", shows the list). Do that before moving more cells.
 
+### Build guards: a player never ships without its Addressables cells
+
+A listed cell is in no Build Settings list, so a player that lacks its bundle or the loader would ship without the cell. Three checks stop that (pure rules in `CellShippingGuard`, wired by `CellShippingBuildGuard`):
+
+- **Skipped content.** `ci/build.sh` / `CiBuild` with `-crSkipAddressables 1` and a non-empty `WorldLayout.addressableCells` fails (exit code 6) with "the Addressables content build is skipped but WorldLayout.addressableCells lists N cell(s) (...)". Content-only runs (`-crSkipPlayers 1`) are not blocked.
+- **Catalog check.** After the content build, the catalog (`catalog.bin`, or `catalog.json`) must hold `cells/<SceneName>` for every listed cell, else exit code 6 naming the missing addresses.
+- **Defines.** The loader compiles under `CR_ADDRESSABLES`, which ProjectSettings defines for the Standalone targets only. `CiBuild` and an `IPreprocessBuildWithReport` (`CellShippingPreBuildCheck`, so every player build, menu builds included) fail the build when the target lacks the define while cells are listed. As a last line, a build that gets through anyway logs one error at startup naming the routed cells (`CellSceneLoaderFactory.CreateWithoutAddressables`) instead of the streamer silently retrying and giving up on each.
+
 ### Validation and the list of shipped scenes
 
 `cr_world_validate` reports an error for a built cell that ships neither way, both ways, or half of the Addressables way (listed without a group entry, a group entry without the list, wrong address), and for a name in `addressableCells` that is not a built cell. Rule: in Build Settings, or in `addressableCells` and the `WorldCells` group, never both.
@@ -182,7 +191,7 @@ Anything that needs "the scenes that ship" calls `ShippedScenes.AllPaths()` (Bui
 
 ### Prefetch (dormant while bundles are local)
 
-`CellPrefetchPlanner` (pure) picks the addressable cells whose nearest edge is past the Dormant radius and within one cell of it, whose centre is within 60 degrees of the player's heading, nearest first, at most two. No heading, no plan. `PlayerHeadingTracker` derives the heading from the 4 Hz position samples (a step needs 4 m; a jump over 64 m is a teleport and clears it). `CellPrefetcher`, ticked by `WorldStreamer`, keeps one fetch in flight (`Addressables.DownloadDependenciesAsync` after a check that the address exists), releases each handle when it is read, fetches a cell once, and retries a failed one after 30 s. It is only created when the layout lists addressable cells. With local bundles a fetch finishes at once and downloads nothing. A tick costs about half a microsecond and runs 4 times a second.
+`CellPrefetchPlanner` (pure) picks the addressable cells whose nearest edge is past the Dormant radius and within one cell of it, whose centre is within 60 degrees of the player's heading, nearest first, at most two. No heading, no plan. `PlayerHeadingTracker` derives the heading from the 4 Hz position samples (a step needs 4 m; a jump over 64 m is a teleport and clears it). `CellPrefetcher`, ticked by `WorldStreamer`, keeps one fetch in flight (`Addressables.DownloadDependenciesAsync` after a check that the address exists), releases each handle when it is read, fetches a cell once, and retries a failed one after 30 s. It is only created when the layout lists addressable cells. With local bundles a fetch finishes at once and downloads nothing. A tick costs about half a microsecond and runs 4 times a second; once every listed cell is fetched it returns immediately. A tick never throws into `WorldStreamer.Update`: a failure is logged once and the fetch in flight is dropped.
 
 ### Editor Play mode
 
