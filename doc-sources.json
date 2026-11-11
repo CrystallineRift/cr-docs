@@ -1207,7 +1207,11 @@
         "Assets/CR/Core/Data/Editor/ContentStudioTool.PushAll.cs",
         "Assets/CR/Core/Data/Logic/PushRunLedger.cs",
         "Assets/CR/Tests/Editor/CreatureContentAddressTests.cs",
-        "Assets/CR/Tests/Editor/GaterbearPlaceholderTests.cs"
+        "Assets/CR/Tests/Editor/GaterbearPlaceholderTests.cs",
+        "Assets/CR/Tests/Editor/RiggedCreatureModelTests.cs",
+        "Assets/CR/Tests/Editor/RiggedCreatureDeformationTests.cs",
+        "Assets/CR/Tests/Editor/DeformationTruthFile.cs",
+        "Assets/CR/Prefabs/*.deform_truth.bytes"
       ]
     },
     "description": "Two-database content pipeline: game-data DB (global authored content, read-only) vs player-data DB (per-trainer saves, mutable); build-time game-data.bytes artifact from CR.Data.Migrations.Tool + build-packages.sh with 12 referential-integrity checks; ships as Addressable + StreamingAssets first-run floor; cold-start adopt (atomic copy + fail-closed schema-version gate); content patched via Addressables, player-data migrated in place; content-vs-player taxonomy"

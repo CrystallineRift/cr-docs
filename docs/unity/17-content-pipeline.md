@@ -258,6 +258,37 @@ The texture keeps its name, format and size, so the existing `.fbx.meta` and mat
 
 **How to judge a lightened model.** When the atlas is fragmented, re-bake. Whole-model renders are not acceptance evidence, because cracks and specks are only a few pixels wide: judge zoomed captures of the head, mouth, spikes and beak taken in Unity (the original, the previous version and the new one side by side, textured and plain grey), at mip levels 1 to 3 as well as full size. The export also writes `<name>.export.json` with a `lighten.health` block: open and non-manifold edges must equal the original's and zero-area triangles must be 0.
 
+## Rigged creature models: four bone influences, and the Blender-versus-Unity test
+
+**The defect.** Blender skins a vertex with every bone that has weight on it. Unity keeps the four largest weights per vertex and renormalises them. A rig with more than four influences on some vertices therefore looks right in Blender and deforms differently in the game: shoulders, chest and belly swell or sag, and a hand-weighted jaw tears. It was found on three creatures:
+
+| Model | Vertices with more than four influences (most influences) | Result in Unity |
+|---|---|---|
+| Cindralis | 1,729 (8) | shoulders, belly and front legs off the rig |
+| Cindrakar | 1,386 (8) | shoulders, chest and head off the rig |
+| Mudcalf | 781 (8) | same cause |
+
+The game shape was up to 9 % of the body height away from the rig. Bone scale was ruled out (no bone in these rigs is scaled), so the cause is the cut to four weights alone.
+
+**The rule.** Export with weights fitted to four bones: the fit keeps the skinned position of the original weights over every frame of every clip, and roughly halves the error that plain truncation would leave. The rigging skill's exporter (`q_export_fbx.py`) does this by itself when a vertex still has more than four influences (`LIMIT_INFLUENCES=0` skips it), and refuses to export a rig that has bone scale keys, a bone whose scale inheritance is not Full, or a non-uniform object scale, because FBX and Unity cannot express those the way Blender does. The re-baked Gaterbear and Zephlet were fitted the same way.
+
+**The regression test.** `RiggedCreatureDeformationTests` (EditMode, `Assets/CR/Tests/Editor/`, with the parser and matcher in `DeformationTruthFile.cs`) compares Unity's skinned mesh with positions exported from Blender. For every `Assets/CR/Prefabs/<model>.deform_truth.bytes` it:
+
+1. loads `<model>.fbx`, instantiates it in a scratch scene and sets the renderer to four bone weights (`SkinQuality.Bone4`), so the test does not depend on the quality level;
+2. finds each truth vertex among Unity's bind-pose vertices (within 1e-4 of the model's height; at least 98 % must be found, otherwise the scale, axes or mesh changed). Where several Unity vertices sit at one bind position (UV-seam copies, or the two layers of a feather) the one that agrees best with Blender over all poses is measured, not the worst of them;
+3. samples the clip at `(frame - 1) / 24` seconds, because the FBX takes are 24 fps and start on frame 1, so Blender frame f is clip time (f-1)/24;
+4. fails when the worst vertex is 0.5 % of the height or more away from Blender, or the 99th percentile is 0.1 % or more. The message names the model, clip, frame and clip time, and the body region (the bone that owns the vertex).
+
+A truth file holds 400 vertices and 16 poses, about 83 KB, chosen where the skin is most sensitive to the cut to four weights. Other tests check that the expected truth files exist (so an empty folder cannot pass), that each truth file has its FBX and stays under 150 KB, and the parser, the frame-to-time mapping and the deviation arithmetic. It currently covers `cindralis_firecat`, `cindraker_firecat`, `mudcalf_anim`, `gatorbear` and `zephlet`.
+
+- **Adding a model:** put its `<model>.deform_truth.bytes` next to the FBX in `Assets/CR/Prefabs/` (Unity makes the `.meta`; commit it) and add the model's base name to `ExpectedTruthModels` in the test.
+- **Re-exporting a model:** the truth belongs to one mesh and one set of weights. Any re-export that changes either (a different `DECIMATE`, a re-weight) must regenerate the `.deform_truth.bytes` in the same change. The exporter writes it next to the FBX by default (`COMPACT_TRUTH=0` skips it). For a model with a full `.deform_truth.bin` and no compact file, `python3 -I compact_truth.py <name>.deform_truth.bin <name>.deform_truth.bytes` (in the skill's `scripts/`) makes one, with a weaker vertex choice.
+- **Running it:** `Unity -batchmode -projectPath <project> -runTests -testPlatform EditMode -testFilter "CR.Tests.Editor.RiggedCreatureDeformationTests;CR.Tests.Editor.DeformationTruthFileTests" -testResults <xml> -logFile <log>` (no `-quit`).
+
+The test samples 400 vertices and 16 poses, so it catches defects of several percent across a region with a wide margin, but a defect on a handful of vertices elsewhere could slip through.
+
+**Other model fixes made with it.** Mudcalf: a squared tube of leftover geometry jutted out of the left shoulder (the shoulder flap) and was cut away with the surface closed; the mouth cut ran through the nose bridge instead of the lip line, which showed as a ridge across the muzzle, so it was re-cut along the lips, and the mouth now stays closed in all nine clips (the model has no mouth cavity). Cindrakar: the jaw bone owned only a thin row of lower teeth while the chin stayed on the head bone, so the teeth tore away from the jaw; the lower jaw is re-weighted to the jaw bone and the rest pose now closes the mouth.
+
 ## Pushing Studio content from the CLI
 
 Studio's **Push All Content** button has a headless twin for the open Editor, so a push no longer needs the window or a modal. Both call the same method (`ContentStudioTool.QueueAllContentPush`), so the order (creatures first, trainer battles last, then the achievements catalog), the per-asset saves and the `ContentPushLog` stamps are identical. The stamps are what clear the **Push N Edits** pill.

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-11 — Creature model fixes and a Blender-versus-Unity deformation test (cr-api-unity #186)
+
+- **Why:** Unity keeps the four largest bone weights per vertex and renormalises; Blender uses all of them. Cindralis (1,729 vertices with more than four influences), Cindrakar (1,386) and Mudcalf (781) looked right in Blender and deformed in the game by up to 9 % of body height at the shoulders, belly and front legs. Mudcalf also had a squared tube of leftover geometry at the left shoulder and a mouth cut through the nose bridge; Cindrakar's jaw bone owned only the lower teeth, so they tore away from the chin.
+- **cr-api-unity:** weights of Cindralis, Cindrakar and Mudcalf fitted to four bones. Mudcalf: shoulder flap cut away, mouth re-cut along the lip line, mouth closed in all nine clips. Cindrakar: lower jaw re-weighted, rest pose closes the mouth. New `RiggedCreatureDeformationTests` compares Unity's skinned mesh with Blender positions stored in `Assets/CR/Prefabs/<model>.deform_truth.bytes` (400 vertices, 16 poses, 83 KB per model) and fails above 0.5 % (worst) or 0.1 % (99th percentile) of the model's height; truth files for the five fitted or re-baked models.
+- **Rigging skill:** the exporter fits weights to four bones, refuses bone scale it cannot express, and writes the compact truth file next to the FBX.
+- **Docs:** [Content Pipeline, four bone influences](?page=unity/17-content-pipeline#rigged-creature-models-four-bone-influences-and-the-blender-versus-unity-test).
+
 ## 2026-11-11 — Mesh Read/Write off for static model families (cr-api-unity #185)
 
 - Mesh Read/Write is now off for the static environment and placeholder-creature model families (Fantastic Ancient Forest, City, Interior and Village packs, LeartesStudios, Monsters Ultimate Pack 02 Cute Series, NOT_Lonely/HQ_RetroFarmhouse, PurePoly/Mining_Pack). The policy is `model-readwrite-policy.json`, applied on import by `ColliderMeshReadablePostprocessor` (version 2); models on `readable-collider-models.json` stay readable. Six Fantastic Village collision models were added to that list. Every machine re-imports all models once (about 5 minutes here).
