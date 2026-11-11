@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-11 — Hit and Faint animation clips for the rigged creatures
+
+- **Why:** in battle the game cross-fades Animator states by name; the rigged creatures had no `Hit` or `Faint` state, so those beats fell back to Idle. Creatures faint or are recalled, they never die, so `Faint` is a slump with a held end pose, not a death.
+- **Rigging skill (animating-quadrupeds):** two new clips for quadrupeds (bear, big cat and calf styles) and birds, wired into the build, check and Unity verify steps. Existing clips are unchanged (a rebuild of Idle, Walk, Roar, Attack and Jump_Attack on Mudcalf, and of all seven clips on Zephryne, matches the old keys exactly).
+- **Assets:** `Hit` and `Faint` added to the Mudcalf, Cindralis, Cindraker and Zephryne FBX exports, Cindris, Zephlet and the gator-bear. The Animator controller treats `Hit` like any one-shot and `Faint` as a held state.
+- **Docs:** [Battle System, Hit and Faint clips](?page=unity/07-battle-system).
+
 ## 2026-11-11 — Lighter rigged creature meshes (about 30,000 vertices)
 
 - **Why:** Gaterbear, Cindris and Zephlet shipped in v0.2.20 straight from the mesh generator (383k, 169k and 161k vertices) while the other four rigged creatures are 8k to 13k. Cindris and Zephlet roam the starting meadow in numbers, so this was the largest skinned-mesh cost in the first hour.
