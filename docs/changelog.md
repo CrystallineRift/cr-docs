@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-11 — Mesh Read/Write off for static model families
+
+- Mesh Read/Write is now off for the static environment and placeholder-creature model families (Fantastic Ancient Forest, City, Interior and Village packs, LeartesStudios, Monsters Ultimate Pack 02 Cute Series, NOT_Lonely/HQ_RetroFarmhouse, PurePoly/Mining_Pack). The policy is `model-readwrite-policy.json`, applied on import by `ColliderMeshReadablePostprocessor` (version 2); models on `readable-collider-models.json` stay readable. Six Fantastic Village collision models were added to that list. Every machine re-imports all models once (about 5 minutes here).
+- `ci/build.sh` now fails a build whose Unity log contains `doesn't have Read/Write enabled` (`ci/check-build-log.sh`, tested by `ci/tests/build-log-rules-test.sh`).
+- New: `cr_model_readwrite_report` (inventory), headless `ColliderMeshAuditRunner.AuditBatch`.
+- **Docs:** [World Navigability, Model Read/Write policy](?page=unity/49-world-navigability#model-readwrite-policy); the collider-mesh section now says `bakeCollisionMeshes` is 1.
+
 ## 2026-11-11 — Open-world cells from Addressables (pilot, two cells, bundles still local)
 
 - **Why:** a perf review (2026-10-30) found the 46 cell scenes and 114 MB of TerrainData all sit in Build Settings. Moving cells into bundles shrinks the install later and lets the game fetch the ring beyond the Dormant radius ahead of the player. This is the pilot: the loading path, switched on for two far-away cells, with bundles still shipped inside the player. Nothing is hosted remotely and no catalog setting changed.

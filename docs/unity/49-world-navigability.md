@@ -46,6 +46,7 @@ Code: `Assets/CR/Core/Data/Editor/Build/CrNavProbeCommands.cs`, `NavProbe/` (Uni
 | `cr_collider_mesh_audit --args "scene=<all\|path\|name\|cells\|interiors\|areas> [out=<dir>] [fix=true] [dry=true]"`, `cr_collider_mesh_audit_status`, `cr_collider_mesh_audit_cancel` | Player-build safety check for `MeshCollider`s, see [Mesh colliders in a Player build](#mesh-colliders-in-a-player-build). |
 | `cr_nav_repair_status`, `cr_nav_repair_cancel` | As above. |
 | `cr_nav_snap_rows`, `cr_dress_cells` | Overworld row placement and NPC dressing, see [Overworld rows](#overworld-rows-on-reachable-ground). |
+| `cr_model_readwrite_report --args "out=<dir>"` | Read-only inventory of mesh Read/Write per model folder family (models, Read/Write on, MeshCollider / particle / skinned / scene use, what the policy would flip). Blocks the Editor for about two minutes. See [Model Read/Write policy](#model-readwrite-policy). |
 
 ### What it measures, per scene
 
@@ -138,13 +139,48 @@ Unity 6000.4 logs, when it builds a scene: `This Mesh Collider is attached to Ga
 
 It writes `<out>/collider_meshes.json` (default `Temp/cr_collider_mesh_audit`): totals, one entry per distinct mesh (`readable`, `colliders`, `brokenColliders`, `scenes`) and the broken colliders by scene and path with the reason. Poll `cr_collider_mesh_audit_status`. `fix=true` adds the model file of every mesh with a broken collider to the committed list and re-imports it (`dry=true` only reports what it would add). A mesh embedded in a scene, or one that is not from a model file, is listed for hand work.
 
-**The list and the postprocessor.** `Assets/CR/Core/Data/Editor/Build/ColliderMeshAudit/readable-collider-models.json` (`models`: sorted, unique, 16 model files at last count, the Fantastic City Pack walls, roofs and collision proxies among them). `ColliderMeshReadablePostprocessor` forces `isReadable` on those models whenever they import. The vendor pack folders are git-ignored and restored from the Asset Store, so a setting kept in their `.meta` files would vanish on a fresh clone or a CI restore; the committed list does not.
+**The list and the postprocessor.** `Assets/CR/Core/Data/Editor/Build/ColliderMeshAudit/readable-collider-models.json` (`models`: sorted, unique, 22 model files at last count, the Fantastic City Pack walls, roofs and collision proxies and the Fantastic Village Pack collision beams and stairs among them). `ColliderMeshReadablePostprocessor` forces `isReadable` on those models whenever they import. The vendor pack folders are git-ignored and restored from the Asset Store, so a setting kept in their `.meta` files would vanish on a fresh clone or a CI restore; the committed list does not. The same postprocessor also applies the [Model Read/Write policy](#model-readwrite-policy), and the collider audit judges a mesh by that same decision, so `cr_collider_mesh_audit` is right even before the models have re-imported.
+
+**Headless audit.** `-executeMethod CR.Core.Data.Editor.ColliderMeshAudit.ColliderMeshAuditRunner.AuditBatch -crOut <dir> [-crFix true]` scans every scene synchronously, writes `<dir>/collider_meshes.json` and, with `-crFix true`, adds the models of broken colliders to the list. Close the Editor on that project first.
 
 **Tests.** `MeshColliderPlayerBuildTests` (EditMode): no mesh collider in any scene is Broken; every listed model imports readable; the list file is sorted and duplicate-free. After adding town or interior pieces run the audit with `fix=true`, commit the list, and run the tests.
 
-**CI rule.** A Player build log must **not contain** `doesn't have Read/Write enabled`. The Unity log is `Logs/ci-unity-*.log` from `ci/build.sh`; grep it after the build and fail on a hit. At the time of writing `ci/build.sh` only greps a summary out of the log and does not fail on this text yet, so check the log by hand on a release build until the step exists.
+**CI rule (enforced).** A Player build log must **not contain** `doesn't have Read/Write enabled`. `ci/build.sh` runs `ci/check-build-log.sh` on the Unity log (`Logs/ci-unity-*.log`) after Unity exits. A hit makes the build exit 1 before any zip is made, prints the offending lines and names the fix (`cr_collider_mesh_audit scene=all fix=true`, or take the model out of an `off` prefix). Unity's own exit code is reported first when it also failed. `ci/tests/build-log-rules-test.sh` tests the check against logs with and without the line (clean, hit, NUL bytes, empty, missing, no argument) and that `ci/build.sh` calls it; it builds nothing. The check applies to content-only builds too.
 
-**`bakeCollisionMeshes` stays 0** (`ProjectSettings`, "Prebake Collision Meshes"). Turning it on would cook every mesh collider into the Player up front, which would make the readable list unnecessary, but it costs build time and size, and it is the lever to try if collider cooking hitches while streaming cells on the Steam Deck. It is a perf option, not part of the safety rule.
+**`bakeCollisionMeshes` is 1** (`ProjectSettings`, "Prebake Collision Meshes"). Mesh colliders that Unity can cook while building (default cooking options, uniform scale) are cooked into the Player up front, so their meshes need not be Read/Write; that is what lets the [Model Read/Write policy](#model-readwrite-policy) turn Read/Write off. The readable list exists for the colliders that cannot be pre-baked.
+
+## Model Read/Write policy
+
+A model whose mesh is Read/Write keeps a CPU copy of the mesh and cannot use the asynchronous upload path: it uploads on the main thread in the frame its cell activates, which hitches on the Steam Deck. Most of the project's models are in git-ignored Asset Store packs whose importers default to Read/Write on (5598 of 6824 at the time of writing). The policy turns it off where nothing needs it.
+
+**Files** (all in `Assets/CR/Core/Data/Editor/Build/ColliderMeshAudit/` unless noted):
+
+| File | Role |
+|---|---|
+| `model-readwrite-policy.json` | `off`: folder prefixes whose models import with Read/Write off. `keep`: folder prefixes never touched. Both sorted, unique, no trailing slash, every prefix an existing `Assets/...` folder (a test checks it). |
+| `readable-collider-models.json` | Models that must stay Read/Write because a `MeshCollider` on them cannot be pre-baked. |
+| `Assets/CR/Core/Data/Logic/ModelReadWritePolicy.cs` | The engine-free decision: (path, current flag, policy, collider list) gives ForceOn, ForceOff or Leave. |
+| `ColliderMeshReadablePostprocessor.cs` | Applies the decision in `OnPreprocessModel`. `GetVersion()` is 2. |
+
+**Decision rules**, in order. A model on the collider list is always Read/Write on. Otherwise the longest matching prefix decides; when the same folder is in both lists, `keep` wins. A model in neither list keeps what its `.meta` says. Paths compare case-insensitively with forward slashes, and a prefix matches whole folder names (`Assets/Pack` does not match `Assets/Pack2`). A `keep` folder inside an `off` folder protects its models; an `off` folder inside a `keep` folder applies.
+
+**Where the flag is stored.** The postprocessor changes the importer for the import, and Unity then saves the changed flag into the model's `.meta` on that machine. The pack `.meta` files are untracked local files, so nothing tracked changes, and a fresh clone or an Asset Store restore (which brings back `isReadable: 1`) is flipped again on its first import. Never edit a pack `.meta` by hand for this.
+
+**Current `off` prefixes:** Fantastic Ancient Forest, Fantastic City Pack, Fantastic Interior Pack, Fantastic Village Pack, LeartesStudios, Monsters Ultimate Pack 02 Cute Series (placeholder creatures), `NOT_Lonely/HQ_RetroFarmhouse`, `PurePoly/Mining_Pack`.
+
+**Current `keep` prefixes and why.** BoZo_StylizedModularCharacters (`BoZoCharacterOptimizer` merges outfit meshes at runtime), Polyart (river, ocean, path and decal tools read and build meshes), Malbers Animations (mesh utilities), Plugins/Jungle (Grabbit reads mesh data and `isReadable`), Plugins/RootMotion, and the packs whose models are mesh-shaped particle emitters or mesh particles: Hovl Studio, Piloto Studio, VFX_Klaus, AdventureAssets. A mesh-shape particle emitter needs a readable mesh.
+
+**Not flipped, and why.** Fantastic Lost Jungle, Remesh Games and Fantastic Seaside Town: already import with Read/Write off except the Seaside models on the collider list. Raygeas: 2 models, both on the collider list. LowlyPoly (2 readable), Feel (4), ThirdParty (1), Plugins/Jungle and RootMotion: too small to matter or not in a shipped scene. Add them when a measurement says so.
+
+**Adding a family.** 1. Run `cr_model_readwrite_report --args "out=<dir>"` (or `-executeMethod CR.Core.Data.Editor.Build.CrModelReadWriteCommands.ReportBatch -crOut <dir>`) and read the family's row: models, Read/Write on, MeshCollider references, particle mesh, skinned, in scenes, shipped. It loads every model and takes about two minutes, and it does not write anything. 2. Search the pack's runtime scripts (not `Editor` folders) for mesh reads: `.vertices`, `.triangles`, `GetVertices`, `CombineMeshes`, `BakeMesh`, `isReadable`, `SetVertices`, `AcquireReadOnlyMeshData`, and for mesh-shaped particle systems. If any are found, add the folder to `keep` instead. 3. Add the prefix to `off`, keeping the list sorted. 4. Run `cr_collider_mesh_audit scene=all fix=true` (or the headless `AuditBatch` with `-crFix true`): models whose colliders cannot be pre-baked are added to the collider list and stay readable. 5. Commit both JSON files and run the EditMode tests (`ModelReadWriteImportTests`, `MeshColliderPlayerBuildTests`).
+
+**Exempting a model.** Add the model file to `readable-collider-models.json` (sorted). It is then always Read/Write, whatever prefix covers it. To exempt a whole folder inside an `off` family, add it to `keep`.
+
+**Cost: one re-import.** Changing the postprocessor version re-imports every model once on each machine that opens the project (the Editor of anyone who pulls, the build runner, a fresh clone). Measured on a warm project with the other editors idle-ish: about 6,950 model and prefab imports, 317 s in the asset pipeline refresh (329 s wall for the Unity run). Bump the version only when a rule changes in a way that must reach already-imported models; adding a prefix to a list does not re-import by itself, and the models under it keep their old flag until they re-import (touch them or bump the version).
+
+**Editor tools are unaffected.** In the Editor, a mesh that is not Read/Write can still be read (`vertices`, `triangles`, `normals`, `GetIndices`, `CombineMeshes`, `AcquireReadOnlyMeshData`, building a `MeshCollider`); only a Player refuses it. The terrain proxy builder, corridor mesh combining, cell proxy baking, the nav probe and the portrait baker therefore work as before (`ModelReadWriteImportTests` asserts this against a non-readable mesh).
+
+**Tests.** `ModelReadWriteImportTests` (EditMode): the policy file is sorted and unique with existing prefixes and no prefix in both lists; every model under an `off` prefix imports non-readable unless it is on the collider list; every collider-list model imports readable; the project's own models (`Assets/CR`) and their meshes are non-readable; the Editor reads a non-readable mesh. The decision rules are in `CR.Core.Data.Logic.Tests` (`ModelReadWritePolicyTests`). The two importer tests take about two seconds together.
 
 ## Town walls on slopes (TownWallGround)
 
@@ -239,7 +275,7 @@ To add one: append the pad to the region's `pads` with `afterSolve: true`, add a
 
 **After changing `EnsureCollider`, the camera trim rule or a kit:** `cr_nav_repair scene=all dry=true`, then apply, then `cr_nav_probe scene=all` and compare `summary.md` with the previous run. Then `cr_collider_mesh_audit scene=all fix=true`, commit `readable-collider-models.json` if it changed, and run `MeshColliderPlayerBuildTests`.
 
-**Before a Player build:** the mesh collider audit is clean, and the build log has no `doesn't have Read/Write enabled`.
+**Before a Player build:** the mesh collider audit is clean. `ci/build.sh` fails the build itself when the log has `doesn't have Read/Write enabled`.
 
 ## Troubleshooting
 

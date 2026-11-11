@@ -3044,7 +3044,15 @@
         "Assets/CR/Tests/Editor/MeshColliderPlayerBuildTests.cs",
         "Assets/CR/Tests/Editor/TownCameraTrimTests.cs",
         "ProjectSettings/TagManager.asset",
-        "ci/build.sh"
+        "ci/build.sh",
+        "Assets/CR/Core/Data/Editor/Build/CrModelReadWriteCommands.cs",
+        "Assets/CR/Core/Data/Logic/ModelReadWrite*.cs",
+        "Assets/CR/Core/Data/Logic/ModelFamily*.cs",
+        "Assets/CR/Core/Data/Logic/ModelMeshReference*.cs",
+        "Assets/CR/Tests/Editor/ModelReadWriteImportTests.cs",
+        "ci/check-build-log.sh",
+        "ci/tests/build-log-rules-test.sh",
+        "ProjectSettings/ProjectSettings.asset"
       ]
     },
     "description": "World navigability: nav probe commands and reason codes, release gate, EnsureCollider mesh/box rule, camera trim (CameraIgnore layer), Player-build mesh collider audit and readable list, town wall ground sampling, dungeon clearance and reach rules, seed-before-build, event row y=0, overworld row placement, afterSolve terrain repair pads and nav-snap ledger"
