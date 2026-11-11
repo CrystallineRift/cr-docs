@@ -221,13 +221,13 @@ Seven creatures use our own rigged models instead of the placeholder packs: Mudc
 
 Three of these models first shipped straight from the mesh generator at hundreds of thousands of vertices, and two of them roam the starting meadow in numbers. They were re-exported at about 30,000 vertices each. The other four models were already between 8,000 and 13,000.
 
-| Model | Vertices before | Vertices now | FBX size before | FBX size now |
+| Model | Vertices before | Vertices now (as Unity imports them) | FBX size before | FBX size now |
 |---|---|---|---|---|
-| `gatorbear` (Gaterbear) | 382,929 | 29,936 | 37.3 MB | 3.6 MB |
-| `cindris_firecat` (Cindris) | 168,676 | 30,245 | 15.3 MB | 3.5 MB |
-| `zephlet` (Zephlet) | 161,039 | 30,227 | 14.7 MB | 3.6 MB |
+| `gatorbear` (Gaterbear) | 382,929 | 30,783 | 37.3 MB | 3.6 MB |
+| `cindris_firecat` (Cindris) | 168,676 | 30,636 | 15.3 MB | 3.5 MB |
+| `zephlet` (Zephlet) | 161,039 | 30,674 | 14.7 MB | 3.8 MB |
 
-The counts are the vertices the engine draws, with UV seams split. The object, bone, material and clip names did not change, so the `.fbx.meta` files, textures, prefabs and controllers needed no edits; only the three `.fbx` files changed. The skeleton and animations are the same; skin weights come from the original surface, and the lighter meshes were checked against the original in the Idle, Walk, Attack and Roar poses.
+The counts are the vertices the engine draws, with UV seams split. The object, bone, material and clip names did not change, so the `.fbx.meta` files, prefabs and controllers needed no edits. The Gaterbear and Zephlet also needed a new texture (below); `gatorbear_albedo.png` and `zephlet_albedo.jpg` keep their names, format and size, and the Zephlet texture file shrank from 11.1 MB to 2.3 MB. Both FBX files carry all nine takes (the seven original clips plus Hit and Faint), so the same file serves the Hit and Faint branch.
 
 **The budget is 40,000 vertices per creature**, summed over every `SkinnedMeshRenderer` and every plain `MeshFilter` mesh on the prefab (an extra unskinned mesh does not escape the count). It is enforced by `RiggedCreatureModelTests` (EditMode, `Assets/CR/Tests/Editor/`), which runs over every prefab in `Assets/CR/Prefabs/Creatures` that is a variant of an `.fbx` in `Assets/CR/Prefabs`:
 
@@ -240,12 +240,23 @@ The counts are the vertices the engine draws, with UV seams split. The object, b
 
 The budget sits above the lightened exports and the models that arrived light, and below a raw generator mesh. Do not raise it to make a heavy model pass; lighten the model.
 
-**Lightening on export.** The rigging skill (`animating-quadrupeds`) can write a lighter mesh while exporting, without touching the rigged `.blend`:
+**Lightening on export.** The rigging skill (`animating-quadrupeds`) can write a lighter mesh while exporting, without touching the rigged `.blend`. It has two modes, set with environment variables when running `q_export_fbx.py` or with keys under `"export"` in the model's `<file>.quadruped.json` config (the environment variable wins; nothing set means the export is unchanged):
 
-- Set the environment variable `DECIMATE=30000` when running `q_export_fbx.py`, or
-- set `"export": {"decimate_verts": 30000}` in the model's `<file>.quadruped.json` config. The environment variable wins; `0` or nothing turns it off.
+- **Keep the UVs:** `DECIMATE=30000` (config `"decimate_verts": 30000`). The mesh is cut open along the UV island borders, decimated, and the cracks that opens are snapped shut. This is only good when the texture atlas is tidy.
+- **Re-bake:** `REBAKE=1 DECIMATE=31000` (config `"rebake": true`). The mesh is simplified as one welded surface, given a new UV layout, and the original colours are painted into a new texture. Use this when the atlas is fragmented.
 
-The target is counted on the mesh with UV seams cut open, which is what the engine draws. The tool cuts the mesh open along UV island borders, collapses it with Blender's decimation, then takes weights and normals from the original surface and keeps the skull and ground-contact vertices. Look at the before and after renders before shipping: at 15,000 vertices the Cindris and Zephlet showed seam cracks on the face and damage at the beak root, which is why they stayed at 30,000.
+`DECIMATE` counts the vertices the engine draws (after UV-seam splits), not Blender's count; aim for 28,000 to 33,000.
+
+**Why the Gaterbear and Zephlet were re-baked.** The first lightened versions (keep-the-UVs mode) showed hairline cracks and dark specks in Unity: on the Gaterbear's head, brow, snout, neck and around the spikes, and on the Zephlet's beak and plume. The source atlas is cut into so many islands that 16,246 of the Gaterbear's 29,936 vertices were seam copies. Each island was simplified on its own, so the seams opened, and island edges sampled the atlas background (black on the Gaterbear). The re-bake does this instead:
+
+1. Simplify the welded surface (no seam splitting).
+2. Lay out new UVs with wide gutters between islands (17 px at 2048, 34 px at 4096, because each mip level halves them), with the head islands enlarged.
+3. Transfer the original colours into a new texture with the same name, format and size, never re-lit, and fill the whole background so no mip level can sample a background colour.
+4. Take skin weights from the original surface, keep the skull and ground-contact vertices, and fit the weights to the four bones Unity keeps (see the next section).
+
+The texture keeps its name, format and size, so the existing `.fbx.meta` and material wiring keep working when the files are dropped over the old ones. Cindris was not re-baked and is unchanged.
+
+**How to judge a lightened model.** When the atlas is fragmented, re-bake. Whole-model renders are not acceptance evidence, because cracks and specks are only a few pixels wide: judge zoomed captures of the head, mouth, spikes and beak taken in Unity (the original, the previous version and the new one side by side, textured and plain grey), at mip levels 1 to 3 as well as full size. The export also writes `<name>.export.json` with a `lighten.health` block: open and non-manifold edges must equal the original's and zero-area triangles must be 0.
 
 ## Pushing Studio content from the CLI
 
