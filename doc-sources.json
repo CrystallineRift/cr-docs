@@ -3105,7 +3105,12 @@
         "Assets/CR/Game/Evolution/Presentation/EvolutionStageDirector.cs",
         "Assets/CR/Scenes/Debug/CreatureShowcase.unity",
         "Assets/CR/Tests/Editor/CreatureShowcaseTests.cs",
-        "Assets/CR/Tests/Editor/DevGrantLevelsCommandTests.cs"
+        "Assets/CR/Tests/Editor/DevGrantLevelsCommandTests.cs",
+        "Assets/CR/Game/Creatures/Editor/CreatureCapture.cs",
+        "Assets/CR/Game/Creatures/Editor/CreatureCaptureFacts.cs",
+        "Assets/CR/Game/Creatures/Logic/CapturePlan.cs",
+        "Assets/CR/Tests/Editor/CreatureCaptureTests.cs",
+        "ci/creature-capture-sheets.py"
       ]
     },
     "description": "Creature Showcase: dev-only scene (not in Build Settings) for watching creatures in Play mode in world, battle and evolution modes; CreatureShowcase component, Logic helpers (picker order, evolution lines, beat table), scene builder, offline Grant Levels To Lead Creature command (cr_dev_grant_levels), EvolutionBlendScale / EvolutionStageScaling shared with the evolution stage director"

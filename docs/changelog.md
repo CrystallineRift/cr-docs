@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-11 — Creature capture tool (cr-api-unity #179)
+
+- **Why:** model and animation changes had been judged on Blender renders, which hid cracks, specks and skinning differences that only show in Unity.
+- **cr-api-unity:** Editor-only `CreatureCapture` (`-executeMethod CR.Game.Creatures.Editor.CreatureCapture.RunBatch`, or `cr_creature_capture`) renders stills, bone-framed close-ups (textured and plain grey), 24 fps frame sequences and `facts.json` per creature through the real URP pipeline; `ci/creature-capture-sheets.py` builds contact sheets, GIFs and before | after comparisons. Capture plan, naming and framing are pure logic with tests.
+- **Docs:** [Creature Showcase, Capturing creatures as Unity draws them](?page=unity/51-creature-showcase#capturing-creatures-as-unity-draws-them). Rule: creature model and animation changes are judged on these captures, and before/after pictures and clips go in the pull request.
+
 ## 2026-11-11 — Creature model fixes and a Blender-versus-Unity deformation test (cr-api-unity #186)
 
 - **Why:** Unity keeps the four largest bone weights per vertex and renormalises; Blender uses all of them. Cindralis (1,729 vertices with more than four influences), Cindrakar (1,386) and Mudcalf (781) looked right in Blender and deformed in the game by up to 9 % of body height at the shoulders, belly and front legs. Mudcalf also had a squared tube of leftover geometry at the left shoulder and a mouth cut through the nose bridge; Cindrakar's jaw bone owned only the lower teeth, so they tore away from the chin.
