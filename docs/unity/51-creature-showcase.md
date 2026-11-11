@@ -36,3 +36,7 @@ A creature whose prefab cannot be resolved is listed as "(no prefab)" and cannot
 ## Getting to the real evolution cutscene offline
 
 **CR > Debug > Grant Levels To Lead Creature (offline)** (a submenu: +1 level, +3 levels, To level 8, To level 14, To level 20; and the CLI command `cr_dev_grant_levels` with an argument such as `3` or `to 14`) is an Editor-only, Play-mode-only shortcut. It asks the offline authority's `ICreatureProgressionService.ApplyExperienceAsync` — the same exact-amount experience operation the admin Grant XP route runs — for the experience of each level, then raises `EvolutionEvents.RaiseCandidates` so the real presenter runs. It refuses outside Play mode, in an online session, and when the offline trainer has no creature. Offline state is local to the device and never reaches the server.
+
+## Naming the playing state
+
+The read-out names the playing state from the names baked into the scene for the creature plus every state a beat can resolve to (`ShowcaseBeats.AllResolvableStates`, which includes Hit, HeavyHit and Faint), so a controller that gains a state needs no scene rebuild. Beat expectations follow the production `ReactionFallbacks` chain against the states the controller actually has.
