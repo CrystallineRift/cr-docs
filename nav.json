@@ -493,5 +493,10 @@
     "section": "Unity",
     "title": "Quest Helpers",
     "path": "unity/50-quest-helpers"
+  },
+  {
+    "section": "Unity",
+    "title": "Creature Showcase",
+    "path": "unity/51-creature-showcase"
   }
 ]

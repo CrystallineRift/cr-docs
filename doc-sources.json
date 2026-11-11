@@ -3046,5 +3046,24 @@
       ]
     },
     "description": "Quest helpers: Gameplay toggle, Track button, HUD pin, authored objective helper markers, world beam/ring/glow, map-node pulse"
+  },
+  "unity/51-creature-showcase": {
+    "docPath": "docs/unity/51-creature-showcase.md",
+    "repos": {
+      "cr-api": [],
+      "cr-data": [
+        "Assets/CR/Game/Creatures/Debug/CreatureShowcase.cs",
+        "Assets/CR/Game/Creatures/Editor/CreatureShowcaseSceneBuilder.cs",
+        "Assets/CR/Game/Creatures/Editor/DevGrantLevelsCommand.cs",
+        "Assets/CR/Game/Creatures/Logic/*.cs",
+        "Assets/CR/Game/Evolution/Logic/EvolutionBlendScale.cs",
+        "Assets/CR/Game/Evolution/Presentation/EvolutionStageScaling.cs",
+        "Assets/CR/Game/Evolution/Presentation/EvolutionStageDirector.cs",
+        "Assets/CR/Scenes/Debug/CreatureShowcase.unity",
+        "Assets/CR/Tests/Editor/CreatureShowcaseTests.cs",
+        "Assets/CR/Tests/Editor/DevGrantLevelsCommandTests.cs"
+      ]
+    },
+    "description": "Creature Showcase: dev-only scene (not in Build Settings) for watching creatures in Play mode in world, battle and evolution modes; CreatureShowcase component, Logic helpers (picker order, evolution lines, beat table), scene builder, offline Grant Levels To Lead Creature command (cr_dev_grant_levels), EvolutionBlendScale / EvolutionStageScaling shared with the evolution stage director"
   }
 }

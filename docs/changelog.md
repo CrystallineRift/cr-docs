@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-11 — Creature showcase scene
+
+- **Why:** the seven creatures swapped to real rigged models (Mudcalf, Gaterbear, Cindris, Cindralis, Cindrakar, Zephlet, Zephryne) had never been watched in Play mode, and reaching an evolution in the real game meant levelling a creature by hand.
+- **cr-api-unity:** dev-only scene `Assets/CR/Scenes/Debug/CreatureShowcase.unity` (CR > Creatures > Open Showcase Scene; not in Build Settings) with a 60 m grid, a 1.8 m reference post and three modes: world (real `WildCreatureBehaviour`: wander, stand, chase, return), battle (real `CreatureBattlePresenter` driven by the real `BattleEvents`, with the Animator state each beat resolves to) and evolution (the stage director's phases, timings, shrink/grow and element effect). The evolution scale arithmetic moved into `EvolutionBlendScale` (Evolution Logic) and `EvolutionStageDirector` calls it; behaviour unchanged. New Editor-only Play-mode command CR > Debug > Grant Levels To Lead Creature (offline) / `cr_dev_grant_levels`: grants levels through the offline `ICreatureProgressionService.ApplyExperienceAsync`, then raises the evolution candidates event; refuses outside Play mode and in online sessions. No server change.
+- **Docs:** new [Creature Showcase](?page=unity/51-creature-showcase).
+- **Fix:** the evolution stage scaled the new model by the old model's root scale, so a new form with its own root scale (Cindrakar, 1.35) was staged smaller than the form it evolved from. Each model is now scaled from its own root scale (`EvolutionStageScaling.Apply`, shared by `EvolutionStageDirector` and the showcase). Forms with equal root scales (Cindris to Cindralis, Zephlet to Zephryne) are unchanged.
+
 ## 2026-11-11 — Hit and Faint animation clips for the rigged creatures
 
 - **Why:** in battle the game cross-fades Animator states by name; the rigged creatures had no `Hit` or `Faint` state, so those beats fell back to Idle. Creatures faint or are recalled, they never die, so `Faint` is a slump with a held end pose, not a death.
