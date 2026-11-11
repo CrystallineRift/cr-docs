@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-11 — Lighter rigged creature meshes (about 30,000 vertices)
+
+- **Why:** Gaterbear, Cindris and Zephlet shipped in v0.2.20 straight from the mesh generator (383k, 169k and 161k vertices) while the other four rigged creatures are 8k to 13k. Cindris and Zephlet roam the starting meadow in numbers, so this was the largest skinned-mesh cost in the first hour.
+- **cr-api-unity:** the three FBX files were re-exported at 29,936, 30,245 and 30,227 vertices (37.3, 15.3 and 14.7 MB down to 3.6, 3.5 and 3.6 MB). Names are unchanged, so prefabs, controllers, textures and `.meta` files are untouched. `RiggedCreatureModelTests` pins a 40,000-vertex budget per creature prefab and checks that every rigged creature is found, still binds to its model and deforms when animated.
+- **Rigging skill:** `DECIMATE=30000` (or `export.decimate_verts` in the config) lightens a mesh on export only.
+- **Docs:** [Content Pipeline, Rigged creature models](?page=unity/17-content-pipeline#rigged-creature-models-the-vertex-budget).
+
 ## 2026-10-28 — Master / Music / Effects volume sliders
 
 - **Why:** the System tab's Master Volume row was an empty placeholder and there was no way to turn the music down.

@@ -215,6 +215,38 @@ success, writes nothing, and the pool silently stays as it was. Always read the 
 after a seed migration rather than trusting that it ran.
 :::
 
+## Rigged creature models: the vertex budget
+
+Seven creatures use our own rigged models instead of the placeholder packs: Mudcalf, Gaterbear, Cindris, Cindralis, Cindrakar, Zephlet and Zephryne. Each prefab under `Assets/CR/Prefabs/Creatures` is a variant of an FBX under `Assets/CR/Prefabs`.
+
+Three of these models first shipped straight from the mesh generator at hundreds of thousands of vertices, and two of them roam the starting meadow in numbers. They were re-exported at about 30,000 vertices each. The other four models were already between 8,000 and 13,000.
+
+| Model | Vertices before | Vertices now | FBX size before | FBX size now |
+|---|---|---|---|---|
+| `gatorbear` (Gaterbear) | 382,929 | 29,936 | 37.3 MB | 3.6 MB |
+| `cindris_firecat` (Cindris) | 168,676 | 30,245 | 15.3 MB | 3.5 MB |
+| `zephlet` (Zephlet) | 161,039 | 30,227 | 14.7 MB | 3.6 MB |
+
+The counts are the vertices the engine draws, with UV seams split. The object, bone, material and clip names did not change, so the `.fbx.meta` files, textures, prefabs and controllers needed no edits; only the three `.fbx` files changed. The skeleton and animations are the same; skin weights come from the original surface, and the lighter meshes were checked against the original in the Idle, Walk, Attack and Roar poses.
+
+**The budget is 40,000 vertices per creature**, summed over every `SkinnedMeshRenderer` and every plain `MeshFilter` mesh on the prefab (an extra unskinned mesh does not escape the count). It is enforced by `RiggedCreatureModelTests` (EditMode, `Assets/CR/Tests/Editor/`), which runs over every prefab in `Assets/CR/Prefabs/Creatures` that is a variant of an `.fbx` in `Assets/CR/Prefabs`:
+
+| Test | Checks |
+|---|---|
+| `The_seven_rigged_creatures_are_found` | The seven prefabs above are all picked up, so a renamed or moved prefab cannot silently drop out of the other checks. |
+| `Every_rigged_creature_mesh_is_within_the_vertex_budget` | Total vertices are at most 40,000 per prefab. The failure message lists the offending model and its count. |
+| `Every_rigged_creature_still_binds_to_its_model` | Each skinned mesh has a mesh, bones that are all bound, as many bones as bind poses, and no missing material; the mesh is not Read/Write; the root has an Animator with a valid avatar and a battle controller, a `CreatureBattlePresenter`, and a `CreatureWorldAnimation` with a world controller. |
+| `Every_rigged_creature_deforms_when_animated` | The Idle pose and a mid-Attack pose differ by at least 5 % of the creature's height. A prefab whose bones no longer match a re-exported FBX bakes the same bind pose for both and fails. |
+
+The budget sits above the lightened exports and the models that arrived light, and below a raw generator mesh. Do not raise it to make a heavy model pass; lighten the model.
+
+**Lightening on export.** The rigging skill (`animating-quadrupeds`) can write a lighter mesh while exporting, without touching the rigged `.blend`:
+
+- Set the environment variable `DECIMATE=30000` when running `q_export_fbx.py`, or
+- set `"export": {"decimate_verts": 30000}` in the model's `<file>.quadruped.json` config. The environment variable wins; `0` or nothing turns it off.
+
+The target is counted on the mesh with UV seams cut open, which is what the engine draws. The tool cuts the mesh open along UV island borders, collapses it with Blender's decimation, then takes weights and normals from the original surface and keeps the skull and ground-contact vertices. Look at the before and after renders before shipping: at 15,000 vertices the Cindris and Zephlet showed seam cracks on the face and damage at the beak root, which is why they stayed at 30,000.
+
 ## Pushing Studio content from the CLI
 
 Studio's **Push All Content** button has a headless twin for the open Editor, so a push no longer needs the window or a modal. Both call the same method (`ContentStudioTool.QueueAllContentPush`), so the order (creatures first, trainer battles last, then the achievements catalog), the per-asset saves and the `ContentPushLog` stamps are identical. The stamps are what clear the **Push N Edits** pill.
