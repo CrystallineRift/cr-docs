@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-16 — Oaklet, a new creature species (in review: cr-api #103, cr-api-unity #188)
+
+- **Status:** in review, not merged, not released. Element, stats, learn list and spawner pools are provisional design choices awaiting the owner's review.
+- **cr-api (#103):** migrations `M21012SeedOaklet` and `M21013SeedLineOaklet`. `creature_oaklet`, Flora, HP 48 / Attack 8 / Defense 14 / Speed 12 / Sp. Attack 13 / Sp. Defense 14 (total 109), no evolution. Learn list `line_oaklet`: Tackle, Growl, Vine Whip at level 1; 5 Absorb, 9 Harden, 13 Body Slam, 18 Energy Ball, 24 Focus, 32 Hyper Beam.
+- **cr-api-unity (#188):** Meshy AI model with a new round-body rig (17 bones, rigid face bone, flank scales as stubby wings, squash and stretch through opt-in bone scale, proven equal in Unity). Eight clips; Faint plops down sitting and is held. New client-only `CreatureDefinition.faintedHeightLimit` (default 0.85, Oaklet 0.95). Wild in `a1-shoulder-wild` (L4-6), `meadow-wild-zone-2` (L3-4) and `meadow-wild-zone-3` (L5-6). Showcase featured list is now eight. Offline floor re-baked with `--base`.
+- **Docs:** [Content Pipeline, Oaklet and the round-body rig](?page=unity/17-content-pipeline#oaklet-and-the-round-body-rig-in-review), [Ability Learning](?page=backend/30-ability-learning), [Evolution](?page=backend/16-evolution), [Spawner System](?page=backend/03-spawner-system#oaklet-in-the-early-zones-in-review), [Creature Showcase](?page=unity/51-creature-showcase), [Standalone Builds](?page=unity/21-standalone-builds#offline-data-floor) and the [AI Content Ledger](?page=content/01-ai-content-ledger).
+
 ## 2026-11-11 — Creature capture tool (cr-api-unity #179)
 
 - **Why:** model and animation changes had been judged on Blender renders, which hid cracks, specks and skinning differences that only show in Unity.
