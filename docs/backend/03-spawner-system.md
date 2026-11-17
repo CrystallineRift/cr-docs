@@ -579,7 +579,7 @@ Status: in review: cr-api-unity #188 (the server seed is cr-api #103; it adds no
 | `meadow-wild-zone-2` | 3-4 | wolfpup, zephlet, bud | 1/4 |
 | `meadow-wild-zone-3` | 5-6 | bud, zephlet | 1/3 |
 
-It is not in `meadow-wild-zone` (the level 1-2 starting cell). A spawner template needs a base creature (`creature_oaklet`) and a growth profile; the server migration chooses none. Not verified: that `floor_spawners` in the floor needs no edit (Unity content syncs spawners).
+It is not in `meadow-wild-zone` (the level 1-2 starting cell). A spawner template needs a base creature (`creature_oaklet`) and a growth profile; the server migration chooses none. Offline, the client writes its spawner definitions into the local database at world start (`SpawnerDefinitionSyncBehaviour` through `LocalSpawnerSyncClient`), so the three pools spawn Oaklet once the floor holds its creature row; no spawner rows are baked into the floor. Online, pools come from the server: the seed adds no spawner templates, so Oaklet appears in the wild only after the three definitions are pushed from Content Studio.
 
 ## Common Mistakes / Tips
 
