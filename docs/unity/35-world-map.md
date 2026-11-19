@@ -15,9 +15,35 @@ domain DLLs' on local SQLite offline. The client only groups and draws it.
 
 The web Studio has a **World map** editor (Content → World map, see [World Map Editor](../admin-web/11-world-map-editor.md)) that
 edits a **server copy** of this layout (`GET`/`PUT /api/v1/world-map/main`): the same nodes, routes and region styles, with
-`x`/`y` as node centres exactly as in `WorldMapArea`. The Studio edits that server copy only. The Unity `WorldMapDefinition`
-SO remains the source the client reads until a follow-up moves it over, so an edit in the browser does not change the game yet.
-The Studio's *Load Unity starter layout* seeds the editor from the six areas in `WorldMap.asset`.
+`x`/`y` as node centres exactly as in `WorldMapArea`. The game now reads that copy. Presentation config only: the client never
+writes it, and no game state flows through it.
+
+`StudioWorldMapLayoutSource` decorates the mode-switched layout source. Which map the Map tab shows, first match wins:
+
+| # | Source | Log label |
+|---|---|---|
+| 1 | The server's map, pulled this session (online only; the fetch starts on the first map read and never blocks the menu, so a map that lands shows from the next open) | `studio-online` |
+| 2 | The last pull, persisted to `persistentDataPath/world-map.main.json` (written atomically; a corrupt file is ignored with a warning) | `studio-cache` |
+| 3 | The bundled fallback `Assets/CR/Resources/OpenWorld/world-map.main.json` | `studio-bundled` |
+| 4 | The inner source's own layout (open mode: generated from the region mask; legacy: the `WorldMapDefinition` SO) | `generated` |
+
+A 404 (no map yet), a 401, a network failure, or a document that fails the local validator keeps the next source down. One Info line
+states which source won and the node count. The marker, area-key and scene-area mappers always delegate to the inner source: its region
+grouping stays the key authority, so a Studio node's `areaKey` must be a key the inner source reports (open mode: the region group,
+e.g. `1`, not `1a`). The painted background sprite stays the inner source's; the document's `backgroundAddress` is passed to the tab,
+which loads it through Addressables and replaces the sprite when it resolves.
+
+### Push, pull, status (Editor, dialog-free)
+
+| Command (`unity run --command ...`) | What |
+|---|---|
+| `cr_world_map_push` (`--args force`) | Exports the active map (open mode: the generated region layout built in edit mode; legacy: the SO), validates it locally, reads the server's `rowVersion` (404 = 0) and `PUT`s with `expectedRowVersion`. A 409 or 400 prints the server's message; `force` re-reads the version and overwrites once. |
+| `cr_world_map_pull` | `GET`s the server map, validates it and writes the bundled fallback `world-map.main.json`, printing rowVersion, updatedAt and counts. |
+| `cr_world_map_status` | Server rowVersion / updatedAt / node count against the bundled file (same document or not). |
+
+The World Map inspector has **Push to Studio**, **Pull from Studio** (writes the bundled file) and **Pull into this asset** (legacy
+authoring: writes the server nodes and routes into the SO, undoable); the result shows on the inspector's status line. Unknown fields
+in a server document are ignored on read and are not preserved in the bundled file.
 
 ## Where things live
 
