@@ -112,7 +112,7 @@ game rule depends on it.
 
 | Route | Policy | Result |
 |---|---|---|
-| `GET /api/v1/world-map/{scope}` | content-write | 200 `{ scope, document, rowVersion, updatedAt }`; 404 when no live row |
+| `GET /api/v1/world-map/{scope}` | any token (the game client reads it) | 200 `{ scope, document, rowVersion, updatedAt }`; 404 when no live row |
 | `PUT /api/v1/world-map/{scope}` | content-write | body `{ document, expectedRowVersion }`; 200 with the same shape; 409 `row-version-conflict` |
 
 `expectedRowVersion` follows the shared contract ([Optimistic Concurrency](?page=backend/28-optimistic-concurrency)): `0` creates,
