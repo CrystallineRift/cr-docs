@@ -26,6 +26,14 @@ Set ids `a5e00000-0000-4000-8000-0000000000NN` (NN 01..11), entry ids `a5e1NN00-
 | line_mudcalf (Normal) | Tackle, Growl, Harden | 5 Scratch, 9 Body Slam, 14 Mud Shot, 19 Slash, 25 Focus, 32 Hyper Beam | Earth Spike, Quake |
 | line_gaterbear (Ground) | Scratch, Growl, Mud Shot | 5 Bite, 10 Harden, 14 Earth Spike, 19 Slash, 24 Body Slam, 32 Quake | Frost Bite, Hyper Beam |
 
+The Zephlet and Oaklet lines are seeded later (M21010 and M21013) and are not in the table above. **Oaklet** (Flora, no evolution; in review: cr-api #103, cr-api-unity #188):
+
+| Line (element) | L1 | Level list | Tone-only |
+|---|---|---|---|
+| line_oaklet (Flora) | Tackle, Growl, Vine Whip | 5 Absorb, 9 Harden, 13 Body Slam, 18 Energy Ball, 24 Focus, 32 Hyper Beam | none seeded |
+
+Set id `a5e00000-0000-4000-8000-000000000013`, entry ids `a5e113LL-LLSS-4000-8000-000000000000` (level and slot in hex), seeded by `M21013SeedLineOaklet`, which also sets `creature.default_ability_progression_set_id`. Every ability already existed and is resolved by name. The learn list is a **provisional design choice awaiting the owner's review**, as are Oaklet's element and stats (see [Evolution](?page=backend/16-evolution) for the species seed).
+
 New generic abilities (ids `a5a00000-0000-4000-8000-00000000000N`): Bite (1), Body Slam (2), Harden (3, self Defense up 3 turns), Focus (4, self Attack up 3 turns). Gaterbear is seeded into cr-api with its authored Unity id `5cc4db96-ddc6-4f2b-99ae-e1c1ebdd6e5a` (migration `M21004SeedGaterbear`; an existing `creature_gaterbear` row under another id is re-keyed).
 
 Invariants pinned by migration tests: every spawnable species has a line set with at least three level-1 entries and no quest gate on them; at most four entries per level; no entry references a soft-deleted ability; no duplicate ability in a set; a generated creature at any band level has four non-empty slots.
@@ -103,6 +111,6 @@ Three existing grant paths: world pickups (`pickup_definition` rows with an Item
 - `Game/CR.Game.Domain.Services/Implementation/Reward/RewardGrantService.cs`, `Quests/CR.Quests.Domain.Services/Implementation/QuestDomainService.cs` (quest offers on claim).
 - `Game/CR.Game.Service.BFF/Endpoints/CreatureLearnEndpoints.cs`; `Creatures/CR.Creatures.Service.REST/Endpoints/CreatureEndpoints.cs`.
 - Tones: `Game/CR.Game.Domain.Services/Implementation/Item/` (`Handlers/TeachAbilityHandler`, `ToneTeachGate`, `NullToneTeachGate`, `ItemUseDomainService`), `Interfaces/Items/IToneTeachGate.cs`, `ToneConsumeResult.cs`; `Game/CR.Game.Model/Items/EffectParameters/TeachAbilityParams.cs`; `Convenience/CR.Game.Compat/Items/ToneResonance.cs`.
-- Migrations: Creatures `M21001` to `M21005`; Items `M21101` to `M21103`. The offline floor is rebaked (`Convenience/CR.Data.Migrations.Tool/game-data.bytes`).
+- Migrations: Creatures `M21001` to `M21005`; Items `M21101` to `M21103`. Oaklet (in review, cr-api #103): Creatures `M21012`, `M21013`. The offline floor is rebaked (`Convenience/CR.Data.Migrations.Tool/game-data.bytes`).
 
 Related: [Item Effects](?page=backend/19-item-effects), [Creature Generation](?page=backend/04-creature-generation), [Ability Economy](?page=backend/29-ability-economy).

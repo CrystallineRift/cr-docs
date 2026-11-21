@@ -569,6 +569,18 @@ cannot influence. The client half — the `SpawnerDefinition` assets, their regi
 (**CR > Areas > Split Encounter Zones**) in the Unity project, and its band table must stay
 identical to the migration's or online and offline play at different difficulties.
 
+## Oaklet in the early zones (in review)
+
+Status: in review: cr-api-unity #188 (the server seed is cr-api #103; it adds no spawner rows, spawners are Unity content). **Provisional design choice awaiting the owner's review.** Oaklet is added to three pools. Every template in these pools has spawn probability 1 and pool weight 100 with the Balanced Growth profile, so Oaklet gets an equal share:
+
+| Spawner | Levels | Other creatures in the pool | Oaklet share |
+|---|---|---|---|
+| `a1-shoulder-wild` | 4-6 | spike, wolfpup, zephlet, mudcalf | 1/5 |
+| `meadow-wild-zone-2` | 3-4 | wolfpup, zephlet, bud | 1/4 |
+| `meadow-wild-zone-3` | 5-6 | bud, zephlet | 1/3 |
+
+It is not in `meadow-wild-zone` (the level 1-2 starting cell). A spawner template needs a base creature (`creature_oaklet`) and a growth profile; the server migration chooses none. Offline, the client writes its spawner definitions into the local database at world start (`SpawnerDefinitionSyncBehaviour` through `LocalSpawnerSyncClient`), so the three pools spawn Oaklet once the floor holds its creature row; no spawner rows are baked into the floor. Online, pools come from the server: the seed adds no spawner templates, so Oaklet appears in the wild only after the three definitions are pushed from Content Studio.
+
 ## Common Mistakes / Tips
 
 - **Spawner not active.** The most common reason `SpawnCreaturesAsync` returns `ValidationError`. Always call `activate` after creating a spawner.
