@@ -100,7 +100,7 @@ Route, audit and guard details: [Moderation](?page=backend/18-moderation).
 
 ## Conflicts (409)
 
-Resources whose server rows carry a `row_version` (dialogues, quests and, in review, quest areas) send `expectedRowVersion` on save and delete.
+Resources whose server rows carry a `row_version` (dialogues, quests and quest areas) send `expectedRowVersion` on save and delete.
 `ResourceDetail` turns a `row-version-conflict` 409 into the conflict dialog (`ConflictDialog`: Compare, Reload, Overwrite
 theirs, Recreate) and a `requirement_cycle` 400 into a loop message. A resource opts in by carrying `rowVersion` in its type
 and calling `withExpectedRowVersion` in its upsert (`src/api/rowVersion.ts`; the 409 parser is `src/api/conflicts.ts`).

@@ -2,7 +2,7 @@
 
 Added 2026-10-28. An optional setting that shows the player where the next step of one quest is. Everything here is display: the client never decides what the next objective is or whether it is done. It reads the quest service (online: server responses; offline: the local cr-api domain services), and the toggle and tracked quest are preferences only.
 
-A **hidden** quest (in review) is never tracked or pointed at: no marker, no beam. See [Hidden Quests and the Claim Reveal](?page=unity/52-hidden-quests-and-claim-reveal).
+A **hidden** quest is never tracked or pointed at: no marker, no beam. See [Hidden Quests and the Claim Reveal](?page=unity/52-hidden-quests-and-claim-reveal).
 
 ## Player-facing behaviour
 

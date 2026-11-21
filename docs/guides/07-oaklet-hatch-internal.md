@@ -1,6 +1,6 @@
 # Oaklet Hatch (internal, spoilers)
 
-> **INTERNAL: SPOILERS.** This page gives away the hatch. It is for designers, operators and testers. Nothing in the game, in player-facing text or in a build's readable files may say what the item is or that it becomes Oaklet. Status: in review: cr-api #106, cr-api-unity #193, cr-admin-web #46, all stacked on the quest-toggles PRs (#105, #192, #45). Not merged, not deployed.
+> **INTERNAL: SPOILERS.** This page gives away the hatch. It is for designers, operators and testers. Nothing in the game, in player-facing text or in a build's readable files may say what the item is or that it becomes Oaklet. Status: merged 2026-11-21, server deployed, shipping in game build v0.2.24 (cr-api #106, cr-api-unity #193, cr-admin-web #46, stacked on the quest-toggles PRs #105, #192, #45). Online, the content must be pushed from Content Studio after the deploy (reward spawner, quest, pickup placements).
 
 ## What the player experiences
 
@@ -16,9 +16,9 @@ Steps walked without the item in the **backpack** do not count and are not repla
 | Piece | What | Where it is documented |
 |---|---|---|
 | Item `item_heavy_pinecone` | Seeded by cr-api migration 21403; pickup definition `item_heavy_pinecone` by 21404 | [Quest System](?page=backend/07-quest-system#migrations) |
-| Tree find spot `tree-spot-farm-01` | One data row in the **Act 1** layout (`Act1/story.json`, `Act1Corridor.asset`), which owns cell `World_c0_r3`: a large tree by Philroe's farm with the pickup at its base | [Open World, Tree find spots](?page=unity/37-open-world#tree-find-spots-in-review) |
+| Tree find spot `tree-spot-farm-01` | One data row in the **Act 1** layout (`Act1/story.json`, `Act1Corridor.asset`), which owns cell `World_c0_r3`: a large tree by Philroe's farm with the pickup at its base | [Open World, Tree find spots](?page=unity/37-open-world#tree-find-spots) |
 | Reward spawner `hatch-oaklet` | One template: `creature_oaklet`, level 1, Balanced Growth, normal variant, quantity 1; reward-only (not a world spawner) | [Spawner System](?page=backend/03-spawner-system) |
-| Quest `quest-heavy-pinecone` | See below | [Quest System](?page=backend/07-quest-system#walk-steps-take-item-and-hidden-quests-in-review) |
+| Quest `quest-heavy-pinecone` | See below | [Quest System](?page=backend/07-quest-system#walk-steps-take-item-and-hidden-quests) |
 | Step counting | Server counts steps from the positions it receives | [Server-Counted Steps](?page=backend/31-server-counted-steps) |
 | Reveal | Generic: any claim that takes an item and spawns a creature | [Hidden Quests and the Claim Reveal](?page=unity/52-hidden-quests-and-claim-reveal#the-claim-reveal) |
 
@@ -46,20 +46,23 @@ Server and offline rules are covered by tests; the quickest checks are:
 
 ## What was NOT tested
 
-- **No Play-mode run** of the tree, the pickup, the walk or the reveal (they were checked from captured stills and a GIF, and from tests).
-- **No end-to-end run against a live server** (no real position stream through the production `PUT /trainer/{id}/location`, no live claim).
+- **No Play-mode run** (before release) of the tree, the pickup, the walk or the reveal (they were checked from captured stills and a GIF, and from tests).
+- **No end-to-end run against a live server** before release (no real position stream through the production `PUT /trainer/{id}/location`, no live claim).
 - The granter and pickup MonoBehaviours have no dedicated test (from the quest-toggles work).
 - The pushed content (quest, spawner, placement) has not been pushed to a server by anyone.
 
-## Open decisions
+## Decisions as shipped
 
-**The item can be discarded.** It is an ordinary item, so a player can throw it away, and with one spot a player who does cannot finish the quest until another spot exists. Alternatives: the spot gives a new one when the player has none and has not hatched yet, or the item cannot be discarded. This stays as is until the owner decides (also written into the PR).
+The owner approved the design and changed nothing, so these shipped as built:
 
-**Old unclaimed quests.** The session-start unclaimed-reward sweep also pays long-completed, unclaimed auto-claim quests on existing saves. Intended.
+- **The item can be discarded.** It is an ordinary item, so a player can throw it away, and with one spot a player who does cannot finish the quest until another spot exists. Alternatives not taken: the spot gives a new one when the player has none and has not hatched yet, or the item cannot be discarded.
+- **The wild pools were removed.** #188 put Oaklet in three wild pools (`a1-shoulder-wild`, `meadow-wild-zone-2`, `meadow-wild-zone-3`); the release removes those three entries (commit `beb27471a`), so the hatch is the only source. Revert that commit to bring wild Oaklets back. See [Spawner System, Oaklet in the early zones](?page=backend/03-spawner-system#oaklet-in-the-early-zones).
+- **The quest's area key is `Meadow`.**
+- **Old unclaimed quests.** The session-start unclaimed-reward sweep also pays long-completed, unclaimed auto-claim quests on existing saves. Intended.
 
-### The wild pools
+## Pushes still to do
 
-#188 (merged) put Oaklet in three wild pools (`a1-shoulder-wild`, `meadow-wild-zone-2`, `meadow-wild-zone-3`). To keep the hatch a surprise, cr-api-unity #193 removes those three entries in a **separate, droppable commit**. Until the owner decides, both outcomes are possible; see [Spawner System, Oaklet in the early zones](?page=backend/03-spawner-system#oaklet-in-the-early-zones).
+Online, the item and its pickup definition come from the server migrations, but the reward spawner `hatch-oaklet`, the quest `quest-heavy-pinecone` and the pickup placements **must be pushed from Content Studio after the deploy**, in that order (spawners, quests, placements), or the quest, the reward and the pickup do not exist online. Offline play needs no push.
 
 ## Related Pages
 

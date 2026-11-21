@@ -4,7 +4,7 @@ Studio content (dialogues, quest templates, the quest map layout) is edited from
 Crystalline Rift Studio and the web Studio. `row_version` is the one contract both use to avoid silently overwriting
 each other. This page is the single source of the contract; the web and Unity pages link here instead of repeating it.
 
-Applies to five tables: `dialogue` (M14003), `quest_template` (M17004), `quest_map_layout` (M17005), `talent_tree` (M15105) and `quest_area_setting` (M21302, in review, cr-api #105). Other tables
+Applies to five tables: `dialogue` (M14003), `quest_template` (M17004), `quest_map_layout` (M17005), `talent_tree` (M15105) and `quest_area_setting` (M21302, cr-api #105). Other tables
 that carry a `row_version` column (for example `spawner`) are unchanged and do not reject stale writes.
 
 ## The column
@@ -65,7 +65,7 @@ Identical trees in an Apply therefore never bump or conflict. See [Talents](?pag
 
 ## Quest area settings
 
-> In review: cr-api PR #105.
+> Status: merged 2026-11-21, server deployed, shipping in game build v0.2.24 (cr-api #105).
 
 `quest_area_setting` (one row per area whose side quests were ever switched; see [Turning quests off](?page=backend/07-quest-system#turning-quests-off-per-quest-and-per-area)) carries a `row_version` (starts at 1, +1 per write). It is a single-row `PUT`, not a bulk route: `PUT /api/v1/quests/area-settings/{areaKey}` with `{ "sideQuestsEnabled": false, "expectedRowVersion": 0 }`.
 

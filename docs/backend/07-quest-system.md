@@ -1,6 +1,6 @@
 # Quest System
 
-> Status: quest on/off switches (per quest and per area) are **in review**, all unmerged: server cr-api #105, Unity cr-api-unity #192, online Studio cr-admin-web #45 (branch `feat/quest-toggles` in each). Nothing here is released. See [Turning quests off](#turning-quests-off-per-quest-and-per-area) and the how-to [Test only the main story](?page=guides/06-test-only-main-story).
+> Status: quest on/off switches (per quest and per area) and the hatch building blocks (steps, walk-steps objective, take-item reward, hidden quests) are **merged 2026-11-21, server deployed, shipping in game build v0.2.24**. History: toggles cr-api #105, cr-api-unity #192, cr-admin-web #45; hatch cr-api #106, cr-api-unity #193, cr-admin-web #46. Migrations 21301, 21302 and 21401 to 21404 deploy with the server. See [Turning quests off](#turning-quests-off-per-quest-and-per-area) and the how-to [Test only the main story](?page=guides/06-test-only-main-story).
 
 Quests are the primary structured progression mechanism in Crystalline Rift. The system separates read-only template data (content) from mutable instance data (player state), evaluates gating requirements, tracks per-objective progress, and writes lifetime stats as a side-effect of every progress event.
 
@@ -139,7 +139,7 @@ is anywhere to return to.
 
 ## Quest categories and area key
 
-Every quest has a **category** and an optional **area key**. Until the quest switches (in review, see
+Every quest has a **category** and an optional **area key**. Until the quest switches (see
 [Turning quests off](#turning-quests-off-per-quest-and-per-area)) both were metadata only. Now exactly one value has a gameplay
 effect: category `MainStory` marks a main story quest, which the per-area switch never blocks. Every other category value, and
 the area key as a label, still gate, grant, require, reward and unlock nothing. The area key is also the quest's *area* for the
@@ -201,7 +201,7 @@ there is no separate `quest_kind` column. (A main act story line also counts as 
 
 ## Turning quests off (per quest and per area)
 
-> In review: cr-api PR #105. Not merged or deployed.
+> Status: merged 2026-11-21, server deployed, shipping in game build v0.2.24 (cr-api #105).
 
 Two switches let an operator take quests out of play without deleting anything. Both default to on, so no existing quest, save or behaviour changes until someone turns something off. The server enforces both. Offline play runs the same quest services on local SQLite, so the same rules apply there once the Unity client registers the area-settings repository (see [Offline play](#offline-play-and-the-unity-installer)). The game client only has to tolerate a refusal quietly.
 
@@ -272,7 +272,7 @@ The block rule is unchanged: off means off, with no automatic exemption. But a m
 
 ### Offline play and the Unity installer
 
-> In review: cr-api-unity #192 (`feat/quest-toggles`).
+> Status: merged 2026-11-21, server deployed, shipping in game build v0.2.24 (cr-api-unity #192).
 
 Offline play runs the same `QuestDomainService` and `QuestObjectiveProjector` on local SQLite, so the rules are the same code. The offline floor `game-data.bytes` is migrated to schema 21302 (migrations 21301 and 21302 included).
 
@@ -286,13 +286,13 @@ Offline play runs the same `QuestDomainService` and `QuestObjectiveProjector` on
 
 ### Where to switch things
 
-- Unity: [Crystalline Rift Studio, Quests tab](?page=unity/08-content-registry#quest-switches-in-the-studio-in-review) and the `QuestDefinition` field `isEnabled` ([Scriptable Objects](?page=unity/12-scriptable-objects)).
-- Online: [Quest Editing, Enabled and Quest areas](?page=admin-web/04-quest-editing#turning-quests-off-in-review).
+- Unity: [Crystalline Rift Studio, Quests tab](?page=unity/08-content-registry#quest-switches-in-the-studio) and the `QuestDefinition` field `isEnabled` ([Scriptable Objects](?page=unity/12-scriptable-objects)).
+- Online: [Quest Editing, Enabled and Quest areas](?page=admin-web/04-quest-editing#turning-quests-off).
 - How-to: [Test only the main story](?page=guides/06-test-only-main-story).
 
-## Walk steps, take item and hidden quests (in review)
+## Walk steps, take item and hidden quests
 
-> In review: cr-api #106 (`feat/oaklet-hatch`), stacked on the quest-toggles PR #105. Not merged. The Unity client is cr-api-unity #193 and the online Studio is cr-admin-web #46. First user: the hidden hatch quest, see [Oaklet Hatch (internal, spoilers)](?page=guides/07-oaklet-hatch-internal).
+> Status: merged 2026-11-21, server deployed, shipping in game build v0.2.24 (cr-api #106, stacked on #105). The Unity client is cr-api-unity #193 and the online Studio is cr-admin-web #46. First user: the hidden hatch quest, see [Oaklet Hatch (internal, spoilers)](?page=guides/07-oaklet-hatch-internal).
 
 Four generic building blocks. None of them knows about a particular quest, item or creature.
 
@@ -333,7 +333,7 @@ The claim answer (`POST /api/v1/quests/{instanceId}/claim-rewards`) gains `taken
 
 `HasItem` requirements evaluate an item GUID. The Studios author them by item content key, and `PUT /templates/bulk` used to store such a key as NULL (a requirement that could never be met). It now resolves a non-GUID `HasItem` reference through `IItemDomainService.GetItemByContentKeyAsync`, like `QuestCompleted` keys. An unknown item key refuses the push with 400 (`HasItem requirement references item 'x', which is not a stored item.`), so **the item must exist on the server before the quest that needs it is pushed**.
 
-**Push order after merging a feature that adds content:** (1) the item exists, by server seed; (2) spawners (a reward `Creature` names a template spawner by content key); (3) quests; (4) pickup placements. For the hatch the item and the pickup definition are seeded by migrations; the spawner, the quest and the placement are Unity content pushed from the Studio.
+**Push order after merging a feature that adds content:** (1) the item exists, by server seed; (2) spawners (a reward `Creature` names a template spawner by content key); (3) quests; (4) pickup placements. For the hatch the item and the pickup definition are seeded by migrations; the spawner, the quest and the placement are Unity content that must be pushed from Content Studio after the deploy.
 
 ### Migrations
 
@@ -973,7 +973,7 @@ When `is_repeatable = true`, a trainer can accept the same template again after 
 | `DefeatTrainersFromList` | 42 | Defeat N DISTINCT trainers from `target_reference_ids` |
 | `FightTrainer` | 43 | Fight a specific trainer: a defeat **or** a loss to a `lossAllowed` trainer counts (`target_reference_id` required, `target_count` 1). `ProgressOutcomeObjectiveMap` maps `TrainerDefeated`, and `BattleLost` with `lossAllowed`, to it (`ObjectivesFor(ProgressOutcome)`); the subject is the `opponentNpcKey` fact; distinct per NPC key, so a repeat is idempotent. A plain loss does not advance. Upsert refuses a missing target or a count other than 1 |
 | `ReachTalentRank` | 50 | Reach a rank in a talent (the "teach a talent" gate, [Talents §8.3](25-talents.md#quest-tie-in)); `target_reference_id` = talent content key, blank matches the highest rank on any talent |
-| `WalkSteps` | 60 | **In review (cr-api #106).** Walk N steps, counted by the server; optional `target_reference_id` = item content key that must be carried. See [Walk steps, take item and hidden quests](#walk-steps-take-item-and-hidden-quests-in-review) |
+| `WalkSteps` | 60 | Walk N steps, counted by the server; optional `target_reference_id` = item content key that must be carried. See [Walk steps, take item and hidden quests](#walk-steps-take-item-and-hidden-quests) |
 
 **List objectives (9, 42)** store their targets as a JSON array in `quest_objective_template.target_reference_ids`
 and the targets already counted in `quest_objective_progress.counted_reference_ids` (M7018, both engines,
@@ -1133,13 +1133,13 @@ All quest endpoints are prefixed `/api/v1/quests`.
 | `GET` | `/api/v1/quests/available` | List available quest templates for a trainer |
 | `GET` | `/api/v1/quests/active` | List InProgress quest instances for a trainer |
 | `GET` | `/api/v1/quests/{instanceId}` | Get a specific quest instance by ID |
-| `POST` | `/api/v1/quests/{templateId}/accept` | Accept a quest by template id (tooling / wire compatibility). 409 `quest-disabled` for a blocked quest (in review) |
-| `POST` | `/api/v1/quests/by-content-key/{contentKey}/accept` | Accept a quest by `content_key` — the route the game client uses; the server resolves its own template row. 409 `quest-disabled` for a blocked quest (in review) |
-| `GET` | `/api/v1/quests/area-settings` | Per-area side-quest switches (in review, cr-api #105): `[{ areaKey, sideQuestsEnabled, rowVersion, hasSetting, sideQuestCount, mainStoryQuestCount }]`, any signed-in caller. See [Turning quests off](#turning-quests-off-per-quest-and-per-area) |
-| `PUT` | `/api/v1/quests/area-settings/{areaKey}` | Set one area's `sideQuestsEnabled` with an optional `expectedRowVersion` (content-write; 400 / 409 `row-version-conflict`). In review |
+| `POST` | `/api/v1/quests/{templateId}/accept` | Accept a quest by template id (tooling / wire compatibility). 409 `quest-disabled` for a blocked quest |
+| `POST` | `/api/v1/quests/by-content-key/{contentKey}/accept` | Accept a quest by `content_key` — the route the game client uses; the server resolves its own template row. 409 `quest-disabled` for a blocked quest |
+| `GET` | `/api/v1/quests/area-settings` | Per-area side-quest switches (cr-api #105): `[{ areaKey, sideQuestsEnabled, rowVersion, hasSetting, sideQuestCount, mainStoryQuestCount }]`, any signed-in caller. See [Turning quests off](#turning-quests-off-per-quest-and-per-area) |
+| `PUT` | `/api/v1/quests/area-settings/{areaKey}` | Set one area's `sideQuestsEnabled` with an optional `expectedRowVersion` (content-write; 400 / 409 `row-version-conflict`) |
 | `POST` | `/api/v1/quests/abandon` | Abandon an active quest instance |
 | `POST` | `/api/v1/quests/progress` | **Retired (410).** See [How to Advance a Quest Objective from Unity](#how-to-advance-a-quest-objective-from-unity) above |
-| `POST` | `/api/v1/quests/{instanceId}/claim-rewards` | Claim rewards for a completed quest. 409 `quest-disabled` while the quest is blocked, 409 `quest-item-missing` (a `TakeItem` item is not held), 400 `quest-reward-unavailable`; the answer lists `takenItems` (in review) |
+| `POST` | `/api/v1/quests/{instanceId}/claim-rewards` | Claim rewards for a completed quest. 409 `quest-disabled` while the quest is blocked, 409 `quest-item-missing` (a `TakeItem` item is not held), 400 `quest-reward-unavailable`; the answer lists `takenItems` |
 | `PUT` | `/api/v1/quests/templates/bulk` | Bulk create-or-update quest templates by `content_key` (Crystalline Rift Studio sync). Optional `id` per template = the authored SO id; a stored row under another id is re-keyed to it |
 | `GET` | `/api/v1/quests/templates` | Every template, no children (player-readable). The client's `ServerQuestTemplateIndex` reads it once per session to map a server template id to its `content_key` |
 | `GET` | `/api/v1/quests/templates/by-content-key/{contentKey}` | One template with objectives, rewards and requirements; 404 on unknown key. The Unity `QuestTemplateOnlineOfflineRepository` calls this only when a `content_key` misses the local `quest_template` cache, then upserts the result locally |
@@ -1387,7 +1387,7 @@ removed since acceptance) is ambiguous and is left alone.
 | `Item` (2) | `content_key` of the item in the `item` table | Same as Currency — both reward types resolve to inventory items |
 | `Creature` (3) | `content_key` of a global spawner template | Looks up the spawner via `ISpawnerRepository.GetSpawnerTemplateByContentKeyAsync`, then calls `ICreatureSpawnDomainService.SpawnCreaturesAsync(spawner.Id, new SpawnRequest { TrainerId = trainerId, RequestedQuantity = quantity })` |
 | `Ability` (4) | `content_key` of a single ability, or `null` for every ability this quest gates | Unlocks quest-gated ability progression entries on the trainer's creatures — see below |
-| `TakeItem` (7) | `content_key` of the item to remove | **In review (cr-api #106).** Not a grant: taken from the backpack with a guarded take **before** anything is granted; refused with 409 `quest-item-missing` when absent. See [Walk steps, take item and hidden quests](#walk-steps-take-item-and-hidden-quests-in-review) |
+| `TakeItem` (7) | `content_key` of the item to remove | Not a grant: taken from the backpack with a guarded take **before** anything is granted; refused with 409 `quest-item-missing` when absent. See [Walk steps, take item and hidden quests](#walk-steps-take-item-and-hidden-quests) |
 
 ### Ability rewards (quest-gated ability unlocks)
 
@@ -1517,7 +1517,7 @@ The Unity online router calls it for a locally mirrored active instance the serv
 `UpsertFromServerAsync` revives a deleted row (`deleted = false` on conflict) so a mirror sweep that raced a
 server-side accept heals on the next read.
 
-`QuestDomainService` and `QuestObjectiveProjector` take `IQuestAreaSettingRepository? areaSettings = null` as their last constructor parameter (in review, cr-api #105). The AIO registers the repository both keyed (`"quest-area-setting"`) and non-keyed, and DI supplies it. A host that builds either class by hand and omits it enforces only the per-quest flag, never the area switch.
+`QuestDomainService` and `QuestObjectiveProjector` take `IQuestAreaSettingRepository? areaSettings = null` as their last constructor parameter (cr-api #105). The AIO registers the repository both keyed (`"quest-area-setting"`) and non-keyed, and DI supplies it. A host that builds either class by hand and omits it enforces only the per-quest flag, never the area switch.
 
 ## Common Mistakes
 
@@ -1550,7 +1550,7 @@ server-side accept heals on the next read.
 ## Related Pages
 
 - [Progress Dispatcher](?page=backend/23-progress-dispatcher)
-- [Server-Counted Steps](?page=backend/31-server-counted-steps) - how positions become steps (in review)
+- [Server-Counted Steps](?page=backend/31-server-counted-steps) - how positions become steps
 - [Oaklet Hatch (internal, spoilers)](?page=guides/07-oaklet-hatch-internal) - the first hidden quest
 - [Test only the main story](?page=guides/06-test-only-main-story) - how to switch off side quests per area, or single quests, and switch them back on
 - [Quest Helpers](?page=unity/50-quest-helpers) - the client setting, Track button and authored helper markers
@@ -1631,4 +1631,4 @@ rewards. One-shot quests are idempotent (the second call answers `alreadyDone`);
 A reward failure after the claim marker is set is reported (`rewardsPaid: false`, `reason`) and **not auto-retried**. Full
 rulings, response shape and audit kind: [Moderation](18-moderation.md#quest-and-achievement-admin-2026-10-20).
 
-**Blocked quests (in review, cr-api #105).** `AdminCompleteAsync` refuses a quest that is blocked (switched off, or a side quest in an area whose side quests are off) with `QuestDisabledException`, before it grants, restarts or completes anything. `ModerationService.CompleteQuestAsync` answers `ModerationResult.Fail(ModerationReason.QuestDisabled)`: HTTP 409, `{ error, reason: "QuestDisabled" }`, no audit row (nothing happened). Switch the quest back on first. The board (`GET .../quests`) shows `isEnabled` and `blockedReason` per row.
+**Blocked quests (cr-api #105).** `AdminCompleteAsync` refuses a quest that is blocked (switched off, or a side quest in an area whose side quests are off) with `QuestDisabledException`, before it grants, restarts or completes anything. `ModerationService.CompleteQuestAsync` answers `ModerationResult.Fail(ModerationReason.QuestDisabled)`: HTTP 409, `{ error, reason: "QuestDisabled" }`, no audit row (nothing happened). Switch the quest back on first. The board (`GET .../quests`) shows `isEnabled` and `blockedReason` per row.

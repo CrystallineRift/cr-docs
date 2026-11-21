@@ -1,8 +1,8 @@
 # Hidden Quests and the Claim Reveal
 
-> Status: in review: cr-api-unity #193 (`feat/oaklet-hatch`, stacked on the quest-toggles PR #192), on top of cr-api #106. Not merged. Not run end to end in Play mode or against a live server; see [What was not tested](#what-was-not-tested). First user: the hidden hatch quest, see [Oaklet Hatch (internal, spoilers)](?page=guides/07-oaklet-hatch-internal).
+> Status: merged 2026-11-21, server deployed, shipping in game build v0.2.24 (cr-api-unity #193, stacked on #192, with cr-api #106). No Play-mode run and no end-to-end run against a live server was done before release; see [What was not tested](#what-was-not-tested). First user: the hidden hatch quest, see [Oaklet Hatch (internal, spoilers)](?page=guides/07-oaklet-hatch-internal).
 
-Three generic client pieces that the server building blocks need ([Quest System](?page=backend/07-quest-system#walk-steps-take-item-and-hidden-quests-in-review), [Server-Counted Steps](?page=backend/31-server-counted-steps)). The client never decides anything about a quest: it reads the authority's answer, and shows or does not show.
+Three generic client pieces that the server building blocks need ([Quest System](?page=backend/07-quest-system#walk-steps-take-item-and-hidden-quests), [Server-Counted Steps](?page=backend/31-server-counted-steps)). The client never decides anything about a quest: it reads the authority's answer, and shows or does not show.
 
 ## What a hidden quest hides
 
@@ -19,7 +19,7 @@ A quest template with `isHidden` runs like any other (offered, auto-accepted, pr
 | Per-area "{Area} Quests" achievements | The Studio leaves hidden quests out when it generates them (`AreaAchievementQuestInputs`) |
 | Wording | The `WalkSteps` objective has the neutral text "Go for a walk" so a non-hidden quest that uses it still reads sensibly; no screen lists a hidden one |
 
-**The authority's flag comes first.** Quest instance answers and progress-report entries carry `isHidden` ([Quest System](?page=backend/07-quest-system#walk-steps-take-item-and-hidden-quests-in-review)). The manager, journal, tracker, helper marker, world map and toast use that flag before any template read, so a flagged quest stays hidden even when its template cannot be read. A failed read for a quest that carries **no** flag still shows it as before (a quest known to be hidden is never shown).
+**The authority's flag comes first.** Quest instance answers and progress-report entries carry `isHidden` ([Quest System](?page=backend/07-quest-system#walk-steps-take-item-and-hidden-quests)). The manager, journal, tracker, helper marker, world map and toast use that flag before any template read, so a flagged quest stays hidden even when its template cannot be read. A failed read for a quest that carries **no** flag still shows it as before (a quest known to be hidden is never shown).
 
 **Records.** The statistics (Records) list does not list the per-quest stat keys of hidden quests, and the steps stat reads "Steps walked".
 
@@ -55,7 +55,7 @@ The quest content fingerprint covers `isHidden` and the salt was bumped again (`
 
 ## Studio
 
-See [Content Registry, Hidden quests, Walk steps and Take item](?page=unity/08-content-registry#hidden-quests-walk-steps-and-take-item-in-review).
+See [Content Registry, Hidden quests, Walk steps and Take item](?page=unity/08-content-registry#hidden-quests-walk-steps-and-take-item).
 
 ## What was not tested
 
@@ -63,4 +63,4 @@ Tests cover the visibility rules, the reveal logic and sequence, the refusal hel
 
 ## Related Pages
 
-- [Quest System](?page=backend/07-quest-system), [Server-Counted Steps](?page=backend/31-server-counted-steps), [Quest Helpers](?page=unity/50-quest-helpers), [Open World, Tree find spots](?page=unity/37-open-world#tree-find-spots-in-review)
+- [Quest System](?page=backend/07-quest-system), [Server-Counted Steps](?page=backend/31-server-counted-steps), [Quest Helpers](?page=unity/50-quest-helpers), [Open World, Tree find spots](?page=unity/37-open-world#tree-find-spots)

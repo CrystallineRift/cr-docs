@@ -24,7 +24,7 @@ requirement enums themselves, see [Quest System](../backend/07-quest-system.md).
 | 42 Defeat trainers from a list | Trainers (comma-separated) | trainer-battle content keys |
 | 43 Fight trainer (win or allowed loss) | NPC, required | NPC content key; count fixed at 1 (zod and server both refuse otherwise). Counts a defeat or a loss to a `lossAllowed` trainer |
 | 50 Reach talent rank | Talent key (empty matches any) | a typed talent content key (talents are nested inside talent-trees, so there's no flat resource to pick from either) |
-| 60 Walk steps (in review) | Carried item (optional; empty counts every step) | **item content key**; the count is steps |
+| 60 Walk steps | Carried item (optional; empty counts every step) | **item content key**; the count is steps |
 
 An empty target on any of the "(empty matches any)" rows matches any instance of that type — a
 `Defeat creature` objective with no creature picked completes on defeating *anything*.
@@ -69,7 +69,7 @@ spec addition here once that lands.
 Two Journal fields group quests into a story: **Story line** (a select of existing lines plus **New story line...**, which
 creates a slug key and a name) and **Step in story line** (shown only when a line is set, default next free step). The list has
 a **Line** column. Saving with an empty line clears both fields. They affect grouping on the map only, not gameplay. The quest
-**category** is unchanged: there is no separate quest kind, since Main Story already means "main" (for the area switch, a `line-act-` story line also counts as main; see [Turning quests off](#turning-quests-off-in-review)). A new quest's key is derived
+**category** is unchanged: there is no separate quest kind, since Main Story already means "main" (for the area switch, a `line-act-` story line also counts as main; see [Turning quests off](#turning-quests-off)). A new quest's key is derived
 from its name and hidden unless debug mode is on.
 
 ## Story map
@@ -78,9 +78,9 @@ from its name and hidden unless debug mode is on.
 See [Quest Story Map](07-quest-story-map.md). A prerequisite shown here as a requirement row is read-only on the form:
 `referenceContentKey` is the target quest's key, resolved by the server.
 
-## Turning quests off (in review)
+## Turning quests off
 
-> In review: cr-admin-web #45 (`feat/quest-toggles`), on top of cr-api #105. Not merged. The Studio talks to the server; the server enforces everything. What the switches mean (main story, area, blocked, frozen): [Quest System, Turning quests off](../backend/07-quest-system.md#turning-quests-off-per-quest-and-per-area). How-to: [Test only the main story](../guides/06-test-only-main-story.md).
+> Status: merged 2026-11-21, server deployed, shipping in game build v0.2.24 (cr-admin-web #45 and #46, with cr-api #105 and #106; the online Studio deploys on merge). The Studio talks to the server; the server enforces everything. What the switches mean (main story, area, blocked, frozen): [Quest System, Turning quests off](../backend/07-quest-system.md#turning-quests-off-per-quest-and-per-area). How-to: [Test only the main story](../guides/06-test-only-main-story.md).
 
 - **Enabled** (Quests form, Quest group): a checkbox, on by default, with help text. Off blocks the quest for everyone, main story quests included. Turning a quest off freezes in-progress copies rather than removing them. Saved as `isEnabled` on every push (the field is always sent, so an edit never leaves a stale switch). A server that omits `isEnabled` reads as on.
 - **Enabled column** on the Quests list: `on` or `OFF`; the list filter `off` finds switched-off quests.
@@ -90,7 +90,7 @@ See [Quest Story Map](07-quest-story-map.md). A prerequisite shown here as a req
 - **Live Ops quest board.** A trainer's quest board shows a badge from the server's `blockedReason` ("Quest turned off" or "Area side quests turned off"), including for frozen in-progress quests. An operator **Complete** refused with 409 `QuestDisabled` reads as a sentence instead of a raw error.
 - **Readable errors.** The 400 tags from the area route (`invalid_area_key`, `invalid_side_quests_enabled`, `invalid_expected_row_version`) are shown as sentences.
 - **OpenAPI.** The Studio's OpenAPI snapshot carries only the quest-toggle routes and fields (area-settings GET/PUT, `isEnabled`, `blockedReason`, `ModerationReason` 16); the generated types follow it.
-- **Hidden quests, Walk steps, Take item** (in review: cr-admin-web #46, on top of cr-api #106). The Quests form has a **Hidden** checkbox (Quest group) with help text: the game shows nothing for a hidden quest, which still runs and still obeys Enabled and the area switch; a server that omits `isHidden` reads as visible. The list has a **Hidden** column showing the word `hidden` (the list filter finds it), and the Live Ops trainer quest board marks hidden quests with a **Hidden** badge. Objective type **60 Walk steps**: the target is **Only while carrying (optional item)**, picked by item content key; the count is steps; steps taken without the item are lost, not replayed. Reward type **7 Take item**: **Item to take** by content key, taken before anything is granted, refused if missing. The Quests form help texts for **Area key** and **Category** now say what they do: the area key decides which area's side-quest switch applies to a side quest, and `Main Story` exempts a quest from the area switch (they used to say "never gates anything"). **Quest areas** gains a **Hidden side quests** column and field (read-only; the number of the area's side quests that are hidden, included in "Side quests", worked out from the quest list, so a count with nothing visible in play is explained). The OpenAPI snapshot gained only the hatch parts (`isHidden`, the two enum values, `includeProgress`).
+- **Hidden quests, Walk steps, Take item** (cr-admin-web #46, on top of cr-api #106). The Quests form has a **Hidden** checkbox (Quest group) with help text: the game shows nothing for a hidden quest, which still runs and still obeys Enabled and the area switch; a server that omits `isHidden` reads as visible. The list has a **Hidden** column showing the word `hidden` (the list filter finds it), and the Live Ops trainer quest board marks hidden quests with a **Hidden** badge. Objective type **60 Walk steps**: the target is **Only while carrying (optional item)**, picked by item content key; the count is steps; steps taken without the item are lost, not replayed. Reward type **7 Take item**: **Item to take** by content key, taken before anything is granted, refused if missing. The Quests form help texts for **Area key** and **Category** now say what they do: the area key decides which area's side-quest switch applies to a side quest, and `Main Story` exempts a quest from the area switch (they used to say "never gates anything"). **Quest areas** gains a **Hidden side quests** column and field (read-only; the number of the area's side quests that are hidden, included in "Side quests", worked out from the quest list, so a count with nothing visible in play is explained). The OpenAPI snapshot gained only the hatch parts (`isHidden`, the two enum values, `includeProgress`).
 - Not built: quick Disable and Enable buttons on list rows (resource actions render only in the detail header today). Use the checkbox and Save.
 
 ## Conflicts

@@ -571,7 +571,7 @@ identical to the migration's or online and offline play at different difficultie
 
 ## Oaklet in the early zones
 
-Status: merged on 2026-11-21 with cr-api-unity #188 (the server seed is cr-api #103, deployed to production; it adds no spawner rows, spawners are Unity content). **Provisional design choice awaiting the owner's review.** #188 added Oaklet to three pools. Every template in these pools has spawn probability 1 and pool weight 100 with the Balanced Growth profile, so Oaklet gets an equal share:
+Status: merged on 2026-11-21 with cr-api-unity #188 (the server seed is cr-api #103, deployed to production; it adds no spawner rows, spawners are Unity content). #188 added Oaklet to three pools; the release that shipped the hatch **removed it from all three** (see below), so the table describes what #188 added, not what is live. Every template in these pools has spawn probability 1 and pool weight 100 with the Balanced Growth profile, so Oaklet gets an equal share:
 
 | Spawner | Levels | Other creatures in the pool | Oaklet share |
 |---|---|---|---|
@@ -581,12 +581,9 @@ Status: merged on 2026-11-21 with cr-api-unity #188 (the server seed is cr-api #
 
 It is not in `meadow-wild-zone` (the level 1-2 starting cell). A spawner template needs a base creature (`creature_oaklet`) and a growth profile; the server migration chooses none. Offline, the client writes its spawner definitions into the local database at world start (`SpawnerDefinitionSyncBehaviour` through `LocalSpawnerSyncClient`), so the three pools spawn Oaklet once the floor holds its creature row; no spawner rows are baked into the floor. Online, pools come from the server: the seed adds no spawner templates, so Oaklet appears in the wild only after the three definitions are pushed from Content Studio.
 
-**Open decision: are the wild pools kept?** The hidden hatch quest (in review: cr-api-unity #193, see [Oaklet Hatch](?page=guides/07-oaklet-hatch-internal)) is meant to be the way a player first gets Oaklet, a surprise. The #193 branch therefore removes Oaklet from the three pools above in a **separate, clearly named, droppable commit** ("Drop Oaklet from the three wild pools"). Until the owner decides, both outcomes are possible and this page claims neither:
+**Outcome that shipped: the wild pools were removed.** The hidden hatch quest ([Oaklet Hatch](?page=guides/07-oaklet-hatch-internal), cr-api-unity #193) is meant to be the way a player first gets Oaklet, a surprise. Release v0.2.24 (merged 2026-11-21) therefore ships the separate commit "Drop Oaklet from the three wild pools" (`beb27471a`): the three pools above lose their Oaklet template, so the hatch is the only source of Oaklet. The table above no longer applies. To bring wild Oaklets back, revert commit `beb27471a`.
 
-- *Pools kept* (the commit is dropped): the table above stays true, Oaklet can be met in the wild, and the hatch is one of two ways to get it.
-- *Pools removed* (the commit stays): the three pools lose their Oaklet template, the table above no longer applies, and online the server keeps whatever was last pushed until the spawner definitions are pushed again from Content Studio.
-
-Either way, online wild spawns only change after a Studio push of the spawner definitions.
+Online, the server keeps whatever was last pushed until the spawner definitions are pushed again from Content Studio, so the wild pools only change online after a Studio push of the three spawners. The hatch's own reward spawner `hatch-oaklet` is a separate, reward-only spawner and must also be pushed from Content Studio after the deploy.
 
 ## Common Mistakes / Tips
 

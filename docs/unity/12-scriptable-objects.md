@@ -180,8 +180,8 @@ Defines a quest template. The backend owns instance/progress data; this SO is th
 | `questName` | string | Player-facing quest title |
 | `description` | string | Player-facing description |
 | `giverNpcContentKey` | string | `content_key` of the NPC that offers this quest |
-| `isEnabled` | bool | **In review (cr-api-unity `feat/quest-toggles`).** The inspector's **Enabled** toggle, true by default. Off: the server does not offer, start or progress the quest (in-progress copies freeze, nothing is deleted); applies to main story quests too. Always sent on push; pull sets it only when the server sent it. See [Quest switches in the Studio](08-content-registry.md#quest-switches-in-the-studio-in-review) |
-| `isHidden` | bool | **In review (cr-api-unity #193).** The inspector's **Hidden** toggle, false by default. On: the game shows the player nothing about the quest (no journal entry, tracker line, marker, toast or banner); it still runs and the toggles still apply. Always sent on push. See [Hidden Quests and the Claim Reveal](52-hidden-quests-and-claim-reveal.md) |
+| `isEnabled` | bool | The inspector's **Enabled** toggle, true by default. Off: the server does not offer, start or progress the quest (in-progress copies freeze, nothing is deleted); applies to main story quests too. Always sent on push; pull sets it only when the server sent it. See [Quest switches in the Studio](08-content-registry.md#quest-switches-in-the-studio) |
+| `isHidden` | bool | The inspector's **Hidden** toggle, false by default. On: the game shows the player nothing about the quest (no journal entry, tracker line, marker, toast or banner); it still runs and the toggles still apply. Always sent on push. See [Hidden Quests and the Claim Reveal](52-hidden-quests-and-claim-reveal.md) |
 | `isRepeatable` | bool | Whether the quest can be completed more than once |
 | `maxRepeatCount` | int | Max repeats (ignored when `isRepeatable` is false) |
 | `sortOrder` | int | Display ordering in quest lists |
@@ -189,10 +189,10 @@ Defines a quest template. The backend owns instance/progress data; this SO is th
 | `rewardClaimMode` | `QuestRewardClaimMode` | `AutoOnCompletion` (default) or `ReturnToGiver` |
 | `objectives` | `List<QuestObjectiveDefinition>` | Ordered objectives — see below |
 | `rewards` | `List<QuestRewardDefinition>` | Rewards on completion |
-| `category` | `QuestCategory` | Journal group and per-category completion counter (Bonus by default). Enum dropdown from the DLL. Gates nothing, except that `MainStory` marks a main story quest, which the per-area side-quest switch never blocks (in review; see [Quest System](?page=backend/07-quest-system#turning-quests-off-per-quest-and-per-area)). |
+| `category` | `QuestCategory` | Journal group and per-category completion counter (Bonus by default). Enum dropdown from the DLL. Gates nothing, except that `MainStory` marks a main story quest, which the per-area side-quest switch never blocks (see [Quest System](?page=backend/07-quest-system#turning-quests-off-per-quest-and-per-area)). |
 | `areaKey` | `string` | Area this quest belongs to, picked in the inspector's **Area** popup from the World Location Catalog's area keys (blank = none). Unknown keys draw red and fail the `quest-area-unknown` audit. |
 
-A second asset, `QuestAreaSettingsDefinition` (`Assets/CR/Content/Defs/QuestAreaSettings/QuestAreaSettings.asset`, in review), holds the per-area "Side quests enabled" switches: one row per area ever switched, no row = enabled. It is edited in the Studio's **Area side quests** panel and synced to `/api/v1/quests/area-settings`; the game never reads it to decide anything.
+A second asset, `QuestAreaSettingsDefinition` (`Assets/CR/Content/Defs/QuestAreaSettings/QuestAreaSettings.asset`), holds the per-area "Side quests enabled" switches: one row per area ever switched, no row = enabled. It is edited in the Studio's **Area side quests** panel and synced to `/api/v1/quests/area-settings`; the game never reads it to decide anything.
 
 Studio push sends `category` as an int and a blank area as `""` (clears). Pull only assigns the fields the server sent
 (`int? category`, `string? areaKey`), and the offline copy (`LocalQuestTemplateSyncClient`) stores a blank area as null.
@@ -223,7 +223,7 @@ warning.
 
 | Field | Type | Purpose |
 |-------|------|---------|
-| `rewardType` | `QuestRewardType` | Experience, Currency, Item, Creature, Ability, Badge, Title, **TakeItem** (7; in review: removes the item named by `referenceId`, `quantity` times, on claim) |
+| `rewardType` | `QuestRewardType` | Experience, Currency, Item, Creature, Ability, Badge, Title, **TakeItem** (7: removes the item named by `referenceId`, `quantity` times, on claim) |
 | `quantity` | int | Amount or count |
 | `referenceId` | string | UUID of item/creature for Item/Creature rewards |
 | `metadata` | string | Optional JSON metadata |
@@ -604,7 +604,7 @@ Every row below pushes the same way: **Crystalline Rift Studio → the owning ta
 | `ItemDefinition` | Crystalline Rift Studio tool | `/api/v1/items` |
 | `SpawnerDefinition` | Crystalline Rift Studio tool | `/api/v1/spawners/sync-config` |
 | `QuestDefinition` | Crystalline Rift Studio tool | `/api/v1/quests/templates/bulk` |
-| `QuestAreaSettingsDefinition` (in review) | Crystalline Rift Studio, Quests tab, Area side quests panel | `PUT /api/v1/quests/area-settings/{areaKey}` (one per row) |
+| `QuestAreaSettingsDefinition` | Crystalline Rift Studio, Quests tab, Area side quests panel | `PUT /api/v1/quests/area-settings/{areaKey}` (one per row) |
 | `AbilityConfig` | Crystalline Rift Studio tool | `/api/v1/abilities` |
 | `AbilityProgressionSetConfig` | Crystalline Rift Studio tool | `/api/v1/ability-progression-sets` |
 | `GrowthProfileConfig` | Crystalline Rift Studio tool | `/api/v1/growth-profiles` |

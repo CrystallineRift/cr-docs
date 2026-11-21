@@ -1,6 +1,6 @@
 # Server-Counted Steps
 
-> Status: in review: cr-api #106 (`feat/oaklet-hatch`, stacked on the quest-toggles PR #105), cr-api-unity #193, cr-admin-web #46. Not merged. First user: the hidden hatch quest, see [Oaklet Hatch (internal, spoilers)](?page=guides/07-oaklet-hatch-internal).
+> Status: merged 2026-11-21, server deployed, shipping in game build v0.2.24 (cr-api #106, cr-api-unity #193, cr-admin-web #46, stacked on #105, #192, #45). First user: the hidden hatch quest, see [Oaklet Hatch (internal, spoilers)](?page=guides/07-oaklet-hatch-internal).
 
 The server counts a trainer's steps. A client never reports a step count: it reports where the player stands, and the server turns the movement between two accepted positions into steps. Steps feed the normal progress pipeline, so a quest objective (`WalkSteps`), a lifetime stat and achievements can use them. The step logic is generic; nothing in it knows about any quest or item.
 
@@ -45,7 +45,7 @@ With the defaults one report can credit at most 450 m (600 steps), and 5000 step
 
 - `ProgressOutcomeKind.StepsWalked` = 18, `Quantity` = steps, no subject.
 - Lifetime stat `steps_walked_total` (`StatKey.StepsWalkedTotal`): incremented by `Quantity`.
-- Quest objective `WalkSteps` (60): see [Quest System](?page=backend/07-quest-system#walk-steps-take-item-and-hidden-quests-in-review).
+- Quest objective `WalkSteps` (60): see [Quest System](?page=backend/07-quest-system#walk-steps-take-item-and-hidden-quests).
 
 ## Where it lives
 
