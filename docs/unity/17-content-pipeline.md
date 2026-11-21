@@ -217,7 +217,7 @@ after a seed migration rather than trusting that it ran.
 
 ## Rigged creature models: the vertex budget
 
-Seven creatures use our own rigged models instead of the placeholder packs: Mudcalf, Gaterbear, Cindris, Cindralis, Cindrakar, Zephlet and Zephryne. Each prefab under `Assets/CR/Prefabs/Creatures` is a variant of an FBX under `Assets/CR/Prefabs`.
+Eight creatures use our own rigged models instead of the placeholder packs: Mudcalf, Gaterbear, Cindris, Cindralis, Cindrakar, Zephlet, Zephryne and Oaklet (Oaklet is in review: cr-api-unity #188). Each prefab under `Assets/CR/Prefabs/Creatures` is a variant of an FBX under `Assets/CR/Prefabs`.
 
 Three of these models first shipped straight from the mesh generator at hundreds of thousands of vertices, and two of them roam the starting meadow in numbers. They were re-exported at about 30,000 vertices each. The other four models were already between 8,000 and 13,000.
 
@@ -233,7 +233,7 @@ The counts are the vertices the engine draws, with UV seams split. The object, b
 
 | Test | Checks |
 |---|---|
-| `The_seven_rigged_creatures_are_found` | The seven prefabs above are all picked up, so a renamed or moved prefab cannot silently drop out of the other checks. |
+| `The_seven_rigged_creatures_are_found` | The rigged prefabs above are all picked up (the test keeps its old name; Oaklet is added in cr-api-unity #188), so a renamed or moved prefab cannot silently drop out of the other checks. |
 | `Every_rigged_creature_mesh_is_within_the_vertex_budget` | Vertices summed over every `SkinnedMeshRenderer` and every plain `MeshFilter` mesh on the prefab are at most 40,000, so an extra unskinned mesh cannot dodge the budget. The failure message lists the offending model and its count. |
 | `Every_rigged_creature_still_binds_to_its_model` | Each skinned mesh has a mesh, bones that are all bound, as many bones as bind poses, and no missing material; the mesh is not Read/Write; the root has an Animator with a valid avatar and a battle controller, a `CreatureBattlePresenter`, and a `CreatureWorldAnimation` with a world controller. |
 | `Every_rigged_creature_deforms_when_animated` | The Idle pose and a mid-Attack pose differ by at least 5 % of the creature's height. A prefab whose bones no longer match a re-exported FBX bakes the same bind pose for both and fails. |
@@ -268,9 +268,9 @@ The texture keeps its name, format and size, so the existing `.fbx.meta` and mat
 | Cindrakar | 1,386 (8) | shoulders, chest and head off the rig |
 | Mudcalf | 781 (8) | same cause |
 
-The game shape was up to 9 % of the body height away from the rig. Bone scale was ruled out (no bone in these rigs is scaled), so the cause is the cut to four weights alone.
+The game shape was up to 9 % of the body height away from the rig. Bone scale was ruled out (no bone in these rigs is scaled), so the cause is the cut to four weights alone. (True of these rigs; bone scale is now allowed per model, see below.)
 
-**The rule.** Export with weights fitted to four bones: the fit keeps the skinned position of the original weights over every frame of every clip, and roughly halves the error that plain truncation would leave. The rigging skill's exporter (`q_export_fbx.py`) does this by itself when a vertex still has more than four influences (`LIMIT_INFLUENCES=0` skips it), and refuses to export a rig that has bone scale keys, a bone whose scale inheritance is not Full, or a non-uniform object scale, because FBX and Unity cannot express those the way Blender does. The re-baked Gaterbear and Zephlet were fitted the same way.
+**The rule.** Export with weights fitted to four bones: the fit keeps the skinned position of the original weights over every frame of every clip, and roughly halves the error that plain truncation would leave. The rigging skill's exporter (`q_export_fbx.py`) does this by itself when a vertex still has more than four influences (`LIMIT_INFLUENCES=0` skips it), and refuses to export a rig that has bone scale keys unless the model's config opts in (see Oaklet and the round-body rig below), a bone whose scale inheritance is not Full, or a non-uniform object scale, because FBX and Unity cannot express those the way Blender does. The re-baked Gaterbear and Zephlet were fitted the same way.
 
 **The regression test.** `RiggedCreatureDeformationTests` (EditMode, `Assets/CR/Tests/Editor/`, with the parser and matcher in `DeformationTruthFile.cs`) compares Unity's skinned mesh with positions exported from Blender. For every `Assets/CR/Prefabs/<model>.deform_truth.bytes` it:
 
@@ -279,7 +279,7 @@ The game shape was up to 9 % of the body height away from the rig. Bone scale wa
 3. samples the clip at `(frame - 1) / 24` seconds, because the FBX takes are 24 fps and start on frame 1, so Blender frame f is clip time (f-1)/24;
 4. fails when the worst vertex is 0.5 % of the height or more away from Blender, or the 99th percentile is 0.1 % or more. The message names the model, clip, frame and clip time, and the body region (the bone that owns the vertex).
 
-A truth file holds 400 vertices and 16 poses, about 83 KB, chosen where the skin is most sensitive to the cut to four weights. Other tests check that the expected truth files exist (so an empty folder cannot pass), that each truth file has its FBX and stays under 150 KB, and the parser, the frame-to-time mapping and the deviation arithmetic. It currently covers `cindralis_firecat`, `cindraker_firecat`, `mudcalf_anim`, `gatorbear` and `zephlet`.
+A truth file holds 400 vertices and 16 poses, about 83 KB, chosen where the skin is most sensitive to the cut to four weights. Other tests check that the expected truth files exist (so an empty folder cannot pass), that each truth file has its FBX and stays under 150 KB, and the parser, the frame-to-time mapping and the deviation arithmetic. It currently covers `cindralis_firecat`, `cindraker_firecat`, `mudcalf_anim`, `gatorbear` and `zephlet`, plus `oaklet` in cr-api-unity #188 (in review).
 
 - **Adding a model:** put its `<model>.deform_truth.bytes` next to the FBX in `Assets/CR/Prefabs/` (Unity makes the `.meta`; commit it) and add the model's base name to `ExpectedTruthModels` in the test.
 - **Re-exporting a model:** the truth belongs to one mesh and one set of weights. Any re-export that changes either (a different `DECIMATE`, a re-weight) must regenerate the `.deform_truth.bytes` in the same change. The exporter writes it next to the FBX by default (`COMPACT_TRUTH=0` skips it). For a model with a full `.deform_truth.bin` and no compact file, `python3 -I compact_truth.py <name>.deform_truth.bin <name>.deform_truth.bytes` (in the skill's `scripts/`) makes one, with a weaker vertex choice.
@@ -292,6 +292,20 @@ The test samples 400 vertices and 16 poses, so it catches defects of several per
 Cindralis: the step that turns the posed sculpt into a square neutral stance read the body's heading from short chest bones whose landmarks sat off-axis, and turned the chest 19.7 degrees against the hips. Front feet, shoulders and elbows ended up to 15 % of the body height from their mirror positions, so the body looked contorted. The stance was rebuilt from the sculpt: the heading comes from the skin's centre line, the spine joints sit on one line, shoulders and hips are mirrored, left and right legs have equal lengths, and the skin in the blend zones is relaxed after un-posing. All nine clips were rebuilt on the new body with the same take names and frame ranges, the weights are fitted to four bones, and the truth file was regenerated. The shoulder line against the hips went from 19.1 to 0.6 degrees; the textures are unchanged.
 
 **Stance check.** The rigging skill's `q_check` has a stance check (straightness seen from above, and left/right symmetry of shoulders, hips, elbows, knees and feet), and a model must pass it before export. Judge stance on Unity captures taken from above, from the front and from both sides (see Creature Showcase, Capturing creatures as Unity draws them), not on the Blender render.
+
+## Oaklet and the round-body rig (in review)
+
+Status: in review: cr-api-unity #188 (server seed: cr-api #103). Oaklet is a round creature, a pinecone owl. It needed a new rig type in the `animating-quadrupeds` skill, the **round body** ("roundling").
+
+**The model.** `oaklet.fbx` is a Meshy AI model (see the AI Content Ledger), 17,921 vertices as Unity imports it (budget 40,000), 17 bones, at most four influences per vertex from the start, eight clips (Idle, Walk, Run, Attack, Jump_Attack, Roar, Hit, Faint). The prefab root scale is 0.841, which makes it 0.8 m tall. It has Battle and World controllers and no Attack_Bite clip, so the presenter falls back. The rig and animation were generated by Claude Code scripts.
+
+**The rig.** Hips, belly and chest are a connected chain for the three body thirds. A rigid `face` bone owns the whole face disc (eyes, beak, blush, fur ring), so the eyes never warp. The flank scales are rigged as stubby wings (a patch of scales per side). Ear tufts, a two-bone twig and short legs with feet complete it. The model has no eyelids, so the eyes stay open in every clip, Faint included.
+
+**Bone scale is opt-in, with proof.** The exporter used to refuse every bone scale key. Squash and stretch on a round body needs it, so a model's config can now say `"bone_scale": {"allowed": true, "max_pct": 15, "face_max_pct": 15}`. With that flag the audit limits every key to `max_pct` from 1 and reports the range per bone. It still refuses an `inherit_scale` other than Full and a scaled object. Oaklet scales hips, belly and chest (volume kept, each key between about 0.95 and 1.04) and counter-scales the face (0.886 to 1.148) so the disc keeps its shape. The proof that Unity shows what Blender shows is the deformation test above: 48 sampled poses (6 per clip, all 8 clips) against Blender, worst 0.000 % of height, and the repo's compact truth file `oaklet.deform_truth.bytes` passes `RiggedCreatureDeformationTests` (worst 0.0001 %). Every clip keeps a scale curve on hips, belly, chest and face, with animation compression off. FBX and Unity inherit parent scale fully, which equals Blender's Full inheritance, so nothing needs a fallback.
+
+**Faint.** Oaklet plops down sitting and slumps, held on the last frames. Creatures faint, they never die. A round body does not lie flat, so the held height is about 0.91 of standing. The lying-down limit is now data: `CreatureDefinition.faintedHeightLimit` is a client-only field (default 0.85, Oaklet 0.95), and the Faint check in `RiggedCreatureModelTests` reads it from the definition. The limit is capped at 0.95 in code (`CreatureDefinition.MaxFaintedHeightLimit`), and a test pins Oaklet at 0.95 and every other rigged creature at 0.85. The Content Studio push builds its payload from named fields, so this field is never sent to the server.
+
+**Showcase and floor.** The showcase's featured list is now eight (see Creature Showcase). The offline floor was re-baked with `--base` (see Standalone Builds).
 
 ## Pushing Studio content from the CLI
 
