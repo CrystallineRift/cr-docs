@@ -25,7 +25,7 @@ The live read-out shows the Animator controller, the state (`A -> B` while blend
 
 `CreatureShowcase` (`Assets/CR/Game/Creatures/Debug/`, namespace `CR.Game.Creatures.Debugging`) holds the behaviour in public methods so tests drive it without the GUI. Decisions that do not need Unity are in `CR.Game.Creatures.Logic` (`Assets/CR/Game/Creatures/Logic/`): the picker order (`ShowcaseCatalogue`), evolution lines and rule levels (`ShowcaseEvolution`) and the beat table with the candidate order the presenter tries (`ShowcaseBeats`). The scene builder is `Assets/CR/Game/Creatures/Editor/CreatureShowcaseSceneBuilder.cs`.
 
-The picker lists the seven creatures with the real rigged models first (`ShowcaseCatalogue.FeaturedKeys`), then every `CreatureDefinition` alphabetically.
+The picker lists the eight creatures with the real rigged models first (Oaklet is the eighth, in review: cr-api-unity #188) (`ShowcaseCatalogue.FeaturedKeys`), then every `CreatureDefinition` alphabetically.
 
 ## Adding a creature
 
@@ -62,7 +62,7 @@ Output goes to `<out>/<creature key>/` as `stills/`, `closeups/`, `frames/<seque
 Unity -batchmode -projectPath <project> -executeMethod CR.Game.Creatures.Editor.CreatureCapture.RunBatch -captureOut <dir> [-captureKeys mudcalf,zephlet] [-captureWhat stills,closeups,frames,facts] [-captureTile 1024]
 ```
 
-Do not pass `-nographics`: the cameras must render. `-captureOut` is required. `-captureKeys` is a comma-separated list of creature keys (`mudcalf` and `creature_mudcalf` both work); leave it out for the seven featured creatures. `-captureWhat` takes any of `stills`, `closeups`, `frames`, `facts` (or `all`, the default). `-captureTile` is the still size in pixels, 64 to 4096, default 1024. With the Editor open, the CLI command `cr_creature_capture` takes the same options as `out`, `keys`, `what` and `tile`; it refuses to run in Play mode.
+Do not pass `-nographics`: the cameras must render. `-captureOut` is required. `-captureKeys` is a comma-separated list of creature keys (`mudcalf` and `creature_mudcalf` both work); leave it out for the eight featured creatures. `-captureWhat` takes any of `stills`, `closeups`, `frames`, `facts` (or `all`, the default). `-captureTile` is the still size in pixels, 64 to 4096, default 1024. With the Editor open, the CLI command `cr_creature_capture` takes the same options as `out`, `keys`, `what` and `tile`; it refuses to run in Play mode.
 
 **Contact sheets and comparisons.** `ci/creature-capture-sheets.py` needs Python 3 with Pillow:
 
