@@ -301,7 +301,7 @@ species seed sits below the rule for the reason below. Covered in `ZephletLineSe
 Oaklet (Flora) is a species with **no evolution**: no rule is seeded, so it never evolves and
 `evolution_creature_id` stays NULL. It is seeded by **M21012** (species `creature_oaklet`) and
 **M21013** (learn list `line_oaklet` and species default), the same shape as Zephlet's M21009 and
-M21010. Covered in `OakletSeedSqliteTests`. Status: in review: cr-api #103, cr-api-unity #188.
+M21010. Covered in `OakletSeedSqliteTests`. Status: merged 2026-11-21: cr-api #103 (deployed to production), cr-api-unity #188.
 
 :::danger The species seed must run before the rules seed
 The rule insert is guarded on **both** species already existing — a rule pointing at an absent

@@ -26,7 +26,7 @@ Set ids `a5e00000-0000-4000-8000-0000000000NN` (NN 01..11), entry ids `a5e1NN00-
 | line_mudcalf (Normal) | Tackle, Growl, Harden | 5 Scratch, 9 Body Slam, 14 Mud Shot, 19 Slash, 25 Focus, 32 Hyper Beam | Earth Spike, Quake |
 | line_gaterbear (Ground) | Scratch, Growl, Mud Shot | 5 Bite, 10 Harden, 14 Earth Spike, 19 Slash, 24 Body Slam, 32 Quake | Frost Bite, Hyper Beam |
 
-The Zephlet and Oaklet lines are seeded later (M21010 and M21013) and are not in the table above. **Oaklet** (Flora, no evolution; in review: cr-api #103, cr-api-unity #188):
+The Zephlet and Oaklet lines are seeded later (M21010 and M21013) and are not in the table above. **Oaklet** (Flora, no evolution; merged 2026-11-21: cr-api #103, deployed to production, and cr-api-unity #188):
 
 | Line (element) | L1 | Level list | Tone-only |
 |---|---|---|---|
@@ -111,6 +111,6 @@ Three existing grant paths: world pickups (`pickup_definition` rows with an Item
 - `Game/CR.Game.Domain.Services/Implementation/Reward/RewardGrantService.cs`, `Quests/CR.Quests.Domain.Services/Implementation/QuestDomainService.cs` (quest offers on claim).
 - `Game/CR.Game.Service.BFF/Endpoints/CreatureLearnEndpoints.cs`; `Creatures/CR.Creatures.Service.REST/Endpoints/CreatureEndpoints.cs`.
 - Tones: `Game/CR.Game.Domain.Services/Implementation/Item/` (`Handlers/TeachAbilityHandler`, `ToneTeachGate`, `NullToneTeachGate`, `ItemUseDomainService`), `Interfaces/Items/IToneTeachGate.cs`, `ToneConsumeResult.cs`; `Game/CR.Game.Model/Items/EffectParameters/TeachAbilityParams.cs`; `Convenience/CR.Game.Compat/Items/ToneResonance.cs`.
-- Migrations: Creatures `M21001` to `M21005`; Items `M21101` to `M21103`. Oaklet (in review, cr-api #103): Creatures `M21012`, `M21013`. The offline floor is rebaked (`Convenience/CR.Data.Migrations.Tool/game-data.bytes`).
+- Migrations: Creatures `M21001` to `M21005`; Items `M21101` to `M21103`. Oaklet (merged 2026-11-21, cr-api #103): Creatures `M21012`, `M21013`. The offline floor is rebaked (`Convenience/CR.Data.Migrations.Tool/game-data.bytes`).
 
 Related: [Item Effects](?page=backend/19-item-effects), [Creature Generation](?page=backend/04-creature-generation), [Ability Economy](?page=backend/29-ability-economy).

@@ -210,6 +210,11 @@
     "path": "backend/30-ability-learning"
   },
   {
+    "section": "Backend",
+    "title": "Server-Counted Steps",
+    "path": "backend/31-server-counted-steps"
+  },
+  {
     "section": "Introduction",
     "title": "Changelog",
     "path": "changelog"
@@ -253,6 +258,11 @@
     "section": "Guides",
     "title": "Test Only the Main Story",
     "path": "guides/06-test-only-main-story"
+  },
+  {
+    "section": "Guides",
+    "title": "Oaklet Hatch (internal, spoilers)",
+    "path": "guides/07-oaklet-hatch-internal"
   },
   {
     "section": "Unity",
@@ -503,5 +513,10 @@
     "section": "Unity",
     "title": "Creature Showcase",
     "path": "unity/51-creature-showcase"
+  },
+  {
+    "section": "Unity",
+    "title": "Hidden Quests and the Claim Reveal",
+    "path": "unity/52-hidden-quests-and-claim-reveal"
   }
 ]

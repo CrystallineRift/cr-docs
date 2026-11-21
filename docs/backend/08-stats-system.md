@@ -293,6 +293,7 @@ Defined in `CR.Stats.Data.Constants.StatKey`. Use these constants rather than in
 | `CreatureLevelKey(id)` | `"creature_level_{id:N}"` | Max | none until C2 |
 | `StatKey.LocationDiscoveredKey(key)` | `"location_discovered_{key}"` | Max 1 | `LifetimeStatProjector` on `LocationEntered` — a **projection**, not a gate; the real first-time gate is the `trainer_location_discovery` ledger, see [Location Discoveries](?page=backend/24-location-discoveries) |
 | `StatKey.SpeciesCapturedKey(baseCreatureId)` | `"species_captured_{id:N}"` | Increment | `LifetimeStatProjector`, fed by `ProgressFacts.BaseCreatureId` (stamped on `CreatureCaptured` by `CaptureAttemptService`) — `TrainerProgressionService.AwardAsync` only *reads* the counter now (0 = first-of-species) to decide the first-capture XP bonus; it no longer writes it |
+| `StepsWalkedTotal` (cr-api #106) | `"steps_walked_total"` | Increment | `LifetimeStatProjector` on `StepsWalked`; the server counts the steps, see [Server-Counted Steps](?page=backend/31-server-counted-steps) |
 | `BattleMissionsCompleted` | `"battle_missions_completed"` | Increment | `LifetimeStatProjector` on `BattleMissionCompleted` — emitted by `BattleDomainService.ApplyMissionsAsync` for **both** mission pools (an `AbilityUnlock` completion and a `GuaranteedCapture`/Bond Trial completion alike, #7 R12); the tracker and `BattleDomainService` never write the stat directly |
 | *(none yet)* | `"trainers_defeated_distinct"` | none until #1 C2 | `AchievementCriterionResolver` reads this key as a raw string literal for `AchievementCriterionType.DistinctTrainersDefeated` (16) — no `StatKey` constant and no writer exist yet, so this criterion never satisfies. See [Achievements](15-achievements.md) |
 
@@ -300,6 +301,10 @@ Defined in `CR.Stats.Data.Constants.StatKey`. Use these constants rather than in
 no code writes it. Every key in this table is server-owned — see the stat-writer registry on
 [Progress Dispatcher](?page=backend/23-progress-dispatcher); the player write routes refuse them, and Unity's stat
 router writes nothing while online.
+
+### Hidden quests and the quest counters
+
+A completed **hidden** quest (cr-api #106) does not increment `quests_completed` or `quests_completed_cat_*`: its `QuestCompleted` outcome carries `Facts[hidden] = "true"` and `LifetimeStatProjector` skips those two counters, so a player-facing count never includes a quest the player was never shown. The per-quest `quest_completed_{key}` stat is still written, so quest-keyed gates keep working.
 
 ### Per-category quest completions
 

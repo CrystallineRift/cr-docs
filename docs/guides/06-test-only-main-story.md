@@ -1,6 +1,6 @@
 # Test Only the Main Story
 
-> Status: in review. The switches are on cr-api PR #105 (server) cr-api-unity #192 (Unity Studio and offline play) and cr-admin-web #45 (online Studio); all open, unmerged. Not merged or deployed. Until then none of the controls below exist on a released build.
+> Status: merged 2026-11-21, server deployed, shipping in game build v0.2.24. History: cr-api #105 (server), cr-api-unity #192 (Unity Studio and offline play), cr-admin-web #45 (online Studio). The controls exist in game build v0.2.24 and the deployed server and Studio.
 
 ## Goal
 
@@ -47,11 +47,11 @@ Set **Side quests enabled** and **Enabled** back on (same places, same save or P
 
 ## Offline play
 
-The offline game runs the same quest rules locally. The Studio's area switches and each quest's Enabled flag are written into the local database when the world starts, so the local quest services block quests the same way. To switch things for offline play, change them in the Unity Studio (the asset is what offline reads); a server push is not needed for that. This is in review (cr-api-unity #192) and has not been run end to end against a live server. The server must be deployed first for the online Studio's area page to work.
+The offline game runs the same quest rules locally. The Studio's area switches and each quest's Enabled flag are written into the local database when the world starts, so the local quest services block quests the same way. To switch things for offline play, change them in the Unity Studio (the asset is what offline reads); a server push is not needed for that. This shipped with cr-api-unity #192 and was not run end to end against a live server before release. The server must be deployed first for the online Studio's area page to work.
 
 ## Related Pages
 
 - [Quest System, Turning quests off](?page=backend/07-quest-system#turning-quests-off-per-quest-and-per-area)
-- [Quest Editing (online Studio)](?page=admin-web/04-quest-editing#turning-quests-off-in-review)
-- [Content Registry, Quest switches in the Studio](?page=unity/08-content-registry#quest-switches-in-the-studio-in-review)
+- [Quest Editing (online Studio)](?page=admin-web/04-quest-editing#turning-quests-off)
+- [Content Registry, Quest switches in the Studio](?page=unity/08-content-registry#quest-switches-in-the-studio)
 - [Optimistic Concurrency, Quest area settings](?page=backend/28-optimistic-concurrency#quest-area-settings)

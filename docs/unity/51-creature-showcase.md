@@ -25,7 +25,7 @@ The live read-out shows the Animator controller, the state (`A -> B` while blend
 
 `CreatureShowcase` (`Assets/CR/Game/Creatures/Debug/`, namespace `CR.Game.Creatures.Debugging`) holds the behaviour in public methods so tests drive it without the GUI. Decisions that do not need Unity are in `CR.Game.Creatures.Logic` (`Assets/CR/Game/Creatures/Logic/`): the picker order (`ShowcaseCatalogue`), evolution lines and rule levels (`ShowcaseEvolution`) and the beat table with the candidate order the presenter tries (`ShowcaseBeats`). The scene builder is `Assets/CR/Game/Creatures/Editor/CreatureShowcaseSceneBuilder.cs`.
 
-The picker lists the eight creatures with the real rigged models first (Oaklet is the eighth, in review: cr-api-unity #188) (`ShowcaseCatalogue.FeaturedKeys`), then every `CreatureDefinition` alphabetically.
+The picker lists the eight creatures with the real rigged models first (Oaklet is the eighth, merged 2026-11-21: cr-api-unity #188) (`ShowcaseCatalogue.FeaturedKeys`), then every `CreatureDefinition` alphabetically.
 
 ## Adding a creature
 

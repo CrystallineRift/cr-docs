@@ -33,6 +33,7 @@ the same cr-api DLLs over the player's local SQLite. Spec: `cr-api-unity/docs/su
 | `ItemUsed`, `KeyItemActivated` | `ItemUseDomainService` | consume + effect succeeded |
 | `NpcTalked` | `NpcTalkService` | key validated; FirstTime when `npc_met_{key}` goes 0 → 1 |
 | `ReadableRead` | `ReadableReadService` (`POST /api/v1/trainers/{t}/readables/{key}/read`) | key names an authored dialogue document (else `UnknownReadable`); FirstTime when `readable_read_{key}` goes 0 → 1 |
+| `StepsWalked` (cr-api #106) | `TrainerLocationService` (`PUT /trainer/{id}/location`) | a position was accepted and the clamped, carried distance came to at least one step; `Quantity` = steps. See [Server-Counted Steps](?page=backend/31-server-counted-steps) |
 | `QuestCompleted` | `QuestObjectiveProjector` | the completion compare-and-set (InProgress → Completed, 1 row) |
 | `BattleWon`, `CreatureDefeated`, `TrainerDefeated` | `BattleDomainService` | after the existing KO-once (`TryCreditKnockOutAsync`) and battle-end (`TryEndBattleAsync`) CAS, one `CreatureDefeated` per credited KO, `BattleWon` (+ `TrainerDefeated`, `Facts[FirstTime]` from the NPC-trainer win) on a win, and the same pair on a **forfeit win** (opponent Run 3×, or an owed swap 3×) — all batched through a single `SafeRecordAllAsync` call per action so achievements evaluate once |
 | `LocationEntered` | `LocationEntryService.EnterAsync` (BFF `POST .../world-locations/enter` — the only caller since Phase E retired the `/quests/progress` compat route) | a genuine `world_location` entry (`Facts[FirstTime]` set on first discovery); see [Location Discoveries](?page=backend/24-location-discoveries) |
@@ -51,7 +52,8 @@ the same cr-api DLLs over the player's local SQLite. Spec: `cr-api-unity/docs/su
 | NpcTalked | `npcs_talked_to_total` +1 **only on FirstTime** (distinct NPCs) | TalkToNpc (distinct keys per quest instance) |
 | ReadableRead | none (no lifetime stat) | ReadReadable (distinct keys per quest instance) |
 | LocationEntered | `locations_visited_total` +1, `location_discovered_{key}` MAX 1 — both only on `Facts[FirstTime]` | VisitLocation (distinct keys per quest instance) |
-| QuestCompleted | `quests_completed` +1, `quest_completed_{key}` +1 — at completion, not claim | CompleteQuest (target = quest content key) |
+| QuestCompleted | `quests_completed` +1, `quest_completed_{key}` +1 — at completion, not claim (a **hidden** quest, `Facts[hidden]`, skips `quests_completed` and `quests_completed_cat_*` but still writes `quest_completed_{key}`) | CompleteQuest (target = quest content key) |
+| StepsWalked | `steps_walked_total` +Quantity | WalkSteps (additive by steps; optional carried item; target = item content key) |
 
 Counting: additive objectives use a clamped atomic `UPDATE … CASE WHEN current_count + @n >= @target …`;
 talk/visit/list objectives insert the subject key into `quest_objective_counted_ref` (revive-on-write, so a

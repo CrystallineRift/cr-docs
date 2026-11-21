@@ -58,7 +58,7 @@ SpawnGrant }` rather than as exceptions, so the caller always learns *which rule
 | `InvalidArgument` | A well-formed request carrying a value the operation cannot act on — most visibly a shadow-ban expiry already in the past. |
 | `NoSpawnCandidate` | The spawner exists but has no pool holding an active template — either it is empty, or the pool the operator named is. |
 | `WouldOverspendTalents` | A negative trainer XP grant would leave `SpentPoints > newLevel − 1` — the take-back would drop the trainer below what their talent spend needs. Retry with `respec: true` (see below). |
-| `QuestDisabled` | Operator Complete on a quest that is blocked: switched off, or a side quest in an area whose side quests are off. HTTP 409, nothing audited. In review (cr-api #105); see [Quest System](07-quest-system.md#turning-quests-off-per-quest-and-per-area). |
+| `QuestDisabled` | Operator Complete on a quest that is blocked: switched off, or a side quest in an area whose side quests are off. HTTP 409, nothing audited. Shipped with cr-api #105; see [Quest System](07-quest-system.md#turning-quests-off-per-quest-and-per-area). |
 
 ### The reason rule
 
@@ -196,7 +196,7 @@ sets it (and `AdminActorName`) through its environment or secret store, never in
 | PUT | `/trainers/{trainerId}/talents/{talentId}` | `SetTalentRankRequest { rank, reason }` — see [Talents](25-talents.md#admin) | `TrainerProgress` | 400 `InvalidReason`, 404; audit `SetTalentRank` (17); 409 `{ error: TalentSpendError, progress }` — **not** the flat `{error, reason}` shape every other route here uses |
 | POST | `/trainers/{trainerId}/talents/respec` | `ReasonRequest` | `TrainerProgress` | 400 `InvalidReason`, 404; audit `RespecTalents` (18) |
 | GET | `/trainers/{trainerId}/quests` | | `AdminQuestBoard { instances[], available[] }` (see [below](#quest-and-achievement-admin-2026-10-20)) | 404 |
-| POST | `/trainers/{trainerId}/quests/{contentKey}/complete` | `ReasonRequest` | `QuestAdminCompleteResult { contentKey, instanceId, granted, completed, rewardsPaid, alreadyDone, reason }` | 409 `QuestDisabled` (in review), 400 `InvalidReason`, 404 (trainer or quest key); audit `QuestCompleted` (23) |
+| POST | `/trainers/{trainerId}/quests/{contentKey}/complete` | `ReasonRequest` | `QuestAdminCompleteResult { contentKey, instanceId, granted, completed, rewardsPaid, alreadyDone, reason }` | 409 `QuestDisabled`, 400 `InvalidReason`, 404 (trainer or quest key); audit `QuestCompleted` (23) |
 | GET | `/trainers/{trainerId}/achievements` | | `AdminAchievementBoard` (see [Achievements](15-achievements.md#admin-achievement-board)) | 404 |
 | GET | `/market/listings?state=&sellerAccountId=&offset=&limit=` | | `MarketListingView[]` — hidden rows **included**, `sellerShadowBanned` set | |
 | DELETE | `/market/listings/{id}` | `ReasonRequest` | `MarketListingView` (post-removal, `state = Cancelled`) | 400, 404, 409 `AlreadySold`/`StorageFull` |
@@ -424,9 +424,10 @@ the trainer comes from the route, never the body. The two reads write no audit r
     Grant XP dialogs.
   - An unknown or soft-deleted quest key is 404 and writes nothing. No-ops (`alreadyDone`) and failed claims are audited too.
   - Metadata: `{contentKey, instanceId, granted, completed, rewardsPaid, alreadyDone, reason}`; actor from `AdminActor.From`.
-- **Blocked quests (in review, cr-api #105).** Complete refuses a quest that is switched off, or a side quest in an area whose side
+- **Blocked quests (cr-api #105).** Complete refuses a quest that is switched off, or a side quest in an area whose side
   quests are off: `ModerationResult.Fail(QuestDisabled)`, HTTP 409 `{ error, reason: "QuestDisabled" }`, nothing granted, nothing
   audited. The board rows carry `isEnabled` and `blockedReason`. See [Quest System](07-quest-system.md#turning-quests-off-per-quest-and-per-area).
+- **Hidden quests (cr-api #106).** The operator board still lists a hidden quest, in both `instances[]` and `available[]`, with `isHidden: true`, so support can see what the player cannot. The stat `steps_walked_total` is listed with the other server-owned counters on the player's flags. See [Quest System](07-quest-system.md#walk-steps-take-item-and-hidden-quests).
 - **Known gaps.** Two concurrent first Completes on a never-started one-shot quest can each create an instance (accept has no
   unique guard); rewards, beats and stats still fire once, but a stray in-progress duplicate may remain. A new repeat always gets
   `RepeatNumber = 1` (pre-existing accept behaviour).
