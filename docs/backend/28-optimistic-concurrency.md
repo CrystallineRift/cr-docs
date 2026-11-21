@@ -71,12 +71,12 @@ Identical trees in an Apply therefore never bump or conflict. See [Talents](?pag
 
 | `expectedRowVersion` | Meaning |
 |---|---|
-| absent or `null` | Last write wins. |
+| absent or `null` | Last write wins, even when two first saves race: the loser re-reads and updates, it never answers 409. |
 | `0` | "I expect no row yet." Conflicts if a live row for that area (any casing) exists. |
 | `n > 0` | Must equal the stored version, otherwise 409. |
 | negative | 400 `invalid_expected_row_version`. |
 
-The 200 answer is the area entry (`areaKey`, `sideQuestsEnabled`, `rowVersion`, `hasSetting`, counts). `GET /api/v1/quests/area-settings` returns `rowVersion` 0 and `hasSetting` false for an area with no row, so a client that sends back the version it read sends 0 for a new area. A 409 has the same body as the other routes (`items[]` with `contentKey` = the trimmed area key, `expectedRowVersion`, `currentRowVersion`, `updatedAt`, `deleted`; `applied` empty; `title: "row-version-conflict"`); `currentRowVersion` and `updatedAt` are null when no row exists. Areas match case-insensitively; a row keeps the spelling it was created with.
+The 200 answer is the area entry (`areaKey`, `sideQuestsEnabled`, `rowVersion`, `hasSetting`, counts, and the information-only `requiredByMainStory`). `GET /api/v1/quests/area-settings` returns `rowVersion` 0 and `hasSetting` false for an area with no row, so a client that sends back the version it read sends 0 for a new area. A 409 has the same body as the other routes (`items[]` with `contentKey` = the trimmed area key, `expectedRowVersion`, `currentRowVersion`, `updatedAt`, `deleted`; `applied` empty; `title: "row-version-conflict"`); `currentRowVersion` and `updatedAt` are null when no row exists. Areas match case-insensitively; a row keeps the spelling it was created with.
 
 The per-quest `isEnabled` flag is an ordinary quest-template field and bumps the template's `rowVersion` like any other change.
 

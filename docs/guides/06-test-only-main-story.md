@@ -6,6 +6,12 @@
 
 Play or test just the main story quest line by turning side quests off, without deleting anything, then turn them back on.
 
+## Read this first: what can strand the main story
+
+Off means off. If a main story quest **needs** a blocked quest, the main story stops there. A main story quest needs another quest when it has a `QuestCompleted` requirement on it or a `CompleteQuest` objective naming it, directly or through a chain. The Studios warn you (an area's "Needed by main story" marker and warning box online, "main story needs N" in Unity, and a warning under **Enabled** on the quest listing who needs it), but nothing is switched on for you.
+
+Limits: only those two dependency kinds are seen. Dialogue conditions, story beats and other gates are not. As of this work the shipped content has **no side quest that the main story needs** (203 quests, 42 main story), so switching any area off today does not strand the main story through requirements. Disabling a single **main story** quest does block later quests that require it.
+
 ## Definitions
 
 - **Main story quest**: a quest whose `category` is `MainStory`, or whose story line is a main act line (`line-act-` and a number, optionally followed by `-something`, for example `line-act-3` or `line-act-3-north`). Every other quest is a **side quest**.

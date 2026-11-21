@@ -219,7 +219,7 @@ Two switches let an operator take quests out of play without deleting anything. 
 | Where | Behaviour |
 |---|---|
 | Offer | Not in `GetAvailableQuestsForTrainerAsync`. In the status view a blocked quest nobody holds reads `Locked`, never `Available`; a held quest keeps its real state. |
-| Start | `AcceptQuestAsync` (by id), `AcceptQuestByContentKeyAsync`, `GrantQuestAsync` (including the location-discovery grant) and the operator's open all throw `QuestDisabledException` before anything is created, restarted or returned. Re-accepting an in-progress blocked quest is refused too. A refused discovery grant does not fail entering the location: the entry succeeds, the discovery claim is released, and the next entry retries. |
+| Start | `AcceptQuestAsync` (by id), `AcceptQuestByContentKeyAsync`, `GrantQuestAsync` (including the location-discovery grant) and the operator's open all throw `QuestDisabledException` before anything is created, restarted or returned. Re-accepting an in-progress blocked quest is refused too. A refused discovery grant does not fail entering the location: the entry succeeds, the discovery claim is released, and the next entry retries. The refusal is logged at Debug without a stack trace (other grant failures stay warnings). |
 | Progress | `QuestObjectiveProjector` skips a blocked in-progress instance: no count, no completion. Events that happen while it is blocked are **not** replayed later. |
 | Claim | `ClaimRewardsAsync` throws before the claim compare-and-set, so the claim is not spent and works once the quest is enabled again. |
 | Operator Complete | Refused: `QuestDisabledException` becomes `ModerationResult.Fail(ModerationReason.QuestDisabled)` (enum value 16), HTTP 409, nothing audited. See [Moderation](18-moderation.md#quest-and-achievement-admin-2026-10-20). |
@@ -228,6 +228,23 @@ Two switches let an operator take quests out of play without deleting anything. 
 A quest that is part-way through when it is switched off is **frozen**: when it is switched back on, the instance continues from the same counts.
 
 The player status view and the operator quest board (`QuestStatusView`, `AdminQuestInstanceView`, `AdminQuestAvailableView`) carry `isEnabled` and `blockedReason` (`"quest-disabled"`, `"area-side-quests-disabled"` or null), so the reason a quest is off, including a frozen held one, can be shown.
+
+### The main story can be stranded: dependencies and the warning
+
+The block rule is unchanged: off means off, with no automatic exemption. But a main story quest that **needs** a blocked quest cannot start or finish while that quest is blocked. So every place a switch is flipped warns the designer instead.
+
+- Quest B **depends on** quest A when (a) B has a `QuestCompleted` requirement whose reference is A's template id, or (b) B has a `CompleteQuest` objective whose target (single or list) equals A's content key (trimmed, case-insensitive). Deleted templates, requirements and objectives are ignored.
+- A quest is **needed by the main story** when a main story quest reaches it through one or more depends-on steps (transitively; cycles are safe). The main quest named in a warning is the one with the smallest content key that reaches it.
+- Every area entry, in `GET /api/v1/quests/area-settings` and in the `PUT` answer, carries `requiredByMainStory`: one element per **side** quest in that area that the main story needs, sorted by `questContentKey`, `[]` when none. It is listed whether the switch is on or off. Information only. Rule: `QuestMainStoryDependencies.Find`.
+
+```json
+"requiredByMainStory": [ { "questContentKey": "quest-a", "questName": "Quest A",
+                           "mainQuestContentKey": "quest-m", "mainQuestName": "Quest M" } ]
+```
+
+- A `QuestCompleted` requirement is stored as the template id. A content-key reference pushed by the Unity Studio is resolved to the id at upsert, and a key that cannot be resolved fails the push with 400.
+
+**Limits.** Only those two dependency kinds are seen. Dialogue conditions, story beats and other gates are not. As of this work the shipped content has **no side quest that the main story needs** (203 quests, 42 main story), so switching any area off today does not strand the main story through requirements. Disabling a single **main story** quest does block later quests that require it.
 
 ### REST
 
@@ -240,7 +257,7 @@ The player status view and the operator quest board (`QuestStatusView`, `AdminQu
 ```
 
   `rowVersion` 0 and `hasSetting` false mean no row is stored yet. The counts cover every live template in the area, enabled or not.
-- `PUT /api/v1/quests/area-settings/{areaKey}` (content-write policy, like `PUT /templates/bulk`): body `{ "sideQuestsEnabled": false, "expectedRowVersion": 0 }`. `sideQuestsEnabled` is required (a missing field is 400, never read as false). `expectedRowVersion` is nullable: null = last write wins, 0 = "I expect no row yet", n > 0 must equal the stored version. 200 answers the same entry shape as the GET after the write. The key is not checked against world locations (a quest's `areaKey` is free text too). A row keeps the spelling it was created with; a later PUT in another casing updates that row.
+- `PUT /api/v1/quests/area-settings/{areaKey}` (content-write policy, like `PUT /templates/bulk`): body `{ "sideQuestsEnabled": false, "expectedRowVersion": 0 }`. `sideQuestsEnabled` is required (a missing field is 400, never read as false). `expectedRowVersion` is nullable: null = last write wins, 0 = "I expect no row yet", n > 0 must equal the stored version. 200 answers the same entry shape as the GET after the write. The key is not checked against world locations (a quest's `areaKey` is free text too). With `expectedRowVersion` null the save is last-write-wins even when two first saves race: the loser re-reads and updates, it never answers 409. A row keeps the spelling it was created with; a later PUT in another casing updates that row.
   - 400 `invalid_area_key` (blank, or over 64 characters after trimming), `invalid_side_quests_enabled` (missing), `invalid_expected_row_version` (negative).
   - 409 on a stale version: the usual `row-version-conflict` body, with the trimmed area key in `contentKey` (see [Optimistic Concurrency](28-optimistic-concurrency.md#quest-area-settings)).
   - 401 without a token, 403 without content-write.
@@ -261,7 +278,7 @@ Offline play runs the same `QuestDomainService` and `QuestObjectiveProjector` on
 
 - **Templates.** The local `quest_template` row carries `IsEnabled` (`LocalQuestTemplateSyncClient`, `QuestTemplateSnapshotExtensions`).
 - **Area switches.** The Studio's `QuestAreaSettingsDefinition` asset (provider field `questAreaSettings`) is written into the local `quest_area_setting` table at world init: `LocalQuestAreaSettingSyncClient`, called from `QuestWorldBehaviour`. Last write wins (offline is its own authority). A stored row the asset no longer lists is reset to "side quests enabled", so removing a switch from the asset cannot leave it on in an old install.
-- **Installer.** Both classes take the area-settings repository as a **last, optional** constructor parameter (`IQuestAreaSettingRepository? areaSettings = null`). Null means no area is off (the per-quest flag is still enforced): a container that forgets it **silently ignores every area switch**. `QuestAreaSettingBindings.Install` binds it (and the sync client) in one place, and a container test resolves both objects and checks they hold it. The AIO does the same server-side and a test guards it. `IQuestDomainService` itself is unchanged.
+- **Installer.** Both classes take the area-settings repository as a **last, optional** constructor parameter (`IQuestAreaSettingRepository? areaSettings = null`). Null means no area is off (the per-quest flag is still enforced): a container that forgets it **silently ignores every area switch**. A server-side host that builds the quest service or projector without it logs one warning per process saying the area switch is not enforced there. `QuestAreaSettingBindings.Install` binds it (and the sync client) in one place, and a container test resolves both objects and checks they hold it. The AIO does the same server-side and a test guards it. `IQuestDomainService` itself is unchanged.
 - **Refusals are tolerated quietly.** `QuestRefusal.IsQuestDisabled` recognises the offline `QuestDisabledException` and the online 409 with code `quest-disabled` (or the legacy `quest_disabled` tag). The dialogue accept and claim handlers, the auto granter, `QuestGranterBehaviour`, the pickup grant and the reward dispatcher let that refusal pass without an error. The client only reads the answer; it never decides whether a quest is blocked.
 - **Re-sync.** The content fingerprint salt is bumped to `cs2`, so every quest re-syncs into local SQLite once after the update.
 - **Order of rollout.** Deploy the server first: until then the area routes return 404 (the Studio pull logs a warning and goes on). After merging, a Studio push is optional (server defaults are "enabled") and only needed to switch something off.
@@ -1448,6 +1465,7 @@ server-side accept heals on the next read.
 
 - **Expecting the area switch to block a main story quest.** It never does: `MainStory` category or a `line-act-N` line exempts a quest. Only the quest's own `isEnabled` can block it.
 - **Forgetting the area key.** A side quest with no `area_key` is in no area, so no area switch affects it. Give it an area key if it should be switchable by area.
+- **Switching off a side quest the main story needs.** The server blocks it anyway; the Studios warn (see [the dependency rule](#the-main-story-can-be-stranded-dependencies-and-the-warning)).
 - **Passing a missing `sideQuestsEnabled`.** `PUT /area-settings/{areaKey}` answers 400; it never reads a missing field as false.
 - **Registering `QuestDomainService` as Singleton.** It must be `AddScoped` because `IConditionEvaluator` depends on `IStatService`, which is Scoped. A Singleton cannot capture a Scoped service.
 - **Forgetting both keyed and non-keyed repository registrations in Program.cs.** The domain service resolves non-keyed. REST endpoints that use `[FromKeyedServices]` resolve keyed. Both registrations must exist. Looking at the actual `Program.cs`, quest repositories are registered as non-keyed singletons only — if you add keyed registrations for the quest repositories, also keep the non-keyed ones.
