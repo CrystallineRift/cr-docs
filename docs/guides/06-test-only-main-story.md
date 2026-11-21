@@ -1,6 +1,6 @@
 # Test Only the Main Story
 
-> Status: in review. The switches are on cr-api PR #105 (server) with the Unity Studio and online Studio controls on their own open branches (PRs to follow). Not merged or deployed. Until then none of the controls below exist on a released build.
+> Status: in review. The switches are on cr-api PR #105 (server) cr-api-unity #192 (Unity Studio and offline play) and cr-admin-web #45 (online Studio); all open, unmerged. Not merged or deployed. Until then none of the controls below exist on a released build.
 
 ## Goal
 
@@ -41,7 +41,7 @@ Set **Side quests enabled** and **Enabled** back on (same places, same save or P
 
 ## Offline play
 
-The offline game runs the same quest rules locally. Unity-side offline enforcement is in review and not yet described as working; test online until it lands.
+The offline game runs the same quest rules locally. The Studio's area switches and each quest's Enabled flag are written into the local database when the world starts, so the local quest services block quests the same way. To switch things for offline play, change them in the Unity Studio (the asset is what offline reads); a server push is not needed for that. This is in review (cr-api-unity #192) and has not been run end to end against a live server. The server must be deployed first for the online Studio's area page to work.
 
 ## Related Pages
 

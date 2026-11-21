@@ -562,7 +562,7 @@ points at. See *Live ops tabs* below.
 
 ### Quest switches in the Studio (in review)
 
-> In review: cr-api-unity branch `feat/quest-toggles` (PR to follow), on top of cr-api #105. Not merged. The Studio only edits and pushes the switches; the server enforces them. Meaning of main story, area, blocked and frozen: [Quest System, Turning quests off](?page=backend/07-quest-system#turning-quests-off-per-quest-and-per-area). How-to: [Test only the main story](?page=guides/06-test-only-main-story).
+> In review: cr-api-unity #192 (`feat/quest-toggles`), on top of cr-api #105. Not merged. The Studio only edits and pushes the switches; the server enforces them. Meaning of main story, area, blocked and frozen: [Quest System, Turning quests off](?page=backend/07-quest-system#turning-quests-off-per-quest-and-per-area). How-to: [Test only the main story](?page=guides/06-test-only-main-story).
 
 - **Enabled** (quest inspector, above Is Repeatable): the `QuestDefinition.isEnabled` toggle, on by default; assets saved before the field read as enabled. Help text under it says that off freezes the quest rather than removing it, that it applies to main story quests too, and that the area switch never does. When the quest is off only because of its area, a warning says which area.
 - **Quest rows** carry a badge: `OFF` (the quest's own switch) or `OFF (area)` (a side quest whose area has side quests off). The badge is a preview of the server's rule for display; the tooltip explains it. The per-quest reason wins when both apply.
@@ -572,7 +572,7 @@ points at. See *Live ops tabs* below.
 - `cr_studio_push_all --args dry` gains a line: `Quest area settings: N area(s) stored; side quests OFF in <areas>.` (or "none stored").
 - **`cr_studio_capture <folder>`** photographs the Quests tab (the area panel, rows marked off, the inspector's Enabled toggle) into PNG files, for pull requests. In-memory edits only: nothing is marked dirty or saved and every value is put back. It needs a graphics device, so never `-nographics`. From an open Editor the command returns at once and the files appear a few seconds later; headless: `Unity -batchmode -projectPath <project> -executeMethod CR.Content.EditorTools.CrStudioCaptureCommand.RunFromBatch -captureOut <folder>` (exits when done; 0 = all pictures written).
 
-Not yet described as working: Unity offline enforcement (seeding the switches into the local database and registering the area-settings repository in the client installer) is still in progress; see [Quest System, Offline play](?page=backend/07-quest-system#offline-play-and-the-unity-installer).
+Offline: the same switches are written into the local database at world init and enforced by the local quest services; the game client tolerates a refusal quietly. Details, the installer binding and what was not tested: see [Quest System, Offline play](?page=backend/07-quest-system#offline-play-and-the-unity-installer).
 
 ### Server & Keys section — which server, with which key
 

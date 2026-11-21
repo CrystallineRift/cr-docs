@@ -1,5 +1,7 @@
 # Quest System
 
+> Status: quest on/off switches (per quest and per area) are **in review**, all unmerged: server cr-api #105, Unity cr-api-unity #192, online Studio cr-admin-web #45 (branch `feat/quest-toggles` in each). Nothing here is released. See [Turning quests off](#turning-quests-off-per-quest-and-per-area) and the how-to [Test only the main story](?page=guides/06-test-only-main-story).
+
 Quests are the primary structured progression mechanism in Crystalline Rift. The system separates read-only template data (content) from mutable instance data (player state), evaluates gating requirements, tracks per-objective progress, and writes lifetime stats as a side-effect of every progress event.
 
 ## Why This Design?
@@ -137,8 +139,11 @@ is anywhere to return to.
 
 ## Quest categories and area key
 
-Every quest has a **category** and an optional **area key**. Both are metadata only: no gate, grant,
-requirement, reward or talent unlock reads them. Spec: `cr-api-unity/docs/superpowers/specs/2026-09-27-quest-categories-design.md`.
+Every quest has a **category** and an optional **area key**. Until the quest switches (in review, see
+[Turning quests off](#turning-quests-off-per-quest-and-per-area)) both were metadata only. Now exactly one value has a gameplay
+effect: category `MainStory` marks a main story quest, which the per-area switch never blocks. Every other category value, and
+the area key as a label, still gate, grant, require, reward and unlock nothing. The area key is also the quest's *area* for the
+area switch. Spec: `cr-api-unity/docs/superpowers/specs/2026-09-27-quest-categories-design.md`.
 
 | Int | `QuestCategory` | Slug | Meaning |
 |---|---|---|---|
@@ -191,7 +196,7 @@ uses. A `VisitLocation` objective's target is likewise picked from `ContentPicke
 resolve; see [Location Discoveries](?page=backend/24-location-discoveries).
 
 **Supersedes checklist step 0b's `quest_kind`.** Main Story means "main", and every other category is a side quest, so
-there is no separate `quest_kind` column. `quest_line` / `line_step` shipped with M17004; see
+there is no separate `quest_kind` column. (A main act story line also counts as main story for the area switch; see below.) `quest_line` / `line_step` shipped with M17004; see
 [Studio concurrency and story lines](#studio-concurrency-and-story-lines).
 
 ## Turning quests off (per quest and per area)
@@ -250,9 +255,17 @@ The player status view and the operator quest board (`QuestStatusView`, `AdminQu
 
 ### Offline play and the Unity installer
 
-The offline floor runs the same `QuestDomainService` and `QuestObjectiveProjector` on local SQLite, and the offline runner picks up migrations 21301 and 21302, so the rules are the same code. Both classes take the area-settings repository as a **last, optional** constructor parameter (`IQuestAreaSettingRepository? areaSettings = null`). Null means no area is off (the per-quest flag is still enforced), which keeps every existing construction site compiling, but a host that forgets it silently loses the area switch. The AIO registers it (keyed and non-keyed) and a test guards it. The Unity client installer builds its own container and must register `IQuestAreaSettingRepository` (`CR.Quests.Data.Sqlite.QuestAreaSettingRepository`, same connection as `IQuestTemplateRepository`) and pass it on. `IQuestDomainService` itself is unchanged.
+> In review: cr-api-unity #192 (`feat/quest-toggles`).
 
-Status of the client side: the Unity wiring (installer registration, seeding `isEnabled` and the area switches into the local database, a rebaked `game-data.bytes`) is **in review** and not described here as working. The shipped floor is not rebaked by this change; an older floor is migrated forward at startup like any other schema bump.
+Offline play runs the same `QuestDomainService` and `QuestObjectiveProjector` on local SQLite, so the rules are the same code. The offline floor `game-data.bytes` is migrated to schema 21302 (migrations 21301 and 21302 included).
+
+- **Templates.** The local `quest_template` row carries `IsEnabled` (`LocalQuestTemplateSyncClient`, `QuestTemplateSnapshotExtensions`).
+- **Area switches.** The Studio's `QuestAreaSettingsDefinition` asset (provider field `questAreaSettings`) is written into the local `quest_area_setting` table at world init: `LocalQuestAreaSettingSyncClient`, called from `QuestWorldBehaviour`. Last write wins (offline is its own authority). A stored row the asset no longer lists is reset to "side quests enabled", so removing a switch from the asset cannot leave it on in an old install.
+- **Installer.** Both classes take the area-settings repository as a **last, optional** constructor parameter (`IQuestAreaSettingRepository? areaSettings = null`). Null means no area is off (the per-quest flag is still enforced): a container that forgets it **silently ignores every area switch**. `QuestAreaSettingBindings.Install` binds it (and the sync client) in one place, and a container test resolves both objects and checks they hold it. The AIO does the same server-side and a test guards it. `IQuestDomainService` itself is unchanged.
+- **Refusals are tolerated quietly.** `QuestRefusal.IsQuestDisabled` recognises the offline `QuestDisabledException` and the online 409 with code `quest-disabled` (or the legacy `quest_disabled` tag). The dialogue accept and claim handlers, the auto granter, `QuestGranterBehaviour`, the pickup grant and the reward dispatcher let that refusal pass without an error. The client only reads the answer; it never decides whether a quest is blocked.
+- **Re-sync.** The content fingerprint salt is bumped to `cs2`, so every quest re-syncs into local SQLite once after the update.
+- **Order of rollout.** Deploy the server first: until then the area routes return 404 (the Studio pull logs a warning and goes on). After merging, a Studio push is optional (server defaults are "enabled") and only needed to switch something off.
+- **Not tested.** No end-to-end run against a live server. The granter and pickup MonoBehaviours have no dedicated test (the shared `QuestRefusal` check and the dialogue, dispatcher and offline paths do).
 
 ### Where to switch things
 
