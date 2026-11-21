@@ -333,7 +333,7 @@ The claim answer (`POST /api/v1/quests/{instanceId}/claim-rewards`) gains `taken
 
 `HasItem` requirements evaluate an item GUID. The Studios author them by item content key, and `PUT /templates/bulk` used to store such a key as NULL (a requirement that could never be met). It now resolves a non-GUID `HasItem` reference through `IItemDomainService.GetItemByContentKeyAsync`, like `QuestCompleted` keys. An unknown item key refuses the push with 400 (`HasItem requirement references item 'x', which is not a stored item.`), so **the item must exist on the server before the quest that needs it is pushed**.
 
-**Push order after merging a feature that adds content:** (1) the item exists, by server seed; (2) spawners (a reward `Creature` names a template spawner by content key); (3) quests; (4) pickup placements. For the hatch the item and the pickup definition are seeded by migrations; the spawner, the quest and the placement are Unity content that must be pushed from Content Studio after the deploy.
+**Push order after merging a feature that adds content:** (1) the item exists, by server seed; (2) spawners (a reward `Creature` names a template spawner by content key); (3) quests; (4) pickup placements. For the hatch the item and the pickup definition are seeded by migrations; the spawner, the quest and the placement are Unity content pushed from Content Studio after the deploy (done at the v0.2.24 release, in that order).
 
 ### Migrations
 
