@@ -575,6 +575,16 @@ points at. See *Live ops tabs* below.
 
 Offline: the same switches are written into the local database at world init and enforced by the local quest services; the game client tolerates a refusal quietly. Details, the installer binding and what was not tested: see [Quest System, Offline play](?page=backend/07-quest-system#offline-play-and-the-unity-installer).
 
+### Hidden quests, Walk steps and Take item (in review)
+
+> In review: cr-api-unity #193 (stacked on #192), on top of cr-api #106. What each means on the server: [Quest System](?page=backend/07-quest-system#walk-steps-take-item-and-hidden-quests-in-review).
+
+- **Hidden** (quest inspector, beside Enabled): `QuestDefinition.isHidden`, off by default. The help text says the game shows the player nothing about the quest (no journal entry, tracker line, helper marker, new-quest toast or progress banner), that it still runs and the toggles still apply, and to keep its name, description and rewards free of anything that gives a surprise away (only operators and designers read them). Quest rows show a `HIDDEN` badge. Push always sends `isHidden`; pull sets it only when the server sent it.
+- **Walk steps** objective (type 60): the target dropdown is **Carrying item** (an item content key; "(none)" counts every step). The count is the number of steps, counted by the server. A walk-steps objective with no carried item shows the warning "every step the player walks counts toward this objective".
+- **Take item** reward (type 7): **Item to take** dropdown. The push refuses a take-item reward with no item or a quantity below 1 (`QuestRewardValidation`, also shown in the inspector).
+- The per-area "{Area} Quests" achievements the Studio generates leave hidden quests out.
+- **`cr_hatch_capture <folder>`** photographs the claim reveal (frames and before/after stills) and the item's bag detail into PNGs, for pull requests; the batch form is `-executeMethod CR.Content.EditorTools.CrHatchCaptureCommand.RunFromBatch -captureOut <folder>`. It needs a graphics device. `cr_studio_capture` is described above; `cr_world_capture_tree_spot` is in [Open World, Tree find spots](?page=unity/37-open-world#tree-find-spots-in-review).
+
 ### Server & Keys section — which server, with which key
 
 Under **SYSTEM**, before Registry (internal section key `configuration`, tab 20). It replaced the

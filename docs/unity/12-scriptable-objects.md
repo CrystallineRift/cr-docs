@@ -181,6 +181,7 @@ Defines a quest template. The backend owns instance/progress data; this SO is th
 | `description` | string | Player-facing description |
 | `giverNpcContentKey` | string | `content_key` of the NPC that offers this quest |
 | `isEnabled` | bool | **In review (cr-api-unity `feat/quest-toggles`).** The inspector's **Enabled** toggle, true by default. Off: the server does not offer, start or progress the quest (in-progress copies freeze, nothing is deleted); applies to main story quests too. Always sent on push; pull sets it only when the server sent it. See [Quest switches in the Studio](08-content-registry.md#quest-switches-in-the-studio-in-review) |
+| `isHidden` | bool | **In review (cr-api-unity #193).** The inspector's **Hidden** toggle, false by default. On: the game shows the player nothing about the quest (no journal entry, tracker line, marker, toast or banner); it still runs and the toggles still apply. Always sent on push. See [Hidden Quests and the Claim Reveal](52-hidden-quests-and-claim-reveal.md) |
 | `isRepeatable` | bool | Whether the quest can be completed more than once |
 | `maxRepeatCount` | int | Max repeats (ignored when `isRepeatable` is false) |
 | `sortOrder` | int | Display ordering in quest lists |
@@ -222,7 +223,7 @@ warning.
 
 | Field | Type | Purpose |
 |-------|------|---------|
-| `rewardType` | `QuestRewardType` | Experience, Currency, Item, Creature, Ability, Badge, Title |
+| `rewardType` | `QuestRewardType` | Experience, Currency, Item, Creature, Ability, Badge, Title, **TakeItem** (7; in review: removes the item named by `referenceId`, `quantity` times, on claim) |
 | `quantity` | int | Amount or count |
 | `referenceId` | string | UUID of item/creature for Item/Creature rewards |
 | `metadata` | string | Optional JSON metadata |

@@ -24,6 +24,7 @@ requirement enums themselves, see [Quest System](../backend/07-quest-system.md).
 | 42 Defeat trainers from a list | Trainers (comma-separated) | trainer-battle content keys |
 | 43 Fight trainer (win or allowed loss) | NPC, required | NPC content key; count fixed at 1 (zod and server both refuse otherwise). Counts a defeat or a loss to a `lossAllowed` trainer |
 | 50 Reach talent rank | Talent key (empty matches any) | a typed talent content key (talents are nested inside talent-trees, so there's no flat resource to pick from either) |
+| 60 Walk steps (in review) | Carried item (optional; empty counts every step) | **item content key**; the count is steps |
 
 An empty target on any of the "(empty matches any)" rows matches any instance of that type — a
 `Defeat creature` objective with no creature picked completes on defeating *anything*.
@@ -89,6 +90,7 @@ See [Quest Story Map](07-quest-story-map.md). A prerequisite shown here as a req
 - **Live Ops quest board.** A trainer's quest board shows a badge from the server's `blockedReason` ("Quest turned off" or "Area side quests turned off"), including for frozen in-progress quests. An operator **Complete** refused with 409 `QuestDisabled` reads as a sentence instead of a raw error.
 - **Readable errors.** The 400 tags from the area route (`invalid_area_key`, `invalid_side_quests_enabled`, `invalid_expected_row_version`) are shown as sentences.
 - **OpenAPI.** The Studio's OpenAPI snapshot carries only the quest-toggle routes and fields (area-settings GET/PUT, `isEnabled`, `blockedReason`, `ModerationReason` 16); the generated types follow it.
+- **Hidden quests, Walk steps, Take item** (in review: cr-admin-web #46, on top of cr-api #106). The Quests form has a **Hidden** checkbox (Quest group) with help text: the game shows nothing for a hidden quest, which still runs and still obeys Enabled and the area switch; a server that omits `isHidden` reads as visible. The list has a **Hidden** column showing the word `hidden` (the list filter finds it), and the Live Ops trainer quest board marks hidden quests with a **Hidden** badge. Objective type **60 Walk steps**: the target is **Only while carrying (optional item)**, picked by item content key; the count is steps; steps taken without the item are lost, not replayed. Reward type **7 Take item**: **Item to take** by content key, taken before anything is granted, refused if missing. The OpenAPI snapshot gained only the hatch parts (`isHidden`, the two enum values, `includeProgress`).
 - Not built: quick Disable and Enable buttons on list rows (resource actions render only in the detail header today). Use the checkbox and Save.
 
 ## Conflicts

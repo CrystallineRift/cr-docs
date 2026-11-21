@@ -290,6 +290,60 @@ Offline play runs the same `QuestDomainService` and `QuestObjectiveProjector` on
 - Online: [Quest Editing, Enabled and Quest areas](?page=admin-web/04-quest-editing#turning-quests-off-in-review).
 - How-to: [Test only the main story](?page=guides/06-test-only-main-story).
 
+## Walk steps, take item and hidden quests (in review)
+
+> In review: cr-api #106 (`feat/oaklet-hatch`), stacked on the quest-toggles PR #105. Not merged. The Unity client is cr-api-unity #193 and the online Studio is cr-admin-web #46. First user: the hidden hatch quest, see [Oaklet Hatch (internal, spoilers)](?page=guides/07-oaklet-hatch-internal).
+
+Four generic building blocks. None of them knows about a particular quest, item or creature.
+
+### `WalkSteps` objective (type 60)
+
+Advanced by the `StepsWalked` outcome, additive by `Quantity`, clamped to `target_count`; it never counts down. The steps are counted by the server from the positions it receives, see [Server-Counted Steps](?page=backend/31-server-counted-steps).
+
+- `target_reference_id` is optional and is an **item content key**. When set, steps count only while the trainer holds at least one of that item in the **backpack** ("carrying"; the backpack is read once per outcome). Steps taken while not carrying it are lost, not replayed later. Blank means every step counts.
+- A blocked quest (see [Turning quests off](#turning-quests-off-per-quest-and-per-area)) does not count steps, like every other objective.
+- A host built without `IBackpackItems` counts **no** steps for a carry-conditioned objective (it fails closed) and logs one warning per process (`CarryCheckNotWiredWarning`). `QuestDomainService` and `QuestObjectiveProjector` take `IBackpackItems? backpack = null` as a last optional constructor parameter, after `areaSettings`.
+
+### `TakeItem` reward (type 7)
+
+`reward.referenceId` is an item content key and `quantity` is how many. On claim, **all** `TakeItem` rewards are taken first, with the guarded take (`IItemEntryGuardedWrites.TryTakeFromEntryAsync`, a conditional UPDATE: the same compare-and-set item use relies on), before the claim is spent and before anything is granted. A partial take is rolled back. If a creature grant throws after the take, the item is returned (the claim stays spent: the existing "one lost reward, logged" rule).
+
+Two refusals, both before anything is spent:
+
+| Status | Body | When |
+|---|---|---|
+| 409 | `{ "code": "quest-item-missing", "error": "quest_item_missing", "message": "The quest needs an item you do not have, so its rewards cannot be claimed yet." }` | The trainer does not hold the item. The claim is **not** spent: it works once the item is back. The same refusal for a host without `IBackpackItems`. |
+| 400 | `{ "code": "quest-reward-unavailable", "message": ... }` | The quest has a `TakeItem` reward and a `Creature` reward whose spawner content key is not stored. Refused **before** anything is taken or spent, so an item is never taken for a grant that cannot run. |
+
+If a `Creature` reward places nothing (the reward service degrades instead of throwing), the taken items are returned and `takenItems` is empty.
+
+The claim answer (`POST /api/v1/quests/{instanceId}/claim-rewards`) gains `takenItems: [{ "itemContentKey": "...", "quantity": 1 }]` (an empty array when none); `spawnedCreatureIds` is unchanged. Offline, `QuestClaimResult.TakenItems` carries the same. A claim whose answer holds both a taken item and a spawned creature is what the client plays as a [reveal](?page=unity/52-hidden-quests-and-claim-reveal#the-claim-reveal).
+
+### Hidden quests
+
+`quest_template.is_hidden` (migration **21402**; boolean, default false; JSON `isHidden`; C# `QuestTemplate.IsHidden`). `UpsertQuestTemplateRequest` gets a trailing nullable `isHidden` (null keeps the stored value, false for a new quest). Every template read returns `isHidden`, and `QuestStatusView`, `AdminQuestInstanceView` and `AdminQuestAvailableView` carry it.
+
+- **On the server a hidden quest is an ordinary quest.** It is offered, accepted, progressed, claimed and blocked by the toggles exactly like any other, and it is **not** filtered out of any player quest list (`available`, `active`, `completed`, `{instanceId}`): the client needs them to auto-accept, progress and claim. Hiding is about what the **player is shown**, and the client does that (see [Hidden Quests and the Claim Reveal](?page=unity/52-hidden-quests-and-claim-reveal#what-a-hidden-quest-hides)).
+- **Server-side exclusions.** A completed hidden quest does not increment `quests_completed` or `quests_completed_cat_*` (its outcome carries `Facts[hidden]`); the per-quest `quest_completed_{key}` stat is still written. The Studios leave hidden quests out of the generated per-area "{Area} Quests" achievements.
+- **Operators and designers still see them.** The Studios and the moderation quest board show hidden quests, marked as hidden.
+
+### `HasItem` by content key, and quest push order
+
+`HasItem` requirements evaluate an item GUID. The Studios author them by item content key, and `PUT /templates/bulk` used to store such a key as NULL (a requirement that could never be met). It now resolves a non-GUID `HasItem` reference through `IItemDomainService.GetItemByContentKeyAsync`, like `QuestCompleted` keys. An unknown item key refuses the push with 400 (`HasItem requirement references item 'x', which is not a stored item.`), so **the item must exist on the server before the quest that needs it is pushed**.
+
+**Push order after merging a feature that adds content:** (1) the item exists, by server seed; (2) spawners (a reward `Creature` names a template spawner by content key); (3) quests; (4) pickup placements. For the hatch the item and the pickup definition are seeded by migrations; the spawner, the quest and the placement are Unity content pushed from the Studio.
+
+### Migrations
+
+| Migration | Domain | What |
+|---|---|---|
+| `M21401AddStepCountingToTrainer` | Trainers | `last_pos_at`, `step_carry`, `location_version` |
+| `M21402AddIsHiddenToQuestTemplate` | Quests | `quest_template.is_hidden` |
+| `M21403SeedHeavyPinecone` | Items | the hatch item (idempotent, both engines) |
+| `M21404SeedHeavyPineconePickup` | Pickups | its pickup definition |
+
+The pickup seed lives in the Pickups domain on purpose: on a fresh database the Items domain migrates before `pickup_definition` exists, so an Items-side pickup seed would be skipped silently (a latent gap in `M21103`, `M21105` and `M21106`, left alone). The offline floor picks all four up (Unity floor schema 21404).
+
 ## The shipped quest chain
 
 Eight quests (M7014) follow the habitat level ladder, so "where do I go next" is answered by a quest
@@ -917,6 +971,7 @@ When `is_repeatable = true`, a trainer can accept the same template again after 
 | `DefeatTrainersFromList` | 42 | Defeat N DISTINCT trainers from `target_reference_ids` |
 | `FightTrainer` | 43 | Fight a specific trainer: a defeat **or** a loss to a `lossAllowed` trainer counts (`target_reference_id` required, `target_count` 1). `ProgressOutcomeObjectiveMap` maps `TrainerDefeated`, and `BattleLost` with `lossAllowed`, to it (`ObjectivesFor(ProgressOutcome)`); the subject is the `opponentNpcKey` fact; distinct per NPC key, so a repeat is idempotent. A plain loss does not advance. Upsert refuses a missing target or a count other than 1 |
 | `ReachTalentRank` | 50 | Reach a rank in a talent (the "teach a talent" gate, [Talents §8.3](25-talents.md#quest-tie-in)); `target_reference_id` = talent content key, blank matches the highest rank on any talent |
+| `WalkSteps` | 60 | **In review (cr-api #106).** Walk N steps, counted by the server; optional `target_reference_id` = item content key that must be carried. See [Walk steps, take item and hidden quests](#walk-steps-take-item-and-hidden-quests-in-review) |
 
 **List objectives (9, 42)** store their targets as a JSON array in `quest_objective_template.target_reference_ids`
 and the targets already counted in `quest_objective_progress.counted_reference_ids` (M7018, both engines,
@@ -1082,7 +1137,7 @@ All quest endpoints are prefixed `/api/v1/quests`.
 | `PUT` | `/api/v1/quests/area-settings/{areaKey}` | Set one area's `sideQuestsEnabled` with an optional `expectedRowVersion` (content-write; 400 / 409 `row-version-conflict`). In review |
 | `POST` | `/api/v1/quests/abandon` | Abandon an active quest instance |
 | `POST` | `/api/v1/quests/progress` | **Retired (410).** See [How to Advance a Quest Objective from Unity](#how-to-advance-a-quest-objective-from-unity) above |
-| `POST` | `/api/v1/quests/{instanceId}/claim-rewards` | Claim rewards for a completed quest. 409 `quest-disabled` while the quest is blocked (in review) |
+| `POST` | `/api/v1/quests/{instanceId}/claim-rewards` | Claim rewards for a completed quest. 409 `quest-disabled` while the quest is blocked, 409 `quest-item-missing` (a `TakeItem` item is not held), 400 `quest-reward-unavailable`; the answer lists `takenItems` (in review) |
 | `PUT` | `/api/v1/quests/templates/bulk` | Bulk create-or-update quest templates by `content_key` (Crystalline Rift Studio sync). Optional `id` per template = the authored SO id; a stored row under another id is re-keyed to it |
 | `GET` | `/api/v1/quests/templates` | Every template, no children (player-readable). The client's `ServerQuestTemplateIndex` reads it once per session to map a server template id to its `content_key` |
 | `GET` | `/api/v1/quests/templates/by-content-key/{contentKey}` | One template with objectives, rewards and requirements; 404 on unknown key. The Unity `QuestTemplateOnlineOfflineRepository` calls this only when a `content_key` misses the local `quest_template` cache, then upserts the result locally |
@@ -1330,6 +1385,7 @@ removed since acceptance) is ambiguous and is left alone.
 | `Item` (2) | `content_key` of the item in the `item` table | Same as Currency — both reward types resolve to inventory items |
 | `Creature` (3) | `content_key` of a global spawner template | Looks up the spawner via `ISpawnerRepository.GetSpawnerTemplateByContentKeyAsync`, then calls `ICreatureSpawnDomainService.SpawnCreaturesAsync(spawner.Id, new SpawnRequest { TrainerId = trainerId, RequestedQuantity = quantity })` |
 | `Ability` (4) | `content_key` of a single ability, or `null` for every ability this quest gates | Unlocks quest-gated ability progression entries on the trainer's creatures — see below |
+| `TakeItem` (7) | `content_key` of the item to remove | **In review (cr-api #106).** Not a grant: taken from the backpack with a guarded take **before** anything is granted; refused with 409 `quest-item-missing` when absent. See [Walk steps, take item and hidden quests](#walk-steps-take-item-and-hidden-quests-in-review) |
 
 ### Ability rewards (quest-gated ability unlocks)
 
@@ -1465,6 +1521,8 @@ server-side accept heals on the next read.
 
 - **Expecting the area switch to block a main story quest.** It never does: `MainStory` category or a `line-act-N` line exempts a quest. Only the quest's own `isEnabled` can block it.
 - **Forgetting the area key.** A side quest with no `area_key` is in no area, so no area switch affects it. Give it an area key if it should be switchable by area.
+- **Pushing a quest before its item exists.** A `HasItem` requirement (or any item content key the push resolves) naming an item the server does not store refuses the push with 400. Seed or push the item first.
+- **Expecting a hidden quest to be hidden by the server.** It is not filtered from any list; the client hides it.
 - **Switching off a side quest the main story needs.** The server blocks it anyway; the Studios warn (see [the dependency rule](#the-main-story-can-be-stranded-dependencies-and-the-warning)).
 - **Passing a missing `sideQuestsEnabled`.** `PUT /area-settings/{areaKey}` answers 400; it never reads a missing field as false.
 - **Registering `QuestDomainService` as Singleton.** It must be `AddScoped` because `IConditionEvaluator` depends on `IStatService`, which is Scoped. A Singleton cannot capture a Scoped service.
@@ -1490,6 +1548,8 @@ server-side accept heals on the next read.
 ## Related Pages
 
 - [Progress Dispatcher](?page=backend/23-progress-dispatcher)
+- [Server-Counted Steps](?page=backend/31-server-counted-steps) - how positions become steps (in review)
+- [Oaklet Hatch (internal, spoilers)](?page=guides/07-oaklet-hatch-internal) - the first hidden quest
 - [Test only the main story](?page=guides/06-test-only-main-story) - how to switch off side quests per area, or single quests, and switch them back on
 - [Quest Helpers](?page=unity/50-quest-helpers) - the client setting, Track button and authored helper markers
 - [Stats and Lifetime Tracking](?page=backend/08-stats-system) — the Stats domain that `RecordProgressEventAsync` writes to as a side-effect

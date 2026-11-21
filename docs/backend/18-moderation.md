@@ -427,6 +427,7 @@ the trainer comes from the route, never the body. The two reads write no audit r
 - **Blocked quests (in review, cr-api #105).** Complete refuses a quest that is switched off, or a side quest in an area whose side
   quests are off: `ModerationResult.Fail(QuestDisabled)`, HTTP 409 `{ error, reason: "QuestDisabled" }`, nothing granted, nothing
   audited. The board rows carry `isEnabled` and `blockedReason`. See [Quest System](07-quest-system.md#turning-quests-off-per-quest-and-per-area).
+- **Hidden quests (in review, cr-api #106).** The operator board still lists a hidden quest, in both `instances[]` and `available[]`, with `isHidden: true`, so support can see what the player cannot. The stat `steps_walked_total` is listed with the other server-owned counters on the player's flags. See [Quest System](07-quest-system.md#walk-steps-take-item-and-hidden-quests-in-review).
 - **Known gaps.** Two concurrent first Completes on a never-started one-shot quest can each create an instance (accept has no
   unique guard); rewards, beats and stats still fire once, but a stray in-progress duplicate may remain. A new repeat always gets
   `RepeatNumber = 1` (pre-existing accept behaviour).

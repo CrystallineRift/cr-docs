@@ -407,6 +407,24 @@ An interior is a hosted scene far below its host cell, entered through a door.
 
 **Registry validation.** `StoryRegistry` reads `Game/Story/Content/story-registry.json`; `StoryRowChecks` runs inside `cr_world_validate` and reports `story:<row>: unknown npc/dialogue/quest/beat/location/trainer key`. A zone's `arenaKey` is required. Registry NPCs placed by story rows need an `NpcDefinition`, or the existing unresolved-NPC rule errors.
 
+## Tree find spots (in review)
+
+> In review: cr-api-unity #193. A reusable "large tree with one pickup at its base", for the hidden hatch quest ([Oaklet Hatch (internal, spoilers)](?page=guides/07-oaklet-hatch-internal)) and any later forest.
+
+**The data row.** `StoryRows.treeSpots` (`StoryTreeSpotRow`, kind `TreeSpot`): `id`, `position` (x, z of the tree) and `yOffset`, `yaw`, `treePrefab` (a project path), `treeScale`, `itemKey` (the pickup; the pickup definition key **is** the item key), `pickupDistance` (metres from the trunk, default 1.6, at least 0.5) and `pickupBearing` (degrees about Y, 0 = +z). A spot decides nothing: collecting is an intent the authority resolves once per trainer under the pickup instance id the row yields (`story-pickup-<cleaned row id>`, the same convention as a story pickup row, so collection stays stable however often the cell is rebuilt). More spots are more rows, not more code. `StoryRowPlacer` builds a holder at the tree's foot with the tree prefab and the pickup (a `CR_Pickup`) as children.
+
+**Add another spot, step by step.**
+
+1. Make sure the item exists: an `ItemDefinition` (content key) on the server by seed or Studio push, and an entry in `Game/Story/Content/story-registry.json` `items` (the check `story:<row>: unknown item key` otherwise).
+2. Add a row under `treeSpots` in the layout's story seed (`Data/Corridor/Continent/story.json`, or a region file under `regions/<key>.json` `"story"`; the overlay merge prefixes ids with the region key). Give it a unique `id`, `position`, `yaw`, `treePrefab`, `treeScale` and `itemKey`. Use `cr_world_capture_tree_spot` (below), or a plan view, to choose the ground.
+3. Seed and rebuild the cell (the same story step as every story row; seed before building). `cr_world_validate` runs `StoryRowChecks`: unknown item key, missing or unloadable prefab, non-positive scale, `pickupDistance` below 0.5, a missing id, and two ids that clean to the same pickup instance id are errors.
+4. Capture it (below) and look at it.
+5. Scan and push the placement (`cr_pickup_placements_scan` / `_push`, which read the cell scenes) so the server knows the pickup instance. Push order across a feature: [Quest System, push order](?page=backend/07-quest-system#hasitem-by-content-key-and-quest-push-order).
+
+**Capture.** `cr_world_capture_tree_spot --args spot=<row id>[,layout=Continent][,from=x;z][,out=/abs/dir][,views=top+wide+close]` renders stills of the spot built in its cell (the spot stands in an Act 1 cell, which the Continent layout only pins, so Act 1's four cells are rendered). A plan view of any area for choosing where a spot goes: `center=x;z,size=<half-width in metres>`, written as `area-top.png`. `cr_hatch_capture` is the reveal's counterpart ([Content Registry](?page=unity/08-content-registry#hidden-quests-walk-steps-and-take-item-in-review)). Tests: `StoryTreeSpotRowTests`.
+
+**First spot.** `tree-spot-farm-01`, a large tree by Philroe's farm in world cell `World_c0_r3`.
+
 ## NPC looks and content commands (P1a)
 
 - **Looks.** `npc-looks.json` (presets, defaults, per-key looks, tint materials) read by `NpcLookTable`; `RoleFor(name, npcType)` picks the role from the name segment, else the authored `_npcType`, else the legacy substring. `cr_dress_cell_npcs` dresses with BSMC 2.0 paths (`Prefabs/Catalog`, `Prefabs/Fantasy/Catalog/<Slot>`) and skips scenes without NPCs. Run it with `-executeMethod`; the pipeline CLI drops the long sweep.

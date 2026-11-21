@@ -155,7 +155,7 @@ the committed floor, and the auto-copy only lands in the working tree. To keep t
 rows a fresh bake drops (story creatures pushed from Studio, such as the gaterbear), migrate the
 committed floor forward instead:
 `dotnet run --project cr-api/Convenience/CR.Data.Migrations.Tool -- <out.bytes> <out_version.txt> --base Assets/StreamingAssets/CR/game-data.bytes`.
-Oaklet (in review: cr-api #103, cr-api-unity #188) was baked this way: the committed floor was migrated forward with `--base`, so it gained migrations 21012 and 21013, the Oaklet creature row and its nine learn entries. The schema head stays 21203, so the version file is unchanged. The client links cr-api through `Packages/manifest.json` to the live package folder, which must be rebuilt with `build-packages.sh` after cr-api #103 merges; the floor already has the rows either way.
+Oaklet (merged 2026-11-21: cr-api #103, deployed to production, and cr-api-unity #188) was baked this way: the committed floor was migrated forward with `--base`, so it gained migrations 21012 and 21013, the Oaklet creature row and its nine learn entries. The schema head stays 21203, so the version file is unchanged. The client links cr-api through `Packages/manifest.json` to the live package folder, which must be rebuilt with `build-packages.sh` from cr-api main (cr-api #103 is merged); the floor already has the rows either way. Not in a released game build yet.
 
 Two guards catch a stale floor: `BundledFloorSchemaTests` (EditMode) and `ci/check-floor-schema.sh`,
 which fails the build-game run before the build starts.
