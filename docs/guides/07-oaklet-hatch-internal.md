@@ -1,6 +1,6 @@
 # Oaklet Hatch (internal, spoilers)
 
-> **INTERNAL: SPOILERS.** This page gives away the hatch. It is for designers, operators and testers. Nothing in the game, in player-facing text or in a build's readable files may say what the item is or that it becomes Oaklet. Status: merged 2026-11-21, server deployed, shipping in game build v0.2.24 (cr-api #106, cr-api-unity #193, cr-admin-web #46, stacked on the quest-toggles PRs #105, #192, #45). Online, the content must be pushed from Content Studio after the deploy (reward spawner, quest, pickup placements).
+> **INTERNAL: SPOILERS.** This page gives away the hatch. It is for designers, operators and testers. Nothing in the game, in player-facing text or in a build's readable files may say what the item is or that it becomes Oaklet. Status: merged 2026-11-21, server deployed, shipping in game build v0.2.24 (cr-api #106, cr-api-unity #193, cr-admin-web #46, stacked on the quest-toggles PRs #105, #192, #45). Online, the content (reward spawner, quest, pickup placements) was pushed from the Studio tooling at the v0.2.24 release.
 
 ## What the player experiences
 
@@ -60,9 +60,9 @@ The owner approved the design and changed nothing, so these shipped as built:
 - **The quest's area key is `Meadow`.**
 - **Old unclaimed quests.** The session-start unclaimed-reward sweep also pays long-completed, unclaimed auto-claim quests on existing saves. Intended.
 
-## Pushes still to do
+## Pushes done at release
 
-Online, the item and its pickup definition come from the server migrations, but the reward spawner `hatch-oaklet`, the quest `quest-heavy-pinecone` and the pickup placements **must be pushed from Content Studio after the deploy**, in that order (spawners, quests, placements), or the quest, the reward and the pickup do not exist online. Offline play needs no push.
+Online, the item and its pickup definition come from the server migrations, but the reward spawner `hatch-oaklet`, the quest `quest-heavy-pinecone` and the pickup placements have to be pushed after a deploy, in that order (spawners, quests, placements), or the quest, the reward and the pickup do not exist online. For v0.2.24 this was done on 2026-11-21 through the Studio tooling: `hatch-oaklet` synced, `quest-heavy-pinecone` synced (server row version 1, recorded in the asset by cr-api-unity #194), and 268 pickup placements registered (an additive push that never removes). Offline play needs no push.
 
 ## Related Pages
 

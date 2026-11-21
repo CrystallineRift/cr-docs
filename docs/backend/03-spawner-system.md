@@ -583,7 +583,7 @@ It is not in `meadow-wild-zone` (the level 1-2 starting cell). A spawner templat
 
 **Outcome that shipped: the wild pools were removed.** The hidden hatch quest ([Oaklet Hatch](?page=guides/07-oaklet-hatch-internal), cr-api-unity #193) is meant to be the way a player first gets Oaklet, a surprise. Release v0.2.24 (merged 2026-11-21) therefore ships the separate commit "Drop Oaklet from the three wild pools" (`beb27471a`): the three pools above lose their Oaklet template, so the hatch is the only source of Oaklet. The table above no longer applies. To bring wild Oaklets back, revert commit `beb27471a`.
 
-Online, the server keeps whatever was last pushed until the spawner definitions are pushed again from Content Studio, so the wild pools only change online after a Studio push of the three spawners. The hatch's own reward spawner `hatch-oaklet` is a separate, reward-only spawner and must also be pushed from Content Studio after the deploy.
+Online, the server keeps whatever was last pushed until the spawner definitions are pushed again from Content Studio. The three wild pools were never pushed while they listed Oaklet, so the server's wild pools never contained it and needed no push for the removal. The hatch's own reward spawner `hatch-oaklet` is a separate, reward-only spawner; it was pushed at the v0.2.24 release.
 
 ## Common Mistakes / Tips
 
