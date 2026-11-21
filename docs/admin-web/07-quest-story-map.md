@@ -19,6 +19,8 @@ React Flow with ELK auto-layout (the same setup as the [Dialogue Canvas](06-dial
 
 - A talent that is gated by a quest (`unlockQuestKey`) links here from the [Talent Tree Editor](09-talent-tree-editor.md) (its gold quest chip opens the map focused on that quest).
 
+A quest that is switched off, or whose area has side quests off, is edited from its form and from **Content → Story → Quest areas**, not from the map; see [Quest Editing](04-quest-editing.md#turning-quests-off-in-review) (in review). The map itself is unchanged.
+
 ## Checks
 
 Pure rules over the loaded quests flag, for example: a quest nobody offers, a prerequisite loop, a broken prerequisite, a

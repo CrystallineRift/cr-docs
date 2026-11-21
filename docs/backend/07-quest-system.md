@@ -1,5 +1,7 @@
 # Quest System
 
+> Status: quest on/off switches (per quest and per area) are **in review**, all unmerged: server cr-api #105, Unity cr-api-unity #192, online Studio cr-admin-web #45 (branch `feat/quest-toggles` in each). Nothing here is released. See [Turning quests off](#turning-quests-off-per-quest-and-per-area) and the how-to [Test only the main story](?page=guides/06-test-only-main-story).
+
 Quests are the primary structured progression mechanism in Crystalline Rift. The system separates read-only template data (content) from mutable instance data (player state), evaluates gating requirements, tracks per-objective progress, and writes lifetime stats as a side-effect of every progress event.
 
 ## Why This Design?
@@ -137,8 +139,11 @@ is anywhere to return to.
 
 ## Quest categories and area key
 
-Every quest has a **category** and an optional **area key**. Both are metadata only: no gate, grant,
-requirement, reward or talent unlock reads them. Spec: `cr-api-unity/docs/superpowers/specs/2026-09-27-quest-categories-design.md`.
+Every quest has a **category** and an optional **area key**. Until the quest switches (in review, see
+[Turning quests off](#turning-quests-off-per-quest-and-per-area)) both were metadata only. Now exactly one value has a gameplay
+effect: category `MainStory` marks a main story quest, which the per-area switch never blocks. Every other category value, and
+the area key as a label, still gate, grant, require, reward and unlock nothing. The area key is also the quest's *area* for the
+area switch. Spec: `cr-api-unity/docs/superpowers/specs/2026-09-27-quest-categories-design.md`.
 
 | Int | `QuestCategory` | Slug | Meaning |
 |---|---|---|---|
@@ -191,8 +196,99 @@ uses. A `VisitLocation` objective's target is likewise picked from `ContentPicke
 resolve; see [Location Discoveries](?page=backend/24-location-discoveries).
 
 **Supersedes checklist step 0b's `quest_kind`.** Main Story means "main", and every other category is a side quest, so
-there is no separate `quest_kind` column. `quest_line` / `line_step` shipped with M17004; see
+there is no separate `quest_kind` column. (A main act story line also counts as main story for the area switch; see below.) `quest_line` / `line_step` shipped with M17004; see
 [Studio concurrency and story lines](#studio-concurrency-and-story-lines).
+
+## Turning quests off (per quest and per area)
+
+> In review: cr-api PR #105. Not merged or deployed.
+
+Two switches let an operator take quests out of play without deleting anything. Both default to on, so no existing quest, save or behaviour changes until someone turns something off. The server enforces both. Offline play runs the same quest services on local SQLite, so the same rules apply there once the Unity client registers the area-settings repository (see [Offline play](#offline-play-and-the-unity-installer)). The game client only has to tolerate a refusal quietly.
+
+### Definitions
+
+- **Main story quest**: a quest template whose `category` is `MainStory`, **or** whose `quest_line` is a main act line: `line-act-`, one to four digits, then the end or `-something` (`line-act-3`, `line-act-3-north`; trimmed, case-insensitive). The Unity HUD uses the same rule (`MainStoryLine`). One predicate holds it: `QuestMainStoryExtensions.IsMainStory`. Every other quest is a **side quest**.
+- **A quest's area**: its `area_key`, trimmed and compared case-insensitively. A quest with no area key is in no area, so no area switch touches it.
+- **Per-quest switch**: `quest_template.is_enabled` (migration **21301**; boolean, default true; JSON `isEnabled`; C# `QuestTemplate.IsEnabled`). Off blocks the quest, main story included.
+- **Per-area switch**: table `quest_area_setting` (migration **21302**), one row per area that was ever switched: `side_quests_enabled` (default true) and a `row_version`. An area with no row has side quests on. Off blocks the **side** quests of that area. It never blocks a main story quest.
+- **Blocked** = the quest's own switch is off, or it is a side quest in an area whose side quests are off. `QuestAvailabilityPolicy` decides this in one place, built once per operation from the stored area settings. `ReasonFor` answers `quest-disabled`, `area-side-quests-disabled` or none. The per-quest reason wins when both apply.
+- **Nothing is deleted.** Blocking changes no row. Instances, progress counts and rewards stay as they were.
+
+### What blocked means
+
+| Where | Behaviour |
+|---|---|
+| Offer | Not in `GetAvailableQuestsForTrainerAsync`. In the status view a blocked quest nobody holds reads `Locked`, never `Available`; a held quest keeps its real state. |
+| Start | `AcceptQuestAsync` (by id), `AcceptQuestByContentKeyAsync`, `GrantQuestAsync` (including the location-discovery grant) and the operator's open all throw `QuestDisabledException` before anything is created, restarted or returned. Re-accepting an in-progress blocked quest is refused too. A refused discovery grant does not fail entering the location: the entry succeeds, the discovery claim is released, and the next entry retries. The refusal is logged at Debug without a stack trace (other grant failures stay warnings). |
+| Progress | `QuestObjectiveProjector` skips a blocked in-progress instance: no count, no completion. Events that happen while it is blocked are **not** replayed later. |
+| Claim | `ClaimRewardsAsync` throws before the claim compare-and-set, so the claim is not spent and works once the quest is enabled again. |
+| Operator Complete | Refused: `QuestDisabledException` becomes `ModerationResult.Fail(ModerationReason.QuestDisabled)` (enum value 16), HTTP 409, nothing audited. See [Moderation](18-moderation.md#quest-and-achievement-admin-2026-10-20). |
+| Abandon | Still allowed: it only ends the player's own instance. |
+
+A quest that is part-way through when it is switched off is **frozen**: when it is switched back on, the instance continues from the same counts.
+
+The player status view and the operator quest board (`QuestStatusView`, `AdminQuestInstanceView`, `AdminQuestAvailableView`) carry `isEnabled` and `blockedReason` (`"quest-disabled"`, `"area-side-quests-disabled"` or null), so the reason a quest is off, including a frozen held one, can be shown.
+
+### The main story can be stranded: dependencies and the warning
+
+The block rule is unchanged: off means off, with no automatic exemption. But a main story quest that **needs** a blocked quest cannot start or finish while that quest is blocked. So every place a switch is flipped warns the designer instead.
+
+- Quest B **depends on** quest A when (a) B has a `QuestCompleted` requirement whose reference is A's template id, or (b) B has a `CompleteQuest` objective whose target (single or list) equals A's content key (trimmed, case-insensitive). Deleted templates, requirements and objectives are ignored.
+- A quest is **needed by the main story** when a main story quest reaches it through one or more depends-on steps (transitively; cycles are safe). The main quest named in a warning is the one with the smallest content key that reaches it.
+- Every area entry, in `GET /api/v1/quests/area-settings` and in the `PUT` answer, carries `requiredByMainStory`: one element per **side** quest in that area that the main story needs, sorted by `questContentKey`, `[]` when none. It is listed whether the switch is on or off. Information only. Rule: `QuestMainStoryDependencies.Find`.
+
+```json
+"requiredByMainStory": [ { "questContentKey": "quest-a", "questName": "Quest A",
+                           "mainQuestContentKey": "quest-m", "mainQuestName": "Quest M" } ]
+```
+
+- A `QuestCompleted` requirement is stored as the template id. A content-key reference pushed by the Unity Studio is resolved to the id at upsert, and a key that cannot be resolved fails the push with 400.
+
+**Limits.** Only those two dependency kinds are seen. Dialogue conditions, story beats and other gates are not. As of this work the shipped content has **no side quest that the main story needs** (203 quests, 42 main story), so switching any area off today does not strand the main story through requirements. Disabling a single **main story** quest does block later quests that require it.
+
+### REST
+
+- `PUT /api/v1/quests/templates/bulk`: `UpsertQuestTemplateRequest` has a trailing nullable `isEnabled`. `null` or absent keeps the stored value (true for a new quest), exactly like `category` and `areaKey`. Applying it bumps the template's `rowVersion` like any template write. Every template read (`GET /templates`, `/templates/by-content-key/{key}`, the hydrated list) returns `isEnabled`.
+- `GET /api/v1/quests/area-settings` (any signed-in caller, like `GET /templates`): a JSON array sorted by `areaKey`, one entry per distinct non-blank area key on a live quest template plus every stored setting, merged case-insensitively:
+
+```json
+[ { "areaKey": "Meadow", "sideQuestsEnabled": true, "rowVersion": 0, "hasSetting": false,
+    "sideQuestCount": 7, "mainStoryQuestCount": 3 } ]
+```
+
+  `rowVersion` 0 and `hasSetting` false mean no row is stored yet. The counts cover every live template in the area, enabled or not.
+- `PUT /api/v1/quests/area-settings/{areaKey}` (content-write policy, like `PUT /templates/bulk`): body `{ "sideQuestsEnabled": false, "expectedRowVersion": 0 }`. `sideQuestsEnabled` is required (a missing field is 400, never read as false). `expectedRowVersion` is nullable: null = last write wins, 0 = "I expect no row yet", n > 0 must equal the stored version. 200 answers the same entry shape as the GET after the write. The key is not checked against world locations (a quest's `areaKey` is free text too). With `expectedRowVersion` null the save is last-write-wins even when two first saves race: the loser re-reads and updates, it never answers 409. A row keeps the spelling it was created with; a later PUT in another casing updates that row.
+  - 400 `invalid_area_key` (blank, or over 64 characters after trimming), `invalid_side_quests_enabled` (missing), `invalid_expected_row_version` (negative).
+  - 409 on a stale version: the usual `row-version-conflict` body, with the trimmed area key in `contentKey` (see [Optimistic Concurrency](28-optimistic-concurrency.md#quest-area-settings)).
+  - 401 without a token, 403 without content-write.
+- Refusing a start or claim, on `POST /api/v1/quests/{templateId}/accept`, `POST /api/v1/quests/by-content-key/{contentKey}/accept` and `POST /api/v1/quests/{instanceId}/claim-rewards`: HTTP 409 with
+
+```json
+{ "code": "quest-disabled", "error": "quest_disabled", "message": "Quest 'quest-x' is turned off." }
+```
+
+  When the area switch is the cause, `message` reads `Quest '<contentKey>' is a side quest in an area whose side quests are turned off.` Match on `code == "quest-disabled"` (or `error == "quest_disabled"`).
+- The operator route `POST /api/v1/admin/trainers/{id}/quests/{key}/complete` answers 409 with `{ error, reason: "QuestDisabled" }` for a blocked quest.
+
+### Offline play and the Unity installer
+
+> In review: cr-api-unity #192 (`feat/quest-toggles`).
+
+Offline play runs the same `QuestDomainService` and `QuestObjectiveProjector` on local SQLite, so the rules are the same code. The offline floor `game-data.bytes` is migrated to schema 21302 (migrations 21301 and 21302 included).
+
+- **Templates.** The local `quest_template` row carries `IsEnabled` (`LocalQuestTemplateSyncClient`, `QuestTemplateSnapshotExtensions`).
+- **Area switches.** The Studio's `QuestAreaSettingsDefinition` asset (provider field `questAreaSettings`) is written into the local `quest_area_setting` table at world init: `LocalQuestAreaSettingSyncClient`, called from `QuestWorldBehaviour`. Last write wins (offline is its own authority). A stored row the asset no longer lists is reset to "side quests enabled", so removing a switch from the asset cannot leave it on in an old install.
+- **Installer.** Both classes take the area-settings repository as a **last, optional** constructor parameter (`IQuestAreaSettingRepository? areaSettings = null`). Null means no area is off (the per-quest flag is still enforced): a container that forgets it **silently ignores every area switch**. A server-side host that builds the quest service or projector without it logs one warning per process saying the area switch is not enforced there. `QuestAreaSettingBindings.Install` binds it (and the sync client) in one place, and a container test resolves both objects and checks they hold it. The AIO does the same server-side and a test guards it. `IQuestDomainService` itself is unchanged.
+- **Refusals are tolerated quietly.** `QuestRefusal.IsQuestDisabled` recognises the offline `QuestDisabledException` and the online 409 with code `quest-disabled` (or the legacy `quest_disabled` tag). The dialogue accept and claim handlers, the auto granter, `QuestGranterBehaviour`, the pickup grant and the reward dispatcher let that refusal pass without an error. The client only reads the answer; it never decides whether a quest is blocked.
+- **Re-sync.** The content fingerprint salt is bumped to `cs2`, so every quest re-syncs into local SQLite once after the update.
+- **Order of rollout.** Deploy the server first: until then the area routes return 404 (the Studio pull logs a warning and goes on). After merging, a Studio push is optional (server defaults are "enabled") and only needed to switch something off.
+- **Not tested.** No end-to-end run against a live server. The granter and pickup MonoBehaviours have no dedicated test (the shared `QuestRefusal` check and the dialogue, dispatcher and offline paths do).
+
+### Where to switch things
+
+- Unity: [Crystalline Rift Studio, Quests tab](?page=unity/08-content-registry#quest-switches-in-the-studio-in-review) and the `QuestDefinition` field `isEnabled` ([Scriptable Objects](?page=unity/12-scriptable-objects)).
+- Online: [Quest Editing, Enabled and Quest areas](?page=admin-web/04-quest-editing#turning-quests-off-in-review).
+- How-to: [Test only the main story](?page=guides/06-test-only-main-story).
 
 ## The shipped quest chain
 
@@ -754,6 +850,8 @@ Abandoned  (AbandonQuestAsync)
 - The template is not already completed, OR `is_repeatable = true` and `repeat_number < max_repeat_count` (or `max_repeat_count = 0`)
 - All `quest_requirement` rows evaluate to true (AND logic); if there are no requirement rows the quest is ungated
 
+A **blocked** quest (switched off, or a side quest in an area whose side quests are off; see [Turning quests off](#turning-quests-off-per-quest-and-per-area)) is never available, is refused on accept, does not progress and cannot be claimed. Nothing is reset: a held instance continues once the quest is enabled again.
+
 **InProgress** — created by `AcceptQuestAsync`. A matching `quest_objective_progress` row is created for every non-deleted objective template at accept time.
 
 `AcceptQuestAsync` is **idempotent**: a non-repeatable template with any existing instance (any
@@ -978,11 +1076,13 @@ All quest endpoints are prefixed `/api/v1/quests`.
 | `GET` | `/api/v1/quests/available` | List available quest templates for a trainer |
 | `GET` | `/api/v1/quests/active` | List InProgress quest instances for a trainer |
 | `GET` | `/api/v1/quests/{instanceId}` | Get a specific quest instance by ID |
-| `POST` | `/api/v1/quests/{templateId}/accept` | Accept a quest by template id (tooling / wire compatibility) |
-| `POST` | `/api/v1/quests/by-content-key/{contentKey}/accept` | Accept a quest by `content_key` — the route the game client uses; the server resolves its own template row |
+| `POST` | `/api/v1/quests/{templateId}/accept` | Accept a quest by template id (tooling / wire compatibility). 409 `quest-disabled` for a blocked quest (in review) |
+| `POST` | `/api/v1/quests/by-content-key/{contentKey}/accept` | Accept a quest by `content_key` — the route the game client uses; the server resolves its own template row. 409 `quest-disabled` for a blocked quest (in review) |
+| `GET` | `/api/v1/quests/area-settings` | Per-area side-quest switches (in review, cr-api #105): `[{ areaKey, sideQuestsEnabled, rowVersion, hasSetting, sideQuestCount, mainStoryQuestCount }]`, any signed-in caller. See [Turning quests off](#turning-quests-off-per-quest-and-per-area) |
+| `PUT` | `/api/v1/quests/area-settings/{areaKey}` | Set one area's `sideQuestsEnabled` with an optional `expectedRowVersion` (content-write; 400 / 409 `row-version-conflict`). In review |
 | `POST` | `/api/v1/quests/abandon` | Abandon an active quest instance |
 | `POST` | `/api/v1/quests/progress` | **Retired (410).** See [How to Advance a Quest Objective from Unity](#how-to-advance-a-quest-objective-from-unity) above |
-| `POST` | `/api/v1/quests/claim` | Claim rewards for a completed quest |
+| `POST` | `/api/v1/quests/{instanceId}/claim-rewards` | Claim rewards for a completed quest. 409 `quest-disabled` while the quest is blocked (in review) |
 | `PUT` | `/api/v1/quests/templates/bulk` | Bulk create-or-update quest templates by `content_key` (Crystalline Rift Studio sync). Optional `id` per template = the authored SO id; a stored row under another id is re-keyed to it |
 | `GET` | `/api/v1/quests/templates` | Every template, no children (player-readable). The client's `ServerQuestTemplateIndex` reads it once per session to map a server template id to its `content_key` |
 | `GET` | `/api/v1/quests/templates/by-content-key/{contentKey}` | One template with objectives, rewards and requirements; 404 on unknown key. The Unity `QuestTemplateOnlineOfflineRepository` calls this only when a `content_key` misses the local `quest_template` cache, then upserts the result locally |
@@ -1359,8 +1459,14 @@ The Unity online router calls it for a locally mirrored active instance the serv
 `UpsertFromServerAsync` revives a deleted row (`deleted = false` on conflict) so a mirror sweep that raced a
 server-side accept heals on the next read.
 
+`QuestDomainService` and `QuestObjectiveProjector` take `IQuestAreaSettingRepository? areaSettings = null` as their last constructor parameter (in review, cr-api #105). The AIO registers the repository both keyed (`"quest-area-setting"`) and non-keyed, and DI supplies it. A host that builds either class by hand and omits it enforces only the per-quest flag, never the area switch.
+
 ## Common Mistakes
 
+- **Expecting the area switch to block a main story quest.** It never does: `MainStory` category or a `line-act-N` line exempts a quest. Only the quest's own `isEnabled` can block it.
+- **Forgetting the area key.** A side quest with no `area_key` is in no area, so no area switch affects it. Give it an area key if it should be switchable by area.
+- **Switching off a side quest the main story needs.** The server blocks it anyway; the Studios warn (see [the dependency rule](#the-main-story-can-be-stranded-dependencies-and-the-warning)).
+- **Passing a missing `sideQuestsEnabled`.** `PUT /area-settings/{areaKey}` answers 400; it never reads a missing field as false.
 - **Registering `QuestDomainService` as Singleton.** It must be `AddScoped` because `IConditionEvaluator` depends on `IStatService`, which is Scoped. A Singleton cannot capture a Scoped service.
 - **Forgetting both keyed and non-keyed repository registrations in Program.cs.** The domain service resolves non-keyed. REST endpoints that use `[FromKeyedServices]` resolve keyed. Both registrations must exist. Looking at the actual `Program.cs`, quest repositories are registered as non-keyed singletons only — if you add keyed registrations for the quest repositories, also keep the non-keyed ones.
 - **A list objective that never advances.** `DefeatCreaturesFromList` / `DefeatTrainersFromList` match by
@@ -1384,6 +1490,7 @@ server-side accept heals on the next read.
 ## Related Pages
 
 - [Progress Dispatcher](?page=backend/23-progress-dispatcher)
+- [Test only the main story](?page=guides/06-test-only-main-story) - how to switch off side quests per area, or single quests, and switch them back on
 - [Quest Helpers](?page=unity/50-quest-helpers) - the client setting, Track button and authored helper markers
 - [Stats and Lifetime Tracking](?page=backend/08-stats-system) — the Stats domain that `RecordProgressEventAsync` writes to as a side-effect
 - [NPC System](?page=backend/02-npc-system) — NPCs are the quest givers; `giver_npc_content_key` links templates to NPC content keys
@@ -1461,3 +1568,5 @@ one), raises each incomplete objective to its target, completes the instance thr
 rewards. One-shot quests are idempotent (the second call answers `alreadyDone`); a repeatable quest starts and pays a new repeat.
 A reward failure after the claim marker is set is reported (`rewardsPaid: false`, `reason`) and **not auto-retried**. Full
 rulings, response shape and audit kind: [Moderation](18-moderation.md#quest-and-achievement-admin-2026-10-20).
+
+**Blocked quests (in review, cr-api #105).** `AdminCompleteAsync` refuses a quest that is blocked (switched off, or a side quest in an area whose side quests are off) with `QuestDisabledException`, before it grants, restarts or completes anything. `ModerationService.CompleteQuestAsync` answers `ModerationResult.Fail(ModerationReason.QuestDisabled)`: HTTP 409, `{ error, reason: "QuestDisabled" }`, no audit row (nothing happened). Switch the quest back on first. The board (`GET .../quests`) shows `isEnabled` and `blockedReason` per row.
