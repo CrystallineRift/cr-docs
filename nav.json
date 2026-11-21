@@ -250,6 +250,11 @@
     "path": "guides/05-setup-di-scene-context"
   },
   {
+    "section": "Guides",
+    "title": "Test Only the Main Story",
+    "path": "guides/06-test-only-main-story"
+  },
+  {
     "section": "Unity",
     "title": "Unity Project Setup",
     "path": "unity/01-project-setup"

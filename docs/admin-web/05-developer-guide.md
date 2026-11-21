@@ -115,6 +115,7 @@ Not every screen is a form. The dialogue **Canvas** is an extra tab on a resourc
 debugger are pages.
 
 - **Tabs.** A descriptor may set `tabs` (a list of `DetailTab`, each with an id and a component), a default tab, `stayAfterSave` (keep the editor open on the new `rowVersion`) and `fullBleed`. The Form tab is always present and extras show only there; non-Form tabs show a validation summary.
+- **No New / Duplicate / Delete.** `creatable: false` on a descriptor hides those buttons and blocks the `/new` route, for a resource that only edits rows the server derives (the **Quest areas** resource; in review, see [Quest Editing](04-quest-editing.md#turning-quests-off-in-review)).
 - **Auto keys.** `autoKey: { prefix, from }` derives a new row's key from a field (`dialogue-`, `quest-`); mark the key field `debugOnly`.
 - **Conditional fields.** `FieldMeta.showWhenSet` shows a field only when another is set (line step after story line); the `storyLine` kind is the line select.
 - **Canvas pages.** Graph code lives in `src/lib/graph/` (pure and tested without React), canvas components in `src/components/canvas/`, and the map in `src/pages/quests/`; register a page with a `src/resources/<name>/page.tsx` route plus a `NAV` entry. In tests the React Flow stubs in `src/test/setup.ts` apply.

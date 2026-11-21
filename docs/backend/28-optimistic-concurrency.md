@@ -4,7 +4,7 @@ Studio content (dialogues, quest templates, the quest map layout) is edited from
 Crystalline Rift Studio and the web Studio. `row_version` is the one contract both use to avoid silently overwriting
 each other. This page is the single source of the contract; the web and Unity pages link here instead of repeating it.
 
-Applies to four tables: `dialogue` (M14003), `quest_template` (M17004), `quest_map_layout` (M17005) and `talent_tree` (M15105). Other tables
+Applies to five tables: `dialogue` (M14003), `quest_template` (M17004), `quest_map_layout` (M17005), `talent_tree` (M15105) and `quest_area_setting` (M21302, in review, cr-api #105). Other tables
 that carry a `row_version` column (for example `spawner`) are unchanged and do not reject stale writes.
 
 ## The column
@@ -63,6 +63,23 @@ by-key routes return it. The bulk route cannot delete trees.
 incoming tree (tree fields plus talents, normalised) with the stored one; when equal it neither bumps the version nor checks it.
 Identical trees in an Apply therefore never bump or conflict. See [Talents](?page=backend/25-talents#row-version).
 
+## Quest area settings
+
+> In review: cr-api PR #105.
+
+`quest_area_setting` (one row per area whose side quests were ever switched; see [Turning quests off](?page=backend/07-quest-system#turning-quests-off-per-quest-and-per-area)) carries a `row_version` (starts at 1, +1 per write). It is a single-row `PUT`, not a bulk route: `PUT /api/v1/quests/area-settings/{areaKey}` with `{ "sideQuestsEnabled": false, "expectedRowVersion": 0 }`.
+
+| `expectedRowVersion` | Meaning |
+|---|---|
+| absent or `null` | Last write wins. |
+| `0` | "I expect no row yet." Conflicts if a live row for that area (any casing) exists. |
+| `n > 0` | Must equal the stored version, otherwise 409. |
+| negative | 400 `invalid_expected_row_version`. |
+
+The 200 answer is the area entry (`areaKey`, `sideQuestsEnabled`, `rowVersion`, `hasSetting`, counts). `GET /api/v1/quests/area-settings` returns `rowVersion` 0 and `hasSetting` false for an area with no row, so a client that sends back the version it read sends 0 for a new area. A 409 has the same body as the other routes (`items[]` with `contentKey` = the trimmed area key, `expectedRowVersion`, `currentRowVersion`, `updatedAt`, `deleted`; `applied` empty; `title: "row-version-conflict"`); `currentRowVersion` and `updatedAt` are null when no row exists. Areas match case-insensitively; a row keeps the spelling it was created with.
+
+The per-quest `isEnabled` flag is an ordinary quest-template field and bumps the template's `rowVersion` like any other change.
+
 ## Dialogue layout does not conflict
 
 A dialogue document holds both content and a presentation `layout` (node positions). The server compares the incoming
@@ -120,6 +137,6 @@ WHERE s.deleted = false
 ## Related
 
 - [Dialogue Server Domain](?page=backend/21-dialogue-domain) for the table and bulk semantics.
-- [Quest System](?page=backend/07-quest-system#studio-concurrency-and-story-lines) for the quest fields and the layout document.
+- [Quest System](?page=backend/07-quest-system#studio-concurrency-and-story-lines) for the quest fields and the layout document, and [Turning quests off](?page=backend/07-quest-system#turning-quests-off-per-quest-and-per-area) for the area switches.
 - [Talents](?page=backend/25-talents#row-version), [Talent Tree Editor](?page=admin-web/09-talent-tree-editor) and [Talents UI (Unity)](?page=unity/36-talents-ui) for talent trees.
 - [Dialogue Authoring (Unity)](?page=unity/32-dialogue-authoring) and [Dialogue Editing](../admin-web/02-dialogue-editing.md) for how each client shows a conflict.

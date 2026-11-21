@@ -68,7 +68,7 @@ spec addition here once that lands.
 Two Journal fields group quests into a story: **Story line** (a select of existing lines plus **New story line...**, which
 creates a slug key and a name) and **Step in story line** (shown only when a line is set, default next free step). The list has
 a **Line** column. Saving with an empty line clears both fields. They affect grouping on the map only, not gameplay. The quest
-**category** is unchanged: there is no separate quest kind, since Main Story already means "main". A new quest's key is derived
+**category** is unchanged: there is no separate quest kind, since Main Story already means "main" (for the area switch, a `line-act-` story line also counts as main; see [Turning quests off](#turning-quests-off-in-review)). A new quest's key is derived
 from its name and hidden unless debug mode is on.
 
 ## Story map
@@ -76,6 +76,17 @@ from its name and hidden unless debug mode is on.
 **Content → Story → Story map** draws every quest and its prerequisites on one canvas and edits lines, steps and prerequisites in place.
 See [Quest Story Map](07-quest-story-map.md). A prerequisite shown here as a requirement row is read-only on the form:
 `referenceContentKey` is the target quest's key, resolved by the server.
+
+## Turning quests off (in review)
+
+> In review: cr-admin-web branch `feat/quest-toggles` (PR to follow), on top of cr-api #105. Not merged. The Studio talks to the server; the server enforces everything. What the switches mean (main story, area, blocked, frozen): [Quest System, Turning quests off](../backend/07-quest-system.md#turning-quests-off-per-quest-and-per-area). How-to: [Test only the main story](../guides/06-test-only-main-story.md).
+
+- **Enabled** (Quests form, Quest group): a checkbox, on by default, with help text. Off blocks the quest for everyone, main story quests included. Turning a quest off freezes in-progress copies rather than removing them. Saved as `isEnabled` on every push (the field is always sent, so an edit never leaves a stale switch). A server that omits `isEnabled` reads as on.
+- **Enabled column** on the Quests list: `on` or `OFF`; the list filter `off` finds switched-off quests.
+- **Area note.** When a saved side quest sits in an area whose side quests are off, a read-only warning at the bottom of the Form tab says so. The note only explains; the server decides. It uses its own copy of the main-story rule (category `MainStory`, or a `line-act-` story line).
+- **Quest areas** (new resource, **Content → Story → Quest areas**, `/content/quest-areas`): one row per area key in use, with columns Area, **Side quests enabled** (`on` or `OFF`), Side quests and Main story quests (counts). The form has the **Side quests enabled** checkbox with help text that main story quests are never affected and that off freezes rather than removes. Save sends `PUT /api/v1/quests/area-settings/{areaKey}` with the loaded entry's `rowVersion` as `expectedRowVersion`. There is no New, Duplicate or Delete: an area appears when a quest names it, and an area with no row is on.
+- A save that loses a race answers 409; it opens the usual conflict dialog (see Conflicts below, and [Optimistic Concurrency](../backend/28-optimistic-concurrency.md#quest-area-settings)).
+- Not built: quick Disable and Enable buttons on list rows (resource actions render only in the detail header today). Use the checkbox and Save.
 
 ## Conflicts
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-21 — Quests can be switched off, per quest and per area (in review: cr-api #105, client PRs to follow)
+
+- **Why:** to test only the main story quest. Side quests can be turned off area by area, and any single quest can be turned off. The server enforces both. Everything is on by default, so no existing quest, save or behaviour changes.
+- **cr-api (#105, `feat/quest-toggles`, not merged):** `quest_template.is_enabled` (migration 21301) and table `quest_area_setting` (migration 21302, with a `row_version`). Main story = category `MainStory` or a `line-act-N` story line; the area switch never blocks it, the per-quest flag can. A blocked quest is not offered (an unstarted one reads `Locked`), cannot be started (accept by id or content key, grants, operator open), does not progress and cannot be claimed; nothing is deleted and a held quest continues when switched back on. New `isEnabled` on template reads and `PUT /templates/bulk`, `GET` and `PUT /api/v1/quests/area-settings` (row-version conflict 409), 409 `quest-disabled` on accept and claim, 409 `QuestDisabled` on operator Complete, `isEnabled` and `blockedReason` on the status views and the operator board. `QuestDomainService` and `QuestObjectiveProjector` take the area-settings repository as an optional last parameter (the Unity installer must pass it).
+- **cr-admin-web (`feat/quest-toggles`, not merged):** "Enabled" on the quest form and list, an area note on a side quest in a switched-off area, and a new **Quest areas** page (Content -> Story).
+- **cr-api-unity (`feat/quest-toggles`, not merged):** "Enabled" toggle in the quest inspector, `OFF` and `OFF (area)` row badges, an "Area side quests" panel with Push and Pull on the Quests tab, and `cr_studio_capture` for Studio screenshots. Offline enforcement on the Unity side is still in progress.
+- **Docs:** [Quest System, Turning quests off](?page=backend/07-quest-system#turning-quests-off-per-quest-and-per-area), [Test only the main story](?page=guides/06-test-only-main-story), [Moderation](?page=backend/18-moderation), [Optimistic Concurrency, Quest area settings](?page=backend/28-optimistic-concurrency#quest-area-settings), [Quest Editing](?page=admin-web/04-quest-editing#turning-quests-off-in-review), [Content Registry, Quest switches in the Studio](?page=unity/08-content-registry#quest-switches-in-the-studio-in-review).
+
 ## 2026-11-11 — Creature capture tool (cr-api-unity #179)
 
 - **Why:** model and animation changes had been judged on Blender renders, which hid cracks, specks and skinning differences that only show in Unity.
