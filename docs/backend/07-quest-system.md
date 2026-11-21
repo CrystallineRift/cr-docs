@@ -302,6 +302,7 @@ Advanced by the `StepsWalked` outcome, additive by `Quantity`, clamped to `targe
 
 - `target_reference_id` is optional and is an **item content key**. When set, steps count only while the trainer holds at least one of that item in the **backpack** ("carrying"; the backpack is read once per outcome). Steps taken while not carrying it are lost, not replayed later. Blank means every step counts.
 - A blocked quest (see [Turning quests off](#turning-quests-off-per-quest-and-per-area)) does not count steps, like every other objective.
+- **"Carrying" means in the backpack.** Steps and the take use the backpack only. The start requirement `HasItem` is looser: it counts every inventory of the trainer.
 - A host built without `IBackpackItems` counts **no** steps for a carry-conditioned objective (it fails closed) and logs one warning per process (`CarryCheckNotWiredWarning`). `QuestDomainService` and `QuestObjectiveProjector` take `IBackpackItems? backpack = null` as a last optional constructor parameter, after `areaSettings`.
 
 ### `TakeItem` reward (type 7)
@@ -313,9 +314,9 @@ Two refusals, both before anything is spent:
 | Status | Body | When |
 |---|---|---|
 | 409 | `{ "code": "quest-item-missing", "error": "quest_item_missing", "message": "The quest needs an item you do not have, so its rewards cannot be claimed yet." }` | The trainer does not hold the item. The claim is **not** spent: it works once the item is back. The same refusal for a host without `IBackpackItems`. |
-| 400 | `{ "code": "quest-reward-unavailable", "message": ... }` | The quest has a `TakeItem` reward and a `Creature` reward whose spawner content key is not stored. Refused **before** anything is taken or spent, so an item is never taken for a grant that cannot run. |
+| 400 | `{ "code": "quest-reward-unavailable", "message": ... }` | The quest has a `TakeItem` reward and a `Creature` reward whose spawner content key is not stored (refused **before** anything is taken or spent), or the creature reward placed nothing (the items are returned and the claim released). |
 
-If a `Creature` reward places nothing (the reward service degrades instead of throwing), the taken items are returned and `takenItems` is empty.
+**One guarded region.** Everything from the first take to the end of the grants is one region. Any exception inside it (a take, the claim compare-and-set, the progress tracker, a grant) returns **every** take. When nothing has been paid yet, the claim is also **released** (un-spent, `IQuestClaimRelease.TryReleaseClaimAsync`, a conditional UPDATE in `BaseQuestInstanceRepository`) so the player can retry; a repository without it logs and leaves the claim spent. If a `Creature` reward places nothing, the items are returned, the claim is released and the answer is **400 `quest-reward-unavailable`** (the same body as above; it used to be a 200 with no creature). If something was already paid (experience, currency, an ability, a placed creature), the claim stays spent and only the items are returned (the existing "one lost reward, logged" rule). A parallel double claim yields exactly one creature and one take.
 
 The claim answer (`POST /api/v1/quests/{instanceId}/claim-rewards`) gains `takenItems: [{ "itemContentKey": "...", "quantity": 1 }]` (an empty array when none); `spawnedCreatureIds` is unchanged. Offline, `QuestClaimResult.TakenItems` carries the same. A claim whose answer holds both a taken item and a spawned creature is what the client plays as a [reveal](?page=unity/52-hidden-quests-and-claim-reveal#the-claim-reveal).
 
@@ -325,6 +326,7 @@ The claim answer (`POST /api/v1/quests/{instanceId}/claim-rewards`) gains `taken
 
 - **On the server a hidden quest is an ordinary quest.** It is offered, accepted, progressed, claimed and blocked by the toggles exactly like any other, and it is **not** filtered out of any player quest list (`available`, `active`, `completed`, `{instanceId}`): the client needs them to auto-accept, progress and claim. Hiding is about what the **player is shown**, and the client does that (see [Hidden Quests and the Claim Reveal](?page=unity/52-hidden-quests-and-claim-reveal#what-a-hidden-quest-hides)).
 - **Server-side exclusions.** A completed hidden quest does not increment `quests_completed` or `quests_completed_cat_*` (its outcome carries `Facts[hidden]`); the per-quest `quest_completed_{key}` stat is still written. The Studios leave hidden quests out of the generated per-area "{Area} Quests" achievements.
+- **`isHidden` on player-facing answers.** A client can hide a quest without reading its template: `isHidden` (false by default) is on the quest instance objects returned by `GET .../active`, `.../completed`, `.../{instanceId}`, both accept answers and the claim answer's `instance`, and on the quest entries of every progress report (`updatedObjectives[]`, `completedQuests[]`). `/available` returns templates, which already carry it. If the server cannot read the template it sends false and the client falls back to its own read. The fields are additive.
 - **Operators and designers still see them.** The Studios and the moderation quest board show hidden quests, marked as hidden.
 
 ### `HasItem` by content key, and quest push order

@@ -20,12 +20,18 @@ The client keeps doing what it already did: `PUT /trainer/{trainerId}/location` 
 | Setting | Config key | Default |
 |---|---|---|
 | Step length | `Steps:StepLengthMeters` | 0.75 m |
-| Maximum credited speed | `Steps:MaxSpeedMetersPerSecond` | 12 m/s |
+| Maximum credited speed | `Steps:MaxSpeedMetersPerSecond` | 7.5 m/s |
 | Maximum elapsed time credited per report | `Steps:MaxElapsedSeconds` | 60 s |
 
-With the defaults one report can credit at most 720 m (960 steps), and 5000 steps need at least 3750 m of real movement.
+With the defaults one report can credit at most 450 m (600 steps), and 5000 steps are 3.75 km.
 
-**Exactly once.** The position write is a compare-and-set on a version counter, `trainers.location_version`, read together with the previous position. A write that loses the race still saves its position and timestamp but counts 0 steps and leaves the carry alone. The older plain save (`UpdateLastLocationAsync`) clears `last_pos_at` and bumps the version, so a teleport through it never counts.
+**Where 7.5 m/s comes from.** The trainer's top on-foot speed was derived from the Unity project, not measured in play: movement is root motion, the fastest clip (sprint) averages 4.49 m/s, and the capped move-speed talents multiply it by at most 1.30, about 5.8 m/s. The default sits about 25 to 30 percent above that. (It was 12 m/s in the first draft, then 9.) The figure comes from animation clip data; the `[MoveTelemetry] moved/s` line on a Steam Deck would confirm it.
+
+**Accepted risk, in plain words.** The server only sees reported positions. A modified client can report positions that move at exactly the clamp speed without anyone walking, and earn steps at up to `maxSpeed / stepLength` per second: **10 steps per second at the defaults**. The clamp bounds cheating; it cannot remove it. The first user, a one-off side quest, makes that an acceptable risk.
+
+**Relocations.** A wagon ride, a door, an area load or a respawn is an instant jump in position, not a travelling vehicle (the wagon has no speed). A jump that changes the area or region key counts 0 steps. A jump inside one region is counted only up to the clamp: at most `maxSpeed * min(elapsed, 60 s)`, which is 450 m or 600 steps at the defaults.
+
+**Exactly once.** The position write is a compare-and-set on a version counter, `trainers.location_version`, read together with the previous position. A write that loses the race still saves its position and bumps the version but counts 0 steps and leaves both the carry and `last_pos_at` alone. The older plain save (`UpdateLastLocationAsync`) clears `last_pos_at` and bumps the version, so a teleport through it never counts.
 
 ## The route: `includeProgress`
 
@@ -45,7 +51,7 @@ With the defaults one report can credit at most 720 m (960 steps), and 5000 step
 
 `CR.Trainers.Domain.Services/Steps/`: `StepCounter` (pure function), `StepCountingOptions`, `IClock` / `SystemClock`, `ITrainerLocationService` / `TrainerLocationService`. The store is the narrow interface `ITrainerLocationStore`, implemented by `BaseTrainerRepository` for both engines (narrow because the Unity client implements `ITrainerRepository`). Trainers reaches the pipeline only through `IProgressOutcomeSink` from Game.Model, so the Trainers domain does **not** depend on Quests.
 
-**Columns** (migration **21401**, `CR.Trainers.Data.Migration`): `trainers.last_pos_at` (server time of the last accepted position, null = none), `trainers.step_carry` (double, default 0), `trainers.location_version` (bigint, default 0).
+**Columns** (migration **21401**, `CR.Trainers.Data.Migration`): `trainers.last_pos_at` (server time of the last accepted position, null = none; a plain timestamp holding the UTC wall clock, written Unspecified-kind: a UTC-kind write was shifted by the Postgres session time zone, which a Postgres step-store test caught), `trainers.step_carry` (double, default 0), `trainers.location_version` (bigint, default 0).
 
 ## Offline parity
 

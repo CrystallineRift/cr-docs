@@ -19,6 +19,10 @@ A quest template with `isHidden` runs like any other (offered, auto-accepted, pr
 | Per-area "{Area} Quests" achievements | The Studio leaves hidden quests out when it generates them (`AreaAchievementQuestInputs`) |
 | Wording | The `WalkSteps` objective has the neutral text "Go for a walk" so a non-hidden quest that uses it still reads sensibly; no screen lists a hidden one |
 
+**The authority's flag comes first.** Quest instance answers and progress-report entries carry `isHidden` ([Quest System](?page=backend/07-quest-system#walk-steps-take-item-and-hidden-quests-in-review)). The manager, journal, tracker, helper marker, world map and toast use that flag before any template read, so a flagged quest stays hidden even when its template cannot be read. A failed read for a quest that carries **no** flag still shows it as before (a quest known to be hidden is never shown).
+
+**Records.** The statistics (Records) list does not list the per-quest stat keys of hidden quests, and the steps stat reads "Steps walked".
+
 `HiddenQuestRegistry` remembers what the authority said about each template (`QuestManager` reads and records every template **before** it raises an event about it); a template nobody has said anything about is treated as not hidden. It is memory for the presenters only and decides nothing.
 
 Operators and designers still see hidden quests in the Studios (a `HIDDEN` badge on the Unity Quests tab row, a **Hidden** field in the inspector), and in the moderation board.
@@ -35,11 +39,15 @@ When a reward claim took an item **and** spawned a creature, the game plays a sh
 - **Before the burst, nothing names the creature.** The words before it name only the item the player is already carrying.
 - **It can never block play.** The overlay takes no clicks, any button press skips it, it ends by itself, and a reveal that arrives while a menu, a battle or a cutscene has the screen waits in `ClaimRevealQueue` and plays when the overworld is free. It is purely presentational: a failure in the observer is logged and never reaches the claim.
 
+## The quest starts in the same session
+
+`QuestAutoGranter` used to sweep only on session ready and after a claim, so a quest that needs a just-collected item would be accepted on the next launch and the steps until then lost. Now `QuestAvailabilitySignal` ("something that can change availability happened") is raised by `PickupBehaviour` after a collect and by `QuestManager` for a progress report carrying beats, creatures or completions; the granter coalesces and debounces the requests into one sweep. The signal carries no data and decides nothing: the sweep asks the authority what is available.
+
 ## Quiet refusals and unclaimed quests
 
 `QuestRefusal.IsClaimDeferred` extends `IsQuestDisabled`: a claim the authority could not pay **yet** passes quietly (no error log, no broken dialogue) when the quest is turned off, the item it takes is missing (`quest-item-missing`) or the reward is unavailable (`quest-reward-unavailable`). Nothing was spent, so the claim waits. The dialogue claim handler and the reward dispatcher use it.
 
-`QuestUnclaimedSweep` runs once per session start and claims every Completed, unclaimed instance whose template pays on completion (a crash, a quit, or a deferred claim leaves one), through the same dispatcher. Quests that wait for their giver are left to the giver.
+`QuestUnclaimedSweep` runs once per session start and claims every Completed, unclaimed instance whose template pays on completion (a crash, a quit, or a deferred claim leaves one), through the same dispatcher. Quests that wait for their giver are left to the giver. This sweep also pays long-completed, unclaimed auto-claim quests on **existing saves**: intended.
 
 ## Content fingerprint
 
@@ -51,7 +59,7 @@ See [Content Registry, Hidden quests, Walk steps and Take item](?page=unity/08-c
 
 ## What was not tested
 
-Tests cover the visibility rules, the reveal logic and sequence, the refusal helpers, the offline hatch chain on SQLite and the tree-spot row (`HatchClientTests`, `HatchOfflineChainTests`, `QuestHiddenTests`, `ClaimRevealTests`, `StoryTreeSpotRowTests`); the full suite was reported green (13067 total, 13065 passed, 2 skipped). **Not tested:** no Play-mode run and no end-to-end run against a live server. The reveal's on-screen look was checked from captured stills and a GIF, not live play.
+Tests cover the visibility rules, the reveal logic and sequence, the refusal helpers, the offline hatch chain on SQLite and the tree-spot row (`HatchClientTests`, `HatchOfflineChainTests`, `QuestHiddenTests`, `ClaimRevealTests`, `StoryTreeSpotRowTests`); the full suite was reported green (13067 total, 13065 passed, 2 skipped). **Not tested:** no Play-mode run and no end-to-end run against a live server. The reveal's on-screen look (the stage is about 40 percent of the screen height) was checked from captured stills and a GIF, not live play. `cr_hatch_capture` writes `reveal-NN.png` frames, `reveal-before.png`, `reveal-after.png` and `bag-item.png` (the bag capture goes through the real bag action policy, so an item with no effect has no Use button).
 
 ## Related Pages
 
