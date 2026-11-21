@@ -213,7 +213,13 @@
         "Quests/CR.Quests.Domain.Services/Implementation/ProgressOutcomeObjectiveMap.cs",
         "Quests/CR.Quests.Domain.Services/Implementation/QuestObjectiveProjector.cs",
         "Quests/CR.Quests.Data.Migration/M17007*.cs",
-        "Quests/**/QuestObjectiveHelperMarker*.cs"
+        "Quests/**/QuestObjectiveHelperMarker*.cs",
+        "Quests/CR.Quests.Data/Extensions/QuestMainStoryExtensions.cs",
+        "Quests/CR.Quests.Data/Model/QuestAvailabilityPolicy.cs",
+        "Quests/CR.Quests.Data/Model/QuestAreaSetting*.cs",
+        "Quests/CR.Quests.Data/Model/QuestBlockReason.cs",
+        "Quests/CR.Quests.Data.Migration/M2130[12]*.cs",
+        "Quests/CR.Quests.Service.REST/Endpoints/QuestAreaSettingEndpoints.cs"
       ],
       "cr-data": [
         "Assets/CR/Core/Data/Logic/QuestObjectiveValidation.cs",
@@ -245,7 +251,9 @@
         "Assets/CR/UI/Quests/QuestHelper*",
         "Assets/CR/UI/Logic/QuestHelper*",
         "Assets/CR/Core/Feedback/Logic/QuestHelper*",
-        "Assets/CR/Core/Data/Editor/QuestHelperMarker*"
+        "Assets/CR/Core/Data/Editor/QuestHelperMarker*",
+        "Assets/CR/Core/Data/Logic/QuestMainStory.cs",
+        "Assets/CR/Core/Data/Logic/QuestToggleState.cs"
       ]
     },
     "description": "Quest system: templates, objectives, rewards, instances, progress events, requirements, condition evaluation; grant mode / reward claim mode (M7017), AcceptQuestAsync restarts an abandoned/failed instance, content:write on template PUT/DELETE, objectives upserted by sort_order and the re-parenting risk"
@@ -777,7 +785,12 @@
         "Assets/CR/Core/Data/Logic/Tests/QuestRegistryOrderTests.cs",
         "Assets/CR/Core/Data/Editor/Abilities/AbilityCost*.cs",
         "Assets/CR/Core/Data/Editor/Progression/LineSetAuthoring.cs",
-        "Assets/CR/Core/Data/Logic/LineSet*.cs"
+        "Assets/CR/Core/Data/Logic/LineSet*.cs",
+        "Assets/CR/Core/Data/Editor/ContentStudioTool.QuestAreaSettings.cs",
+        "Assets/CR/Core/Data/Editor/ContentStudioTool.Capture.cs",
+        "Assets/CR/Content/Editor/CrStudioCaptureCommand.cs",
+        "Assets/CR/Core/Data/Logic/QuestAreaPanel.cs",
+        "Assets/CR/Game/World/Editor/QuestAreaSettingsSyncHelper.cs"
       ]
     },
     "description": "IGameContentRegistry, ScriptableObjectContentRegistry, ServerContentRegistry, MutableContentRegistry, ContentRegistryInitializer, ContentManifestClientUnityHttp, ContentDefinitionProvider, ContentKeys constants, CreatureDefinition/ItemDefinition/NpcDefinition/SpawnerDefinition ScriptableObjects, CreatureContentDef/ItemContentDef/NpcContentDef/SpawnerContentDef POCOs, IGameAssetLoader.LoadAssetByKeyAsync, ContentStudioTool unified EditorWindow (7 tabs replacing ContentCreatorTool and AbilityLibraryTool), custom Inspectors for all definition types, AddressablesCatalogUpdater, LocalizationEditorWindow, ContentAuditTool, ContentPublishTool, AbilityConfig/AbilityProgressionSetConfig/GrowthProfileConfig SOs, AbilityEditorSyncHelper, ability sync clients (HTTP/local/online-offline); Crystalline Rift Studio chrome rebuilt in UI Toolkit (CRStudio.uss shared editor design system, grouped navigation rail with live counts, header count chips + server field + connection pill, status bar; tab bodies remain IMGUI in an IMGUIContainer); ContentDisplayName single naming rule + ContentPicker dropdowns (human names stored as keys, dangling references warned, options from project incl. arenas unioned from spawners/trainers/open scenes); header rebuilt around one StudioWorkSummary pill (the single ranked answer to \"what needs doing\", with the button that resolves it) plus Guide and Advanced switches — Advanced (same pref as the old Debug toggle) holds the server field, raw keys/ids, the all-content sync bar and the recovery actions; ContentSectionCatalog is the one source of the rail's labels, groups and per-section guide sentences; project scans (registry sweep, orphan scan, Addressables lookups, push-state file stats) cached through EditorMemo/EditorMemoPolicy on the IMGUI layout pass instead of running every repaint; Trainer Battles tab; spawner/pool/creature/item reference fields all ContentPicker dropdowns (Fetch-button flows deleted); NpcAuthorChecklist readiness panel on NpcDefinitionEditor; Crystalline Rift Studio's slow work moved off the draw thread into a job system (StudioJobTracker/StudioJobQueue pure logic + StudioJob/StudioIteratorJob/StudioJobRunner stepping on EditorApplication.update within an 8ms budget, yield-a-Task for non-Unity work, StudioProgressBar cr-jobbar strip above the status bar, [Studio]-prefixed console lines on every status transition): per-definition content pushes (plan built without network, one send per tick, cancellable, tab not stamped on a partial run), per-type pulls, and the registry sweep + push comparison (published into a pending slot and adopted only on a Layout pass); NPC placements now scanned across EVERY scene in the project rather than the open ones — NpcSceneScanJob reads scene/prefab YAML on a worker thread (NpcScanFileReader buffered single-pass pre-filter, NpcScenePlacementParser for Component/PrefabInstance/PrefabReference shapes, NpcPrefabClosure fixed point over m_SourcePrefab so variants and nested NPC prefabs count), results cached per file in Library/CRStudioNpcScenes.json under NpcScanCachePolicy with prefab-state and resolved-prefab fingerprints; NpcPlacementIndex/NpcSceneGroup drive a scan strip, per-row 'in Village (2), Meadow' summaries and per-scene grouped placements with Open scene/Select via NpcPlacementNavigator; NpcDefinitionEditor's checklist reads placement from the scan or the open scene and memoises BuildSnapshot; COMBAT → Battle Reactions tab (CreatureReactionProfile rows with ReactionProfileRow digest, Variant button, inline CreatureReactionProfileEditor; local-only, no sync); SYSTEM → Configuration section (StudioConfigurationPanel + BackendEnvironmentsConfig asset: Local/Production environments applied to the editor's server pref, every *_server_http_address in game_config.yaml via GameConfigRewrite, and the Addressables Remote.LoadPath; BackendUrl/BackendEnvironmentMatch/BackendTargetsSummary pure logic; one Key row per environment (personal API key) stored in EditorPrefs via BackendKeyVault, masked with a 15s auto-hiding reveal, activated for both service and admin auth by Use for editor); LIVE OPS group (Players tab 18 + Marketplace tab 19 in Editor/LiveOps/, EditorAdminAuth admin token, StudioJob-backed admin reads/writes, ModerationReasonDialog) — see backend/18-moderation; Review window (ContentReviewWindow, Review button beside Push All): every unpushed asset grouped by type with per-row Diff (FieldDiff over EditorJsonUtility of local vs server-applied clone), Push (PushOne, single-asset job, tab not stamped) and Revert (RevertOne, same apply as Pull All, confirm-gated, not for Trainer Battles); ContentPushLog per-asset stamps (LastPushUtcTicks_asset_<guid>) so ContentPushStatus counts an asset pushed when newer than the later of tab/asset stamps; ReviewRow/ReviewGroup/ContentReviewRows pure logic; Dialogues tab (22) with its audit panel"
@@ -1108,7 +1121,8 @@
         "Assets/CR/Content/Defs/StatusConditions/*.asset",
         "Assets/CR/Core/Data/Registry/Definitions/DialogueDefinition.cs",
         "Assets/CR/Content/Defs/Dialogues/*.asset",
-        "Assets/CR/Core/Data/Editor/QuestDefinitionEditor.cs"
+        "Assets/CR/Core/Data/Editor/QuestDefinitionEditor.cs",
+        "Assets/CR/Core/Data/Registry/Definitions/QuestAreaSettingsDefinition.cs"
       ]
     },
     "description": "All ScriptableObject types: what each does, every field, which sync to the backend and via which endpoint, ContentDefinitionProvider registry wiring, BattleCameraProfile cinematic-camera feel SO, CreatureReactionProfile shared body-reaction SO (animation+cry+feedback per beat, baseProfile inheritance/override for evolutions, Resolve() flatten; referenced by CreatureDefinition.reactionProfile; offensive VFX comes from AbilityConfig), Dialogue Database note, ElementalReactionDefinition (primer condition + detonator element -> multiplier/applied condition, snake_case content key, seed-migration export) and ElementalDamageMatrixConfig (one asset per matrix version, 100 completed cells, isActive mirrors battle_system_version); DialogueDefinition SO (id rule, hidden documentJson), QuestDefinition gains grantMode/rewardClaimMode and loses conversationTitle/conversationId, ContentDefinitionProvider.quests/dialogues corrected"
@@ -1735,7 +1749,8 @@
         "Moderation/**/*.csproj",
         "Quests/CR.Quests.Domain.Services/**/*.cs",
         "Stats/**/*.cs",
-        "Quests/CR.Quests.Data/Extensions/StoryBeatBackfillKeys.cs"
+        "Quests/CR.Quests.Data/Extensions/StoryBeatBackfillKeys.cs",
+        "Moderation/CR.Moderation.Domain.Services/Models/ModerationReason.cs"
       ],
       "cr-data": [
         "Assets/CR/Core/Data/Editor/LiveOps/**",
@@ -2462,7 +2477,8 @@
         "src/pages/quests/**",
         "src/components/editors/KeyChipsEditor.tsx",
         "src/components/quests/flow/**",
-        "src/resources/quests/types.ts"
+        "src/resources/quests/types.ts",
+        "src/resources/quest-areas/**"
       ]
     },
     "description": "Studio web quest editing: which key family (item/creature/NPC/world-location content key vs quest/item/creature GUID vs free-typed trainer/talent key) each objective/requirement/reward target picker uses, the fix for objective types 21/22 (Activate key item / Used item) which used to point their picker at the item GUID instead of the content key `ItemUseDomainService` actually emits, and the `targetMetadata`/reward `metadata` `typedMeta` columns (wired up, currently empty specs — no objective or reward type parses metadata server-side yet)."
@@ -2799,7 +2815,8 @@
         "Quests/CR.Quests.Service.REST/**/*.cs",
         "Talents/CR.Talents.Data/**/*.cs",
         "Talents/CR.Talents.Data.Migration/M15105*.cs",
-        "Talents/CR.Talents.Service.REST/**/*.cs"
+        "Talents/CR.Talents.Service.REST/**/*.cs",
+        "Quests/CR.Quests.Data.Migration/M21302*.cs"
       ],
       "cr-data": [
         "Assets/CR/Core/Data/Registry/Sync/**",
@@ -2811,7 +2828,8 @@
         "src/api/conflicts.ts",
         "src/api/rowVersion.ts",
         "src/components/resource/ConflictDialog.tsx",
-        "src/resources/talent-trees/descriptor.ts"
+        "src/resources/talent-trees/descriptor.ts",
+        "src/resources/quest-areas/**"
       ]
     },
     "description": "row_version contract: expectedRowVersion, 409 body, deploy notes. Includes talent trees (M15105, no bump on identical content)."

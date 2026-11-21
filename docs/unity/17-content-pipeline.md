@@ -322,6 +322,8 @@ unity cmd --project-path <cr-api-unity> cr_studio_push_status --args cancel
 - **`go`** queues one `StudioJob` per type plus one for achievements. `StudioJobRunner` steps them on `EditorApplication.update`, one request per tick, so the command returns before anything is sent. It refuses while the runner is already busy.
 - **`cr_studio_push_status`** reads `PushRunLedger` (shared with the window's own Push All): `RUNNING`, `DONE`, `DONE WITH FAILURES` or `STOPPED`, the job in progress, and `OK` / `FAILED` per type. A type stopped part-way is listed as never answered and is not stamped.
 
+- Since the quest switches (in review, cr-api-unity `feat/quest-toggles`) `dry` also prints a `Quest area settings:` line, and `cr_studio_capture <folder>` photographs the Quests tab for pull requests; see [Content Registry, Quest switches in the Studio](?page=unity/08-content-registry#quest-switches-in-the-studio-in-review).
+
 A push writes live content to that server, so the user runs `go`. The ledger and the queue are lost on a domain reload (a script compile); a push interrupted that way shows as `STOPPED`, and the unstamped types stay pending.
 
 ## Related Pages
